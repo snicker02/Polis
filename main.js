@@ -8,7 +8,7 @@ import { Renderer } from './engine/renderer.js';
 import { exportPack, exportStructuresZip, tileList, commandList, cityId } from './engine/export.js';
 import { THEMES } from './engine/materials.js';
 
-const VERSION = '0.1.4';
+const VERSION = '0.1.5';
 const $ = (id) => document.getElementById(id);
 
 const SLIDERS = {
@@ -286,7 +286,8 @@ function refreshCommands() {
     $('cmds').value = [
       `# city id ${cityNs} — after importing its pack, stand where you want it:`,
       `/function ${cityNs}/build_centered`,
-      `/function ${cityNs}/build          (corner at your feet)`,
+      `# when the city has finished appearing, from the same spot:`,
+      `/function ${cityNs}/populate_centered`,
       '',
       `# or the exact coordinates (${tiles.length} tile${tiles.length === 1 ? '' : 's'}):`,
       ...exactCommands,
@@ -328,14 +329,14 @@ async function doExport(kind) {
       seed: result.cfg.seed, spawns: result.spawns || [],
       summary: summaryLine(),
       packName: `Polis ${cityNs}`,
-      description: `/function ${cityNs}/build_centered · Polis v${VERSION}`,
+      description: `/function ${cityNs}/build_centered then populate_centered · Polis v${VERSION}`,
     };
     const out = kind === 'mcpack'
       ? await exportPack(result.world, opts)
       : await exportStructuresZip(result.world, opts);
     const name = `${cityNs.replace(/_/g, '-')}-v${VERSION}.` + (kind === 'mcpack' ? 'mcpack' : 'zip');
     download(out.data, name);
-    toast(`${name} — in game: /function ${cityNs}/build_centered`);
+    toast(`${name} — in game: /function ${cityNs}/build_centered, then populate_centered`);
   } catch (e) {
     console.error(e);
     toast('Export failed: ' + e.message, true);

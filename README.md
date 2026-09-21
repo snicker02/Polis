@@ -1,4 +1,4 @@
-# Polis v0.1.4
+# Polis v0.1.5
 
 A procedural city generator that exports to **Minecraft Bedrock**. Plans a
 street grid, subdivides it into lots, raises buildings with real interiors —
@@ -110,7 +110,7 @@ Furniture only goes against the outer walls, never within one cell of the
 stairs or two cells of the front door, and every furnished building is
 re-verified: if furniture ever cost a floor its reachability, it is removed.
 
-**Villagers and golems.** The build function summons villagers next to beds
+**Villagers and golems.** The populate function summons villagers next to beds
 (**Villagers** slider caps the number) and one iron golem per eight villagers.
 Golems are placed only on pavement and plazas, outside every building
 footprint, with three clear blocks of headroom. A bell in a plaza or park gives
@@ -141,10 +141,16 @@ buildings; at the time of writing that is 2,000+ floors, all reachable.
 /function polis_12345_a3f9/build               city corner at your feet
 ```
 
-`build` places the city and then summons the villagers and golems — run it
-**once**. If some tiles were outside loaded chunks, stand near them and run
-`blocks_centered` (or `blocks`), which places blocks only and never adds
-duplicate villagers.
+Then, once the whole city has finished appearing — **without moving** — run
+
+```
+/function polis_12345_a3f9/populate_centered   (or populate, after build)
+```
+
+which summons the villagers and iron golems. It is a separate step on
+purpose: `/structure load` keeps placing blocks after the command returns, so
+mobs summoned in the same function arrive before their floors do. `build` is
+safe to rerun if some tiles were missed; `populate` is meant to run once.
 
 `polis_12345_a3f9` is the **city id**: the seed plus a four-character hash of
 the actual blocks. It is shown in the app, printed at the top of
@@ -229,6 +235,15 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.1.5** — Villagers and golems now come from a separate `populate`
+function, run after the city has appeared. In 0.1.4 the summons ran in the
+same function as the structure loads, which finish placing blocks later, so
+mobs arrived before their floors. Summons also used half-block offsets, which put every mob one
+block off whenever the player stood past the middle of a block. They now use
+whole-block offsets. Both functions report in chat. The validator simulates the
+load and summons from off-centre player positions and checks that every mob
+stands on a floor with clear space; the 0.1.4 offsets fail that check.
 
 **0.1.4** — Life. Farms with central irrigation channels and hydrated
 farmland, park ponds, flowers, furnished interiors (beds in eight colours,

@@ -85,41 +85,56 @@ export function buildStructures(world, opts = {}) {
 // ---- functions ----------------------------------------------------------------
 function rel(v) { return v === 0 ? '~' : `~${v}`; }
 
+// Two steps, on purpose. /structure load does not finish placing blocks
+// before the next command runs, so mobs summoned in the same function arrive
+// before their floors do: upper-floor villagers fall, others get buried.
+// build places blocks (safe to rerun); populate summons the mobs (run once,
+// after the city is standing).
+//
+// Summons use whole-block offsets from the same execution point as the
+// structure loads. Both floor the player's position the same way, so each mob
+// lands in exactly its intended block wherever in a block the player stands.
+// (Half-block offsets put mobs one block off whenever the player stood past
+// the middle of a block.)
 export function functionFiles(tiles, world, opts = {}) {
   const ns = opts.namespace || 'polis';
   const spawns = opts.spawns || [];
   const wb = world.box;
   const cx = Math.floor((wb.x0 + wb.x1 + 1) / 2);
   const cz = Math.floor((wb.z0 + wb.z1 + 1) / 2);
-  const relf = (v) => (v === 0 ? '~' : `~${Number(v.toFixed(1))}`);
+  const villagers = spawns.filter((p) => p.type === 'villager').length;
+  const golems = spawns.length - villagers;
   const loads = (dx, dz) => tiles.map((t) =>
     `structure load ${ns}:${t.name} ${rel(t.offset[0] - dx)} ${rel(t.offset[1] - GROUND_DROP)} ${rel(t.offset[2] - dz)}`);
   const summons = (dx, dz) => spawns.map((p) => {
     const id = p.type === 'golem' ? 'minecraft:iron_golem' : 'minecraft:villager_v2';
-    return `summon ${id} ${relf(p.x - dx + 0.5)} ${rel(p.y - GROUND_DROP)} ${relf(p.z - dz + 0.5)}`;
+    return `summon ${id} ${rel(p.x - dx)} ${rel(p.y - GROUND_DROP)} ${rel(p.z - dz)}`;
   });
-  const villagers = spawns.filter((p) => p.type === 'villager').length;
-  const golems = spawns.length - villagers;
-  const head = (title, withLife) => [
+  const build = (dx, dz, title, pop) => [
     `# ${title}`,
-    `# ${tiles.length} structure${tiles.length === 1 ? '' : 's'}` +
-      (withLife && spawns.length ? `, then ${villagers} villagers and ${golems} iron golems.` : '.'),
-    '# Only loaded chunks are filled: stand where you can see the whole area.',
-    withLife && spawns.length
-      ? '# Run this ONCE. To fill in missed tiles afterwards use the blocks function (no duplicates).'
-      : '# Safe to run again: it only places blocks.',
-  ];
-  const make = (dx, dz, title, withLife) =>
-    head(title, withLife).concat(loads(dx, dz), withLife ? summons(dx, dz) : []).join('\n') + '\n';
+    `# ${tiles.length} structure${tiles.length === 1 ? '' : 's'}. Safe to run again: blocks only.`,
+    '# Only loaded chunks are filled: stand near the middle and raise render distance.',
+    `# When the whole city is standing, run /function ${ns}/${pop} from the SAME spot.`,
+    ...loads(dx, dz),
+    `say Polis: city placed. When it has finished appearing, run /function ${ns}/${pop} from this same spot.`,
+  ].join('\n') + '\n';
+  const populate = (dx, dz, title) => [
+    `# ${title}`,
+    `# ${villagers} villagers next to their beds and ${golems} iron golems on the streets.`,
+    '# Run ONCE, from the same spot you ran build from, after the city has appeared.',
+    `say Polis: summoning ${villagers} villagers and ${golems} iron golems...`,
+    ...summons(dx, dz),
+    'say Polis: done. Mobs only appear in loaded chunks; walk closer to any that are missing.',
+  ].join('\n') + '\n';
   return [
     { name: `functions/${ns}/build.mcfunction`, fn: `${ns}/build`,
-      text: make(wb.x0, wb.z0, 'Polis: city corner at your feet', true) },
+      text: build(wb.x0, wb.z0, 'Polis: city corner at your feet', 'populate') },
     { name: `functions/${ns}/build_centered.mcfunction`, fn: `${ns}/build_centered`,
-      text: make(cx, cz, 'Polis: city centred on you', true) },
-    { name: `functions/${ns}/blocks.mcfunction`, fn: `${ns}/blocks`,
-      text: make(wb.x0, wb.z0, 'Polis: blocks only, corner at your feet', false) },
-    { name: `functions/${ns}/blocks_centered.mcfunction`, fn: `${ns}/blocks_centered`,
-      text: make(cx, cz, 'Polis: blocks only, centred on you', false) },
+      text: build(cx, cz, 'Polis: city centred on you', 'populate_centered') },
+    { name: `functions/${ns}/populate.mcfunction`, fn: `${ns}/populate`,
+      text: populate(wb.x0, wb.z0, 'Polis: villagers and golems (pairs with build)') },
+    { name: `functions/${ns}/populate_centered.mcfunction`, fn: `${ns}/populate_centered`,
+      text: populate(cx, cz, 'Polis: villagers and golems (pairs with build_centered)') },
   ];
 }
 
@@ -145,18 +160,19 @@ export function placementGuide(tiles, opts = {}) {
     ? 'Air fill is ON: loading clears terrain, trees and water out of the whole city volume.'
     : 'Air fill is OFF: empty cells keep whatever was already there (best on a flat world).');
   L.push('');
-  L.push('QUICKEST (one command):');
+  L.push('HOW TO BUILD IT:');
   L.push('  1. Import the .mcpack and enable the behaviour pack on your world. Cheats on.');
-  L.push('  2. Stand where you want the city and run ONE of:');
-  L.push(`       /function ${ns}/build            city corner at your feet`);
-  L.push(`       /function ${ns}/build_centered   city centred on you`);
+  L.push('  2. Stand on the ground where you want the city and run:');
+  L.push(`       /function ${ns}/build_centered`);
   L.push('     The city ground replaces the block you are standing on.');
-  L.push('  3. Only loaded chunks get filled. For a big city stand near the middle,');
-  L.push('     raise render distance, and fly up so the whole area is in view.');
-  L.push('     build also summons the villagers and iron golems, so run it ONCE.');
-  L.push(`     To fill in tiles that were missed, stand near them and run`);
-  L.push(`       /function ${ns}/blocks_centered   (or ${ns}/blocks)`);
-  L.push('     which places blocks only and never duplicates villagers.');
+  L.push('  3. Wait until the whole city has finished appearing, then - WITHOUT MOVING - run:');
+  L.push(`       /function ${ns}/populate_centered`);
+  L.push('     This summons the villagers and iron golems. Run it once.');
+  L.push('');
+  L.push(`  (${ns}/build and ${ns}/populate do the same with the city corner at your feet.)`);
+  L.push('');
+  L.push('  Only loaded chunks get filled. For a big city stand near the middle and raise');
+  L.push('  render distance. build is safe to rerun if tiles were missed; populate is not.');
   L.push('');
   L.push(`EXACT COORDINATES (base corner ${base.join(' ')}):`);
   for (const t of tiles) {

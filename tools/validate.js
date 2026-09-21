@@ -565,7 +565,7 @@ section('6b. air fill and /function build');
 
   // parse a function into [name, dx, dy, dz]
   const parseFn = (e) => {
-    const lines = new TextDecoder().decode(inflate(e)).split('\n').filter((l) => l && !l.startsWith('#'));
+    const lines = new TextDecoder().decode(inflate(e)).split('\n').filter((l) => l && !l.startsWith('#') && !l.startsWith('say '));
     return lines.map((l) => {
       const m = l.match(/^structure load polis:(\S+) (~-?\d*) (~-?\d*) (~-?\d*)$/);
       if (!m) return { bad: l };
@@ -575,7 +575,7 @@ section('6b. air fill and /function build');
   };
   const build = fnBuild ? parseFn(fnBuild) : [];
   const cent = fnCent ? parseFn(fnCent) : [];
-  check('function: every line is a valid relative structure load (no leading slash)',
+  check('function: every command is a valid relative structure load or say (no leading slash)',
     build.every((l) => !l.bad) && cent.every((l) => !l.bad),
     (build.concat(cent).find((l) => l.bad) || {}).bad);
   check('function: one line per structure', build.length === out.structures.length && cent.length === out.structures.length,
@@ -725,19 +725,59 @@ section('6d. summons and block entities');
     return new TextDecoder().decode(e.method === 8 ? zlib.inflateRawSync(Buffer.from(p)) : p);
   };
   const build = get(`functions/${ns}/build_centered.mcfunction`);
-  const blocks = get(`functions/${ns}/blocks_centered.mcfunction`);
-  check('functions: build and blocks variants present', !!build && !!blocks && !!get(`functions/${ns}/build.mcfunction`) && !!get(`functions/${ns}/blocks.mcfunction`));
-  const sv = (build || '').split('\n').filter((l) => l.startsWith('summon minecraft:villager_v2 '));
-  const sg = (build || '').split('\n').filter((l) => l.startsWith('summon minecraft:iron_golem '));
+  const popul = get(`functions/${ns}/populate_centered.mcfunction`);
+  check('functions: build, build_centered, populate, populate_centered present',
+    !!build && !!popul && !!get(`functions/${ns}/build.mcfunction`) && !!get(`functions/${ns}/populate.mcfunction`));
+  const sv = (popul || '').split('\n').filter((l) => l.startsWith('summon minecraft:villager_v2 '));
+  const sg = (popul || '').split('\n').filter((l) => l.startsWith('summon minecraft:iron_golem '));
   const want = r.spawns.filter((p) => p.type === 'villager').length;
   check('functions: one summon per villager', sv.length === want, `${sv.length} vs ${want}`);
   check('functions: one summon per golem', sg.length === r.spawns.length - want);
-  check('functions: summons come after every structure load',
-    (build || '').lastIndexOf('structure load') < (build || '').indexOf('summon '));
-  check('functions: summon lines are well formed',
-    sv.concat(sg).every((l) => /^summon minecraft:(villager_v2|iron_golem) ~-?[\d.]* ~-?\d* ~-?[\d.]*$/.test(l)),
-    sv.concat(sg).find((l) => !/^summon minecraft:(villager_v2|iron_golem) ~-?[\d.]* ~-?\d* ~-?[\d.]*$/.test(l)));
-  check('functions: blocks variant summons nothing', !(blocks || '').includes('summon'));
+  check('functions: build summons nothing (mobs must not arrive before their floors)', !(build || '').includes('summon'));
+  check('functions: populate loads no structures', !(popul || '').includes('structure load'));
+  const SUM = /^summon minecraft:(villager_v2|iron_golem) (~-?\d*) (~-?\d*) (~-?\d*)$/;
+  check('functions: summons use whole-block offsets', sv.concat(sg).every((l) => SUM.test(l)),
+    sv.concat(sg).find((l) => !SUM.test(l)));
+  check('functions: both tell the player what happened in chat',
+    (build || '').includes('\nsay ') && (popul || '').includes('\nsay '));
+
+  // --- simulate the game: player off-centre in a block, load, then summon --------
+  const tiles = new Map();
+  for (const st of out.structures) {
+    const e = z.entries.find((x) => x.name === `structures/${ns}/${st.name}.mcstructure`);
+    const p = localPayload(out.data, e);
+    const { root } = decodeNbt(new Uint8Array(zlib.inflateRawSync(Buffer.from(p))));
+    tiles.set(st.name, { size: [...root.size], pal: root.structure.palette.default.block_palette, l0: root.structure.block_indices[0] });
+  }
+  const num = (t) => (t === '~' ? 0 : Number(t.slice(1)));
+  for (const player of [[1000.3, 70, -500.2], [1000.8, 70, -500.9], [-37.5, 64, 12.99]]) {
+    const placed = new Map();
+    for (const ln of (build || '').split('\n')) {
+      const m = ln.match(/^structure load \S+:(\S+) (~-?\d*) (~-?\d*) (~-?\d*)$/);
+      if (!m) continue;
+      const t = tiles.get(m[1]);
+      const ox = Math.floor(player[0] + num(m[2])), oy = Math.floor(player[1] + num(m[3])), oz = Math.floor(player[2] + num(m[4]));
+      const [sx, sy, sz] = t.size;
+      for (let x = 0; x < sx; x++) for (let y = 0; y < sy; y++) for (let zz = 0; zz < sz; zz++) {
+        const v = t.l0[(x * sy + y) * sz + zz];
+        if (v >= 0) placed.set(`${ox + x},${oy + y},${oz + zz}`, t.pal[v].name);
+      }
+    }
+    const blocking = (k) => {
+      const n = placed.get(k);
+      return !!n && n !== 'minecraft:air' && !/_door$|carpet|dandelion|cornflower|allium|bluet|orchid|wheat|carrots|beetroot/.test(n);
+    };
+    let bad = 0, first = '';
+    for (const ln of sv.concat(sg)) {
+      const m = ln.match(SUM);
+      const bx = Math.floor(player[0] + num(m[2])), by = Math.floor(player[1] + num(m[3])), bz = Math.floor(player[2] + num(m[4]));
+      const tall = m[1] === 'iron_golem' ? 3 : 2;
+      let ok = blocking(`${bx},${by - 1},${bz}`);
+      for (let h = 0; h < tall; h++) if (blocking(`${bx},${by + h},${bz}`)) ok = false;
+      if (!ok) { bad++; if (!first) first = `${m[1]} at ${bx},${by},${bz}`; }
+    }
+    check(`simulated load from ${player.join(',')}: every mob stands on a floor with clear space`, bad === 0, `${bad} bad, e.g. ${first}`);
+  }
 
   // bed colours land in block_position_data, one per bed half, at the right index
   let entities = 0, bedHalves = 0, badEnt = 0;
