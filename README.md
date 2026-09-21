@@ -1,4 +1,4 @@
-# Polis v0.1.0
+# Polis v0.1.1
 
 A procedural city generator that exports to **Minecraft Bedrock**. Plans a
 street grid, subdivides it into lots, raises buildings with real interiors —
@@ -88,20 +88,38 @@ buildings; at the time of writing that is 2,000+ floors, all reachable.
 
 ## Exporting to Bedrock
 
-Bedrock structure blocks cap at 64 blocks per horizontal axis, so a city ships
-as aligned 64×64 chunks.
-
 1. **Export .mcpack** and open the file — Bedrock imports it.
-2. Enable the behaviour pack on the world you want to build in, with cheats on.
-3. Run the `/structure load` commands. The **Copy /structure commands** button
-   puts them on the clipboard already offset from the base X/Y/Z you set in
-   the panel; `placement-guide.txt` inside the pack has the same list.
+2. Enable the behaviour pack on the world, with cheats on.
+3. Stand where you want the city and run one command:
 
-A flat world at y=64 is the easiest target. Stand near where each chunk lands
-so the area is loaded.
+```
+/function polis/build_centered      city centred on you
+/function polis/build               city corner at your feet
+```
 
-**Export .mcstructure zip** gives the raw structure files instead, for anyone
-who would rather drop them into an existing pack.
+The city's ground layer replaces the block you are standing on.
+
+Bedrock caps structures at 64 blocks per horizontal axis, so a city ships as
+aligned 64×64 tiles; the two functions just load all of them in one go with
+relative coordinates. Bedrock only places structures into **loaded chunks**.
+For a large city, stand near the middle, raise render distance and fly up so
+the whole area is in view. If a corner comes up missing, move toward it and
+run the function again — reloading a tile is harmless.
+
+**Fill open areas with air** (on by default) writes real `minecraft:air` into
+every empty cell instead of structure void. Loading then clears terrain,
+trees, water and anything else out of the whole city volume — full tile
+footprint, from the base layer up to the tallest roof — including inside the
+buildings. Turn it off to keep whatever is already there, which only matters
+if you are deliberately layering the city onto an existing build. On a flat
+world the two modes look identical.
+
+The panel still lists exact-coordinate `/structure load` commands offset from
+the base X/Y/Z you set, and **Copy exact /structure commands** puts them on the
+clipboard. `placement-guide.txt` inside the pack has both.
+
+**Export .mcstructure zip** gives the raw structure files and the two
+`.mcfunction` files, for dropping into an existing pack.
 
 ## Controls
 
@@ -147,3 +165,17 @@ count of ~1M down to ~160k quads. Vertices are 20-byte interleaved (position
 `3×f32`, colour `4×u8`, normal `3×i8`) in batches of at most 16,384 quads so a
 single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
+
+## Changelog
+
+**0.1.1** — The pack now contains `functions/polis/build.mcfunction` and
+`build_centered.mcfunction`, so the whole city loads with one command. New
+**Fill open areas with air** export option (default on) replaces structure
+void with air so loading clears existing terrain; tiles are then emitted at
+full footprint and full city height so the carve has no gaps. Pack name and
+description now carry the seed. The command list no longer encodes every
+structure just to print coordinates. Validator adds an end-to-end simulation
+of both functions against the source world, cell for cell.
+
+**0.1.0** — First release.
+

@@ -1,74 +1,152 @@
-// engine/export.js — world -> Bedrock structures + placement guide.
+// engine/export.js — world -> Bedrock structures, functions and placement guide.
+//
+// Bedrock structures are capped at 64 blocks per horizontal axis, so the city
+// is cut into aligned 64x64 tiles. The pack also ships two functions that load
+// every tile in one go, relative to wherever the player is standing:
+//
+//   /function polis/build            city corner at your feet
+//   /function polis/build_centered   city centred on you
+//
+// Both put the city's ground layer where the block under your feet is.
 
 import { splitWorld, writeMcStructure, buildMcPack, makeZip } from './blockcore.js';
-import { MATERIALS } from './materials.js';
+import { MATERIALS, MAT } from './materials.js';
 
-export const CHUNK = 64;   // Bedrock structure blocks max out at 64 per horizontal axis
+export const CHUNK = 64;          // Bedrock structure limit per horizontal axis
+export const GROUND_DROP = 2;     // base layer y=0 sits 2 below feet; surface y=1 replaces the block you stand on
 
-export function buildStructures(world, opts = {}) {
+// Tile layout without encoding anything — cheap enough to call on every UI change.
+export function tileList(world, opts = {}) {
   const size = opts.chunkSize || CHUNK;
   const prefix = opts.prefix || 'c';
   const chunks = splitWorld(world, size);
-  const structures = [];
-  for (const c of chunks) {
-    const box = { x0: c.x0, y0: c.y0, z0: c.z0, x1: c.x1, y1: c.y1, z1: c.z1 };
-    const res = writeMcStructure(c.keys, c.ids, box, MATERIALS);
-    structures.push({
+  const wb = world.box;
+  return chunks.map((c) => {
+    let box = { x0: c.x0, y0: c.y0, z0: c.z0, x1: c.x1, y1: c.y1, z1: c.z1 };
+    if (opts.fillAir) {
+      // Full tile footprint, full city height: loading carves the whole volume.
+      box = {
+        x0: Math.max(wb.x0, c.cx * size), x1: Math.min(wb.x1, c.cx * size + size - 1),
+        z0: Math.max(wb.z0, c.cz * size), z1: Math.min(wb.z1, c.cz * size + size - 1),
+        y0: wb.y0, y1: wb.y1,
+      };
+    }
+    return {
       name: `${prefix}_x${c.cx}_z${c.cz}`,
-      data: res.data,
-      box, size: res.size, cells: res.cells, paletteSize: res.paletteSize,
+      chunk: c, box,
       offset: [box.x0, box.y0, box.z0],
-    });
-  }
-  return structures;
+      size: [box.x1 - box.x0 + 1, box.y1 - box.y0 + 1, box.z1 - box.z0 + 1],
+      cells: c.keys.length,
+    };
+  });
 }
 
-export function placementGuide(structures, opts = {}) {
+export function buildStructures(world, opts = {}) {
+  const airId = opts.fillAir ? MAT.AIR : undefined;
+  return tileList(world, opts).map((t) => {
+    const res = writeMcStructure(t.chunk.keys, t.chunk.ids, t.box, MATERIALS, { airId });
+    return {
+      name: t.name, data: res.data, box: t.box,
+      size: res.size, cells: res.cells, paletteSize: res.paletteSize,
+      offset: t.offset,
+    };
+  });
+}
+
+// ---- functions ----------------------------------------------------------------
+function rel(v) { return v === 0 ? '~' : `~${v}`; }
+
+export function functionFiles(tiles, world, opts = {}) {
+  const ns = opts.namespace || 'polis';
+  const wb = world.box;
+  const cx = Math.floor((wb.x0 + wb.x1 + 1) / 2);
+  const cz = Math.floor((wb.z0 + wb.z1 + 1) / 2);
+  const make = (dx, dz, title) => {
+    const L = [
+      `# ${title}`,
+      `# ${tiles.length} structure${tiles.length === 1 ? '' : 's'}. Only loaded chunks are filled:`,
+      '# stand where you can see the whole area, or raise render distance.',
+    ];
+    for (const t of tiles) {
+      L.push(`structure load ${ns}:${t.name} ${rel(t.offset[0] - dx)} ${rel(t.offset[1] - GROUND_DROP)} ${rel(t.offset[2] - dz)}`);
+    }
+    return L.join('\n') + '\n';
+  };
+  return [
+    { name: `functions/${ns}/build.mcfunction`, fn: `${ns}/build`,
+      text: make(wb.x0, wb.z0, 'Polis: city corner at your feet') },
+    { name: `functions/${ns}/build_centered.mcfunction`, fn: `${ns}/build_centered`,
+      text: make(cx, cz, 'Polis: city centred on you') },
+  ];
+}
+
+// ---- guide --------------------------------------------------------------------
+export function placementGuide(tiles, opts = {}) {
   const ns = opts.namespace || 'polis';
   const base = opts.base || [0, 64, 0];
   const L = [];
   L.push('POLIS — placement guide');
   L.push('=======================');
   L.push('');
-  L.push(`${structures.length} structure${structures.length === 1 ? '' : 's'}, each at most ${CHUNK}x${CHUNK} blocks across.`);
+  L.push(`${tiles.length} structure${tiles.length === 1 ? '' : 's'}, each at most ${CHUNK}x${CHUNK} blocks across.`);
+  L.push(opts.fillAir
+    ? 'Air fill is ON: loading clears terrain, trees and water out of the whole city volume.'
+    : 'Air fill is OFF: empty cells keep whatever was already there (best on a flat world).');
   L.push('');
-  L.push('HOW TO PLACE (Bedrock):');
-  L.push('  1. Import the .mcpack (open it, or drop it into the game) and enable the');
-  L.push('     behaviour pack on the world you want to build in.');
-  L.push('  2. Turn on cheats, then run the commands below in order. They already');
-  L.push(`     include the base corner ${base.join(' ')} — change the numbers if you want the`);
-  L.push('     city somewhere else, keeping the offsets between them identical.');
-  L.push('  3. Flat worlds work best. Each command places one chunk of the city;');
-  L.push('     the chunks are aligned, so together they form the whole build.');
+  L.push('QUICKEST (one command):');
+  L.push('  1. Import the .mcpack and enable the behaviour pack on your world. Cheats on.');
+  L.push('  2. Stand where you want the city and run ONE of:');
+  L.push(`       /function ${ns}/build            city corner at your feet`);
+  L.push(`       /function ${ns}/build_centered   city centred on you`);
+  L.push('     The city ground replaces the block you are standing on.');
+  L.push('  3. Only loaded chunks get filled. For a big city stand near the middle,');
+  L.push('     raise render distance, and fly up so the whole area is in view.');
+  L.push('     Running the function again is safe and fills anything that was missed.');
   L.push('');
-  L.push('COMMANDS:');
-  for (const s of structures) {
-    const x = base[0] + s.offset[0], y = base[1] + s.offset[1], z = base[2] + s.offset[2];
-    L.push(`  /structure load ${ns}:${s.name} ${x} ${y} ${z}`);
+  L.push(`EXACT COORDINATES (base corner ${base.join(' ')}):`);
+  for (const t of tiles) {
+    const x = base[0] + t.offset[0], y = base[1] + t.offset[1], z = base[2] + t.offset[2];
+    L.push(`  /structure load ${ns}:${t.name} ${x} ${y} ${z}`);
   }
   L.push('');
   L.push('OFFSETS (relative to the city corner):');
-  for (const s of structures) {
-    L.push(`  ${s.name}  ->  +${s.offset[0]} +${s.offset[1]} +${s.offset[2]}   size ${s.size.join('x')}   ${s.cells} blocks`);
+  for (const t of tiles) {
+    L.push(`  ${t.name}  ->  +${t.offset[0]} +${t.offset[1]} +${t.offset[2]}   size ${t.size.join('x')}   ${t.cells} blocks`);
   }
   L.push('');
-  L.push('If a structure will not load, check that the pack is enabled on the world');
-  L.push('and that the area is loaded (stand near where it is being placed).');
+  L.push('If nothing loads: check the pack is enabled on this world and cheats are on.');
+  L.push('If only part loads: those tiles were outside loaded chunks — move and rerun.');
   return L.join('\n');
 }
 
+export function commandList(tiles, opts = {}) {
+  const ns = opts.namespace || 'polis';
+  const base = opts.base || [0, 64, 0];
+  return tiles.map((t) =>
+    `/structure load ${ns}:${t.name} ${base[0] + t.offset[0]} ${base[1] + t.offset[1]} ${base[2] + t.offset[2]}`);
+}
+
+// ---- packages -----------------------------------------------------------------
 export async function exportPack(world, opts = {}) {
+  const tiles = tileList(world, opts);
   const structures = buildStructures(world, opts);
-  const guide = placementGuide(structures, opts);
-  const data = await buildMcPack(structures, { ...opts, guide });
-  return { data, structures, guide };
+  const guide = placementGuide(tiles, opts);
+  const fns = functionFiles(tiles, world, opts);
+  const data = await buildMcPack(structures, {
+    ...opts, guide,
+    files: fns.map((f) => ({ name: f.name, data: f.text })),
+  });
+  return { data, structures, guide, functions: fns };
 }
 
 export async function exportStructuresZip(world, opts = {}) {
+  const tiles = tileList(world, opts);
   const structures = buildStructures(world, opts);
-  const guide = placementGuide(structures, opts);
+  const guide = placementGuide(tiles, opts);
+  const fns = functionFiles(tiles, world, opts);
   const files = structures.map((s) => ({ name: `${s.name}.mcstructure`, data: s.data }));
+  for (const f of fns) files.push({ name: f.name, data: new TextEncoder().encode(f.text) });
   files.push({ name: 'placement-guide.txt', data: new TextEncoder().encode(guide) });
   const data = await makeZip(files, opts);
-  return { data, structures, guide };
+  return { data, structures, guide, functions: fns };
 }

@@ -5,9 +5,10 @@ import { USE } from './engine/plan.js';
 import { verifyAll } from './engine/verify.js';
 import { buildMesh } from './engine/mesher.js';
 import { Renderer } from './engine/renderer.js';
-import { exportPack, exportStructuresZip, buildStructures, placementGuide } from './engine/export.js';
+import { exportPack, exportStructuresZip, tileList, commandList } from './engine/export.js';
 import { THEMES } from './engine/materials.js';
 
+const VERSION = '0.1.1';
 const $ = (id) => document.getElementById(id);
 
 const SLIDERS = {
@@ -57,7 +58,7 @@ function boot() {
   $('mcpack').addEventListener('click', () => doExport('mcpack'));
   $('mcstruct').addEventListener('click', () => doExport('zip'));
   $('copycmd').addEventListener('click', copyCommands);
-  for (const b of ['baseX', 'baseY', 'baseZ']) $(b).addEventListener('change', refreshCommands);
+  for (const b of ['baseX', 'baseY', 'baseZ', 'fillAir']) $(b).addEventListener('change', refreshCommands);
 
   $('map').addEventListener('click', (e) => {
     const r = e.currentTarget.getBoundingClientRect();
@@ -256,34 +257,46 @@ function base() {
   return [Number($('baseX').value) | 0, Number($('baseY').value) | 0, Number($('baseZ').value) | 0];
 }
 
+let exactCommands = [];
+
 function refreshCommands() {
   if (!result) return;
   try {
-    const structures = buildStructures(result.world, { prefix: 'c' });
-    const guide = placementGuide(structures, { base: base() });
-    const cmds = guide.split('\n').filter((l) => l.includes('/structure load')).map((l) => l.trim());
-    $('cmds').value = cmds.join('\n');
+    const tiles = tileList(result.world, { prefix: 'c', fillAir: $('fillAir').checked });
+    exactCommands = commandList(tiles, { base: base() });
+    $('cmds').value = [
+      '# one command, after importing the pack — stand where you want it:',
+      '/function polis/build_centered',
+      '/function polis/build          (corner at your feet)',
+      '',
+      `# or the exact coordinates (${tiles.length} tile${tiles.length === 1 ? '' : 's'}):`,
+      ...exactCommands,
+    ].join('\n');
   } catch (e) {
+    exactCommands = [];
     $('cmds').value = 'error: ' + e.message;
   }
 }
 
 function copyCommands() {
-  const t = $('cmds');
-  if (!t.value) { toast('Nothing to copy yet.', true); return; }
+  if (!exactCommands.length) { toast('Nothing to copy yet.', true); return; }
+  const text = exactCommands.join('\n');
   if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(t.value)
-      .then(() => toast('Placement commands copied.'))
-      .catch(() => fallbackCopy(t));
-  } else fallbackCopy(t);
+    navigator.clipboard.writeText(text)
+      .then(() => toast(`${exactCommands.length} /structure commands copied.`))
+      .catch(() => fallbackCopy(text));
+  } else fallbackCopy(text);
 }
 
-function fallbackCopy(t) {
-  t.removeAttribute('readonly');
+function fallbackCopy(text) {
+  const t = document.createElement('textarea');
+  t.value = text;
+  t.style.position = 'fixed'; t.style.opacity = '0';
+  document.body.appendChild(t);
   t.select();
-  try { document.execCommand('copy'); toast('Placement commands copied.'); }
+  try { document.execCommand('copy'); toast(`${exactCommands.length} /structure commands copied.`); }
   catch (e) { toast('Copy failed — select the text manually.', true); }
-  t.setAttribute('readonly', '');
+  t.remove();
 }
 
 async function doExport(kind) {
@@ -291,11 +304,15 @@ async function doExport(kind) {
   busy(true);
   $('mcpack').disabled = $('mcstruct').disabled = true;
   try {
-    const opts = { base: base(), namespace: 'polis', prefix: 'c', packName: 'Polis city' };
+    const opts = {
+      base: base(), namespace: 'polis', prefix: 'c', fillAir: $('fillAir').checked,
+      packName: `Polis city ${result.cfg.seed}`,
+      description: `Polis v${VERSION} · seed ${result.cfg.seed} · /function polis/build_centered`,
+    };
     const out = kind === 'mcpack'
       ? await exportPack(result.world, opts)
       : await exportStructuresZip(result.world, opts);
-    const name = `polis-${result.cfg.seed}-v0.1.0.` + (kind === 'mcpack' ? 'mcpack' : 'zip');
+    const name = `polis-${result.cfg.seed}-v${VERSION}.` + (kind === 'mcpack' ? 'mcpack' : 'zip');
     download(out.data, name);
     toast(`${out.structures.length} structure${out.structures.length === 1 ? '' : 's'} → ${name}`);
   } catch (e) {

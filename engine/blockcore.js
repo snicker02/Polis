@@ -217,13 +217,20 @@ function stateTag(st) {
  * Build one .mcstructure from a list of packed cells.
  * keys/ids are parallel typed arrays (see splitWorld).
  */
-export function writeMcStructure(keys, ids, box, materials) {
+export function writeMcStructure(keys, ids, box, materials, opts = {}) {
   const sx = box.x1 - box.x0 + 1, sy = box.y1 - box.y0 + 1, sz = box.z1 - box.z0 + 1;
   const n = sx * sy * sz;
   if (n <= 0) throw new Error('empty structure box');
-  const layer0 = new Int32Array(n).fill(-1);
   const palette = [];
   const remap = new Map();
+  // Index -1 is "structure void": loading leaves whatever was already there.
+  // With airId set, empty cells become real air instead, so loading the
+  // structure clears terrain, trees and water out of the whole volume.
+  let fill = -1;
+  if (opts.airId !== undefined && opts.airId !== null) {
+    fill = 0; palette.push(opts.airId); remap.set(opts.airId, 0);
+  }
+  const layer0 = new Int32Array(n).fill(fill);
 
   for (let i = 0; i < keys.length; i++) {
     const k = keys[i];
@@ -462,6 +469,9 @@ export async function buildMcPack(structures, opts = {}) {
     { name: 'manifest.json', data: utf8(JSON.stringify(manifest, null, 2)) },
   ];
   if (opts.guide) files.push({ name: 'placement-guide.txt', data: utf8(opts.guide) });
+  for (const f of opts.files || []) {
+    files.push({ name: f.name, data: typeof f.data === 'string' ? utf8(f.data) : f.data });
+  }
   for (const s of structures) {
     files.push({ name: `structures/${ns}/${s.name}.mcstructure`, data: s.data });
   }

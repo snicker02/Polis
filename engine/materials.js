@@ -50,6 +50,10 @@ export const MATERIALS = new Registry();
 const A = (n, b, c, st, fl) => MATERIALS.add(n, b, c, st, fl);
 
 export const MAT = {
+  // Never placed in the world; only written into exported structures when
+  // "fill air" is on, so empty cells overwrite whatever terrain was there.
+  AIR:         A('AIR', 'minecraft:air', '#000000', {}, { passable: true, transparent: true }),
+
   // ---- ground & street ----
   BASE:        A('BASE', 'minecraft:stone', '#7d7d7d'),
   DIRT:        A('DIRT', 'minecraft:dirt', '#7a5b3c'),

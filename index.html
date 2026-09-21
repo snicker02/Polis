@@ -131,7 +131,7 @@
   <div id="panel">
     <div id="panelScroll">
       <h1>PO<span>L</span>IS</h1>
-      <div class="sub">procedural city → Minecraft Bedrock · v0.1.0</div>
+      <div class="sub">procedural city → Minecraft Bedrock · v0.1.1</div>
 
       <fieldset>
         <legend>Mode</legend>
@@ -212,10 +212,11 @@
         <div class="row">
           <input type="number" id="baseX" value="0"><input type="number" id="baseY" value="64"><input type="number" id="baseZ" value="0">
         </div>
+        <label class="chk" style="margin:4px 0 2px"><input type="checkbox" id="fillAir" checked>Fill open areas with air (clears terrain, trees, water)</label>
         <div class="btnrow"><button id="mcpack" class="primary">Export .mcpack</button></div>
         <div class="btnrow"><button id="mcstruct">Export .mcstructure zip</button></div>
-        <div class="btnrow"><button id="copycmd">Copy /structure commands</button></div>
-        <div class="hint">Bedrock structure blocks cap at 64 wide, so the build ships as aligned chunks. Load them in the listed order.</div>
+        <div class="btnrow"><button id="copycmd">Copy exact /structure commands</button></div>
+        <div class="hint">The pack loads the whole city with one command: <b>/function polis/build_centered</b>. Only loaded chunks fill — stand near the middle; rerunning is safe.</div>
         <textarea id="cmds" readonly placeholder="Generate to see the placement commands."></textarea>
       </fieldset>
     </div>
