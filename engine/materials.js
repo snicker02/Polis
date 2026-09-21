@@ -210,15 +210,18 @@ const DOOR_BLOCKS = {
 export const DOOR_KINDS = Object.keys(DOOR_BLOCKS);
 export const DIR = { east: 0, south: 1, west: 2, north: 3 };
 
-// Doors take the facing as a string. Bedrock's own Java->Bedrock tables map
-// facing east/south/west/north to the old numbers 0/1/2/3, which is the DIR
-// numbering used throughout; 0.1.5 and earlier wrote that old number, which is
-// not a valid door state at 1.21.60 (the game fell back to a default facing).
-const DOOR_FACING = ['east', 'south', 'west', 'north'];
+// Doors store their facing in minecraft:cardinal_direction, but ROTATED a
+// quarter turn from the way the door faces. Bedrock's own Java->Bedrock table
+// (tools/bedrock-states.json, _doorFacingToCardinal) gives:
+//   facing north -> "east", south -> "west", east -> "south", west -> "north".
+// `dir` here is the DIR numbering (east 0, south 1, west 2, north 3), which is
+// the Java facing. 0.1.7-0.1.8 wrote the facing unrotated, so every door was a
+// quarter turn out; single doors hid it, double doors came apart.
+const DOOR_CARDINAL = ['south', 'west', 'north', 'east'];   // indexed by DIR
 export function doorId(kind, dir, upper, hinge = 0) {
   const [block, color] = DOOR_BLOCKS[kind] || DOOR_BLOCKS.oak;  // unknown kind -> oak, never iron
   return MATERIALS.add(null, block, color, {
-    'minecraft:cardinal_direction': S(DOOR_FACING[dir & 3]),
+    'minecraft:cardinal_direction': S(DOOR_CARDINAL[dir & 3]),
     door_hinge_bit: B(hinge),
     open_bit: B(0),
     upper_block_bit: B(upper ? 1 : 0),

@@ -300,10 +300,17 @@ export function makeBuilding(world, spec, rng) {
   }
 
   // ---- doors ---------------------------------------------------------------
+  // A double door is two doors with the same facing and opposite hinges, the
+  // hinges on the OUTER edges. "Right" is the side clockwise from the facing,
+  // so which of our two cells gets the right hinge depends on the street side.
   const dirVal = DIR[face];
+  const CLOCKWISE = { north: 'east', east: 'south', south: 'west', west: 'north' };
+  const secondSide = (face === 'south' || face === 'north') ? 'east' : 'south';
+  const secondIsRight = CLOCKWISE[face] === secondSide;
+  const hingeOf = (i) => (doorCells.length < 2 ? 0 : ((i === 1) === secondIsRight ? 1 : 0));
   doorCells.forEach(([cx, cz], i) => {
-    world.set(cx, gy + 1, cz, doorId(theme.door, dirVal, false, i));
-    world.set(cx, gy + 2, cz, doorId(theme.door, dirVal, true, i));
+    world.set(cx, gy + 1, cz, doorId(theme.door, dirVal, false, hingeOf(i)));
+    world.set(cx, gy + 2, cz, doorId(theme.door, dirVal, true, hingeOf(i)));
   });
   // lit entrance
   if (P >= 5) {

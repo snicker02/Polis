@@ -8,7 +8,7 @@ import { Renderer } from './engine/renderer.js';
 import { exportPack, exportStructuresZip, tileList, commandList, cityId, POLIS_VERSION } from './engine/export.js';
 import { THEMES } from './engine/materials.js';
 
-const VERSION = '0.1.8';
+const VERSION = '0.2.0';
 const $ = (id) => document.getElementById(id);
 
 const SLIDERS = {

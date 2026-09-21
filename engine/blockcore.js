@@ -121,7 +121,7 @@ export function perimeter(x0, z0, x1, z1) {
 // Little-endian NBT writer
 // ============================================================================
 
-const TAG = { END: 0, BYTE: 1, SHORT: 2, INT: 3, LONG: 4, FLOAT: 5, DOUBLE: 6, BYTE_ARRAY: 7, STRING: 8, LIST: 9, COMPOUND: 10, INT_ARRAY: 11 };
+export const TAG = { END: 0, BYTE: 1, SHORT: 2, INT: 3, LONG: 4, FLOAT: 5, DOUBLE: 6, BYTE_ARRAY: 7, STRING: 8, LIST: 9, COMPOUND: 10, INT_ARRAY: 11 };
 
 class ByteWriter {
   constructor(cap = 1 << 16) {
@@ -142,6 +142,7 @@ class ByteWriter {
   short(v) { this.need(2); this.view.setInt16(this.p, v, true); this.p += 2; }
   int(v) { this.need(4); this.view.setInt32(this.p, v, true); this.p += 4; }
   float(v) { this.need(4); this.view.setFloat32(this.p, v, true); this.p += 4; }
+  double(v) { this.need(8); this.view.setFloat64(this.p, v, true); this.p += 8; }
   long(v) {
     this.need(8);
     const big = BigInt(v);
@@ -172,6 +173,8 @@ export const N = {
   short: (v) => ({ t: TAG.SHORT, v }),
   int: (v) => ({ t: TAG.INT, v }),
   float: (v) => ({ t: TAG.FLOAT, v }),
+  long: (v) => ({ t: TAG.LONG, v: BigInt(v) }),
+  double: (v) => ({ t: TAG.DOUBLE, v }),
   str: (v) => ({ t: TAG.STRING, v }),
   list: (et, items) => ({ t: TAG.LIST, et, v: items }),
   intList: (arr) => ({ t: TAG.LIST, et: TAG.INT, v: arr, typed: true }),
@@ -184,9 +187,14 @@ function writePayload(w, tag) {
     case TAG.SHORT: w.short(tag.v); break;
     case TAG.INT: w.int(tag.v); break;
     case TAG.FLOAT: w.float(tag.v); break;
+    case TAG.LONG: w.long(tag.v); break;
+    case TAG.DOUBLE: w.double(tag.v); break;
     case TAG.STRING: w.str(tag.v); break;
+    case TAG.BYTE_ARRAY: { w.int(tag.v.length); for (const b of tag.v) w.byte(b); break; }
+    case TAG.INT_ARRAY: { w.int(tag.v.length); w.ints(tag.v); break; }
     case TAG.LIST: {
-      w.byte(tag.v.length ? tag.et : TAG.END);
+      // empty lists keep their element type when copied from game data (keepEt)
+      w.byte(tag.v.length || tag.keepEt ? tag.et : TAG.END);
       w.int(tag.v.length);
       if (tag.typed) { w.ints(tag.v); }
       else for (const item of tag.v) writePayload(w, item);
@@ -248,6 +256,9 @@ export function writeMcStructure(keys, ids, box, materials, opts = {}) {
   if (opts.airId !== undefined && opts.airId !== null) {
     fill = 0; palette.push(opts.airId); remap.set(opts.airId, 0);
   }
+  // Entity-only structures still carry one (unused) palette entry, as every
+  // structure the game itself saves does. Cells stay structure void.
+  if (opts.placeholderId !== undefined && !palette.length) { palette.push(opts.placeholderId); remap.set(opts.placeholderId, 0); }
   const layer0 = new Int32Array(n).fill(fill);
 
   for (let i = 0; i < keys.length; i++) {
@@ -293,7 +304,7 @@ export function writeMcStructure(keys, ids, box, materials, opts = {}) {
     size: N.intList([sx, sy, sz]),
     structure: N.comp({
       block_indices: N.list(TAG.LIST, [N.intList(layer0), N.intList(layer1)]),
-      entities: N.list(TAG.COMPOUND, []),
+      entities: N.list(TAG.COMPOUND, opts.entities || []),
       palette: N.comp({
         default: N.comp({
           block_palette: N.list(TAG.COMPOUND, palTags),
@@ -301,10 +312,13 @@ export function writeMcStructure(keys, ids, box, materials, opts = {}) {
         }),
       }),
     }),
-    structure_world_origin: N.intList([0, 0, 0]),
+    // As in structures saved by the game: the origin is the box's minimum
+    // corner, and entity Pos / block-entity x,y,z are in the same coordinates.
+    structure_world_origin: N.intList([box.x0, box.y0, box.z0]),
   });
 
-  return { data: encodeNbt(root), size: [sx, sy, sz], paletteSize: palette.length, cells: keys.length, entities: posCount };
+  return { data: encodeNbt(root), size: [sx, sy, sz], paletteSize: palette.length, cells: keys.length,
+    entities: posCount, mobs: (opts.entities || []).length };
 }
 
 /**

@@ -21,6 +21,7 @@ import { VoxelWorld, splitWorld, buildMcPack } from '../engine/blockcore.js';
 import { buildStructures, placementGuide, CHUNK, exportPack, tileList, functionFiles, GROUND_DROP, cityId, POLIS_VERSION, SUMMON_IDS } from '../engine/export.js';
 import { buildMesh, MAX_QUADS, STRIDE } from '../engine/mesher.js';
 import { decodeNbt, readZip, localPayload } from './nbt-read.js';
+import { decodeTyped } from './nbt-typed.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const deflateRaw = (b) => new Uint8Array(zlib.deflateRawSync(Buffer.from(b)));
@@ -194,6 +195,35 @@ section('2b. stair layouts and doors');
     const v = verifyAll(r.world, r.buildings);
     check(`${stairStyle} with stair blocks off: climbable`, v.floorsReached === v.floorsChecked,
       `${v.floorsReached}/${v.floorsChecked}`);
+  }
+
+  // doors: facing -> cardinal_direction exactly as Bedrock's own table says
+  const DOORMAP = JSON.parse(readFileSync(join(ROOT, 'tools/bedrock-states.json'), 'utf8'))._doorFacingToCardinal.map;
+  const FACE_DIR = { east: 0, south: 1, west: 2, north: 3 };
+  const doorBad = Object.entries(DOORMAP).filter(([face, card]) =>
+    MATERIALS.def(doorId('oak', FACE_DIR[face], false)).states['minecraft:cardinal_direction'].value !== card);
+  check('doors: facing maps to cardinal_direction per Bedrock\'s Java->Bedrock table', doorBad.length === 0,
+    doorBad.map(([f, c]) => `${f} should be ${c}`).join(', '));
+  // double doors: same facing, opposite hinges, right hinge on the cell clockwise of the facing
+  {
+    const CW = { north: [1, 0], east: [0, 1], south: [-1, 0], west: [0, -1] };   // clockwise-of-facing offset
+    let pairs = 0, badPairs = 0;
+    for (const seed of [1, 2, 3, 4, 5, 6]) {
+      const r = generateCity({ ...DEFAULTS, size: 192, seed });
+      for (const b of r.buildings) {
+        if (!b.doorCells || b.doorCells.length !== 2) continue;
+        pairs++;
+        const [[ax, az], [bx, bz]] = b.doorCells;
+        const da = MATERIALS.def(r.world.get(ax, b.groundY + 1, az)), db = MATERIALS.def(r.world.get(bx, b.groundY + 1, bz));
+        const ca = da.states['minecraft:cardinal_direction'].value, cb = db.states['minecraft:cardinal_direction'].value;
+        const ha = da.states.door_hinge_bit.value, hb = db.states.door_hinge_bit.value;
+        const [rx, rz] = CW[b.facing];
+        const rightIsB = (bx - ax) === rx && (bz - az) === rz;
+        const ok = ca === cb && ha !== hb && (rightIsB ? hb === 1 : ha === 1);
+        if (!ok) badPairs++;
+      }
+    }
+    check('double doors: same facing, hinges on the outer edges', pairs > 0 && badPairs === 0, `${badPairs}/${pairs} bad`);
   }
 
   // doors: only real Bedrock door ids, and only ones a player can open by hand
@@ -650,7 +680,8 @@ section('6b. air fill and /function build');
 
   // parse a function into [name, dx, dy, dz]
   const parseFn = (e) => {
-    const lines = new TextDecoder().decode(inflate(e)).split('\n').filter((l) => l && !l.startsWith('#') && !l.startsWith('say '));
+    const lines = new TextDecoder().decode(inflate(e)).split('\n')
+      .filter((l) => l && !l.startsWith('#') && !l.startsWith('say ') && !l.startsWith('tickingarea '));
     return lines.map((l) => {
       const m = l.match(/^structure load polis:(\S+) (~-?\d*) (~-?\d*) (~-?\d*)$/);
       if (!m) return { bad: l };
@@ -795,106 +826,139 @@ section('6c. city ids');
 }
 
 // ===========================================================================
-// 6d. villagers in functions, bed colours in the structure file
+// 6d. population: mob structures, minecart summons, ticking areas, bed colours
 // ===========================================================================
-section('6d. summons and block entities');
+section('6d. population');
 {
-  const r = generateCity({ ...DEFAULTS, size: 128, seed: 12345 });
+  const r = generateCity({ ...DEFAULTS, size: 192, seed: 12345, transit: 'rails' });
   const ns = cityId(r.world, 12345);
-  const out = await exportPack(r.world, { namespace: ns, fillAir: true, spawns: r.spawns, deflateRaw });
+  const out = await exportPack(r.world, { namespace: ns, fillAir: true, spawns: r.spawns, seed: 12345, deflateRaw });
   const z = readZip(out.data);
-  const get = (name) => {
+  const raw = (name) => {
     const e = z.entries.find((x) => x.name === name);
     if (!e) return null;
     const p = localPayload(out.data, e);
-    return new TextDecoder().decode(e.method === 8 ? zlib.inflateRawSync(Buffer.from(p)) : p);
+    return e.method === 8 ? new Uint8Array(zlib.inflateRawSync(Buffer.from(p))) : p;
   };
-  const build = get(`functions/${ns}/build_centered.mcfunction`);
-  const popul = get(`functions/${ns}/populate_centered.mcfunction`);
+  const text = (name) => { const b = raw(name); return b ? new TextDecoder().decode(b) : null; };
+  const build = text(`functions/${ns}/build_centered.mcfunction`);
+  const popul = text(`functions/${ns}/populate_centered.mcfunction`);
   check('functions: build, build_centered, populate, populate_centered present',
-    !!build && !!popul && !!get(`functions/${ns}/build.mcfunction`) && !!get(`functions/${ns}/populate.mcfunction`));
-  const sv = (popul || '').split('\n').filter((l) => l.startsWith('summon minecraft:villager '));
-  const sc = (popul || '').split('\n').filter((l) => l.startsWith('summon minecraft:minecart '));
-  const sg = (popul || '').split('\n').filter((l) => l.startsWith('summon minecraft:iron_golem '));
-  const want = r.spawns.filter((p) => p.type === 'villager').length;
-  check('functions: one summon per villager', sv.length === want, `${sv.length} vs ${want}`);
-  check('functions: one summon per golem', sg.length === r.spawns.filter((p) => p.type === 'golem').length);
-  check('functions: build summons nothing (mobs must not arrive before their floors)', !(build || '').includes('summon'));
-  check('functions: populate loads no structures', !(popul || '').includes('structure load'));
-  const SUM = /^summon minecraft:(villager|iron_golem|minecart) (~-?\d*) (~-?\d*) (~-?\d*)$/;
-  check('functions: summons use whole-block offsets', sv.concat(sg).every((l) => SUM.test(l)),
-    sv.concat(sg).find((l) => !SUM.test(l)));
-  check('functions: both tell the player what happened in chat',
-    (build || '').includes('\nsay ') && (popul || '').includes('\nsay '));
-
-  // --- simulate the game: player off-centre in a block, load, then summon --------
-  const tiles = new Map();
-  for (const st of out.structures) {
-    const e = z.entries.find((x) => x.name === `structures/${ns}/${st.name}.mcstructure`);
-    const p = localPayload(out.data, e);
-    const { root } = decodeNbt(new Uint8Array(zlib.inflateRawSync(Buffer.from(p))));
-    tiles.set(st.name, { size: [...root.size], pal: root.structure.palette.default.block_palette, l0: root.structure.block_indices[0] });
+    !!build && !!popul && !!text(`functions/${ns}/build.mcfunction`) && !!text(`functions/${ns}/populate.mcfunction`));
+  const lines = (t) => (t || '').split('\n').filter((l) => l && !l.startsWith('#'));
+  const wantV = r.spawns.filter((p) => p.type === 'villager').length;
+  const wantG = r.spawns.filter((p) => p.type === 'golem').length;
+  const wantC = r.spawns.filter((p) => p.type === 'minecart').length;
+  check('population: this city has villagers, golems and carts to place', wantV > 0 && wantG > 0 && wantC > 0);
+  check('functions: nobody summons villagers or golems any more',
+    !/summon minecraft:(villager|iron_golem)/.test(build + popul));
+  check('functions: build summons nothing and loads no mob structures',
+    !build.includes('summon') && !lines(build).some((l) => / \S+:m_x/.test(l)));
+  const mobLoads = lines(popul).filter((l) => /^structure load \S+:m_x-?\d+_z-?\d+ /.test(l));
+  check('populate: one structure load per mob structure', mobLoads.length === out.mobStructures.length && mobLoads.length > 0,
+    `${mobLoads.length} vs ${out.mobStructures.length}`);
+  check('populate: one summon per minecart', lines(popul).filter((l) => l.startsWith('summon minecraft:minecart ')).length === wantC);
+  const adds = lines(build).filter((l) => l.startsWith('tickingarea add '));
+  const removes = lines(popul).filter((l) => l.startsWith('tickingarea remove '));
+  check('ticking areas: build adds them, populate removes the same ones', adds.length > 0 && adds.length <= 10 &&
+    removes.length === adds.length && adds.every((l) => removes.includes('tickingarea remove ' + l.split(' ').pop())));
+  const areaOk = adds.every((l) => {
+    const m = l.match(/^tickingarea add (~-?\d*) (~-?\d*) (~-?\d*) (~-?\d*) (~-?\d*) (~-?\d*) [a-z0-9_]+$/);
+    if (!m) return false;
+    const n = (t) => (t === '~' ? 0 : Number(t.slice(1)));
+    const w = n(m[4]) - n(m[1]) + 1, d = n(m[6]) - n(m[3]) + 1;
+    return w > 0 && d > 0 && w <= 144 && d <= 144;   // 144 blocks can never span more than 10 chunks
+  });
+  check('ticking areas: well formed and each within the 100-chunk limit', areaOk);
+  let covered = 0; const wb = r.world.box;
+  for (const l of adds) {
+    const m = l.match(/^tickingarea add (~-?\d*) \S+ (~-?\d*) (~-?\d*) \S+ (~-?\d*) /);
+    const n = (t) => (t === '~' ? 0 : Number(t.slice(1)));
+    covered += (n(m[3]) - n(m[1]) + 1) * (n(m[4]) - n(m[2]) + 1);
   }
-  const num = (t) => (t === '~' ? 0 : Number(t.slice(1)));
-  for (const player of [[1000.3, 70, -500.2], [1000.8, 70, -500.9], [-37.5, 64, 12.99]]) {
+  check('ticking areas: together they cover the whole city exactly', covered === (wb.x1 - wb.x0 + 1) * (wb.z1 - wb.z0 + 1));
+
+  // decode every tile and mob structure, then place them all from an
+  // off-centre player position the way the game would, and check each mob
+  const typed = {};
+  for (const st of out.structures.concat(out.mobStructures)) typed[st.name] = decodeTyped(raw(`structures/${ns}/${st.name}.mcstructure`));
+  let entCount = 0, badEnt = 0, uids = new Set(), dupUid = 0, vCount = 0, gCount = 0, blocksInMob = 0;
+  for (const st of out.mobStructures) {
+    const t = typed[st.name].v;
+    const l0 = t.structure.v.block_indices.v[0].v;
+    for (const c of l0) if (c.v !== -1) blocksInMob++;
+    for (const e of t.structure.v.entities.v) {
+      entCount++;
+      const v = e.v, id = v.identifier.v;
+      if (id === 'minecraft:villager_v2') {
+        vCount++;
+        const d = v.definitions.v.map((x) => x.v);
+        if (!d.includes('+unskilled') || !d.includes('+adult') || d.includes('+nitwit') || 'DwellingUniqueID' in v || 'Offers' in v) badEnt++;
+      } else if (id === 'minecraft:iron_golem') gCount++;
+      else badEnt++;
+      if (v.Pos.et !== 5 || v.Pos.v.length !== 3 || v.UniqueID.t !== 4) badEnt++;
+      const k = v.UniqueID.v.toString(); if (uids.has(k)) dupUid++; uids.add(k);
+    }
+  }
+  check('mob structures: exactly the planned villagers and golems', vCount === wantV && gCount === wantG, `${vCount}/${wantV} villagers, ${gCount}/${wantG} golems`);
+  check('mob structures: villagers are fresh unskilled adults with no village or trades', badEnt === 0, `${badEnt} bad`);
+  check('mob structures: every entity has a unique id', dupUid === 0);
+  check('mob structures: contain no blocks at all (never overwrite the city)', blocksInMob === 0, `${blocksInMob} blocks`);
+  check('mob structures: palette holds one unused entry, like game-saved structures',
+    out.mobStructures.every((st) => typed[st.name].v.structure.v.palette.v.default.v.block_palette.v.length === 1));
+
+  for (const player of [[1000.3, 70, -500.2], [-37.7, 64, 12.99]]) {
     const placed = new Map();
-    for (const ln of (build || '').split('\n')) {
+    const loadAt = (ln) => {
       const m = ln.match(/^structure load \S+:(\S+) (~-?\d*) (~-?\d*) (~-?\d*)$/);
-      if (!m) continue;
-      const t = tiles.get(m[1]);
-      const ox = Math.floor(player[0] + num(m[2])), oy = Math.floor(player[1] + num(m[3])), oz = Math.floor(player[2] + num(m[4]));
-      const [sx, sy, sz] = t.size;
+      if (!m) return null;
+      const n = (t) => (t === '~' ? 0 : Number(t.slice(1)));
+      return { name: m[1], at: [Math.floor(player[0] + n(m[2])), Math.floor(player[1] + n(m[3])), Math.floor(player[2] + n(m[4]))] };
+    };
+    for (const ln of lines(build)) {
+      const L = loadAt(ln); if (!L) continue;
+      const t = typed[L.name].v; const [sx, sy, sz] = t.size.v.map((q) => q.v);
+      const pal = t.structure.v.palette.v.default.v.block_palette.v, l0 = t.structure.v.block_indices.v[0].v;
       for (let x = 0; x < sx; x++) for (let y = 0; y < sy; y++) for (let zz = 0; zz < sz; zz++) {
-        const v = t.l0[(x * sy + y) * sz + zz];
-        if (v >= 0) placed.set(`${ox + x},${oy + y},${oz + zz}`, t.pal[v].name);
+        const iv = l0[(x * sy + y) * sz + zz].v;
+        if (iv >= 0) placed.set(`${L.at[0] + x},${L.at[1] + y},${L.at[2] + zz}`, pal[iv].v.name.v);
       }
     }
-    const blocking = (k) => {
-      const n = placed.get(k);
-      return !!n && n !== 'minecraft:air' && !/_door$|carpet|dandelion|cornflower|allium|bluet|orchid|wheat|carrots|beetroot/.test(n);
-    };
-    let bad = 0, first = '';
-    for (const ln of sv.concat(sg)) {
-      const m = ln.match(SUM);
-      const bx = Math.floor(player[0] + num(m[2])), by = Math.floor(player[1] + num(m[3])), bz = Math.floor(player[2] + num(m[4]));
-      const tall = m[1] === 'iron_golem' ? 3 : 2;
-      let ok = blocking(`${bx},${by - 1},${bz}`);
-      for (let h = 0; h < tall; h++) if (blocking(`${bx},${by + h},${bz}`)) ok = false;
-      if (!ok) { bad++; if (!first) first = `${m[1]} at ${bx},${by},${bz}`; }
+    const blocking = (k) => { const nm = placed.get(k); return !!nm && nm !== 'minecraft:air' && !/_door$|carpet|dandelion|cornflower|allium|bluet|orchid|wheat|carrots|beetroot|rail$/.test(nm); };
+    let bad = 0, total = 0, first = '';
+    for (const ln of mobLoads) {
+      const L = loadAt(ln); const t = typed[L.name].v;
+      const origin = t.structure_world_origin.v.map((q) => q.v);
+      for (const e of t.structure.v.entities.v) {
+        total++;
+        const [px, py, pz] = e.v.Pos.v.map((q) => q.v);
+        const bx = Math.floor(L.at[0] + (px - origin[0])), by = Math.floor(L.at[1] + (py - origin[1])), bz = Math.floor(L.at[2] + (pz - origin[2]));
+        const tall = e.v.identifier.v === 'minecraft:iron_golem' ? 3 : 2;
+        let ok = blocking(`${bx},${by - 1},${bz}`);
+        for (let h = 0; h < tall; h++) if (blocking(`${bx},${by + h},${bz}`)) ok = false;
+        if (!ok) { bad++; if (!first) first = `${e.v.identifier.v} at ${bx},${by},${bz}`; }
+      }
     }
-    check(`simulated load from ${player.join(',')}: every mob stands on a floor with clear space`, bad === 0, `${bad} bad, e.g. ${first}`);
+    check(`simulated load from ${player.join(',')}: every villager and golem lands on a floor with room to stand`,
+      bad === 0 && total === wantV + wantG, `${bad}/${total} bad, e.g. ${first}`);
   }
 
-  // entity names: exactly the ones Bedrock's /summon parser accepts. villager_v2
-  // looked right but made Bedrock reject the whole populate file in game.
-  const ACCEPTED = new Set(['minecraft:villager', 'minecraft:iron_golem', 'minecraft:minecart']);
-  check('summon: only entity names the /summon command accepts (not internal ids like villager_v2)',
-    Object.values(SUMMON_IDS).every((n) => ACCEPTED.has(n)) && !(popul || '').includes('villager_v2'));
-  const kinds = ['villagers', 'golems'].filter((k) => z.entries.some((e) => e.name === `functions/${ns}/${k}_centered.mcfunction`));
-  check('functions: a separate file per mob kind as a fallback', kinds.length === 2, kinds.join(','));
-  const vOnly = get(`functions/${ns}/villagers_centered.mcfunction`) || '';
-  check('functions: villagers_centered has exactly the villager summons',
-    vOnly.split('\n').filter((l) => l.startsWith('summon minecraft:villager ')).length === want && !vOnly.includes('iron_golem'));
-
-  // bed colours land in block_position_data, one per bed half, at the right index
-  let entities = 0, bedHalves = 0, badEnt = 0;
+  // bed colours still land in block_position_data at the right index
+  let entities = 0, bedHalves = 0, badBE = 0;
   for (const st of out.structures) {
-    const e = z.entries.find((x) => x.name === `structures/${ns}/${st.name}.mcstructure`);
-    const p = localPayload(out.data, e);
-    const { root } = decodeNbt(new Uint8Array(zlib.inflateRawSync(Buffer.from(p))));
-    const pal = root.structure.palette.default.block_palette;
-    const l0 = root.structure.block_indices[0];
-    const pd = root.structure.palette.default.block_position_data;
-    for (let i = 0; i < l0.length; i++) if (pal[l0[i]] && pal[l0[i]].name === 'minecraft:bed') bedHalves++;
+    const t = typed[st.name].v;
+    const pal = t.structure.v.palette.v.default.v.block_palette.v, l0 = t.structure.v.block_indices.v[0].v;
+    const pd = t.structure.v.palette.v.default.v.block_position_data.v;
+    for (const c of l0) if (c.v >= 0 && pal[c.v].v.name.v === 'minecraft:bed') bedHalves++;
     for (const [idx, v] of Object.entries(pd)) {
       entities++;
-      const be = v.block_entity_data;
-      if (!be || be.id !== 'Bed' || typeof be.color !== 'number' || pal[l0[Number(idx)]].name !== 'minecraft:bed') badEnt++;
+      const be = v.v.block_entity_data.v;
+      if (be.id.v !== 'Bed' || be.color.t !== 1 || pal[l0[Number(idx)].v].v.name.v !== 'minecraft:bed') badBE++;
     }
   }
-  check('nbt: one bed entity per bed half', entities === bedHalves && bedHalves > 0, `${entities} vs ${bedHalves}`);
-  check('nbt: every bed entity sits on a bed block with a colour', badEnt === 0, `${badEnt} bad`);
-  note(`${sv.length} villager + ${sg.length} golem summons · ${bedHalves / 2} beds with colours in NBT`);
+  check('nbt: one bed entity per bed half, each on a bed with a colour', entities === bedHalves && bedHalves > 0 && badBE === 0,
+    `${entities} vs ${bedHalves}, ${badBE} bad`);
+  note(`${wantV} villagers + ${wantG} golems in ${out.mobStructures.length} mob structures · ${wantC} minecart summons · ${adds.length} ticking areas`);
 }
 
 // ===========================================================================
@@ -921,7 +985,8 @@ section('6e. versions');
 
   // every command in every function is one of the three forms we emit
   const FORMS = [/^structure load [a-z0-9_]+:[a-z0-9_]+ ~-?\d* ~-?\d* ~-?\d*$/,
-    /^summon minecraft:(villager|iron_golem|minecart) ~-?\d* ~-?\d* ~-?\d*$/, /^say [^\n]+$/];
+    /^summon minecraft:minecart ~-?\d* ~-?\d* ~-?\d*$/, /^say [^\n]+$/,
+    /^tickingarea add ~-?\d* ~-?\d* ~-?\d* ~-?\d* ~-?\d* ~-?\d* [a-z0-9_]+$/, /^tickingarea remove [a-z0-9_]+$/];
   let badCmd = null;
   for (const f of out.functions) for (const l of f.text.split('\n')) {
     if (!l || l.startsWith('#')) continue;

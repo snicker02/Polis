@@ -1,4 +1,4 @@
-# Polis v0.1.8
+# Polis v0.2.0
 
 A procedural city generator that exports to **Minecraft Bedrock**. Plans a
 street grid, subdivides it into lots, raises buildings with real interiors —
@@ -115,7 +115,7 @@ Furniture only goes against the outer walls, never within one cell of the
 stairs or two cells of the front door, and every furnished building is
 re-verified: if furniture ever cost a floor its reachability, it is removed.
 
-**Villagers and golems.** The populate function summons villagers next to beds
+**Villagers and golems.** The populate function places villagers next to beds
 (**Villagers** slider caps the number) and one iron golem per eight villagers.
 Golems are placed only on pavement and plazas, outside every building
 footprint, with three clear blocks of headroom. A bell in a plaza or park gives
@@ -179,10 +179,15 @@ Then, once the whole city has finished appearing — **without moving** — run
 /function polis_12345_a3f9/populate_centered   (or populate, after build)
 ```
 
-which summons the villagers and iron golems. It is a separate step on
-purpose: `/structure load` keeps placing blocks after the command returns, so
-mobs summoned in the same function arrive before their floors do. `build` is
-safe to rerun if some tiles were missed; `populate` is meant to run once.
+which brings in the villagers, iron golems and minecarts. Villagers and
+golems travel inside entity-only structures (`m_x…_z…`), so they arrive
+wherever blocks can load — exactly like the city itself. `/summon` could not
+do this: it only works in chunks the game is actively simulating (simulation
+distance, 4 chunks by default), so summoning a whole population from one spot
+placed only the few nearest the player. Minecarts are still summoned; `build`
+adds temporary ticking areas over the city so those summons reach every line,
+and `populate` removes them again. `build` is safe to rerun if some tiles were
+missed; `populate` is meant to run once.
 
 `polis_12345_a3f9` is the **city id**: the seed plus a four-character hash of
 the actual blocks. It is shown in the app, printed at the top of
@@ -275,6 +280,29 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.2.0** — Population fixed. Villagers and iron golems now travel inside
+entity-only structures instead of being summoned, because `/summon` only works
+in simulated chunks and placed just the few mobs near the player. The entity
+templates come from a real structure saved in Bedrock 26.x
+(`tools/extract-templates.js` → `engine/entity-templates.js`); each villager is
+reset to a fresh unemployed adult with no village, trades or inventory. `build`
+adds ticking areas (each ≤ 144 blocks, well inside the 100-chunk limit) so the
+minecart summons in `populate` reach the whole railway; `populate` removes
+them. Structures now record their true world origin, as game-saved ones do.
+The NBT writer gained long, double and array tags; it reproduces the in-game
+file tag for tag (168,739 tags, zero differences). The validator now places
+the city and mob structures from off-centre positions and checks that every
+villager and golem lands on a floor with room to stand.
+
+**0.1.9** — Doors fixed properly. Bedrock stores a door's facing in
+`minecraft:cardinal_direction` rotated a quarter turn (a door facing north is
+stored as `east`), per Bedrock's own Java-to-Bedrock table, which is now
+vendored in `tools/bedrock-states.json`. 0.1.7–0.1.8 wrote the facing
+unrotated, which split double doors onto opposite edges of their blocks.
+Double doors also now put their hinges on the outer edges for every street
+direction. The validator checks door facing against the table and every
+double door's facing and hinges.
 
 **0.1.8** — Villagers are summoned as `minecraft:villager`. 0.1.5–0.1.7 used
 the internal id `minecraft:villager_v2`, which the command parser in current

@@ -11,11 +11,13 @@
 
 import { splitWorld, writeMcStructure, buildMcPack, makeZip, crc32 } from './blockcore.js';
 import { MATERIALS, MAT } from './materials.js';
+import { makeEntity } from './entities.js';
+import { makeRng } from './rng.js';
 
 // Must match main.js VERSION, package.json and index.html data-version;
 // tools/validate.js fails if they drift. The app refuses to export when the
 // browser has mixed cached copies of old and new files.
-export const POLIS_VERSION = '0.1.8';
+export const POLIS_VERSION = '0.2.0';
 
 export const CHUNK = 64;          // Bedrock structure limit per horizontal axis
 export const GROUND_DROP = 2;     // base layer y=0 sits 2 below feet; surface y=1 replaces the block you stand on
@@ -90,87 +92,127 @@ export function buildStructures(world, opts = {}) {
   });
 }
 
+// ---- mob structures ------------------------------------------------------------
+// Villagers and golems travel inside entity-only structures (no blocks, every
+// cell structure void), one per 64x64 tile, so they arrive wherever blocks do.
+export function mobTiles(spawns, opts = {}) {
+  const size = opts.chunkSize || CHUNK;
+  const groups = new Map();
+  for (const p of spawns || []) {
+    if (p.type !== 'villager' && p.type !== 'golem') continue;
+    const cx = Math.floor(p.x / size), cz = Math.floor(p.z / size);
+    const k = cx + ',' + cz;
+    if (!groups.has(k)) groups.set(k, { cx, cz, mobs: [] });
+    groups.get(k).mobs.push(p);
+  }
+  return [...groups.values()].sort((a, b) => a.cz - b.cz || a.cx - b.cx).map((g) => {
+    const box = { x0: Infinity, y0: Infinity, z0: Infinity, x1: -Infinity, y1: -Infinity, z1: -Infinity };
+    for (const p of g.mobs) {
+      box.x0 = Math.min(box.x0, p.x); box.x1 = Math.max(box.x1, p.x);
+      box.z0 = Math.min(box.z0, p.z); box.z1 = Math.max(box.z1, p.z);
+      box.y0 = Math.min(box.y0, p.y); box.y1 = Math.max(box.y1, p.y + (p.type === 'golem' ? 2 : 1));
+    }
+    return {
+      name: `m_x${g.cx}_z${g.cz}`, box, mobs: g.mobs,
+      offset: [box.x0, box.y0, box.z0],
+      size: [box.x1 - box.x0 + 1, box.y1 - box.y0 + 1, box.z1 - box.z0 + 1],
+    };
+  });
+}
+
+export function buildMobStructures(spawns, opts = {}) {
+  const rng = makeRng(((opts.seed | 0) ^ 0x6d0b5) >>> 0);
+  return mobTiles(spawns, opts).map((t) => {
+    const entities = t.mobs.map((p) => makeEntity(p.type, p.x, p.y, p.z, rng));
+    const res = writeMcStructure([], [], t.box, MATERIALS, { entities, placeholderId: MAT.AIR });
+    return {
+      name: t.name, data: res.data, box: t.box, size: res.size, offset: t.offset,
+      cells: 0, paletteSize: 0, entities: 0, mobs: res.mobs,
+      villagers: t.mobs.filter((p) => p.type === 'villager').length,
+      golems: t.mobs.filter((p) => p.type === 'golem').length,
+    };
+  });
+}
+
+// Ticking areas keep the whole city simulated while populate runs, so the
+// minecart summons reach every line. Each area is at most 144 x 144 blocks,
+// which can never exceed Bedrock's 100-chunk limit per area however the city
+// straddles chunk borders.
+export function tickingAreas(world, ns) {
+  const wb = world.box, S = 144, out = [];
+  for (let z = wb.z0; z <= wb.z1; z += S)
+    for (let x = wb.x0; x <= wb.x1; x += S)
+      out.push({ name: `${ns}_t${out.length + 1}`, x0: x, z0: z, x1: Math.min(wb.x1, x + S - 1), z1: Math.min(wb.z1, z + S - 1) });
+  return out;
+}
+
 // ---- functions ----------------------------------------------------------------
 function rel(v) { return v === 0 ? '~' : `~${v}`; }
 
 // Entity names as the /summon command accepts them (Microsoft's /summon
-// reference: "summon villager", "summon iron_golem"). The internal name
-// villager_v2 is rejected by the command parser in current Bedrock, and one
-// unparseable line makes Bedrock drop the whole function file.
-export const SUMMON_IDS = { villager: 'minecraft:villager', golem: 'minecraft:iron_golem', minecart: 'minecraft:minecart' };
+// reference). Only minecarts are still summoned; villagers and golems come
+// from mob structures, where the game's own internal ids are used.
+export const SUMMON_IDS = { minecart: 'minecraft:minecart' };
 
-// Two steps, on purpose. /structure load does not finish placing blocks
-// before the next command runs, so mobs summoned in the same function arrive
-// before their floors do: upper-floor villagers fall, others get buried.
-// build places blocks (safe to rerun); populate summons the mobs (run once,
-// after the city is standing).
-//
-// Summons use whole-block offsets from the same execution point as the
-// structure loads. Both floor the player's position the same way, so each mob
-// lands in exactly its intended block wherever in a block the player stands.
-// (Half-block offsets put mobs one block off whenever the player stood past
-// the middle of a block.)
+// build     blocks only, safe to rerun; ends by adding ticking areas
+// populate  mob structures + minecart summons; run once, after the city has
+//           appeared, from the same spot; ends by removing the ticking areas
 export function functionFiles(tiles, world, opts = {}) {
   const ns = opts.namespace || 'polis';
   const spawns = opts.spawns || [];
+  const mobs = opts.mobTiles || mobTiles(spawns, opts);
   const wb = world.box;
   const cx = Math.floor((wb.x0 + wb.x1 + 1) / 2);
   const cz = Math.floor((wb.z0 + wb.z1 + 1) / 2);
   const villagers = spawns.filter((p) => p.type === 'villager').length;
   const golems = spawns.filter((p) => p.type === 'golem').length;
-  const carts = spawns.filter((p) => p.type === 'minecart').length;
-  const ENTITY = SUMMON_IDS;
-  const loads = (dx, dz) => tiles.map((t) =>
-    `structure load ${ns}:${t.name} ${rel(t.offset[0] - dx)} ${rel(t.offset[1] - GROUND_DROP)} ${rel(t.offset[2] - dz)}`);
-  const summons = (dx, dz) => spawns.map((p) => {
-    const id = ENTITY[p.type];
-    return `summon ${id} ${rel(p.x - dx)} ${rel(p.y - GROUND_DROP)} ${rel(p.z - dz)}`;
-  });
+  const carts = spawns.filter((p) => p.type === 'minecart');
+  const areas = tickingAreas(world, ns);
+  const top = wb.y1 - wb.y0 + 2;
+  const load = (t, dx, dz) =>
+    `structure load ${ns}:${t.name} ${rel(t.offset[0] - dx)} ${rel(t.offset[1] - GROUND_DROP)} ${rel(t.offset[2] - dz)}`;
   const build = (dx, dz, title, pop) => [
     `# ${title}`,
     `# ${tiles.length} structure${tiles.length === 1 ? '' : 's'}. Safe to run again: blocks only.`,
     '# Only loaded chunks are filled: stand near the middle and raise render distance.',
     `# When the whole city is standing, run /function ${ns}/${pop} from the SAME spot.`,
-    ...loads(dx, dz),
+    ...tiles.map((t) => load(t, dx, dz)),
+    ...areas.map((a) => `tickingarea add ${rel(a.x0 - dx)} ${rel(-GROUND_DROP)} ${rel(a.z0 - dz)} ${rel(a.x1 - dx)} ${rel(top)} ${rel(a.z1 - dz)} ${a.name}`),
     `say Polis: city placed. When it has finished appearing, run /function ${ns}/${pop} from this same spot.`,
   ].join('\n') + '\n';
   const populate = (dx, dz, title) => [
     `# ${title}`,
-    `# ${villagers} villagers next to their beds, ${golems} iron golems on the streets` +
-      (carts ? `, ${carts} minecarts on the railway.` : '.'),
+    `# ${villagers} villagers and ${golems} iron golems arrive inside ${mobs.length} mob structure${mobs.length === 1 ? '' : 's'}` +
+      (carts.length ? `; ${carts.length} minecarts are summoned onto the railway.` : '.'),
     '# Run ONCE, from the same spot you ran build from, after the city has appeared.',
-    `say Polis: summoning ${villagers} villagers, ${golems} iron golems` + (carts ? ` and ${carts} minecarts...` : '...'),
-    ...summons(dx, dz),
-    'say Polis: done. Mobs only appear in loaded chunks; walk closer to any that are missing.',
+    `say Polis: bringing in ${villagers} villagers, ${golems} iron golems` + (carts.length ? ` and ${carts.length} minecarts...` : '...'),
+    ...mobs.map((t) => load(t, dx, dz)),
+    ...carts.map((p) => `summon ${SUMMON_IDS.minecart} ${rel(p.x - dx)} ${rel(p.y - GROUND_DROP)} ${rel(p.z - dz)}`),
+    ...areas.map((a) => `tickingarea remove ${a.name}`),
+    'say Polis: done. Villagers take jobs from the workstations and claim beds over the next few minutes.',
   ].join('\n') + '\n';
-  return [
+  const files = [
     { name: `functions/${ns}/build.mcfunction`, fn: `${ns}/build`,
       text: build(wb.x0, wb.z0, 'Polis: city corner at your feet', 'populate') },
     { name: `functions/${ns}/build_centered.mcfunction`, fn: `${ns}/build_centered`,
       text: build(cx, cz, 'Polis: city centred on you', 'populate_centered') },
     { name: `functions/${ns}/populate.mcfunction`, fn: `${ns}/populate`,
-      text: populate(wb.x0, wb.z0, 'Polis: villagers and golems (pairs with build)') },
+      text: populate(wb.x0, wb.z0, 'Polis: villagers, golems and minecarts (pairs with build)') },
     { name: `functions/${ns}/populate_centered.mcfunction`, fn: `${ns}/populate_centered`,
-      text: populate(cx, cz, 'Polis: villagers and golems (pairs with build_centered)') },
-    // one file per kind of mob as well: if Bedrock ever rejects one entity name,
-    // the others still load and can be run on their own
-    ...['villager', 'golem', 'minecart'].filter((k) => spawns.some((p) => p.type === k)).flatMap((k) => {
-      const plural = { villager: 'villagers', golem: 'golems', minecart: 'minecarts' }[k];
-      const only = (dx, dz, title) => [
-        `# ${title}`,
-        '# Run ONCE, from the same spot you ran build from. (populate does all kinds at once.)',
-        `say Polis: summoning ${spawns.filter((p) => p.type === k).length} ${plural}...`,
-        ...spawns.filter((p) => p.type === k).map((p) =>
-          `summon ${ENTITY[k]} ${rel(p.x - dx)} ${rel(p.y - GROUND_DROP)} ${rel(p.z - dz)}`),
-      ].join('\n') + '\n';
-      return [
-        { name: `functions/${ns}/${plural}.mcfunction`, fn: `${ns}/${plural}`,
-          text: only(wb.x0, wb.z0, `Polis: ${plural} only (pairs with build)`) },
-        { name: `functions/${ns}/${plural}_centered.mcfunction`, fn: `${ns}/${plural}_centered`,
-          text: only(cx, cz, `Polis: ${plural} only (pairs with build_centered)`) },
-      ];
-    }),
+      text: populate(cx, cz, 'Polis: villagers, golems and minecarts (pairs with build_centered)') },
   ];
+  if (carts.length) {
+    const only = (dx, dz, title) => [
+      `# ${title}`,
+      '# Summons only reach simulated chunks: walk along the railway if some carts are missing.',
+      `say Polis: summoning ${carts.length} minecarts...`,
+      ...carts.map((p) => `summon ${SUMMON_IDS.minecart} ${rel(p.x - dx)} ${rel(p.y - GROUND_DROP)} ${rel(p.z - dz)}`),
+    ].join('\n') + '\n';
+    files.push(
+      { name: `functions/${ns}/minecarts.mcfunction`, fn: `${ns}/minecarts`, text: only(wb.x0, wb.z0, 'Polis: minecarts only (pairs with build)') },
+      { name: `functions/${ns}/minecarts_centered.mcfunction`, fn: `${ns}/minecarts_centered`, text: only(cx, cz, 'Polis: minecarts only (pairs with build_centered)') });
+  }
+  return files;
 }
 
 // ---- guide --------------------------------------------------------------------
@@ -189,8 +231,8 @@ export function placementGuide(tiles, opts = {}) {
   L.push('');
   L.push(`    /function ${ns}/populate_centered`);
   L.push('');
-  L.push(`Functions in this pack: ${ns}/build, build_centered, populate, populate_centered,`);
-  L.push('plus villagers / golems / minecarts (and _centered) to summon one kind at a time.');
+  L.push(`Functions in this pack: ${ns}/build, build_centered, populate, populate_centered`);
+  L.push('(plus minecarts / minecarts_centered on railway cities).');
   L.push(`Made with Polis v${POLIS_VERSION}. If /function says one is "not found", an older`);
   L.push('Polis pack is probably still active on this world: remove old Polis packs.');
   L.push('');
@@ -245,23 +287,25 @@ export function commandList(tiles, opts = {}) {
 export async function exportPack(world, opts = {}) {
   const tiles = tileList(world, opts);
   const structures = buildStructures(world, opts);
+  const mobStructs = buildMobStructures(opts.spawns, opts);
   const guide = placementGuide(tiles, opts);
-  const fns = functionFiles(tiles, world, opts);
-  const data = await buildMcPack(structures, {
+  const fns = functionFiles(tiles, world, { ...opts, mobTiles: mobStructs });
+  const data = await buildMcPack(structures.concat(mobStructs), {
     ...opts, guide,
     files: fns.map((f) => ({ name: f.name, data: f.text })),
   });
-  return { data, structures, guide, functions: fns };
+  return { data, structures, mobStructures: mobStructs, guide, functions: fns };
 }
 
 export async function exportStructuresZip(world, opts = {}) {
   const tiles = tileList(world, opts);
   const structures = buildStructures(world, opts);
+  const mobStructs = buildMobStructures(opts.spawns, opts);
   const guide = placementGuide(tiles, opts);
-  const fns = functionFiles(tiles, world, opts);
-  const files = structures.map((s) => ({ name: `${s.name}.mcstructure`, data: s.data }));
+  const fns = functionFiles(tiles, world, { ...opts, mobTiles: mobStructs });
+  const files = structures.concat(mobStructs).map((s) => ({ name: `${s.name}.mcstructure`, data: s.data }));
   for (const f of fns) files.push({ name: f.name, data: new TextEncoder().encode(f.text) });
   files.push({ name: 'placement-guide.txt', data: new TextEncoder().encode(guide) });
   const data = await makeZip(files, opts);
-  return { data, structures, guide, functions: fns };
+  return { data, structures, mobStructures: mobStructs, guide, functions: fns };
 }
