@@ -1,4 +1,4 @@
-# Polis v0.1.5
+# Polis v0.1.7
 
 A procedural city generator that exports to **Minecraft Bedrock**. Plans a
 street grid, subdivides it into lots, raises buildings with real interiors —
@@ -33,9 +33,14 @@ It is all static files, but ES modules need a real origin — opening
 `index.html` from `file://` will not work. Any one-liner will do:
 
 ```
-python3 -m http.server 8080      # then open http://localhost:8080
-npx serve .
+node tools/serve.js              # then open http://localhost:8080
 ```
+
+`tools/serve.js` is a dependency-free static server with caching switched off.
+Browsers cache JavaScript modules hard, so after unzipping a new version any
+other server can hand you a mix of old and new files. The app checks for that:
+if the page, `main.js` and the engine report different versions it shows a red
+banner and refuses to export until you hard-refresh (Ctrl+Shift+R).
 
 Headless checks:
 
@@ -117,6 +122,33 @@ footprint, with three clear blocks of headroom. A bell in a plaza or park gives
 the village its gathering point. Workstations — composters, cartography and
 fletching tables, blast furnaces, brewing stands, cauldrons, barrels — let
 villagers take up professions.
+
+## Railways
+
+The **Streets** setting chooses what runs between the blocks:
+
+- **Roads** — asphalt, markings and crosswalks (the default).
+- **Railways (no roads)** — every street becomes a green strip with a minecart
+  line down the middle on a gravel bed.
+- **Roads + tram rails** — asphalt roads with a line down the centre.
+
+Every street gets one straight line. East–west lines run at ground level
+straight through every junction; north–south lines never meet them at grade —
+they climb four blocks on powered rails, cross on a stone-brick bridge that
+leaves two clear blocks for a cart and rider underneath, and come back down.
+So there are no junctions anywhere: every line is a simple path with nothing
+to derail at.
+
+Every powered rail sits on a redstone block, so it is permanently on and needs
+no wiring. Flat track has a powered booster every 16 blocks. Each line ends at
+a stone-brick buffer with a powered rail in front of it, so a cart that stops
+there is pushed straight back out: **every line is a shuttle that runs back and
+forth on its own.** `populate` puts one minecart on each line. Right-click a
+cart to get in (catch it as it passes, or at a buffer as it turns round);
+sneak to get out.
+
+Lamps and pedestrians keep the sidewalks. Rails are walkable, so you can cross
+the tracks anywhere on foot.
 
 ## Verification
 
@@ -206,11 +238,16 @@ smooth walk to a jump per step. It stays climbable either way, because the
 three-cell headroom rule does not depend on the stair shape. Turning **Stair
 blocks** off replaces them with full blocks and is the fallback.
 
-**Beds.** Bed orientation uses the legacy numbering Bedrock inherited
-(`direction` 0 = head to the south, 1 = west, 2 = north, 3 = east). It is the
-one block mapping here that could not be checked against a current reference.
-If beds ever load as single halves, that table in `materials.js` (`BED_DIR` /
-`BED_VEC`) is the only thing to change.
+**Block states.** Every block and state Polis writes is checked against
+Bedrock's own 1.21.60 state list (`tools/bedrock-states.json`); orientations
+(doors, beds, stairs, rails) come from Bedrock's Java-to-Bedrock mapping tables.
+To add a block, add it to `materials.js` and run the validator — it will say
+exactly which states Bedrock expects.
+
+**"Function … not found".** Bedrock silently drops a whole function file if
+any single command in it fails to parse, and uses the higher pack when two
+active packs share a function name. Check the content log (Settings → Creator →
+Content Log) for load errors, and remove older Polis packs from the world.
 
 **blockcore.** This copy is a same-API rebuild rather than the canonical one
 shipped in `fieldcraft-v0.1.0.zip`. It wants a reconciliation pass against the
@@ -235,6 +272,30 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.1.7** — Railways: a **Streets** setting with Roads, Railways (no roads)
+and Roads + tram rails; grade-separated lines with bridges over every
+crossing; permanently powered boosters and shuttle stations; one minecart per
+line, summoned by `populate`.
+
+Block correctness: `tools/bedrock-states.json` now vendors Bedrock's own
+list of every valid block state at 1.21.60 (from PrismarineJS minecraft-data),
+and the validator checks every block Polis can write against it. That caught
+two long-standing bugs. **Doors** were written with the old numeric `direction`
+state, which is not valid at 1.21.60; they now use `minecraft:cardinal_direction`.
+The game had been falling back to a default facing, which is why they still
+worked. **Quartz blocks** were missing `pillar_axis`. Bed, stair and rail
+orientations are now confirmed against Bedrock's Java-to-Bedrock tables, and
+furnaces no longer need a special version tag.
+
+**0.1.6** — The Polis version is now part of the city id, so packs made by
+different versions never share a namespace. In 0.1.5 an unchanged city got
+the same id as its 0.1.4 pack, and if both were active Bedrock used the older
+one, which had no `populate` function. The app now detects stale cached files
+and blocks export until a hard refresh. New `tools/serve.js` serves with
+caching off. The guide lists all four functions. The validator checks that every
+version stamp agrees and that every function command is one of the known-good
+forms, because one bad line makes Bedrock drop the whole function.
 
 **0.1.5** — Villagers and golems now come from a separate `populate`
 function, run after the city has appeared. In 0.1.4 the summons ran in the

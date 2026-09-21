@@ -73,7 +73,7 @@ class BatchBuilder {
 function materialTable() {
   const n = MATERIALS.length;
   const r = new Uint8Array(n), g = new Uint8Array(n), b = new Uint8Array(n);
-  const a = new Uint8Array(n), tr = new Uint8Array(n);
+  const a = new Uint8Array(n), tr = new Uint8Array(n), fl = new Uint8Array(n);
   for (let i = 0; i < n; i++) {
     const d = MATERIALS.def(i);
     r[i] = Math.round(d.color[0] * 255);
@@ -81,8 +81,9 @@ function materialTable() {
     b[i] = Math.round(d.color[2] * 255);
     tr[i] = d.transparent ? 1 : 0;
     a[i] = d.transparent ? 150 : 255;
+    fl[i] = d.flat ? 1 : 0;
   }
-  return { r, g, b, a, tr, n };
+  return { r, g, b, a, tr, fl, n };
 }
 
 export function buildMesh(world, opts = {}) {
@@ -110,17 +111,26 @@ export function buildMesh(world, opts = {}) {
     const ox = c.cx * CS, oy = c.cy * CS, oz = c.cz * CS;
     dense.fill(-1);
     for (let i = 0; i < c.ids.length; i++) {
-      dense[PIDX(c.xs[i], c.ys[i], c.zs[i])] = c.ids[i];
+      const id = c.ids[i];
+      if (M.fl[id]) {
+        // thin plates (rails, carpet): never cull neighbours, draw one top quad
+        const x = ox + c.xs[i], y = oy + c.ys[i] + 0.07, z = oz + c.zs[i];
+        opaque.quad([[x, y, z], [x, y, z + 1], [x + 1, y, z + 1], [x + 1, y, z]],
+          M.r[id], M.g[id], M.b[id], 255, 0, 127, 0);
+        continue;
+      }
+      dense[PIDX(c.xs[i], c.ys[i], c.zs[i])] = id;
     }
-    // padded shell from the world (neighbouring chunks)
+    // padded shell from the world (neighbouring chunks); plates count as empty
+    const gw = (x, y, z) => { const id = world.get(x, y, z); return id >= 0 && M.fl[id] ? -1 : id; };
     for (let u = -1; u <= CS; u++) {
       for (let v = -1; v <= CS; v++) {
-        dense[PIDX(-1, u, v)] = world.get(ox - 1, oy + u, oz + v);
-        dense[PIDX(CS, u, v)] = world.get(ox + CS, oy + u, oz + v);
-        dense[PIDX(u, -1, v)] = world.get(ox + u, oy - 1, oz + v);
-        dense[PIDX(u, CS, v)] = world.get(ox + u, oy + CS, oz + v);
-        dense[PIDX(u, v, -1)] = world.get(ox + u, oy + v, oz - 1);
-        dense[PIDX(u, v, CS)] = world.get(ox + u, oy + v, oz + CS);
+        dense[PIDX(-1, u, v)] = gw(ox - 1, oy + u, oz + v);
+        dense[PIDX(CS, u, v)] = gw(ox + CS, oy + u, oz + v);
+        dense[PIDX(u, -1, v)] = gw(ox + u, oy - 1, oz + v);
+        dense[PIDX(u, CS, v)] = gw(ox + u, oy + CS, oz + v);
+        dense[PIDX(u, v, -1)] = gw(ox + u, oy + v, oz - 1);
+        dense[PIDX(u, v, CS)] = gw(ox + u, oy + v, oz + CS);
       }
     }
 

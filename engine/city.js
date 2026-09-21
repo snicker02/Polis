@@ -6,6 +6,7 @@ import { generatePlan, frontage, USE } from './plan.js';
 import { MAT, THEMES } from './materials.js';
 import { makeBuilding, OUTWARD } from './building.js';
 import { farm, pond, scatterFlowers, furnish, bedSpawns, placeBell, golemSpawns } from './life.js';
+import { layTransit, trimOverRails } from './transit.js';
 
 export const DEFAULTS = {
   seed: 12345,
@@ -30,6 +31,7 @@ export const DEFAULTS = {
   roofAccess: true,
   useStairs: true,
   stairStyle: 'mixed',
+  transit: 'roads',          // 'roads' | 'rails' (railway instead of roads) | 'trams' (rails down the roads)
   farmChance: 0.2,
   pondChance: 0.5,
   furnish: true,
@@ -69,7 +71,7 @@ export function generateCity(cfgIn, onProgress) {
   }
 
   // ---- road markings -------------------------------------------------------
-  if (cfg.markings) {
+  if (cfg.markings && cfg.transit !== 'rails') {
     for (const c of plan.corridors) {
       if (c.w < 5) continue;
       if (c.axis === 'x') {
@@ -97,6 +99,9 @@ export function generateCity(cfgIn, onProgress) {
       }
     }
   }
+
+  // ---- railways ------------------------------------------------------------
+  const transit = layTransit(world, plan, cfg.transit, GROUND);
 
   // ---- lots ----------------------------------------------------------------
   const buildings = [];
@@ -175,6 +180,7 @@ export function generateCity(cfgIn, onProgress) {
   }
 
   clearDoorways(world, buildings);
+  trimOverRails(world, transit);
 
   // ---- the village ---------------------------------------------------------
   const bell = cfg.villagers > 0 ? placeBell(world, plan, GROUND) : null;
@@ -187,8 +193,10 @@ export function generateCity(cfgIn, onProgress) {
     spawns = spawns.concat(golemSpawns(world, plan, buildings, golems, lifeRng, GROUND));
   }
 
-  const stats = summarise(world, plan, buildings, cfg, { farms, beds, spawns, bell });
-  return { world, plan, buildings, cfg, stats, farms, spawns, bell };
+  if (transit) spawns = spawns.concat(transit.carts);
+
+  const stats = summarise(world, plan, buildings, cfg, { farms, beds, spawns, bell, transit });
+  return { world, plan, buildings, cfg, stats, farms, spawns, bell, transit };
 }
 
 // ---- keep the way in clear --------------------------------------------------
@@ -371,5 +379,8 @@ function summarise(world, plan, buildings, cfg, life = {}) {
     stations: buildings.reduce((a, b) => a + ((b.furniture && b.furniture.stations) || 0), 0),
     plants: buildings.reduce((a, b) => a + ((b.furniture && b.furniture.plants) || 0), 0),
     bell: !!life.bell,
+    railLines: life.transit ? life.transit.stats.lines : 0,
+    railBridges: life.transit ? life.transit.stats.bridges : 0,
+    carts: (life.spawns || []).filter((p) => p.type === 'minecart').length,
   };
 }

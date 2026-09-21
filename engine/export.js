@@ -12,6 +12,11 @@
 import { splitWorld, writeMcStructure, buildMcPack, makeZip, crc32 } from './blockcore.js';
 import { MATERIALS, MAT } from './materials.js';
 
+// Must match main.js VERSION, package.json and index.html data-version;
+// tools/validate.js fails if they drift. The app refuses to export when the
+// browser has mixed cached copies of old and new files.
+export const POLIS_VERSION = '0.1.7';
+
 export const CHUNK = 64;          // Bedrock structure limit per horizontal axis
 export const GROUND_DROP = 2;     // base layer y=0 sits 2 below feet; surface y=1 replaces the block you stand on
 
@@ -21,7 +26,7 @@ export const GROUND_DROP = 2;     // base layer y=0 sits 2 below feet; surface y
 // The suffix is a content hash: same seed with different sliders -> different id;
 // the same city regenerated later -> the same id. It hashes block names and
 // states, not registry ids, because door/stair ids depend on session history.
-export function cityId(world, seed) {
+export function cityId(world, seed, version = POLIS_VERSION) {
   const n = MATERIALS.length;
   const enc = new TextEncoder();
   const matHash = new Uint32Array(n);
@@ -30,7 +35,10 @@ export function cityId(world, seed) {
     const st = Object.keys(d.states).sort().map((k) => k + '=' + d.states[k].value).join(',');
     matHash[i] = crc32(enc.encode(d.block + '|' + st));
   }
-  let a = 0, b = 0;
+  // The Polis version is part of the id: packs from different versions carry
+  // different functions, so they must never share a namespace, even for an
+  // identical city. (0.1.4 and 0.1.5 did, and Bedrock picked the older pack.)
+  let a = crc32(enc.encode('polis ' + version)), b = 0;
   for (const [k, id] of world.cells) {
     // order-independent: sum two differently mixed per-cell hashes
     let h = (Math.imul(k, 0x9e3779b1) ^ matHash[id]) >>> 0;
@@ -103,11 +111,13 @@ export function functionFiles(tiles, world, opts = {}) {
   const cx = Math.floor((wb.x0 + wb.x1 + 1) / 2);
   const cz = Math.floor((wb.z0 + wb.z1 + 1) / 2);
   const villagers = spawns.filter((p) => p.type === 'villager').length;
-  const golems = spawns.length - villagers;
+  const golems = spawns.filter((p) => p.type === 'golem').length;
+  const carts = spawns.filter((p) => p.type === 'minecart').length;
+  const ENTITY = { villager: 'minecraft:villager_v2', golem: 'minecraft:iron_golem', minecart: 'minecraft:minecart' };
   const loads = (dx, dz) => tiles.map((t) =>
     `structure load ${ns}:${t.name} ${rel(t.offset[0] - dx)} ${rel(t.offset[1] - GROUND_DROP)} ${rel(t.offset[2] - dz)}`);
   const summons = (dx, dz) => spawns.map((p) => {
-    const id = p.type === 'golem' ? 'minecraft:iron_golem' : 'minecraft:villager_v2';
+    const id = ENTITY[p.type];
     return `summon ${id} ${rel(p.x - dx)} ${rel(p.y - GROUND_DROP)} ${rel(p.z - dz)}`;
   });
   const build = (dx, dz, title, pop) => [
@@ -120,9 +130,10 @@ export function functionFiles(tiles, world, opts = {}) {
   ].join('\n') + '\n';
   const populate = (dx, dz, title) => [
     `# ${title}`,
-    `# ${villagers} villagers next to their beds and ${golems} iron golems on the streets.`,
+    `# ${villagers} villagers next to their beds, ${golems} iron golems on the streets` +
+      (carts ? `, ${carts} minecarts on the railway.` : '.'),
     '# Run ONCE, from the same spot you ran build from, after the city has appeared.',
-    `say Polis: summoning ${villagers} villagers and ${golems} iron golems...`,
+    `say Polis: summoning ${villagers} villagers, ${golems} iron golems` + (carts ? ` and ${carts} minecarts...` : '...'),
     ...summons(dx, dz),
     'say Polis: done. Mobs only appear in loaded chunks; walk closer to any that are missing.',
   ].join('\n') + '\n';
@@ -149,6 +160,14 @@ export function placementGuide(tiles, opts = {}) {
   L.push('TO BUILD THIS CITY, stand where you want it and type in chat:');
   L.push('');
   L.push(`    /function ${ns}/build_centered`);
+  L.push('');
+  L.push('then, once the city has finished appearing, from the same spot:');
+  L.push('');
+  L.push(`    /function ${ns}/populate_centered`);
+  L.push('');
+  L.push(`This pack contains four functions: ${ns}/build, build_centered, populate, populate_centered.`);
+  L.push(`Made with Polis v${POLIS_VERSION}. If /function says one is "not found", an older`);
+  L.push('Polis pack is probably still active on this world: remove old Polis packs.');
   L.push('');
   L.push(`City id  ${ns}` + (opts.seed !== undefined ? `      seed ${opts.seed}` : ''));
   if (opts.summary) L.push(opts.summary);

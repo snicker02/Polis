@@ -4,8 +4,6 @@
 // Block ids are the FLATTENED modern Bedrock ids (1.21+). If a future
 // version renames one, this table is the only place to edit.
 
-import { BLOCK_VERSION_NEW } from './blockcore.js';
-
 export const B = (v) => ({ type: 'byte', value: v | 0 });
 export const I = (v) => ({ type: 'int', value: v | 0 });
 export const S = (v) => ({ type: 'string', value: String(v) });
@@ -38,6 +36,7 @@ class Registry {
         transparent: !!flags.transparent, // preview-only hint
         flowable: !!flags.flowable,      // water flows into / washes away this block
         version: flags.version || 0,     // palette version tag; 0 = default (1.21.60)
+        flat: !!flags.flat,              // preview draws it as a thin plate (rails, carpet)
       });
       this.byKey.set(key, id);
     }
@@ -80,7 +79,7 @@ export const MAT = {
   GLOWSTONE:   A('GLOWSTONE', 'minecraft:glowstone', '#f2d28a'),
 
   // ---- walls / floors ----
-  QUARTZ:      A('QUARTZ', 'minecraft:quartz_block', '#e8e3da'),
+  QUARTZ:      A('QUARTZ', 'minecraft:quartz_block', '#e8e3da', { pillar_axis: S('y') }),
   SMOOTH:      A('SMOOTH', 'minecraft:smooth_stone', '#a8a8a8'),
   STONEBRICK:  A('STONEBRICK', 'minecraft:stone_bricks', '#7b7b75'),
   DEEPSLATE:   A('DEEPSLATE', 'minecraft:deepslate_tiles', '#35353a'),
@@ -112,6 +111,7 @@ export const MAT = {
 // Every id and state below was checked against Microsoft's Bedrock block list
 // (learn.microsoft.com, vanilla listings, 2026-08) or is already proven in game.
 const PLANT = { passable: true, flowable: true, transparent: true };
+const RUG = { passable: true, flowable: true, flat: true };
 Object.assign(MAT, {
   FARMLAND:    A('FARMLAND', 'minecraft:farmland', '#5b3b1f', { moisturized_amount: I(7) }),
   GRASS_PATH:  A('GRASS_PATH', 'minecraft:grass_path', '#9b7f4c'),
@@ -133,10 +133,10 @@ Object.assign(MAT, {
   ALLIUM:      A('ALLIUM', 'minecraft:allium', '#b169d8', {}, PLANT),
   AZURE_BLUET: A('AZURE_BLUET', 'minecraft:azure_bluet', '#dfe6ee', {}, PLANT),
   BLUE_ORCHID: A('BLUE_ORCHID', 'minecraft:blue_orchid', '#3aa2d6', {}, PLANT),
-  CARPET_BLUE: A('CARPET_BLUE', 'minecraft:blue_carpet', '#35399d', {}, PLANT),
-  CARPET_CYAN: A('CARPET_CYAN', 'minecraft:cyan_carpet', '#158991', {}, PLANT),
-  CARPET_BROWN:A('CARPET_BROWN', 'minecraft:brown_carpet', '#724728', {}, PLANT),
-  CARPET_GRAY: A('CARPET_GRAY', 'minecraft:gray_carpet', '#3e4447', {}, PLANT),
+  CARPET_BLUE: A('CARPET_BLUE', 'minecraft:blue_carpet', '#35399d', {}, RUG),
+  CARPET_CYAN: A('CARPET_CYAN', 'minecraft:cyan_carpet', '#158991', {}, RUG),
+  CARPET_BROWN:A('CARPET_BROWN', 'minecraft:brown_carpet', '#724728', {}, RUG),
+  CARPET_GRAY: A('CARPET_GRAY', 'minecraft:gray_carpet', '#3e4447', {}, RUG),
 });
 export const FLOWERS = [MAT.DANDELION, MAT.CORNFLOWER, MAT.ALLIUM, MAT.AZURE_BLUET, MAT.BLUE_ORCHID];
 export const CARPETS = [MAT.CARPET_BLUE, MAT.CARPET_CYAN, MAT.CARPET_BROWN, MAT.CARPET_GRAY];
@@ -164,13 +164,31 @@ export function bedId(dir, head) {
   });
 }
 
-// Furnace family uses the newer string state, so these entries carry the
-// newer palette version tag. Value is the way the front of the block faces.
+// Furnace family: minecraft:cardinal_direction = the way the front faces.
+// (Valid at 1.21.60, so no special version tag is needed.)
 export function furnaceId(kind, facing) {
   const block = kind === 'blast' ? 'minecraft:blast_furnace' : 'minecraft:furnace';
   return MATERIALS.add(null, block, kind === 'blast' ? '#4f4f55' : '#6e6e6e',
-    { 'minecraft:cardinal_direction': S(facing) }, { version: BLOCK_VERSION_NEW });
+    { 'minecraft:cardinal_direction': S(facing) });
 }
+
+// ---- transit: rails, powered rails, railbed --------------------------------
+// rail_direction (from Bedrock's own Java->Bedrock tables): 0 north-south,
+// 1 east-west, 2 ascending east, 3 ascending west, 4 ascending north,
+// 5 ascending south. A powered rail on a redstone block is permanently on.
+export const RAIL = { NS: 0, EW: 1, UP_E: 2, UP_W: 3, UP_N: 4, UP_S: 5 };
+const FLAT = { passable: true, flowable: true, flat: true };
+export function railId(dir) {
+  return MATERIALS.add(null, 'minecraft:rail', '#8d7b62', { rail_direction: I(dir) }, FLAT);
+}
+export function poweredRailId(dir) {
+  return MATERIALS.add(null, 'minecraft:golden_rail', '#d8b13a',
+    { rail_data_bit: B(1), rail_direction: I(dir) }, FLAT);
+}
+Object.assign(MAT, {
+  REDSTONE:  A('REDSTONE', 'minecraft:redstone_block', '#a1170f'),
+  GRAVEL:    A('GRAVEL', 'minecraft:gravel', '#857c78'),
+});
 
 // ---- doors -----------------------------------------------------------------
 // Bedrock door states: direction (0=east,1=south,2=west,3=north),
@@ -192,10 +210,15 @@ const DOOR_BLOCKS = {
 export const DOOR_KINDS = Object.keys(DOOR_BLOCKS);
 export const DIR = { east: 0, south: 1, west: 2, north: 3 };
 
+// Doors take the facing as a string. Bedrock's own Java->Bedrock tables map
+// facing east/south/west/north to the old numbers 0/1/2/3, which is the DIR
+// numbering used throughout; 0.1.5 and earlier wrote that old number, which is
+// not a valid door state at 1.21.60 (the game fell back to a default facing).
+const DOOR_FACING = ['east', 'south', 'west', 'north'];
 export function doorId(kind, dir, upper, hinge = 0) {
   const [block, color] = DOOR_BLOCKS[kind] || DOOR_BLOCKS.oak;  // unknown kind -> oak, never iron
   return MATERIALS.add(null, block, color, {
-    direction: I(dir),
+    'minecraft:cardinal_direction': S(DOOR_FACING[dir & 3]),
     door_hinge_bit: B(hinge),
     open_bit: B(0),
     upper_block_bit: B(upper ? 1 : 0),

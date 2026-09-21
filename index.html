@@ -126,12 +126,12 @@
   }
 </style>
 </head>
-<body class="mode-city">
+<body class="mode-city" data-version="0.1.7">
 <div id="app">
   <div id="panel">
     <div id="panelScroll">
       <h1>PO<span>L</span>IS</h1>
-      <div class="sub">procedural city → Minecraft Bedrock · v0.1.5</div>
+      <div class="sub">procedural city → Minecraft Bedrock · v0.1.7</div>
 
       <fieldset>
         <legend>Mode</legend>
@@ -151,6 +151,11 @@
       <fieldset class="city-only">
         <legend>City</legend>
         <div class="row"><label>Size</label><input type="range" id="size" min="64" max="256" step="8" value="160"><span class="val" id="size_v"></span></div>
+        <div class="row"><label>Streets</label><select id="transit" style="width:150px">
+          <option value="roads" selected>Roads</option>
+          <option value="rails">Railways (no roads)</option>
+          <option value="trams">Roads + tram rails</option>
+        </select></div>
         <div class="row"><label>Block size</label><input type="range" id="minBlock" min="10" max="30" step="1" value="16"><span class="val" id="minBlock_v"></span></div>
         <div class="row"><label>Irregularity</label><input type="range" id="blockIrregularity" min="0" max="1" step="0.05" value="0.8"><span class="val" id="blockIrregularity_v"></span></div>
         <div class="row"><label>Avenue width</label><input type="range" id="avenueWidth" min="5" max="11" step="2" value="7"><span class="val" id="avenueWidth_v"></span></div>
@@ -247,6 +252,6 @@
     <div id="busy">generating…</div>
   </div>
 </div>
-<script type="module" src="./main.js"></script>
+<script type="module" src="./main.js?v=0.1.7"></script>
 </body>
 </html>

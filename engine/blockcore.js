@@ -216,12 +216,11 @@ export function encodeNbt(rootCompound, rootName = '') {
 // ============================================================================
 
 // Advisory block version stamp written into each palette entry.
-// Every palette entry carries the game version its name and states belong to;
-// Bedrock upgrades older entries on load. Everything proven in game so far is
-// written in 1.21.60 form. Blocks that only exist in the newer state format
-// (minecraft:cardinal_direction on furnaces) carry a 1.26.0 tag instead.
+// Every palette entry carries the block-state version its name and states
+// belong to; Bedrock upgrades older entries on load. All blocks are written in
+// 1.21.60 form, checked by tools/validate.js against Bedrock's own state list
+// for that version (tools/bedrock-states.json).
 export const BLOCK_VERSION = 18168865;       // 1.21.60.33  (0x01153C21)
-export const BLOCK_VERSION_NEW = 18481152;   // 1.26.0.0    (0x011A0000)
 
 function stateTag(st) {
   const out = {};

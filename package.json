@@ -1,8 +1,8 @@
 {
   "name": "polis",
-  "version": "0.1.5",
+  "version": "0.1.7",
   "type": "module",
   "private": true,
   "description": "Polis — Minecraft Bedrock city generator",
-  "scripts": { "validate": "node tools/validate.js" }
+  "scripts": { "validate": "node tools/validate.js", "serve": "node tools/serve.js" }
 }

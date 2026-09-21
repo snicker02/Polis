@@ -5,10 +5,10 @@ import { USE } from './engine/plan.js';
 import { verifyAll } from './engine/verify.js';
 import { buildMesh } from './engine/mesher.js';
 import { Renderer } from './engine/renderer.js';
-import { exportPack, exportStructuresZip, tileList, commandList, cityId } from './engine/export.js';
+import { exportPack, exportStructuresZip, tileList, commandList, cityId, POLIS_VERSION } from './engine/export.js';
 import { THEMES } from './engine/materials.js';
 
-const VERSION = '0.1.5';
+const VERSION = '0.1.7';
 const $ = (id) => document.getElementById(id);
 
 const SLIDERS = {
@@ -26,7 +26,27 @@ let focal = [0.5, 0.5];
 let busyDepth = 0;
 
 // ---- boot -------------------------------------------------------------------
+// Browsers cache ES modules aggressively. If index.html, main.js and the
+// engine disagree about the version, some files are stale copies and an
+// export would silently use old code — so say so and refuse to export.
+function staleFiles() {
+  const page = document.body.dataset.version;
+  if (page === VERSION && POLIS_VERSION === VERSION) return null;
+  return `Mixed versions loaded (page ${page || '?'}, app ${VERSION}, engine ${POLIS_VERSION}). ` +
+    'Your browser is using cached copies of old files. Hard-refresh the page ' +
+    '(Ctrl+Shift+R, or Cmd+Shift+R on a Mac), or serve it with  node tools/serve.js';
+}
+
 function boot() {
+  const stale = staleFiles();
+  if (stale) {
+    const b = document.createElement('div');
+    b.id = 'staleBanner';
+    b.textContent = stale;
+    b.style.cssText = 'position:fixed;left:0;right:0;top:0;z-index:99;padding:10px 14px;' +
+      'background:#5a1f1f;color:#ffd9d9;font:13px system-ui;border-bottom:1px solid #a33';
+    document.body.appendChild(b);
+  }
   try {
     renderer = new Renderer($('gl'));
   } catch (e) {
@@ -116,6 +136,7 @@ function readCfg() {
   cfg.pitch = num('pitch');
   cfg.setbackEvery = num('setbackEvery');
   cfg.stairStyle = $('stairStyle').value;
+  cfg.transit = $('transit').value;
   cfg.furnish = $('furnish').checked;
   cfg.flowers = $('flowers').checked;
   cfg.villagers = num('villagers');
@@ -213,6 +234,17 @@ function drawMap() {
     img.data[i * 4 + 2] = c[2]; img.data[i * 4 + 3] = 255;
   }
   ctx.putImageData(img, 0, 0);
+  // railway: green corridors and the track lines
+  if (result.transit) {
+    if (result.transit.mode === 'rails') {
+      ctx.fillStyle = '#2d4a2a';
+      for (let z = 0; z < D; z++) for (let x = 0; x < W; x++) if (use[z * W + x] === USE.ROAD) ctx.fillRect(x, z, 1, 1);
+    }
+    for (const l of result.transit.lines) {
+      ctx.fillStyle = '#c9a54a';
+      for (const [x, , z] of l.cells) ctx.fillRect(x, z, 1, 1);
+    }
+  }
   // building footprints, brightness by height
   const maxF = Math.max(1, result.stats.tallest);
   for (const b of result.buildings) {
@@ -258,6 +290,7 @@ function showStats(mesh, times) {
     line('farms / beds', `${s.farms} / ${s.beds}`);
     line('workstations / plants', `${s.stations} / ${s.plants}`);
     line('villagers / golems', `${s.villagers} / ${s.golems}` + (s.bell ? ' · bell' : ''));
+    if (s.railLines) line('rail lines / bridges / carts', `${s.railLines} / ${s.railBridges} / ${s.carts}`);
   }
   const allOk = v.total > 0 && v.ok === v.total && v.floorsReached === v.floorsChecked;
   line('stairs verified', v.total === 0 ? '—' :
@@ -321,6 +354,8 @@ function fallbackCopy(text) {
 
 async function doExport(kind) {
   if (!result) { toast('Generate something first.', true); return; }
+  const stale = staleFiles();
+  if (stale) { toast('Export blocked: ' + stale, true); return; }
   busy(true);
   $('mcpack').disabled = $('mcstruct').disabled = true;
   try {

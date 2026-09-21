@@ -15,10 +15,10 @@ import zlib from 'node:zlib';
 import { generateCity, generateSingle, DEFAULTS } from '../engine/city.js';
 import { USE } from '../engine/plan.js';
 import { verifyAll } from '../engine/verify.js';
-import { MATERIALS, THEMES, DOOR_KINDS, doorId, MAT, BED_VEC } from '../engine/materials.js';
-import { BLOCK_VERSION_NEW } from '../engine/blockcore.js';
+import { MATERIALS, THEMES, DOOR_KINDS, doorId, MAT, BED_VEC, stairId, cropId, CROP_KINDS, bedId, furnaceId, railId, poweredRailId } from '../engine/materials.js';
+import { BLOCK_VERSION } from '../engine/blockcore.js';
 import { VoxelWorld, splitWorld, buildMcPack } from '../engine/blockcore.js';
-import { buildStructures, placementGuide, CHUNK, exportPack, tileList, functionFiles, GROUND_DROP, cityId } from '../engine/export.js';
+import { buildStructures, placementGuide, CHUNK, exportPack, tileList, functionFiles, GROUND_DROP, cityId, POLIS_VERSION } from '../engine/export.js';
 import { buildMesh, MAX_QUADS, STRIDE } from '../engine/mesher.js';
 import { decodeNbt, readZip, localPayload } from './nbt-read.js';
 
@@ -335,38 +335,123 @@ section('2c. life');
   note(`${waterCells.toLocaleString()} water blocks, 0 leaks · ${farmsTotal} farms · ${bedsTotal} beds · ` +
     `${villagers} villagers · ${golems} golems`);
 
-  // new block ids: only names confirmed against the Bedrock block list
-  const CONFIRMED = new Set(['minecraft:farmland', 'minecraft:grass_path', 'minecraft:clay',
-    'minecraft:composter', 'minecraft:crafting_table', 'minecraft:bookshelf', 'minecraft:barrel',
-    'minecraft:cartography_table', 'minecraft:fletching_table', 'minecraft:brewing_stand',
-    'minecraft:cauldron', 'minecraft:bell', 'minecraft:azalea', 'minecraft:flowering_azalea',
-    'minecraft:dandelion', 'minecraft:cornflower', 'minecraft:allium', 'minecraft:azure_bluet',
-    'minecraft:blue_orchid', 'minecraft:blue_carpet', 'minecraft:cyan_carpet', 'minecraft:brown_carpet',
-    'minecraft:gray_carpet', 'minecraft:wheat', 'minecraft:carrots', 'minecraft:beetroot',
-    'minecraft:bed', 'minecraft:furnace', 'minecraft:blast_furnace']);
-  const PRE = new Set(['minecraft:stone', 'minecraft:dirt', 'minecraft:grass_block', 'minecraft:gray_concrete',
-    'minecraft:black_concrete', 'minecraft:light_gray_concrete', 'minecraft:smooth_stone', 'minecraft:yellow_concrete',
-    'minecraft:white_concrete', 'minecraft:sandstone', 'minecraft:glass', 'minecraft:tinted_glass',
-    'minecraft:glass_pane', 'minecraft:iron_block', 'minecraft:iron_bars', 'minecraft:sea_lantern',
-    'minecraft:glowstone', 'minecraft:quartz_block', 'minecraft:stone_bricks', 'minecraft:deepslate_tiles',
-    'minecraft:brick_block', 'minecraft:oak_planks', 'minecraft:spruce_planks', 'minecraft:blue_concrete',
-    'minecraft:cyan_concrete', 'minecraft:red_concrete', 'minecraft:orange_concrete', 'minecraft:green_concrete',
-    'minecraft:oak_log', 'minecraft:oak_leaves', 'minecraft:spruce_log', 'minecraft:spruce_leaves',
-    'minecraft:water', 'minecraft:air']);
-  const unknown = new Set();
-  for (let i = 0; i < MATERIALS.length; i++) {
-    const b = MATERIALS.def(i).block;
-    if (!CONFIRMED.has(b) && !PRE.has(b) && !/_door$|_stairs$/.test(b)) unknown.add(b);
-  }
-  check('blocks: every id is confirmed or already proven in game', unknown.size === 0, [...unknown].join(', '));
-  const furnaces = [];
+  // every block Polis can write, checked against Bedrock's own state list
+  // for the version tag we write (tools/bedrock-states.json, 1.21.60)
+  const REF = JSON.parse(readFileSync(join(ROOT, 'tools/bedrock-states.json'), 'utf8'))['1.21.60'];
+  for (const k of DOOR_KINDS) for (let d = 0; d < 4; d++) for (const u of [0, 1]) for (const h of [0, 1]) doorId(k, d, !!u, h);
+  for (const k of CROP_KINDS) for (let g = 0; g < 8; g++) cropId(k, g);
+  for (let d = 0; d < 4; d++) { bedId(d, 0); bedId(d, 1); }
+  for (const f of ['north', 'south', 'east', 'west']) { furnaceId('furnace', f); furnaceId('blast', f); }
+  for (let d = 0; d < 6; d++) { railId(d); poweredRailId(d); }
+  for (const t of Object.keys(THEMES)) for (const th of THEMES[t]) for (const [dir, up] of [[0, 0], [1, 0], [2, 1], [3, 1]]) stairId(th.stair, dir, !!up);
+  generateCity({ ...DEFAULTS, size: 128, seed: 4, transit: 'rails' });
+  const problems = [];
   for (let i = 0; i < MATERIALS.length; i++) {
     const d = MATERIALS.def(i);
-    if (d.block === 'minecraft:furnace' || d.block === 'minecraft:blast_furnace') furnaces.push(d);
+    const name = d.block.replace(/^minecraft:/, '');
+    const ref = REF[name];
+    if (!ref) { problems.push(`${d.block}: no such block at 1.21.60`); continue; }
+    const want = Object.keys(ref).sort().join(','), have = Object.keys(d.states).sort().join(',');
+    if (want !== have) { problems.push(`${d.block}: states {${have}} but Bedrock has {${want}}`); continue; }
+    for (const [k, st] of Object.entries(d.states)) {
+      if (ref[k].t !== st.type) problems.push(`${d.block}.${k}: type ${st.type}, Bedrock ${ref[k].t}`);
+      else if (!ref[k].v.includes(st.value)) problems.push(`${d.block}.${k}=${st.value} not in [${ref[k].v}]`);
+    }
+    if (d.version && d.version !== BLOCK_VERSION) problems.push(`${d.block}: unexpected version tag ${d.version}`);
   }
-  check('blocks: furnaces use the new direction state with the new version tag',
-    furnaces.length > 0 && furnaces.every((d) => d.version === BLOCK_VERSION_NEW &&
-      ['north', 'south', 'east', 'west'].includes(d.states['minecraft:cardinal_direction'].value)));
+  check('blocks: every block and state is valid in Bedrock 1.21.60 (Bedrock\'s own state list)',
+    problems.length === 0, problems.slice(0, 4).join(' | ') + (problems.length > 4 ? ` (+${problems.length - 4})` : ''));
+  note(`${MATERIALS.length} block+state combinations checked against Bedrock 1.21.60 state data`);
+}
+
+// ===========================================================================
+// 2d. railways
+// ===========================================================================
+section('2d. railways');
+{
+  // rail ends: [dx, dz, height of that end above the rail's own y]
+  const ENDS = {
+    0: [[0, -1, 0], [0, 1, 0]], 1: [[-1, 0, 0], [1, 0, 0]],
+    2: [[1, 0, 1], [-1, 0, 0]], 3: [[-1, 0, 1], [1, 0, 0]],
+    4: [[0, -1, 1], [0, 1, 0]], 5: [[0, 1, 1], [0, -1, 0]],
+  };
+  const isRail = (w, x, y, z) => { const id = w.get(x, y, z); return id >= 0 && /rail$/.test(MATERIALS.def(id).block); };
+  const dirOf = (w, x, y, z) => MATERIALS.def(w.get(x, y, z)).states.rail_direction.value;
+  const blocking = (w, x, y, z) => { const id = w.get(x, y, z); return id !== -1 && !MATERIALS.isPassable(id); };
+  let totals = { lines: 0, bridges: 0, rails: 0, carts: 0 };
+  for (const [transit, c] of [['rails', { size: 160, seed: 12345 }], ['rails', { size: 224, seed: 7 }],
+                              ['trams', { size: 192, seed: 5 }], ['rails', { size: 128, seed: 3, pitch: 7 }],
+                              // regressions: tree canopies over the track (fixed by trimOverRails)
+                              ['rails', { size: 256, seed: 11, blockIrregularity: 1 }], ['trams', { size: 192, seed: 22, blockIrregularity: 0.5 }]]) {
+    const r = generateCity({ ...DEFAULTS, ...c, transit });
+    const w = r.world;
+    const tag = `${transit} ${c.size}/${c.seed}`;
+    const rails = [];
+    w.forEach((x, y, z, id) => { if (/rail$/.test(MATERIALS.def(id).block)) rails.push([x, y, z]); });
+    let noSupport = 0, unpowered = 0, lowRoof = 0, badLink = 0, offRoad = 0, sideTouch = 0, noBuffer = 0;
+    const key = (x, y, z) => `${x},${y},${z}`;
+    const adj = new Map();
+    for (const [x, y, z] of rails) {
+      const id = w.get(x, y, z), d = MATERIALS.def(id);
+      const below = w.get(x, y - 1, z);
+      if (below === -1 || MATERIALS.def(below).flowable || MATERIALS.isPassable(below)) noSupport++;
+      if (d.block === 'minecraft:golden_rail' && (below === -1 || MATERIALS.def(below).block !== 'minecraft:redstone_block')) unpowered++;
+      if (blocking(w, x, y + 1, z) || blocking(w, x, y + 2, z)) lowRoof++;
+      if (r.plan.use[z * r.plan.W + x] !== USE.ROAD) offRoad++;
+      const links = [];
+      for (const [dx, dz, h] of ENDS[dir = dirOf(w, x, y, z)]) {
+        const endY = y + h;
+        let found = null;
+        for (const yb of [endY, endY - 1]) {
+          if (!isRail(w, x + dx, yb, z + dz)) continue;
+          const back = ENDS[dirOf(w, x + dx, yb, z + dz)].find(([ex, ez]) => ex === -dx && ez === -dz);
+          if (back && yb + back[2] === endY) found = key(x + dx, yb, z + dz);
+        }
+        if (found) links.push(found);
+        else if (!blocking(w, x + dx, y, z + dz)) noBuffer++;       // open end with no buffer
+      }
+      adj.set(key(x, y, z), links);
+      // no rail may touch this one from the side (Bedrock would re-curve them on a block update)
+      const axisX = ENDS[dirOf(w, x, y, z)][0][0] !== 0;
+      for (const [sx, sz] of axisX ? [[0, 1], [0, -1]] : [[1, 0], [-1, 0]])
+        for (const yy of [y - 1, y, y + 1]) if (isRail(w, x + sx, yy, z + sz)) sideTouch++;
+    }
+    var dir;
+    // links must be mutual; each connected piece is a line with exactly two ends
+    for (const [k, links] of adj) for (const l of links) if (!(adj.get(l) || []).includes(k)) badLink++;
+    const seen = new Set(); let comps = 0, badComp = 0;
+    for (const k of adj.keys()) {
+      if (seen.has(k)) continue;
+      comps++;
+      const stack = [k]; let ends = 0;
+      while (stack.length) {
+        const u = stack.pop(); if (seen.has(u)) continue; seen.add(u);
+        const ls = adj.get(u); if (ls.length < 2) ends++;
+        for (const v of ls) if (!seen.has(v)) stack.push(v);
+      }
+      if (ends !== 2) badComp++;
+    }
+    const carts = r.spawns.filter((p) => p.type === 'minecart');
+    const cartOnRail = carts.every((p) => isRail(w, p.x, p.y, p.z));
+    check(`${tag}: every rail sits on a solid block`, noSupport === 0, `${noSupport}`);
+    check(`${tag}: every powered rail sits on a redstone block`, unpowered === 0, `${unpowered}`);
+    check(`${tag}: 2 clear blocks above every rail (cart + rider)`, lowRoof === 0, `${lowRoof}`);
+    check(`${tag}: rails only on former road cells`, offRoad === 0, `${offRoad}`);
+    check(`${tag}: every rail joins its neighbours end to end`, badLink === 0, `${badLink}`);
+    check(`${tag}: no rail touches another from the side`, sideTouch === 0, `${sideTouch}`);
+    check(`${tag}: every open end of track has a buffer block`, noBuffer === 0, `${noBuffer}`);
+    check(`${tag}: every piece of track is one line with two ends (no junctions)`, badComp === 0 && comps === r.transit.stats.lines,
+      `${badComp} bad, ${comps} pieces vs ${r.transit.stats.lines} lines`);
+    check(`${tag}: one minecart per line, on the rails`, carts.length === r.transit.stats.lines && cartOnRail);
+    const v = verifyAll(w, r.buildings);
+    check(`${tag}: every building floor still reachable`, v.floorsReached === v.floorsChecked, `${v.floorsReached}/${v.floorsChecked}`);
+    totals.lines += r.transit.stats.lines; totals.bridges += r.transit.stats.bridges; totals.rails += rails.length; totals.carts += carts.length;
+  }
+  check('railways: bridges built', totals.bridges > 0);
+  const plain = generateCity({ ...DEFAULTS, size: 128, seed: 3 });
+  let anyRail = false; plain.world.forEach((x, y, z, id) => { if (/rail$/.test(MATERIALS.def(id).block)) anyRail = true; });
+  check('roads mode: no rails at all', !anyRail && !plain.transit);
+  note(`${totals.lines} lines · ${totals.bridges} bridges · ${totals.rails.toLocaleString()} rails · ${totals.carts} carts, all topology checks clean`);
 }
 
 // ===========================================================================
@@ -729,13 +814,14 @@ section('6d. summons and block entities');
   check('functions: build, build_centered, populate, populate_centered present',
     !!build && !!popul && !!get(`functions/${ns}/build.mcfunction`) && !!get(`functions/${ns}/populate.mcfunction`));
   const sv = (popul || '').split('\n').filter((l) => l.startsWith('summon minecraft:villager_v2 '));
+  const sc = (popul || '').split('\n').filter((l) => l.startsWith('summon minecraft:minecart '));
   const sg = (popul || '').split('\n').filter((l) => l.startsWith('summon minecraft:iron_golem '));
   const want = r.spawns.filter((p) => p.type === 'villager').length;
   check('functions: one summon per villager', sv.length === want, `${sv.length} vs ${want}`);
-  check('functions: one summon per golem', sg.length === r.spawns.length - want);
+  check('functions: one summon per golem', sg.length === r.spawns.filter((p) => p.type === 'golem').length);
   check('functions: build summons nothing (mobs must not arrive before their floors)', !(build || '').includes('summon'));
   check('functions: populate loads no structures', !(popul || '').includes('structure load'));
-  const SUM = /^summon minecraft:(villager_v2|iron_golem) (~-?\d*) (~-?\d*) (~-?\d*)$/;
+  const SUM = /^summon minecraft:(villager_v2|iron_golem|minecart) (~-?\d*) (~-?\d*) (~-?\d*)$/;
   check('functions: summons use whole-block offsets', sv.concat(sg).every((l) => SUM.test(l)),
     sv.concat(sg).find((l) => !SUM.test(l)));
   check('functions: both tell the player what happened in chat',
@@ -801,6 +887,51 @@ section('6d. summons and block entities');
 }
 
 // ===========================================================================
+// 6e. versions agree everywhere; packs from different versions never collide
+// ===========================================================================
+section('6e. versions');
+{
+  const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')).version;
+  const mainV = (readFileSync(join(ROOT, 'main.js'), 'utf8').match(/const VERSION = '([^']+)'/) || [])[1];
+  const html = readFileSync(join(ROOT, 'index.html'), 'utf8');
+  const pageV = (html.match(/data-version="([^"]+)"/) || [])[1];
+  const scriptV = (html.match(/main\.js\?v=([\w.]+)/) || [])[1];
+  const readmeV = (readFileSync(join(ROOT, 'README.md'), 'utf8').match(/^# Polis v([\w.]+)/m) || [])[1];
+  check('versions: package, main.js, engine, page, script tag and README agree',
+    [mainV, POLIS_VERSION, pageV, scriptV, readmeV].every((v) => v === pkg),
+    `package ${pkg} · main ${mainV} · engine ${POLIS_VERSION} · page ${pageV} · script ${scriptV} · readme ${readmeV}`);
+  const r = generateCity({ ...DEFAULTS, size: 96, seed: 12345 });
+  check('city id: the same city from two Polis versions gets two ids',
+    cityId(r.world, 12345, '0.1.5') !== cityId(r.world, 12345, '0.1.6'));
+  check('city id: stable within a version', cityId(r.world, 12345) === cityId(r.world, 12345));
+  const out = await exportPack(r.world, { namespace: cityId(r.world, 12345), spawns: r.spawns, deflateRaw });
+  check('guide: names all four functions and the Polis version',
+    /build_centered/.test(out.guide) && /populate_centered/.test(out.guide) && out.guide.includes(`Polis v${POLIS_VERSION}`));
+
+  // every command in every function is one of the three forms we emit
+  const FORMS = [/^structure load [a-z0-9_]+:[a-z0-9_]+ ~-?\d* ~-?\d* ~-?\d*$/,
+    /^summon minecraft:(villager_v2|iron_golem|minecart) ~-?\d* ~-?\d* ~-?\d*$/, /^say [^\n]+$/];
+  let badCmd = null;
+  for (const f of out.functions) for (const l of f.text.split('\n')) {
+    if (!l || l.startsWith('#')) continue;
+    if (!FORMS.some((re) => re.test(l))) badCmd = badCmd || `${f.name}: ${l}`;
+  }
+  check('functions: every command is a known-good form (a bad line makes Bedrock drop the whole function)', !badCmd, badCmd);
+
+  // the no-cache dev server really sends no-store
+  const { spawn } = await import('node:child_process');
+  const port = 18000 + Math.floor(Math.random() * 1000);
+  const srv = spawn(process.execPath, [join(ROOT, 'tools/serve.js'), String(port)], { stdio: 'ignore' });
+  let hdr = null, body = '';
+  for (let i = 0; i < 40 && !hdr; i++) {
+    await new Promise((res) => setTimeout(res, 100));
+    try { const r2 = await fetch(`http://localhost:${port}/`); hdr = r2.headers.get('cache-control'); body = await r2.text(); } catch { /* not up yet */ }
+  }
+  srv.kill();
+  check('serve.js: serves index.html with caching off', hdr === 'no-store' && body.includes('data-version'), String(hdr));
+}
+
+// ===========================================================================
 // 7. mesher
 // ===========================================================================
 section('7. greedy mesher');
@@ -812,9 +943,12 @@ section('7. greedy mesher');
   const tr = (id) => id >= 0 && MATERIALS.def(id).transparent;
   let brute = 0;
   const DIRS = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
+  const flat = (id) => id >= 0 && MATERIALS.def(id).flat;
   w.forEach((x, y, z, id) => {
+    if (flat(id)) { brute++; return; }            // drawn as one top plate
     for (const [dx, dy, dz] of DIRS) {
-      const nb = w.get(x + dx, y + dy, z + dz);
+      let nb = w.get(x + dx, y + dy, z + dz);
+      if (flat(nb)) nb = -1;
       if (nb === -1 || (tr(nb) && nb !== id)) brute++;
     }
   });
