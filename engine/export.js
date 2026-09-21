@@ -15,7 +15,7 @@ import { MATERIALS, MAT } from './materials.js';
 // Must match main.js VERSION, package.json and index.html data-version;
 // tools/validate.js fails if they drift. The app refuses to export when the
 // browser has mixed cached copies of old and new files.
-export const POLIS_VERSION = '0.1.7';
+export const POLIS_VERSION = '0.1.8';
 
 export const CHUNK = 64;          // Bedrock structure limit per horizontal axis
 export const GROUND_DROP = 2;     // base layer y=0 sits 2 below feet; surface y=1 replaces the block you stand on
@@ -93,6 +93,12 @@ export function buildStructures(world, opts = {}) {
 // ---- functions ----------------------------------------------------------------
 function rel(v) { return v === 0 ? '~' : `~${v}`; }
 
+// Entity names as the /summon command accepts them (Microsoft's /summon
+// reference: "summon villager", "summon iron_golem"). The internal name
+// villager_v2 is rejected by the command parser in current Bedrock, and one
+// unparseable line makes Bedrock drop the whole function file.
+export const SUMMON_IDS = { villager: 'minecraft:villager', golem: 'minecraft:iron_golem', minecart: 'minecraft:minecart' };
+
 // Two steps, on purpose. /structure load does not finish placing blocks
 // before the next command runs, so mobs summoned in the same function arrive
 // before their floors do: upper-floor villagers fall, others get buried.
@@ -113,7 +119,7 @@ export function functionFiles(tiles, world, opts = {}) {
   const villagers = spawns.filter((p) => p.type === 'villager').length;
   const golems = spawns.filter((p) => p.type === 'golem').length;
   const carts = spawns.filter((p) => p.type === 'minecart').length;
-  const ENTITY = { villager: 'minecraft:villager_v2', golem: 'minecraft:iron_golem', minecart: 'minecraft:minecart' };
+  const ENTITY = SUMMON_IDS;
   const loads = (dx, dz) => tiles.map((t) =>
     `structure load ${ns}:${t.name} ${rel(t.offset[0] - dx)} ${rel(t.offset[1] - GROUND_DROP)} ${rel(t.offset[2] - dz)}`);
   const summons = (dx, dz) => spawns.map((p) => {
@@ -146,6 +152,24 @@ export function functionFiles(tiles, world, opts = {}) {
       text: populate(wb.x0, wb.z0, 'Polis: villagers and golems (pairs with build)') },
     { name: `functions/${ns}/populate_centered.mcfunction`, fn: `${ns}/populate_centered`,
       text: populate(cx, cz, 'Polis: villagers and golems (pairs with build_centered)') },
+    // one file per kind of mob as well: if Bedrock ever rejects one entity name,
+    // the others still load and can be run on their own
+    ...['villager', 'golem', 'minecart'].filter((k) => spawns.some((p) => p.type === k)).flatMap((k) => {
+      const plural = { villager: 'villagers', golem: 'golems', minecart: 'minecarts' }[k];
+      const only = (dx, dz, title) => [
+        `# ${title}`,
+        '# Run ONCE, from the same spot you ran build from. (populate does all kinds at once.)',
+        `say Polis: summoning ${spawns.filter((p) => p.type === k).length} ${plural}...`,
+        ...spawns.filter((p) => p.type === k).map((p) =>
+          `summon ${ENTITY[k]} ${rel(p.x - dx)} ${rel(p.y - GROUND_DROP)} ${rel(p.z - dz)}`),
+      ].join('\n') + '\n';
+      return [
+        { name: `functions/${ns}/${plural}.mcfunction`, fn: `${ns}/${plural}`,
+          text: only(wb.x0, wb.z0, `Polis: ${plural} only (pairs with build)`) },
+        { name: `functions/${ns}/${plural}_centered.mcfunction`, fn: `${ns}/${plural}_centered`,
+          text: only(cx, cz, `Polis: ${plural} only (pairs with build_centered)`) },
+      ];
+    }),
   ];
 }
 
@@ -165,7 +189,8 @@ export function placementGuide(tiles, opts = {}) {
   L.push('');
   L.push(`    /function ${ns}/populate_centered`);
   L.push('');
-  L.push(`This pack contains four functions: ${ns}/build, build_centered, populate, populate_centered.`);
+  L.push(`Functions in this pack: ${ns}/build, build_centered, populate, populate_centered,`);
+  L.push('plus villagers / golems / minecarts (and _centered) to summon one kind at a time.');
   L.push(`Made with Polis v${POLIS_VERSION}. If /function says one is "not found", an older`);
   L.push('Polis pack is probably still active on this world: remove old Polis packs.');
   L.push('');

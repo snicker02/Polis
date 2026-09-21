@@ -18,7 +18,7 @@ import { verifyAll } from '../engine/verify.js';
 import { MATERIALS, THEMES, DOOR_KINDS, doorId, MAT, BED_VEC, stairId, cropId, CROP_KINDS, bedId, furnaceId, railId, poweredRailId } from '../engine/materials.js';
 import { BLOCK_VERSION } from '../engine/blockcore.js';
 import { VoxelWorld, splitWorld, buildMcPack } from '../engine/blockcore.js';
-import { buildStructures, placementGuide, CHUNK, exportPack, tileList, functionFiles, GROUND_DROP, cityId, POLIS_VERSION } from '../engine/export.js';
+import { buildStructures, placementGuide, CHUNK, exportPack, tileList, functionFiles, GROUND_DROP, cityId, POLIS_VERSION, SUMMON_IDS } from '../engine/export.js';
 import { buildMesh, MAX_QUADS, STRIDE } from '../engine/mesher.js';
 import { decodeNbt, readZip, localPayload } from './nbt-read.js';
 
@@ -813,7 +813,7 @@ section('6d. summons and block entities');
   const popul = get(`functions/${ns}/populate_centered.mcfunction`);
   check('functions: build, build_centered, populate, populate_centered present',
     !!build && !!popul && !!get(`functions/${ns}/build.mcfunction`) && !!get(`functions/${ns}/populate.mcfunction`));
-  const sv = (popul || '').split('\n').filter((l) => l.startsWith('summon minecraft:villager_v2 '));
+  const sv = (popul || '').split('\n').filter((l) => l.startsWith('summon minecraft:villager '));
   const sc = (popul || '').split('\n').filter((l) => l.startsWith('summon minecraft:minecart '));
   const sg = (popul || '').split('\n').filter((l) => l.startsWith('summon minecraft:iron_golem '));
   const want = r.spawns.filter((p) => p.type === 'villager').length;
@@ -821,7 +821,7 @@ section('6d. summons and block entities');
   check('functions: one summon per golem', sg.length === r.spawns.filter((p) => p.type === 'golem').length);
   check('functions: build summons nothing (mobs must not arrive before their floors)', !(build || '').includes('summon'));
   check('functions: populate loads no structures', !(popul || '').includes('structure load'));
-  const SUM = /^summon minecraft:(villager_v2|iron_golem|minecart) (~-?\d*) (~-?\d*) (~-?\d*)$/;
+  const SUM = /^summon minecraft:(villager|iron_golem|minecart) (~-?\d*) (~-?\d*) (~-?\d*)$/;
   check('functions: summons use whole-block offsets', sv.concat(sg).every((l) => SUM.test(l)),
     sv.concat(sg).find((l) => !SUM.test(l)));
   check('functions: both tell the player what happened in chat',
@@ -864,6 +864,17 @@ section('6d. summons and block entities');
     }
     check(`simulated load from ${player.join(',')}: every mob stands on a floor with clear space`, bad === 0, `${bad} bad, e.g. ${first}`);
   }
+
+  // entity names: exactly the ones Bedrock's /summon parser accepts. villager_v2
+  // looked right but made Bedrock reject the whole populate file in game.
+  const ACCEPTED = new Set(['minecraft:villager', 'minecraft:iron_golem', 'minecraft:minecart']);
+  check('summon: only entity names the /summon command accepts (not internal ids like villager_v2)',
+    Object.values(SUMMON_IDS).every((n) => ACCEPTED.has(n)) && !(popul || '').includes('villager_v2'));
+  const kinds = ['villagers', 'golems'].filter((k) => z.entries.some((e) => e.name === `functions/${ns}/${k}_centered.mcfunction`));
+  check('functions: a separate file per mob kind as a fallback', kinds.length === 2, kinds.join(','));
+  const vOnly = get(`functions/${ns}/villagers_centered.mcfunction`) || '';
+  check('functions: villagers_centered has exactly the villager summons',
+    vOnly.split('\n').filter((l) => l.startsWith('summon minecraft:villager ')).length === want && !vOnly.includes('iron_golem'));
 
   // bed colours land in block_position_data, one per bed half, at the right index
   let entities = 0, bedHalves = 0, badEnt = 0;
@@ -910,7 +921,7 @@ section('6e. versions');
 
   // every command in every function is one of the three forms we emit
   const FORMS = [/^structure load [a-z0-9_]+:[a-z0-9_]+ ~-?\d* ~-?\d* ~-?\d*$/,
-    /^summon minecraft:(villager_v2|iron_golem|minecart) ~-?\d* ~-?\d* ~-?\d*$/, /^say [^\n]+$/];
+    /^summon minecraft:(villager|iron_golem|minecart) ~-?\d* ~-?\d* ~-?\d*$/, /^say [^\n]+$/];
   let badCmd = null;
   for (const f of out.functions) for (const l of f.text.split('\n')) {
     if (!l || l.startsWith('#')) continue;

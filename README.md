@@ -1,4 +1,4 @@
-# Polis v0.1.7
+# Polis v0.1.8
 
 A procedural city generator that exports to **Minecraft Bedrock**. Plans a
 street grid, subdivides it into lots, raises buildings with real interiors —
@@ -244,6 +244,9 @@ Bedrock's own 1.21.60 state list (`tools/bedrock-states.json`); orientations
 To add a block, add it to `materials.js` and run the validator — it will say
 exactly which states Bedrock expects.
 
+**Checking a pack in game.** Settings → Creator → Content Log shows exactly
+which line of which function Bedrock refused to load.
+
 **"Function … not found".** Bedrock silently drops a whole function file if
 any single command in it fails to parse, and uses the higher pack when two
 active packs share a function name. Check the content log (Settings → Creator →
@@ -272,6 +275,14 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.1.8** — Villagers are summoned as `minecraft:villager`. 0.1.5–0.1.7 used
+the internal id `minecraft:villager_v2`, which the command parser in current
+Bedrock rejects. Because one unparseable line makes Bedrock drop the whole
+function file, `populate` never loaded at all. There are now also per-kind
+fallback functions (`villagers`, `golems`, `minecarts`, each with a
+`_centered` twin), so if any one entity name is ever rejected again, the
+others still load.
 
 **0.1.7** — Railways: a **Streets** setting with Roads, Railways (no roads)
 and Roads + tram rails; grade-separated lines with bridges over every
