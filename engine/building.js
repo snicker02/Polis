@@ -319,6 +319,7 @@ export function makeBuilding(world, spec, rng) {
     stairKind: core ? core.kind : null,
     hut, hutDoor, windows: windowCount,
     door: { x: dx, y: gy + 1, z: dz, out: outv },
+    doorCells: doorCells.map((c) => c.slice()),
     outside: [dx + outv[0], gy + 1, dz + outv[1]],
   };
 }

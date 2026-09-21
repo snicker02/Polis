@@ -5,6 +5,7 @@ import { makeRng, fbm2, clamp } from './rng.js';
 import { generatePlan, frontage, USE } from './plan.js';
 import { MAT, THEMES } from './materials.js';
 import { makeBuilding, OUTWARD } from './building.js';
+import { farm, pond, scatterFlowers, furnish, bedSpawns, placeBell, golemSpawns } from './life.js';
 
 export const DEFAULTS = {
   seed: 12345,
@@ -29,6 +30,13 @@ export const DEFAULTS = {
   roofAccess: true,
   useStairs: true,
   stairStyle: 'mixed',
+  farmChance: 0.2,
+  pondChance: 0.5,
+  furnish: true,
+  flowers: true,
+  villagers: 60,
+  villagersPerGolem: 8,
+  golemMax: 12,
   lights: true,
   lamps: true,
   trees: true,
@@ -92,10 +100,19 @@ export function generateCity(cfgIn, onProgress) {
 
   // ---- lots ----------------------------------------------------------------
   const buildings = [];
+  const farms = [];
+  const beds = [];
   const themeRng = rng.fork();
+  const lifeRng = rng.fork();
   for (const lot of plan.lots) {
     if (lot.kind === USE.PARK) { park(world, lot, rng, cfg); continue; }
     if (lot.kind === USE.PLAZA) { plaza(world, lot, rng, cfg); continue; }
+
+    if (lot.style === 'house' && cfg.farmChance > 0 &&
+        lot.x1 - lot.x0 + 1 >= 7 && lot.z1 - lot.z0 + 1 >= 7 && lifeRng.chance(cfg.farmChance)) {
+      const f = farm(world, lot, frontage(plan, lot).side, lifeRng, GROUND, plan);
+      if (f) { farms.push(f); continue; }
+    }
 
     const m = lot.margin;
     const fx0 = lot.x0 + m, fz0 = lot.z0 + m, fx1 = lot.x1 - m, fz1 = lot.z1 - m;
@@ -119,6 +136,11 @@ export function generateCity(cfgIn, onProgress) {
 
     if (rec) {
       buildings.push(rec);
+      if (cfg.furnish) {
+        const f = furnish(world, rec, lifeRng);
+        rec.beds = f.beds; rec.furniture = f;
+        for (const b of f.beds) beds.push(b);
+      } else { rec.beds = []; }
       // front path from the door out to the lot edge
       if (lot.style === 'house') {
         const [ox, oz] = OUTWARD[rec.facing];
@@ -128,6 +150,7 @@ export function generateCity(cfgIn, onProgress) {
           px += ox; pz += oz;
         }
         if (cfg.trees) yardTrees(world, lot, rec, rng);
+        if (cfg.flowers) scatterFlowers(world, lot, 0.05, lifeRng, GROUND);
       }
     } else {
       garden(world, lot, rng, cfg);
@@ -153,8 +176,19 @@ export function generateCity(cfgIn, onProgress) {
 
   clearDoorways(world, buildings);
 
-  const stats = summarise(world, plan, buildings, cfg);
-  return { world, plan, buildings, cfg, stats };
+  // ---- the village ---------------------------------------------------------
+  const bell = cfg.villagers > 0 ? placeBell(world, plan, GROUND) : null;
+  let spawns = [];
+  if (cfg.villagers > 0) {
+    const vs = bedSpawns(world, beds);
+    lifeRng.shuffle(vs);
+    spawns = vs.slice(0, cfg.villagers);
+    const golems = Math.min(cfg.golemMax, Math.ceil(spawns.length / Math.max(1, cfg.villagersPerGolem)));
+    spawns = spawns.concat(golemSpawns(world, plan, buildings, golems, lifeRng, GROUND));
+  }
+
+  const stats = summarise(world, plan, buildings, cfg, { farms, beds, spawns, bell });
+  return { world, plan, buildings, cfg, stats, farms, spawns, bell };
 }
 
 // ---- keep the way in clear --------------------------------------------------
@@ -207,6 +241,8 @@ export function generateSingle(cfgIn) {
   }, rng);
 
   const buildings = rec ? [rec] : [];
+  let beds = [];
+  if (rec && cfg.furnish) { const f = furnish(world, rec, makeRng(cfg.seed ^ 0x51f3)); rec.beds = f.beds; rec.furniture = f; beds = f.beds; }
   if (rec) {
     const [ox, oz] = OUTWARD[rec.facing];
     let px = rec.door.x + ox, pz = rec.door.z + oz;
@@ -214,7 +250,9 @@ export function generateSingle(cfgIn) {
   }
   clearDoorways(world, buildings);
   const plan = { W, D, use: new Uint8Array(W * D), lots: [], corridors: [], focal: [W / 2, D / 2], roadAxis: new Uint8Array(W * D) };
-  return { world, plan, buildings, cfg, stats: summarise(world, plan, buildings, cfg) };
+  const spawns = cfg.villagers > 0 ? bedSpawns(world, beds).slice(0, cfg.villagers) : [];
+  return { world, plan, buildings, cfg, spawns, farms: [], bell: null,
+    stats: summarise(world, plan, buildings, cfg, { farms: [], beds, spawns, bell: null }) };
 }
 
 // ---- open space ------------------------------------------------------------
@@ -225,13 +263,17 @@ function park(world, lot, rng, cfg) {
   const cx = Math.round((lot.x0 + lot.x1) / 2), cz = Math.round((lot.z0 + lot.z1) / 2);
   for (let x = lot.x0; x <= lot.x1; x++) world.set(x, GROUND, cz, MAT.PATH);
   for (let z = lot.z0; z <= lot.z1; z++) world.set(cx, GROUND, z, MAT.PATH);
-  if (!cfg.trees) return;
-  for (let z = lot.z0 + 1; z <= lot.z1 - 1; z++) {
-    for (let x = lot.x0 + 1; x <= lot.x1 - 1; x++) {
-      if (x === cx || z === cz) continue;
-      if (fbm2(x, z, cfg.seed ^ 0x77e2, 4) > 0.72 && rng.chance(0.45)) tree(world, x, z, rng);
+  if (cfg.pondChance > 0 && rng.chance(cfg.pondChance)) pond(world, lot, cx, cz, rng, GROUND);
+  if (cfg.trees) {
+    for (let z = lot.z0 + 1; z <= lot.z1 - 1; z++) {
+      for (let x = lot.x0 + 1; x <= lot.x1 - 1; x++) {
+        if (x === cx || z === cz) continue;
+        if (world.get(x, GROUND, z) !== MAT.GRASS || world.has(x, GROUND + 1, z)) continue;
+        if (fbm2(x, z, cfg.seed ^ 0x77e2, 4) > 0.72 && rng.chance(0.45)) tree(world, x, z, rng);
+      }
     }
   }
+  if (cfg.flowers) scatterFlowers(world, lot, 0.07, rng, GROUND);
 }
 
 function plaza(world, lot, rng, cfg) {
@@ -305,7 +347,7 @@ function tree(world, x, z, rng) {
 }
 
 // ---- stats -----------------------------------------------------------------
-function summarise(world, plan, buildings, cfg) {
+function summarise(world, plan, buildings, cfg, life = {}) {
   let floors = 0, tallest = 0, windows = 0, houses = 0, mids = 0, towers = 0;
   for (const b of buildings) {
     floors += b.floors;
@@ -322,5 +364,12 @@ function summarise(world, plan, buildings, cfg) {
     floors, tallest, windows,
     height: bb.empty ? 0 : bb.y1 - bb.y0 + 1,
     footprint: [plan.W, plan.D],
+    farms: (life.farms || []).length,
+    beds: (life.beds || []).length,
+    villagers: (life.spawns || []).filter((p) => p.type === 'villager').length,
+    golems: (life.spawns || []).filter((p) => p.type === 'golem').length,
+    stations: buildings.reduce((a, b) => a + ((b.furniture && b.furniture.stations) || 0), 0),
+    plants: buildings.reduce((a, b) => a + ((b.furniture && b.furniture.plants) || 0), 0),
+    bell: !!life.bell,
   };
 }

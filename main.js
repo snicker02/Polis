@@ -8,13 +8,14 @@ import { Renderer } from './engine/renderer.js';
 import { exportPack, exportStructuresZip, tileList, commandList, cityId } from './engine/export.js';
 import { THEMES } from './engine/materials.js';
 
-const VERSION = '0.1.3';
+const VERSION = '0.1.4';
 const $ = (id) => document.getElementById(id);
 
 const SLIDERS = {
   size: 0, minBlock: 0, blockIrregularity: 2, avenueWidth: 0, streetWidth: 0,
   downtownRadius: 2, zoneNoise: 2, parkChance: 2, lotDowntown: 0, lotSuburb: 0,
   maxFloors: 0, pitch: 0, setbackEvery: 0, bw: 0, bd: 0, floors: 0, clip: 0,
+  farmChance: 2, pondChance: 2, villagers: 0,
 };
 const CHECKS = ['setback', 'roofAccess', 'useStairs', 'lights', 'lamps', 'trees', 'markings'];
 
@@ -115,6 +116,11 @@ function readCfg() {
   cfg.pitch = num('pitch');
   cfg.setbackEvery = num('setbackEvery');
   cfg.stairStyle = $('stairStyle').value;
+  cfg.furnish = $('furnish').checked;
+  cfg.flowers = $('flowers').checked;
+  cfg.villagers = num('villagers');
+  cfg.farmChance = num('farmChance');
+  cfg.pondChance = num('pondChance');
   for (const c of CHECKS) cfg[c] = $(c).checked;
   if ($('mode').value === 'city') {
     cfg.size = num('size');
@@ -186,6 +192,7 @@ const MAP_COL = {
   [USE.LOT]: '#2a3a26',
   [USE.PARK]: '#2f5a2c',
   [USE.PLAZA]: '#6b6552',
+  6: '#8a7a2a',              // farm
 };
 
 function drawMap() {
@@ -247,6 +254,11 @@ function showStats(mesh, times) {
   for (const b of result.buildings) if (b.stairKind) kinds[b.stairKind] = (kinds[b.stairKind] || 0) + 1;
   const kindText = ['switchback', 'wide', 'spiral'].filter((k) => kinds[k]).map((k) => `${kinds[k]} ${k}`).join(' · ');
   if (kindText) line('stairs', kindText);
+  if (s.farms !== undefined) {
+    line('farms / beds', `${s.farms} / ${s.beds}`);
+    line('workstations / plants', `${s.stations} / ${s.plants}`);
+    line('villagers / golems', `${s.villagers} / ${s.golems}` + (s.bell ? ' · bell' : ''));
+  }
   const allOk = v.total > 0 && v.ok === v.total && v.floorsReached === v.floorsChecked;
   line('stairs verified', v.total === 0 ? '—' :
     (allOk ? `✓ ${v.floorsReached}/${v.floorsChecked} floors` : `✗ ${v.ok}/${v.total} buildings`),
@@ -313,7 +325,7 @@ async function doExport(kind) {
   try {
     const opts = {
       base: base(), namespace: cityNs, prefix: 'c', fillAir: $('fillAir').checked,
-      seed: result.cfg.seed,
+      seed: result.cfg.seed, spawns: result.spawns || [],
       summary: summaryLine(),
       packName: `Polis ${cityNs}`,
       description: `/function ${cityNs}/build_centered · Polis v${VERSION}`,
@@ -337,6 +349,7 @@ function summaryLine() {
   const s = result.stats;
   const mode = $('mode').value === 'city' ? `city ${s.footprint[0]}x${s.footprint[1]}` : `single ${result.cfg.style}`;
   return `${mode} · ${s.buildings} building${s.buildings === 1 ? '' : 's'} · ${s.floors} floors · ` +
+    `${s.farms || 0} farms · ${s.villagers || 0} villagers · ${s.golems || 0} golems · ` +
     `${s.blocks.toLocaleString()} blocks · air fill ${$('fillAir').checked ? 'on' : 'off'}`;
 }
 

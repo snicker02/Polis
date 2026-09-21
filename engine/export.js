@@ -73,10 +73,10 @@ export function tileList(world, opts = {}) {
 export function buildStructures(world, opts = {}) {
   const airId = opts.fillAir ? MAT.AIR : undefined;
   return tileList(world, opts).map((t) => {
-    const res = writeMcStructure(t.chunk.keys, t.chunk.ids, t.box, MATERIALS, { airId });
+    const res = writeMcStructure(t.chunk.keys, t.chunk.ids, t.box, MATERIALS, { airId, blockData: world.data });
     return {
       name: t.name, data: res.data, box: t.box,
-      size: res.size, cells: res.cells, paletteSize: res.paletteSize,
+      size: res.size, cells: res.cells, paletteSize: res.paletteSize, entities: res.entities,
       offset: t.offset,
     };
   });
@@ -87,25 +87,39 @@ function rel(v) { return v === 0 ? '~' : `~${v}`; }
 
 export function functionFiles(tiles, world, opts = {}) {
   const ns = opts.namespace || 'polis';
+  const spawns = opts.spawns || [];
   const wb = world.box;
   const cx = Math.floor((wb.x0 + wb.x1 + 1) / 2);
   const cz = Math.floor((wb.z0 + wb.z1 + 1) / 2);
-  const make = (dx, dz, title) => {
-    const L = [
-      `# ${title}`,
-      `# ${tiles.length} structure${tiles.length === 1 ? '' : 's'}. Only loaded chunks are filled:`,
-      '# stand where you can see the whole area, or raise render distance.',
-    ];
-    for (const t of tiles) {
-      L.push(`structure load ${ns}:${t.name} ${rel(t.offset[0] - dx)} ${rel(t.offset[1] - GROUND_DROP)} ${rel(t.offset[2] - dz)}`);
-    }
-    return L.join('\n') + '\n';
-  };
+  const relf = (v) => (v === 0 ? '~' : `~${Number(v.toFixed(1))}`);
+  const loads = (dx, dz) => tiles.map((t) =>
+    `structure load ${ns}:${t.name} ${rel(t.offset[0] - dx)} ${rel(t.offset[1] - GROUND_DROP)} ${rel(t.offset[2] - dz)}`);
+  const summons = (dx, dz) => spawns.map((p) => {
+    const id = p.type === 'golem' ? 'minecraft:iron_golem' : 'minecraft:villager_v2';
+    return `summon ${id} ${relf(p.x - dx + 0.5)} ${rel(p.y - GROUND_DROP)} ${relf(p.z - dz + 0.5)}`;
+  });
+  const villagers = spawns.filter((p) => p.type === 'villager').length;
+  const golems = spawns.length - villagers;
+  const head = (title, withLife) => [
+    `# ${title}`,
+    `# ${tiles.length} structure${tiles.length === 1 ? '' : 's'}` +
+      (withLife && spawns.length ? `, then ${villagers} villagers and ${golems} iron golems.` : '.'),
+    '# Only loaded chunks are filled: stand where you can see the whole area.',
+    withLife && spawns.length
+      ? '# Run this ONCE. To fill in missed tiles afterwards use the blocks function (no duplicates).'
+      : '# Safe to run again: it only places blocks.',
+  ];
+  const make = (dx, dz, title, withLife) =>
+    head(title, withLife).concat(loads(dx, dz), withLife ? summons(dx, dz) : []).join('\n') + '\n';
   return [
     { name: `functions/${ns}/build.mcfunction`, fn: `${ns}/build`,
-      text: make(wb.x0, wb.z0, 'Polis: city corner at your feet') },
+      text: make(wb.x0, wb.z0, 'Polis: city corner at your feet', true) },
     { name: `functions/${ns}/build_centered.mcfunction`, fn: `${ns}/build_centered`,
-      text: make(cx, cz, 'Polis: city centred on you') },
+      text: make(cx, cz, 'Polis: city centred on you', true) },
+    { name: `functions/${ns}/blocks.mcfunction`, fn: `${ns}/blocks`,
+      text: make(wb.x0, wb.z0, 'Polis: blocks only, corner at your feet', false) },
+    { name: `functions/${ns}/blocks_centered.mcfunction`, fn: `${ns}/blocks_centered`,
+      text: make(cx, cz, 'Polis: blocks only, centred on you', false) },
   ];
 }
 
@@ -139,7 +153,10 @@ export function placementGuide(tiles, opts = {}) {
   L.push('     The city ground replaces the block you are standing on.');
   L.push('  3. Only loaded chunks get filled. For a big city stand near the middle,');
   L.push('     raise render distance, and fly up so the whole area is in view.');
-  L.push('     Running the function again is safe and fills anything that was missed.');
+  L.push('     build also summons the villagers and iron golems, so run it ONCE.');
+  L.push(`     To fill in tiles that were missed, stand near them and run`);
+  L.push(`       /function ${ns}/blocks_centered   (or ${ns}/blocks)`);
+  L.push('     which places blocks only and never duplicates villagers.');
   L.push('');
   L.push(`EXACT COORDINATES (base corner ${base.join(' ')}):`);
   for (const t of tiles) {

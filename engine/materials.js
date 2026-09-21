@@ -4,6 +4,8 @@
 // Block ids are the FLATTENED modern Bedrock ids (1.21+). If a future
 // version renames one, this table is the only place to edit.
 
+import { BLOCK_VERSION_NEW } from './blockcore.js';
+
 export const B = (v) => ({ type: 'byte', value: v | 0 });
 export const I = (v) => ({ type: 'int', value: v | 0 });
 export const S = (v) => ({ type: 'string', value: String(v) });
@@ -32,8 +34,10 @@ class Registry {
       id = this.defs.length;
       this.defs.push({
         id, name, block, states, color: hex(color),
-        passable: !!flags.passable,      // player can walk through (doors)
+        passable: !!flags.passable,      // player can walk through (doors, flowers, crops, carpet)
         transparent: !!flags.transparent, // preview-only hint
+        flowable: !!flags.flowable,      // water flows into / washes away this block
+        version: flags.version || 0,     // palette version tag; 0 = default (1.21.60)
       });
       this.byKey.set(key, id);
     }
@@ -103,6 +107,70 @@ export const MAT = {
                  { persistent_bit: B(1), update_bit: B(0) }),
   WATER:       A('WATER', 'minecraft:water', '#3a63c0', { liquid_depth: I(0) }, { transparent: true }),
 };
+
+// ---- life: farms, water, plants, furniture, workstations --------------------
+// Every id and state below was checked against Microsoft's Bedrock block list
+// (learn.microsoft.com, vanilla listings, 2026-08) or is already proven in game.
+const PLANT = { passable: true, flowable: true, transparent: true };
+Object.assign(MAT, {
+  FARMLAND:    A('FARMLAND', 'minecraft:farmland', '#5b3b1f', { moisturized_amount: I(7) }),
+  GRASS_PATH:  A('GRASS_PATH', 'minecraft:grass_path', '#9b7f4c'),
+  CLAY:        A('CLAY', 'minecraft:clay', '#9fa5b1'),
+  COMPOSTER:   A('COMPOSTER', 'minecraft:composter', '#7a5530', { composter_fill_level: I(0) }),
+  CRAFTING:    A('CRAFTING', 'minecraft:crafting_table', '#9c6b3c'),
+  BOOKSHELF:   A('BOOKSHELF', 'minecraft:bookshelf', '#8a6a3e'),
+  BARREL:      A('BARREL', 'minecraft:barrel', '#7d5a34', { facing_direction: I(1), open_bit: B(0) }),
+  CARTOGRAPHY: A('CARTOGRAPHY', 'minecraft:cartography_table', '#6b5a45'),
+  FLETCHING:   A('FLETCHING', 'minecraft:fletching_table', '#c2ab7a'),
+  BREWING:     A('BREWING', 'minecraft:brewing_stand', '#8b7a5c',
+                 { brewing_stand_slot_a_bit: B(0), brewing_stand_slot_b_bit: B(0), brewing_stand_slot_c_bit: B(0) }),
+  CAULDRON:    A('CAULDRON', 'minecraft:cauldron', '#3f3f44', { cauldron_liquid: S('water'), fill_level: I(0) }),
+  BELL:        A('BELL', 'minecraft:bell', '#e2b93b', { attachment: S('standing'), direction: I(0), toggle_bit: B(0) }),
+  AZALEA:      A('AZALEA', 'minecraft:azalea', '#5f7d2e'),
+  AZALEA_FL:   A('AZALEA_FL', 'minecraft:flowering_azalea', '#7d6b8a'),
+  DANDELION:   A('DANDELION', 'minecraft:dandelion', '#e8d23a', {}, PLANT),
+  CORNFLOWER:  A('CORNFLOWER', 'minecraft:cornflower', '#4f6fd6', {}, PLANT),
+  ALLIUM:      A('ALLIUM', 'minecraft:allium', '#b169d8', {}, PLANT),
+  AZURE_BLUET: A('AZURE_BLUET', 'minecraft:azure_bluet', '#dfe6ee', {}, PLANT),
+  BLUE_ORCHID: A('BLUE_ORCHID', 'minecraft:blue_orchid', '#3aa2d6', {}, PLANT),
+  CARPET_BLUE: A('CARPET_BLUE', 'minecraft:blue_carpet', '#35399d', {}, PLANT),
+  CARPET_CYAN: A('CARPET_CYAN', 'minecraft:cyan_carpet', '#158991', {}, PLANT),
+  CARPET_BROWN:A('CARPET_BROWN', 'minecraft:brown_carpet', '#724728', {}, PLANT),
+  CARPET_GRAY: A('CARPET_GRAY', 'minecraft:gray_carpet', '#3e4447', {}, PLANT),
+});
+export const FLOWERS = [MAT.DANDELION, MAT.CORNFLOWER, MAT.ALLIUM, MAT.AZURE_BLUET, MAT.BLUE_ORCHID];
+export const CARPETS = [MAT.CARPET_BLUE, MAT.CARPET_CYAN, MAT.CARPET_BROWN, MAT.CARPET_GRAY];
+
+// crops: wheat / carrots / beetroot, growth 0..7
+const CROP_BLOCKS = {
+  wheat: ['minecraft:wheat', '#c9b64a'],
+  carrots: ['minecraft:carrots', '#e08a2c'],
+  beetroot: ['minecraft:beetroot', '#9c2f3a'],
+};
+export const CROP_KINDS = Object.keys(CROP_BLOCKS);
+export function cropId(kind, growth) {
+  const [block, color] = CROP_BLOCKS[kind] || CROP_BLOCKS.wheat;
+  return MATERIALS.add(null, block, color, { growth: I(Math.max(0, Math.min(7, growth))) }, PLANT);
+}
+
+// Beds: direction is where the head lies from the foot, using the legacy
+// numbering Bedrock inherited: 0 = south (+z), 1 = west (-x), 2 = north (-z),
+// 3 = east (+x). Colour lives in the bed's block entity (see VoxelWorld.setData).
+export const BED_DIR = { south: 0, west: 1, north: 2, east: 3 };
+export const BED_VEC = [[0, 1], [-1, 0], [0, -1], [1, 0]];
+export function bedId(dir, head) {
+  return MATERIALS.add(null, 'minecraft:bed', '#b8312f', {
+    direction: I(dir), head_piece_bit: B(head ? 1 : 0), occupied_bit: B(0),
+  });
+}
+
+// Furnace family uses the newer string state, so these entries carry the
+// newer palette version tag. Value is the way the front of the block faces.
+export function furnaceId(kind, facing) {
+  const block = kind === 'blast' ? 'minecraft:blast_furnace' : 'minecraft:furnace';
+  return MATERIALS.add(null, block, kind === 'blast' ? '#4f4f55' : '#6e6e6e',
+    { 'minecraft:cardinal_direction': S(facing) }, { version: BLOCK_VERSION_NEW });
+}
 
 // ---- doors -----------------------------------------------------------------
 // Bedrock door states: direction (0=east,1=south,2=west,3=north),

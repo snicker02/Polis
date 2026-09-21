@@ -14,6 +14,7 @@ export class VoxelWorld {
   constructor(opts = {}) {
     this.budget = opts.budget || 4000000;
     this.cells = new Map();
+    this.data = new Map();     // packed key -> block-entity description (beds)
     this.overflow = 0;
     this.minX = Infinity; this.minY = Infinity; this.minZ = Infinity;
     this.maxX = -Infinity; this.maxY = -Infinity; this.maxZ = -Infinity;
@@ -37,6 +38,7 @@ export class VoxelWorld {
     if (!this.cells.has(k)) {
       if (this.cells.size >= this.budget) { this.overflow++; return false; }
     }
+    if (this.cells.get(k) !== id) this.data.delete(k);   // new block, stale entity data goes
     this.cells.set(k, id);
     if (x < this.minX) this.minX = x; if (x > this.maxX) this.maxX = x;
     if (y < this.minY) this.minY = y; if (y > this.maxY) this.maxY = y;
@@ -54,7 +56,19 @@ export class VoxelWorld {
 
   clear(x, y, z) {
     if (!this.inRange(x, y, z)) return false;
-    return this.cells.delete(((y + YOFF) * KZ + z) * KX + x);
+    const k = ((y + YOFF) * KZ + z) * KX + x;
+    this.data.delete(k);
+    return this.cells.delete(k);
+  }
+
+  // Block-entity data for a cell: { id: 'Bed', bytes: { color: 14, ... } }.
+  // Written into the structure's block_position_data on export.
+  setData(x, y, z, d) {
+    if (!this.inRange(x, y, z)) return;
+    this.data.set(((y + YOFF) * KZ + z) * KX + x, d);
+  }
+  getData(x, y, z) {
+    return this.data.get(((y + YOFF) * KZ + z) * KX + x);
   }
 
   get size() { return this.cells.size; }
@@ -202,7 +216,12 @@ export function encodeNbt(rootCompound, rootName = '') {
 // ============================================================================
 
 // Advisory block version stamp written into each palette entry.
-export const BLOCK_VERSION = 18168865; // 1.21.x
+// Every palette entry carries the game version its name and states belong to;
+// Bedrock upgrades older entries on load. Everything proven in game so far is
+// written in 1.21.60 form. Blocks that only exist in the newer state format
+// (minecraft:cardinal_direction on furnaces) carry a 1.26.0 tag instead.
+export const BLOCK_VERSION = 18168865;       // 1.21.60.33  (0x01153C21)
+export const BLOCK_VERSION_NEW = 18481152;   // 1.26.0.0    (0x011A0000)
 
 function stateTag(st) {
   const out = {};
@@ -243,12 +262,30 @@ export function writeMcStructure(keys, ids, box, materials, opts = {}) {
   }
   const layer1 = new Int32Array(n).fill(-1);
 
+  // block entities (bed colours): keyed by the flattened layer index
+  const posData = {};
+  let posCount = 0;
+  if (opts.blockData && opts.blockData.size) {
+    for (let i = 0; i < keys.length; i++) {
+      const d = opts.blockData.get(keys[i]);
+      if (!d) continue;
+      const k = keys[i];
+      const x = k % KX; const r = (k - x) / KX;
+      const z = r % KZ; const y = (r - z) / KZ - YOFF;
+      const idx = ((x - box.x0) * sy + (y - box.y0)) * sz + (z - box.z0);
+      const ent = { id: N.str(d.id), isMovable: N.byte(1), x: N.int(x), y: N.int(y), z: N.int(z) };
+      for (const [bk, bv] of Object.entries(d.bytes || {})) ent[bk] = N.byte(bv);
+      posData[String(idx)] = N.comp({ block_entity_data: N.comp(ent) });
+      posCount++;
+    }
+  }
+
   const palTags = palette.map((mid) => {
     const def = materials.def(mid);
     return N.comp({
       name: N.str(def.block),
       states: stateTag(def.states),
-      version: N.int(BLOCK_VERSION),
+      version: N.int(def.version || BLOCK_VERSION),
     });
   });
 
@@ -261,14 +298,14 @@ export function writeMcStructure(keys, ids, box, materials, opts = {}) {
       palette: N.comp({
         default: N.comp({
           block_palette: N.list(TAG.COMPOUND, palTags),
-          block_position_data: N.comp({}),
+          block_position_data: N.comp(posData),
         }),
       }),
     }),
     structure_world_origin: N.intList([0, 0, 0]),
   });
 
-  return { data: encodeNbt(root), size: [sx, sy, sz], paletteSize: palette.length, cells: keys.length };
+  return { data: encodeNbt(root), size: [sx, sy, sz], paletteSize: palette.length, cells: keys.length, entities: posCount };
 }
 
 /**

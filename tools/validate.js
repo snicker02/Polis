@@ -15,7 +15,8 @@ import zlib from 'node:zlib';
 import { generateCity, generateSingle, DEFAULTS } from '../engine/city.js';
 import { USE } from '../engine/plan.js';
 import { verifyAll } from '../engine/verify.js';
-import { MATERIALS, THEMES, DOOR_KINDS, doorId } from '../engine/materials.js';
+import { MATERIALS, THEMES, DOOR_KINDS, doorId, MAT, BED_VEC } from '../engine/materials.js';
+import { BLOCK_VERSION_NEW } from '../engine/blockcore.js';
 import { VoxelWorld, splitWorld, buildMcPack } from '../engine/blockcore.js';
 import { buildStructures, placementGuide, CHUNK, exportPack, tileList, functionFiles, GROUND_DROP, cityId } from '../engine/export.js';
 import { buildMesh, MAX_QUADS, STRIDE } from '../engine/mesher.js';
@@ -215,6 +216,157 @@ section('2b. stair layouts and doors');
     if (n.endsWith('_door') && !BEDROCK_WOOD_DOORS.has(n)) placedBad++;
   });
   check('doors: no invalid or iron door placed anywhere in a city', placedBad === 0, `${placedBad} bad`);
+}
+
+// ===========================================================================
+// 2c. life: water, farms, beds, furniture, villagers, golems
+// ===========================================================================
+section('2c. life');
+{
+  const WATER = MAT.WATER;
+  const tight = (w, x, y, z) => {
+    const id = w.get(x, y, z);
+    if (id === -1) return false;
+    if (id === WATER) return true;
+    const d = MATERIALS.def(id);
+    return !d.flowable && !d.passable;
+  };
+  let waterCells = 0, leaks = 0, farmsTotal = 0, ponds = 0, badHydration = 0, badCrop = 0;
+  let bedsTotal = 0, badBeds = 0, badBedData = 0, villagers = 0, golems = 0;
+  let villagersOutside = 0, golemsInside = 0, badSpawn = 0, bells = 0, furnitureNearCore = 0;
+  const leakList = [];
+  for (const c of [
+    { size: 160, seed: 12345 }, { size: 192, seed: 5, farmChance: 0.4 },
+    { size: 128, seed: 21, pondChance: 1 }, { size: 224, seed: 7, farmChance: 0.5, pondChance: 1 },
+    { size: 160, seed: 99, pitch: 4 }, { size: 160, seed: 98, pitch: 7, villagers: 200 },
+  ]) {
+    const r = generateCity({ ...DEFAULTS, ...c });
+    const w = r.world;
+    farmsTotal += r.farms.length;
+    // every water block: solid or water on all four sides and underneath
+    w.forEach((x, y, z, id) => {
+      if (id !== WATER) return;
+      waterCells++;
+      const ok = tight(w, x + 1, y, z) && tight(w, x - 1, y, z) && tight(w, x, y, z + 1) &&
+                 tight(w, x, y, z - 1) && tight(w, x, y - 1, z);
+      if (!ok) { leaks++; if (leakList.length < 3) leakList.push(`${c.seed}@${x},${y},${z}`); }
+    });
+    // ponds show up as clay-bedded water
+    w.forEach((x, y, z, id) => { if (id === MAT.CLAY) ponds++; });
+    // farms: every farmland within 4 of water (same level), every crop on farmland
+    for (const f of r.farms) {
+      for (let z = f.z0; z <= f.z1; z++) for (let x = f.x0; x <= f.x1; x++) {
+        const id = w.get(x, 1, z);
+        if (id === MAT.FARMLAND) {
+          let wet = false;
+          for (let dz = -4; dz <= 4 && !wet; dz++) for (let dx = -4; dx <= 4 && !wet; dx++)
+            if (w.get(x + dx, 1, z + dz) === WATER) wet = true;
+          if (!wet) badHydration++;
+        }
+        const top = w.get(x, 2, z);
+        if (top !== -1 && /wheat|carrots|beetroot/.test(MATERIALS.def(top).block) && id !== MAT.FARMLAND) badCrop++;
+      }
+    }
+    // beds: every foot has its head where its direction says, and both carry a colour
+    const cellInfo = (x, y, z) => { const id = w.get(x, y, z); return id === -1 ? null : MATERIALS.def(id); };
+    w.forEach((x, y, z, id) => {
+      const d = MATERIALS.def(id);
+      if (d.block !== 'minecraft:bed') return;
+      const head = d.states.head_piece_bit.value === 1, dir = d.states.direction.value;
+      const [vx, vz] = BED_VEC[dir];
+      const px = head ? x - vx : x + vx, pz = head ? z - vz : z + vz;
+      const p = cellInfo(px, y, pz);
+      if (!p || p.block !== 'minecraft:bed' || p.states.direction.value !== dir ||
+          p.states.head_piece_bit.value === (head ? 1 : 0)) badBeds++;
+      const data = w.getData(x, y, z);
+      if (!data || data.id !== 'Bed' || typeof data.bytes.color !== 'number') badBedData++;
+      if (!head) bedsTotal++;
+    });
+    // furniture never inside the ring round a stair core
+    for (const b of r.buildings) {
+      if (!b.core) continue;
+      for (let k = 0; k < b.floors; k++) {
+        const y = b.floorYs[k] + 1;
+        for (let z = b.core.z0 - 1; z <= b.core.z1 + 1; z++) for (let x = b.core.x0 - 1; x <= b.core.x1 + 1; x++) {
+          const id = w.get(x, y, z);
+          if (id === -1) continue;
+          const n = MATERIALS.def(id).block;
+          if (/bed|bookshelf|crafting|furnace|barrel|cartography|fletching|brewing|cauldron|azalea|carpet/.test(n)) furnitureNearCore++;
+        }
+      }
+    }
+    // spawns
+    const inB = (x, z, pad) => r.buildings.some((b) => x >= b.x0 - pad && x <= b.x1 + pad && z >= b.z0 - pad && z <= b.z1 + pad);
+    const solid = (x, y, z) => { const id = w.get(x, y, z); return id !== -1 && !MATERIALS.isPassable(id); };
+    for (const p of r.spawns) {
+      if (p.type === 'villager') {
+        villagers++;
+        if (!inB(p.x, p.z, 0)) villagersOutside++;
+        if (!solid(p.x, p.y - 1, p.z) || solid(p.x, p.y, p.z) || solid(p.x, p.y + 1, p.z)) badSpawn++;
+      } else {
+        golems++;
+        if (inB(p.x, p.z, 0)) golemsInside++;
+        if (!solid(p.x, p.y - 1, p.z) || solid(p.x, p.y, p.z) || solid(p.x, p.y + 1, p.z) || solid(p.x, p.y + 2, p.z)) badSpawn++;
+      }
+    }
+    if (r.villagers !== 0 && r.bell) bells++;
+    check(`life ${c.size}/${c.seed}: villager cap respected`,
+      r.spawns.filter((p) => p.type === 'villager').length <= (c.villagers || DEFAULTS.villagers));
+    const vv = verifyAll(w, r.buildings);
+    check(`life ${c.size}/${c.seed}: furnished buildings still fully reachable`,
+      vv.floorsReached === vv.floorsChecked, `${vv.floorsReached}/${vv.floorsChecked}`);
+  }
+  check('water: no water block can flow anywhere', leaks === 0, `${leaks} leaking: ${leakList.join(' ')}`);
+  check('water: farms and ponds actually contain water', waterCells > 100, String(waterCells));
+  check('farms: generated', farmsTotal > 0, String(farmsTotal));
+  check('ponds: generated', ponds > 0, String(ponds));
+  check('farms: every farmland block is within 4 of water', badHydration === 0, `${badHydration} dry`);
+  check('farms: every crop sits on farmland', badCrop === 0, `${badCrop} bad`);
+  check('beds: generated', bedsTotal > 0, String(bedsTotal));
+  check('beds: every half has its partner where its direction says', badBeds === 0, `${badBeds} broken`);
+  check('beds: every half carries a colour block entity', badBedData === 0, `${badBedData} missing`);
+  check('furniture: never in the ring round a stair core', furnitureNearCore === 0, `${furnitureNearCore} pieces`);
+  check('villagers: summoned', villagers > 0, String(villagers));
+  check('villagers: all inside buildings', villagersOutside === 0, `${villagersOutside} outside`);
+  check('golems: summoned', golems > 0, String(golems));
+  check('golems: never inside a building footprint', golemsInside === 0, `${golemsInside} inside`);
+  check('spawns: every mob has floor under it and room to stand', badSpawn === 0, `${badSpawn} bad`);
+  check('village: a bell in every city', bells === 6, `${bells}/6`);
+  note(`${waterCells.toLocaleString()} water blocks, 0 leaks · ${farmsTotal} farms · ${bedsTotal} beds · ` +
+    `${villagers} villagers · ${golems} golems`);
+
+  // new block ids: only names confirmed against the Bedrock block list
+  const CONFIRMED = new Set(['minecraft:farmland', 'minecraft:grass_path', 'minecraft:clay',
+    'minecraft:composter', 'minecraft:crafting_table', 'minecraft:bookshelf', 'minecraft:barrel',
+    'minecraft:cartography_table', 'minecraft:fletching_table', 'minecraft:brewing_stand',
+    'minecraft:cauldron', 'minecraft:bell', 'minecraft:azalea', 'minecraft:flowering_azalea',
+    'minecraft:dandelion', 'minecraft:cornflower', 'minecraft:allium', 'minecraft:azure_bluet',
+    'minecraft:blue_orchid', 'minecraft:blue_carpet', 'minecraft:cyan_carpet', 'minecraft:brown_carpet',
+    'minecraft:gray_carpet', 'minecraft:wheat', 'minecraft:carrots', 'minecraft:beetroot',
+    'minecraft:bed', 'minecraft:furnace', 'minecraft:blast_furnace']);
+  const PRE = new Set(['minecraft:stone', 'minecraft:dirt', 'minecraft:grass_block', 'minecraft:gray_concrete',
+    'minecraft:black_concrete', 'minecraft:light_gray_concrete', 'minecraft:smooth_stone', 'minecraft:yellow_concrete',
+    'minecraft:white_concrete', 'minecraft:sandstone', 'minecraft:glass', 'minecraft:tinted_glass',
+    'minecraft:glass_pane', 'minecraft:iron_block', 'minecraft:iron_bars', 'minecraft:sea_lantern',
+    'minecraft:glowstone', 'minecraft:quartz_block', 'minecraft:stone_bricks', 'minecraft:deepslate_tiles',
+    'minecraft:brick_block', 'minecraft:oak_planks', 'minecraft:spruce_planks', 'minecraft:blue_concrete',
+    'minecraft:cyan_concrete', 'minecraft:red_concrete', 'minecraft:orange_concrete', 'minecraft:green_concrete',
+    'minecraft:oak_log', 'minecraft:oak_leaves', 'minecraft:spruce_log', 'minecraft:spruce_leaves',
+    'minecraft:water', 'minecraft:air']);
+  const unknown = new Set();
+  for (let i = 0; i < MATERIALS.length; i++) {
+    const b = MATERIALS.def(i).block;
+    if (!CONFIRMED.has(b) && !PRE.has(b) && !/_door$|_stairs$/.test(b)) unknown.add(b);
+  }
+  check('blocks: every id is confirmed or already proven in game', unknown.size === 0, [...unknown].join(', '));
+  const furnaces = [];
+  for (let i = 0; i < MATERIALS.length; i++) {
+    const d = MATERIALS.def(i);
+    if (d.block === 'minecraft:furnace' || d.block === 'minecraft:blast_furnace') furnaces.push(d);
+  }
+  check('blocks: furnaces use the new direction state with the new version tag',
+    furnaces.length > 0 && furnaces.every((d) => d.version === BLOCK_VERSION_NEW &&
+      ['north', 'south', 'east', 'west'].includes(d.states['minecraft:cardinal_direction'].value)));
 }
 
 // ===========================================================================
@@ -555,6 +707,57 @@ section('6c. city ids');
   check('guide: the build command is in the first lines', first.includes(`/function ${idA1}/build_centered`));
   check('guide: names the seed and city id', pa.guide.includes('seed 12345') && pa.guide.includes(`City id  ${idA1}`));
   note(`${idA1} · ${idB} · ${idC}`);
+}
+
+// ===========================================================================
+// 6d. villagers in functions, bed colours in the structure file
+// ===========================================================================
+section('6d. summons and block entities');
+{
+  const r = generateCity({ ...DEFAULTS, size: 128, seed: 12345 });
+  const ns = cityId(r.world, 12345);
+  const out = await exportPack(r.world, { namespace: ns, fillAir: true, spawns: r.spawns, deflateRaw });
+  const z = readZip(out.data);
+  const get = (name) => {
+    const e = z.entries.find((x) => x.name === name);
+    if (!e) return null;
+    const p = localPayload(out.data, e);
+    return new TextDecoder().decode(e.method === 8 ? zlib.inflateRawSync(Buffer.from(p)) : p);
+  };
+  const build = get(`functions/${ns}/build_centered.mcfunction`);
+  const blocks = get(`functions/${ns}/blocks_centered.mcfunction`);
+  check('functions: build and blocks variants present', !!build && !!blocks && !!get(`functions/${ns}/build.mcfunction`) && !!get(`functions/${ns}/blocks.mcfunction`));
+  const sv = (build || '').split('\n').filter((l) => l.startsWith('summon minecraft:villager_v2 '));
+  const sg = (build || '').split('\n').filter((l) => l.startsWith('summon minecraft:iron_golem '));
+  const want = r.spawns.filter((p) => p.type === 'villager').length;
+  check('functions: one summon per villager', sv.length === want, `${sv.length} vs ${want}`);
+  check('functions: one summon per golem', sg.length === r.spawns.length - want);
+  check('functions: summons come after every structure load',
+    (build || '').lastIndexOf('structure load') < (build || '').indexOf('summon '));
+  check('functions: summon lines are well formed',
+    sv.concat(sg).every((l) => /^summon minecraft:(villager_v2|iron_golem) ~-?[\d.]* ~-?\d* ~-?[\d.]*$/.test(l)),
+    sv.concat(sg).find((l) => !/^summon minecraft:(villager_v2|iron_golem) ~-?[\d.]* ~-?\d* ~-?[\d.]*$/.test(l)));
+  check('functions: blocks variant summons nothing', !(blocks || '').includes('summon'));
+
+  // bed colours land in block_position_data, one per bed half, at the right index
+  let entities = 0, bedHalves = 0, badEnt = 0;
+  for (const st of out.structures) {
+    const e = z.entries.find((x) => x.name === `structures/${ns}/${st.name}.mcstructure`);
+    const p = localPayload(out.data, e);
+    const { root } = decodeNbt(new Uint8Array(zlib.inflateRawSync(Buffer.from(p))));
+    const pal = root.structure.palette.default.block_palette;
+    const l0 = root.structure.block_indices[0];
+    const pd = root.structure.palette.default.block_position_data;
+    for (let i = 0; i < l0.length; i++) if (pal[l0[i]] && pal[l0[i]].name === 'minecraft:bed') bedHalves++;
+    for (const [idx, v] of Object.entries(pd)) {
+      entities++;
+      const be = v.block_entity_data;
+      if (!be || be.id !== 'Bed' || typeof be.color !== 'number' || pal[l0[Number(idx)]].name !== 'minecraft:bed') badEnt++;
+    }
+  }
+  check('nbt: one bed entity per bed half', entities === bedHalves && bedHalves > 0, `${entities} vs ${bedHalves}`);
+  check('nbt: every bed entity sits on a bed block with a colour', badEnt === 0, `${badEnt} bad`);
+  note(`${sv.length} villager + ${sg.length} golem summons · ${bedHalves / 2} beds with colours in NBT`);
 }
 
 // ===========================================================================

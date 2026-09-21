@@ -1,4 +1,4 @@
-# Polis v0.1.3
+# Polis v0.1.4
 
 A procedural city generator that exports to **Minecraft Bedrock**. Plans a
 street grid, subdivides it into lots, raises buildings with real interiors —
@@ -83,6 +83,41 @@ streets and alleys with sidewalks, curbs, centre lines and crosswalks. Lot
 subdivision guarantees frontage through alleys, so there are no landlocked
 lots and every door opens onto pavement.
 
+## Life
+
+**Farms** take over some suburban lots (**Farms** slider). Each is hedged in
+oak leaves with a two-block entrance on the street side, has a dirt path
+round the inside, and a water channel running down the centre — more than one
+channel on wide farms, spaced so every farmland block is within 4 of water and
+stays hydrated. Wheat, carrots and beetroot grow in strips at mixed stages. A
+composter by the entrance is the farmer's workstation.
+
+**Water never escapes.** Every water block — farm channels, park ponds,
+plaza fountains — sits at ground level with solid blocks on all four sides and
+underneath. Water does not flow upward, so the crops and flowers above it are
+safe, and there is nothing at its own level for it to spread into. The
+validator checks every water block in every test city against that rule.
+
+**Ponds** appear in about half the parks (**Park ponds** slider): a clay-bottomed
+oval in one quarter of the park, clear of the paths, with flowers on the bank.
+
+**Interiors.** Houses get a kitchen downstairs (crafting table, furnaces,
+barrel, bookshelves) and bedrooms upstairs; mid-rises get a shop on the ground
+floor and apartments above; towers mix lobbies, apartments, offices and
+libraries. Planters — a grass block with a flower or azalea — sit in rooms
+throughout. Beds come in eight colours, stored in the bed's block entity.
+Furniture only goes against the outer walls, never within one cell of the
+stairs or two cells of the front door, and every furnished building is
+re-verified: if furniture ever cost a floor its reachability, it is removed.
+
+**Villagers and golems.** The build function summons villagers next to beds
+(**Villagers** slider caps the number) and one iron golem per eight villagers.
+Golems are placed only on pavement and plazas, outside every building
+footprint, with three clear blocks of headroom. A bell in a plaza or park gives
+the village its gathering point. Workstations — composters, cartography and
+fletching tables, blast furnaces, brewing stands, cauldrons, barrels — let
+villagers take up professions.
+
 ## Verification
 
 `engine/verify.js` is not a heuristic — it is a flood fill over *standing
@@ -105,6 +140,11 @@ buildings; at the time of writing that is 2,000+ floors, all reachable.
 /function polis_12345_a3f9/build_centered      city centred on you
 /function polis_12345_a3f9/build               city corner at your feet
 ```
+
+`build` places the city and then summons the villagers and golems — run it
+**once**. If some tiles were outside loaded chunks, stand near them and run
+`blocks_centered` (or `blocks`), which places blocks only and never adds
+duplicate villagers.
 
 `polis_12345_a3f9` is the **city id**: the seed plus a four-character hash of
 the actual blocks. It is shown in the app, printed at the top of
@@ -160,6 +200,12 @@ smooth walk to a jump per step. It stays climbable either way, because the
 three-cell headroom rule does not depend on the stair shape. Turning **Stair
 blocks** off replaces them with full blocks and is the fallback.
 
+**Beds.** Bed orientation uses the legacy numbering Bedrock inherited
+(`direction` 0 = head to the south, 1 = west, 2 = north, 3 = east). It is the
+one block mapping here that could not be checked against a current reference.
+If beds ever load as single halves, that table in `materials.js` (`BED_DIR` /
+`BED_VEC`) is the only thing to change.
+
 **blockcore.** This copy is a same-API rebuild rather than the canonical one
 shipped in `fieldcraft-v0.1.0.zip`. It wants a reconciliation pass against the
 Fieldcraft and Hypostyle copies before the three drift further apart.
@@ -183,6 +229,17 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.1.4** — Life. Farms with central irrigation channels and hydrated
+farmland, park ponds, flowers, furnished interiors (beds in eight colours,
+crafting tables, furnaces, bookshelves, barrels, workstations, planters,
+rugs), a village bell, and villagers and iron golems summoned by the build
+function. New `blocks` / `blocks_centered` functions re-place blocks without
+duplicating mobs. Every new block id was checked against Microsoft's Bedrock
+block list; furnaces use the newer `minecraft:cardinal_direction` state and
+carry a matching palette version tag. Validator adds watertightness of every
+water block, farm hydration, bed pairing and colours, furniture clearance,
+villager and golem placement, and the summon lines in the functions.
 
 **0.1.3** — Oak doors now use Bedrock's `minecraft:wooden_door`; 0.1.2 and
 earlier wrote the Java name `minecraft:oak_door`, which Bedrock does not have,
