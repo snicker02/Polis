@@ -49,7 +49,8 @@ export function verifyBuilding(world, rec, opts = {}) {
   seen.add(key(...start));
   const perLevel = new Map();   // feet-y -> count of cells inside the building
 
-  const inShaft = (x, z) => rec.shaft && x >= rec.shaft.x && x <= rec.shaft.x + 2 && z >= rec.shaft.z && z <= rec.shaft.z + 2;
+  const c = rec.core;
+  const inShaft = (x, z) => c && x >= c.x0 && x <= c.x1 && z >= c.z0 && z <= c.z1;
 
   let head = 0;
   while (head < queue.length) {

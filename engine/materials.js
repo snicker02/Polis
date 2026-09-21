@@ -107,16 +107,25 @@ export const MAT = {
 // ---- doors -----------------------------------------------------------------
 // Bedrock door states: direction (0=east,1=south,2=west,3=north),
 // door_hinge_bit, open_bit, upper_block_bit.
+//
+// Bedrock block names, which are NOT all the Java names: the oak door is
+// still minecraft:wooden_door in Bedrock (minecraft:oak_door does not exist
+// there and loads as a broken block). Only doors a player can open by hand
+// are used — an iron door needs redstone, so it is deliberately absent.
 const DOOR_BLOCKS = {
-  oak: ['minecraft:oak_door', '#a9803f'],
-  spruce: ['minecraft:spruce_door', '#6d5232'],
-  dark: ['minecraft:dark_oak_door', '#4a3520'],
-  iron: ['minecraft:iron_door', '#c6c6c6'],
+  oak:      ['minecraft:wooden_door',   '#a9803f'],
+  spruce:   ['minecraft:spruce_door',   '#6d5232'],
+  birch:    ['minecraft:birch_door',    '#d7c98b'],
+  dark:     ['minecraft:dark_oak_door', '#4a3520'],
+  mangrove: ['minecraft:mangrove_door', '#773933'],
+  crimson:  ['minecraft:crimson_door',  '#6a344b'],
+  warped:   ['minecraft:warped_door',   '#2b6963'],
 };
+export const DOOR_KINDS = Object.keys(DOOR_BLOCKS);
 export const DIR = { east: 0, south: 1, west: 2, north: 3 };
 
 export function doorId(kind, dir, upper, hinge = 0) {
-  const [block, color] = DOOR_BLOCKS[kind] || DOOR_BLOCKS.oak;
+  const [block, color] = DOOR_BLOCKS[kind] || DOOR_BLOCKS.oak;  // unknown kind -> oak, never iron
   return MATERIALS.add(null, block, color, {
     direction: I(dir),
     door_hinge_bit: B(hinge),
@@ -159,19 +168,19 @@ export const STAIR_SOLID = {
 // wall / trim / floor / glass / stair-kind / door-kind
 export const THEMES = {
   tower: [
-    { name: 'glass',    wall: MAT.C_WHITE,   trim: MAT.IRON,      floor: MAT.SMOOTH,  glass: MAT.TINTED, stair: 'quartz',     door: 'iron' },
-    { name: 'noir',     wall: MAT.C_BLACK,   trim: MAT.C_GRAY,    floor: MAT.DEEPSLATE, glass: MAT.TINTED, stair: 'deepslate', door: 'iron' },
-    { name: 'steel',    wall: MAT.C_LGRAY,   trim: MAT.IRON,      floor: MAT.SMOOTH,  glass: MAT.GLASS,  stair: 'stonebrick', door: 'iron' },
-    { name: 'azure',    wall: MAT.C_BLUE,    trim: MAT.QUARTZ,    floor: MAT.SMOOTH,  glass: MAT.TINTED, stair: 'quartz',     door: 'iron' },
-    { name: 'ivory',    wall: MAT.QUARTZ,    trim: MAT.C_LGRAY,   floor: MAT.SMOOTH,  glass: MAT.GLASS,  stair: 'quartz',     door: 'iron' },
-    { name: 'teal',     wall: MAT.C_CYAN,    trim: MAT.C_WHITE,   floor: MAT.SMOOTH,  glass: MAT.TINTED, stair: 'quartz',     door: 'iron' },
+    { name: 'glass',    wall: MAT.C_WHITE,   trim: MAT.IRON,      floor: MAT.SMOOTH,  glass: MAT.TINTED, stair: 'quartz',     door: 'dark' },
+    { name: 'noir',     wall: MAT.C_BLACK,   trim: MAT.C_GRAY,    floor: MAT.DEEPSLATE, glass: MAT.TINTED, stair: 'deepslate', door: 'crimson' },
+    { name: 'steel',    wall: MAT.C_LGRAY,   trim: MAT.IRON,      floor: MAT.SMOOTH,  glass: MAT.GLASS,  stair: 'stonebrick', door: 'spruce' },
+    { name: 'azure',    wall: MAT.C_BLUE,    trim: MAT.QUARTZ,    floor: MAT.SMOOTH,  glass: MAT.TINTED, stair: 'quartz',     door: 'warped' },
+    { name: 'ivory',    wall: MAT.QUARTZ,    trim: MAT.C_LGRAY,   floor: MAT.SMOOTH,  glass: MAT.GLASS,  stair: 'quartz',     door: 'birch' },
+    { name: 'teal',     wall: MAT.C_CYAN,    trim: MAT.C_WHITE,   floor: MAT.SMOOTH,  glass: MAT.TINTED, stair: 'quartz',     door: 'warped' },
   ],
   mid: [
     { name: 'brick',    wall: MAT.BRICK,     trim: MAT.STONEBRICK, floor: MAT.OAK,    glass: MAT.GLASS,  stair: 'brick',      door: 'oak' },
     { name: 'stone',    wall: MAT.STONEBRICK, trim: MAT.SMOOTH,   floor: MAT.OAK,     glass: MAT.GLASS,  stair: 'stonebrick', door: 'oak' },
     { name: 'sand',     wall: MAT.SANDSTONE, trim: MAT.QUARTZ,    floor: MAT.SPRUCE,  glass: MAT.GLASS,  stair: 'sandstone',  door: 'spruce' },
     { name: 'rust',     wall: MAT.C_ORANGE,  trim: MAT.C_WHITE,   floor: MAT.OAK,     glass: MAT.GLASS,  stair: 'brick',      door: 'oak' },
-    { name: 'slate',    wall: MAT.C_GRAY,    trim: MAT.C_LGRAY,   floor: MAT.SMOOTH,  glass: MAT.GLASS,  stair: 'stonebrick', door: 'oak' },
+    { name: 'slate',    wall: MAT.C_GRAY,    trim: MAT.C_LGRAY,   floor: MAT.SMOOTH,  glass: MAT.GLASS,  stair: 'stonebrick', door: 'mangrove' },
   ],
   house: [
     { name: 'cottage',  wall: MAT.OAK,       trim: MAT.SPRUCE,    floor: MAT.OAK,     glass: MAT.GLASS,  stair: 'dark',       door: 'oak', roof: MAT.SPRUCE },

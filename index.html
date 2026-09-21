@@ -131,7 +131,7 @@
   <div id="panel">
     <div id="panelScroll">
       <h1>PO<span>L</span>IS</h1>
-      <div class="sub">procedural city → Minecraft Bedrock · v0.1.1</div>
+      <div class="sub">procedural city → Minecraft Bedrock · v0.1.3</div>
 
       <fieldset>
         <legend>Mode</legend>
@@ -179,6 +179,12 @@
         <legend>Buildings</legend>
         <div class="row city-only"><label>Max floors</label><input type="range" id="maxFloors" min="1" max="40" step="1" value="18"><span class="val" id="maxFloors_v"></span></div>
         <div class="row"><label>Floor height</label><input type="range" id="pitch" min="4" max="8" step="1" value="5"><span class="val" id="pitch_v"></span></div>
+        <div class="row"><label>Stairs</label><select id="stairStyle" style="width:150px">
+          <option value="mixed" selected>Mixed</option>
+          <option value="switchback">Switchback</option>
+          <option value="wide">Wide switchback</option>
+          <option value="spiral">Spiral</option>
+        </select></div>
         <div class="row"><label>Setback every</label><input type="range" id="setbackEvery" min="3" max="14" step="1" value="7"><span class="val" id="setbackEvery_v"></span></div>
         <div class="checks">
           <label class="chk"><input type="checkbox" id="setback" checked>Setbacks</label>
@@ -216,7 +222,7 @@
         <div class="btnrow"><button id="mcpack" class="primary">Export .mcpack</button></div>
         <div class="btnrow"><button id="mcstruct">Export .mcstructure zip</button></div>
         <div class="btnrow"><button id="copycmd">Copy exact /structure commands</button></div>
-        <div class="hint">The pack loads the whole city with one command: <b>/function polis/build_centered</b>. Only loaded chunks fill — stand near the middle; rerunning is safe.</div>
+        <div class="hint">The pack loads the whole city with one command, shown below; each export gets its own city id so packs never clash. Only loaded chunks fill — stand near the middle; rerunning is safe.</div>
         <textarea id="cmds" readonly placeholder="Generate to see the placement commands."></textarea>
       </fieldset>
     </div>

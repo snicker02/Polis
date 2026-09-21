@@ -1,4 +1,4 @@
-# Polis v0.1.1
+# Polis v0.1.3
 
 A procedural city generator that exports to **Minecraft Bedrock**. Plans a
 street grid, subdivides it into lots, raises buildings with real interiors —
@@ -45,23 +45,32 @@ npm run validate                 # node tools/validate.js
 
 ## The requirements, and how they are met
 
-**Steps up to every level.** Each building has a 3×3 spiral stair core. The
-climb runs around a ring of eight cells, rising exactly one block per cell, so
-it lands flush with every floor slab whatever the floor pitch is. A landing
-hole is punched through the slab at each floor, and the core always keeps at
-least one cell of open floor on all four sides so you can step off the ring
-wherever the spiral puts you.
+**Steps up to every level.** Three stair layouts, chosen per building by
+the **Stairs** setting:
+
+- **Switchback** — 1-wide straight flights that alternate direction each
+  storey, with a landing at both ends. Core is (pitch+1) × 2.
+- **Wide switchback** — the same with 2-wide flights. Core is (pitch+1) × 4.
+- **Spiral** — the original 3×3 ring. Compact, but tight to walk.
+- **Mixed** (default) — towers get wide switchbacks, most mid-rises and houses
+  get switchbacks, and about a third of mid-rises keep a spiral for variety.
+
+Every layout falls back to the next one that fits if the footprint is too
+small. Straight flights only need the two landings open, so they can sit flush
+against the back wall — away from the street, so the front door never opens
+onto a flight.
 
 The subtle part is headroom. A player standing on a step at height `s` needs
 cells `s+1`, `s+2` **and** `s+3` clear — the third one because the next step up
-puts their head where the floor slab above would otherwise be. The landing rule
-excludes the ring cells of the steps at `Y-1`, `Y-2` and `Y-3`. Get that wrong
-by one and the climb stalls at the first floor; this is what the verifier
-caught during the build.
+puts their head where the floor slab above would otherwise be. At each slab the
+cells over the three highest steps below it are left open. Get that wrong by
+one and the climb stalls at the first floor; the verifier caught exactly that
+during the first build.
 
-**Windows and doors.** Real `minecraft:*_door` blocks with proper
-`direction` / `door_hinge_bit` / `upper_block_bit` states, placed on the lot's
-street frontage. Towers get twin doors and a lit entrance. Window banding
+**Windows and doors.** Real Bedrock door blocks with `direction` /
+`door_hinge_bit` / `upper_block_bit` states, placed on the lot's street
+frontage — oak, spruce, birch, dark oak, mangrove, crimson and warped, all of
+which open by hand. Towers get twin doors and a lit entrance. Window banding
 varies by style: ribbon glazing on towers, punched openings on mid-rises,
 individual panes on houses.
 
@@ -93,9 +102,16 @@ buildings; at the time of writing that is 2,000+ floors, all reachable.
 3. Stand where you want the city and run one command:
 
 ```
-/function polis/build_centered      city centred on you
-/function polis/build               city corner at your feet
+/function polis_12345_a3f9/build_centered      city centred on you
+/function polis_12345_a3f9/build               city corner at your feet
 ```
+
+`polis_12345_a3f9` is the **city id**: the seed plus a four-character hash of
+the actual blocks. It is shown in the app, printed at the top of
+`placement-guide.txt`, used in the pack's name and in the exported filename.
+Typing `/function polis` in chat autocompletes every Polis city installed on
+that world. Because each export has its own id, any number of city packs can
+be active at once without handing each other's tiles to `/structure load`.
 
 The city's ground layer replaces the block you are standing on.
 
@@ -167,6 +183,23 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.1.3** — Oak doors now use Bedrock's `minecraft:wooden_door`; 0.1.2 and
+earlier wrote the Java name `minecraft:oak_door`, which Bedrock does not have,
+so every oak door loaded as a broken block. Iron doors are gone — they need
+redstone to open — and tower themes now use dark oak, crimson, spruce, warped
+and birch doors. New stair layouts: switchback and wide switchback, plus a
+**Stairs** setting (Mixed / Switchback / Wide switchback / Spiral); Mixed is
+the default. Validator adds a 240-build sweep across every layout, pitch and
+footprint, and checks that every door id is a hand-openable Bedrock door.
+
+**0.1.2** — Every export gets its own namespace (`polis_<seed>_<hash>`), so
+multiple city packs on one world no longer collide — in 0.1.1 all packs used
+`polis:c_x0_z0` and Bedrock picked whichever pack was higher in the list. The
+hash is of block names, so regenerating the same city gives the same id, and
+changing any slider on the same seed gives a new one. The placement guide now
+opens with the exact command to type and names the seed. Validator adds
+collision tests across two exported packs.
 
 **0.1.1** — The pack now contains `functions/polis/build.mcfunction` and
 `build_centered.mcfunction`, so the whole city loads with one command. New

@@ -9,11 +9,40 @@
 //
 // Both put the city's ground layer where the block under your feet is.
 
-import { splitWorld, writeMcStructure, buildMcPack, makeZip } from './blockcore.js';
+import { splitWorld, writeMcStructure, buildMcPack, makeZip, crc32 } from './blockcore.js';
 import { MATERIALS, MAT } from './materials.js';
 
 export const CHUNK = 64;          // Bedrock structure limit per horizontal axis
 export const GROUND_DROP = 2;     // base layer y=0 sits 2 below feet; surface y=1 replaces the block you stand on
+
+// ---- per-city identity ---------------------------------------------------------
+// Every export gets its own namespace, e.g. polis_12345_a3f9, so two city packs
+// active on the same world never hand each other's tiles to /structure load.
+// The suffix is a content hash: same seed with different sliders -> different id;
+// the same city regenerated later -> the same id. It hashes block names and
+// states, not registry ids, because door/stair ids depend on session history.
+export function cityId(world, seed) {
+  const n = MATERIALS.length;
+  const enc = new TextEncoder();
+  const matHash = new Uint32Array(n);
+  for (let i = 0; i < n; i++) {
+    const d = MATERIALS.def(i);
+    const st = Object.keys(d.states).sort().map((k) => k + '=' + d.states[k].value).join(',');
+    matHash[i] = crc32(enc.encode(d.block + '|' + st));
+  }
+  let a = 0, b = 0;
+  for (const [k, id] of world.cells) {
+    // order-independent: sum two differently mixed per-cell hashes
+    let h = (Math.imul(k, 0x9e3779b1) ^ matHash[id]) >>> 0;
+    h = Math.imul(h ^ (h >>> 16), 0x85ebca6b) >>> 0;
+    h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35) >>> 0;
+    h = (h ^ (h >>> 16)) >>> 0;
+    a = (a + h) >>> 0;
+    b = (b + Math.imul(h, 0x27d4eb2f)) >>> 0;
+  }
+  const hex = ((a ^ (b >>> 7)) >>> 0).toString(16).padStart(8, '0').slice(0, 4);
+  return `polis_${seed >>> 0}_${hex}`;
+}
 
 // Tile layout without encoding anything — cheap enough to call on every UI change.
 export function tileList(world, opts = {}) {
@@ -87,6 +116,15 @@ export function placementGuide(tiles, opts = {}) {
   const L = [];
   L.push('POLIS — placement guide');
   L.push('=======================');
+  L.push('');
+  L.push('TO BUILD THIS CITY, stand where you want it and type in chat:');
+  L.push('');
+  L.push(`    /function ${ns}/build_centered`);
+  L.push('');
+  L.push(`City id  ${ns}` + (opts.seed !== undefined ? `      seed ${opts.seed}` : ''));
+  if (opts.summary) L.push(opts.summary);
+  L.push('The seed only matters in the Polis app; the city itself is inside this pack.');
+  L.push('Every exported city has its own id, so several packs can be active at once.');
   L.push('');
   L.push(`${tiles.length} structure${tiles.length === 1 ? '' : 's'}, each at most ${CHUNK}x${CHUNK} blocks across.`);
   L.push(opts.fillAir

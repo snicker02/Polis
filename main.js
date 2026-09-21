@@ -5,10 +5,10 @@ import { USE } from './engine/plan.js';
 import { verifyAll } from './engine/verify.js';
 import { buildMesh } from './engine/mesher.js';
 import { Renderer } from './engine/renderer.js';
-import { exportPack, exportStructuresZip, tileList, commandList } from './engine/export.js';
+import { exportPack, exportStructuresZip, tileList, commandList, cityId } from './engine/export.js';
 import { THEMES } from './engine/materials.js';
 
-const VERSION = '0.1.1';
+const VERSION = '0.1.3';
 const $ = (id) => document.getElementById(id);
 
 const SLIDERS = {
@@ -114,6 +114,7 @@ function readCfg() {
   cfg.seed = num('seed') | 0;
   cfg.pitch = num('pitch');
   cfg.setbackEvery = num('setbackEvery');
+  cfg.stairStyle = $('stairStyle').value;
   for (const c of CHECKS) cfg[c] = $(c).checked;
   if ($('mode').value === 'city') {
     cfg.size = num('size');
@@ -149,6 +150,7 @@ function generate() {
       result = ($('mode').value === 'city') ? generateCity(cfg) : generateSingle(cfg);
       const t1 = performance.now();
       verification = verifyAll(result.world, result.buildings);
+      cityNs = cityId(result.world, result.cfg.seed);
       const t2 = performance.now();
       const mesh = buildMesh(result.world);
       renderer.setMesh(mesh);
@@ -241,6 +243,10 @@ function showStats(mesh, times) {
   if (s.buildings) line('  houses / mid / tower', `${s.houses} / ${s.mids} / ${s.towers}`);
   line('floors', `${s.floors} (tallest ${s.tallest})`);
   line('windows', s.windows.toLocaleString());
+  const kinds = {};
+  for (const b of result.buildings) if (b.stairKind) kinds[b.stairKind] = (kinds[b.stairKind] || 0) + 1;
+  const kindText = ['switchback', 'wide', 'spiral'].filter((k) => kinds[k]).map((k) => `${kinds[k]} ${k}`).join(' · ');
+  if (kindText) line('stairs', kindText);
   const allOk = v.total > 0 && v.ok === v.total && v.floorsReached === v.floorsChecked;
   line('stairs verified', v.total === 0 ? '—' :
     (allOk ? `✓ ${v.floorsReached}/${v.floorsChecked} floors` : `✗ ${v.ok}/${v.total} buildings`),
@@ -258,16 +264,17 @@ function base() {
 }
 
 let exactCommands = [];
+let cityNs = 'polis';
 
 function refreshCommands() {
   if (!result) return;
   try {
     const tiles = tileList(result.world, { prefix: 'c', fillAir: $('fillAir').checked });
-    exactCommands = commandList(tiles, { base: base() });
+    exactCommands = commandList(tiles, { base: base(), namespace: cityNs });
     $('cmds').value = [
-      '# one command, after importing the pack — stand where you want it:',
-      '/function polis/build_centered',
-      '/function polis/build          (corner at your feet)',
+      `# city id ${cityNs} — after importing its pack, stand where you want it:`,
+      `/function ${cityNs}/build_centered`,
+      `/function ${cityNs}/build          (corner at your feet)`,
       '',
       `# or the exact coordinates (${tiles.length} tile${tiles.length === 1 ? '' : 's'}):`,
       ...exactCommands,
@@ -305,16 +312,18 @@ async function doExport(kind) {
   $('mcpack').disabled = $('mcstruct').disabled = true;
   try {
     const opts = {
-      base: base(), namespace: 'polis', prefix: 'c', fillAir: $('fillAir').checked,
-      packName: `Polis city ${result.cfg.seed}`,
-      description: `Polis v${VERSION} · seed ${result.cfg.seed} · /function polis/build_centered`,
+      base: base(), namespace: cityNs, prefix: 'c', fillAir: $('fillAir').checked,
+      seed: result.cfg.seed,
+      summary: summaryLine(),
+      packName: `Polis ${cityNs}`,
+      description: `/function ${cityNs}/build_centered · Polis v${VERSION}`,
     };
     const out = kind === 'mcpack'
       ? await exportPack(result.world, opts)
       : await exportStructuresZip(result.world, opts);
-    const name = `polis-${result.cfg.seed}-v${VERSION}.` + (kind === 'mcpack' ? 'mcpack' : 'zip');
+    const name = `${cityNs.replace(/_/g, '-')}-v${VERSION}.` + (kind === 'mcpack' ? 'mcpack' : 'zip');
     download(out.data, name);
-    toast(`${out.structures.length} structure${out.structures.length === 1 ? '' : 's'} → ${name}`);
+    toast(`${name} — in game: /function ${cityNs}/build_centered`);
   } catch (e) {
     console.error(e);
     toast('Export failed: ' + e.message, true);
@@ -322,6 +331,13 @@ async function doExport(kind) {
     $('mcpack').disabled = $('mcstruct').disabled = false;
     busy(false);
   }
+}
+
+function summaryLine() {
+  const s = result.stats;
+  const mode = $('mode').value === 'city' ? `city ${s.footprint[0]}x${s.footprint[1]}` : `single ${result.cfg.style}`;
+  return `${mode} · ${s.buildings} building${s.buildings === 1 ? '' : 's'} · ${s.floors} floors · ` +
+    `${s.blocks.toLocaleString()} blocks · air fill ${$('fillAir').checked ? 'on' : 'off'}`;
 }
 
 function download(data, name) {

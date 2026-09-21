@@ -1,43 +1,68 @@
 // engine/building.js — one building, from lot rectangle to blocks.
 //
-// STAIRWELL DESIGN (the part that has to actually work in game)
-// ------------------------------------------------------------
-// Every multi-floor building gets a 3x3 spiral core. The eight cells around
-// the core ring are, in order, orthogonally adjacent:
+// STAIRS (the part that has to actually work in game)
+// ---------------------------------------------------
+// Three stair layouts, all built from the same rule: a step is a stair block
+// that rises exactly one block from the previous one, so every flight lands
+// flush with the floor slab above it.
 //
-//     0 1 2        step t sits in RING[t % 8] at height  base + t
-//     7 . 3        so the climb rises exactly 1 block per cell and
-//     6 5 4        arrives FLUSH with every floor slab, whatever the pitch.
+//   switchback  1-wide straight flights, alternating direction each storey,
+//               with a landing at both ends. Core: (P+1) x 2.
 //
-// Head room is free: the next block in the same ring cell is 8 above.
-// At each floor slab height Y the shaft is floored in (a landing) EXCEPT the
-// three ring cells holding the steps at Y-1, Y-2 and Y-3 — those must stay
-// open. Two is not enough: standing on a step needs feet+head clear AND one
-// more cell to jump into, so every step wants 3 free cells above it. The core
-// is always placed with at least one cell of open floor on all four sides, so
-// whichever ring cell the spiral happens to land on at a given floor, the
-// player can step off it.
+//        u ->   0   1 .. P-1   P          even storeys climb strip A toward +u,
+//        A    [L] [ s  s  s ] [L]          odd storeys climb strip B toward -u;
+//        B    [L] [ s  s  s ] [L]          the landings at u=0 and u=P join them.
 //
-// The steps themselves are stair blocks facing along the direction of travel,
-// which makes the climb a smooth walk rather than a jump per floor; with stair
-// blocks switched off they become full blocks, which the 3-cell head room
-// keeps jumpable.
+//   wide        the same with 2-wide flights. Core: (P+1) x 4. Towers.
 //
-// tools/validate.js walks this with a real player-movement flood fill.
+//   spiral      the original 3x3 ring. Step t sits in RING[t % 8] at base+t.
+//
+// Head room is the same rule for all three: at a floor slab of height Y, the
+// cells holding steps at Y-1, Y-2 and Y-3 are left open. Two is not enough —
+// a step wants feet, head and one more cell clear above it, or the slab above
+// catches the climber's head. The core keeps open floor at both ends (and all
+// round when there is room), so the player can always step off at a landing.
+//
+// With stair blocks switched off every step becomes a full block, which the
+// 3-cell head room keeps jumpable.
+//
+// tools/validate.js walks every building with a player-movement flood fill.
 
 import { perimeter } from './blockcore.js';
-import { MAT, MATERIALS, doorId, stairId, DIR, WEIRDO, STAIR_SOLID } from './materials.js';
+import { MAT, doorId, stairId, DIR, WEIRDO, STAIR_SOLID } from './materials.js';
+
+export const OUTWARD = { north: [0, -1], south: [0, 1], west: [-1, 0], east: [1, 0] };
+const OPPOSITE = { north: 'south', south: 'north', east: 'west', west: 'east' };
+export const STAIR_STYLES = ['mixed', 'switchback', 'wide', 'spiral'];
 
 const RING = [[0, 0], [1, 0], [2, 0], [2, 1], [2, 2], [1, 2], [0, 2], [0, 1]];
 // direction of travel out of RING[t] -> RING[t+1], as Bedrock weirdo_direction
 const RING_DIR = [WEIRDO.east, WEIRDO.east, WEIRDO.south, WEIRDO.south,
                   WEIRDO.west, WEIRDO.west, WEIRDO.north, WEIRDO.north];
-export const OUTWARD = { north: [0, -1], south: [0, 1], west: [-1, 0], east: [1, 0] };
-const OPPOSITE = { north: 'south', south: 'north', east: 'west', west: 'east' };
+
+// Preference order per building. Each kind falls back to the next if the
+// footprint is too small for it.
+function stairPreference(styleSetting, buildingStyle, rng) {
+  switch (styleSetting) {
+    case 'wide': return ['wide', 'switchback', 'spiral'];
+    case 'switchback': return ['switchback', 'spiral'];
+    case 'spiral': return ['spiral', 'switchback'];
+    default:
+      if (buildingStyle === 'tower') return ['wide', 'switchback', 'spiral'];
+      if (buildingStyle === 'mid') return rng.chance(0.3) ? ['spiral', 'switchback'] : ['switchback', 'spiral'];
+      return ['switchback', 'spiral'];
+  }
+}
+
+// Core size in (u = flight direction, v = across) for each kind.
+function coreSize(kind, P) {
+  if (kind === 'spiral') return [3, 3];
+  return [P + 1, kind === 'wide' ? 4 : 2];
+}
 
 /**
  * spec: {x0,z0,x1,z1, floors, pitch, groundY, style, facing, theme,
- *        roofAccess, useStairs, lights, setback, setbackEvery}
+ *        roofAccess, useStairs, stairStyle, lights, setback, setbackEvery}
  * Returns a record describing what was built (or null if the lot is too small).
  */
 export function makeBuilding(world, spec, rng) {
@@ -47,8 +72,9 @@ export function makeBuilding(world, spec, rng) {
   if (w < 5 || d < 5) return null;
 
   let floors = Math.max(1, spec.floors | 0);
-  if (Math.min(w, d) < 7) floors = 1;           // no room for a stair core
+  if (Math.min(w, d) < 7) floors = 1;           // too narrow for any stair
   const style = spec.style;
+  const face = spec.facing || 'south';
 
   // ---- stepped setbacks ----------------------------------------------------
   const insets = [0];
@@ -59,51 +85,111 @@ export function makeBuilding(world, spec, rng) {
     insets.push(ins);
   }
   const rect = (k) => ({ x0: x0 + insets[k], z0: z0 + insets[k], x1: x1 - insets[k], z1: z1 - insets[k] });
-  const top = rect(floors - 1);
+  let top = rect(floors - 1);
 
-  // ---- stair core ----------------------------------------------------------
-  let shaft = null;
+  // ---- stair core placement -------------------------------------------------
+  // Tries each kind in preference order, both orientations, first with open
+  // floor all round, then (straight flights only) flush against the back wall.
+  let core = null;   // {x0,z0,x1,z1, kind, alongX}
   if (floors > 1) {
-    const sxLo = top.x0 + 2, sxHi = top.x1 - 4;
-    const szLo = top.z0 + 2, szHi = top.z1 - 4;
-    if (sxHi >= sxLo && szHi >= szLo) {
-      shaft = {
-        x: Math.min(Math.max(Math.round((top.x0 + top.x1) / 2) - 1, sxLo), sxHi),
-        z: Math.min(Math.max(Math.round((top.z0 + top.z1) / 2) - 1, szLo), szHi),
-      };
-    } else {
-      floors = 1;
+    const prefs = stairPreference(spec.stairStyle || 'mixed', style, rng);
+    const fit = (lo, hi, len, margin) => {
+      const a = lo + margin, b = hi - margin - (len - 1);
+      return b >= a ? [a, b] : null;
+    };
+    const centre = (range, lo, hi, len) => {
+      const c = Math.round((lo + hi) / 2 - (len - 1) / 2);
+      return Math.min(Math.max(c, range[0]), range[1]);
+    };
+    outer:
+    for (const kind of prefs) {
+      const [U, V] = coreSize(kind, P);
+      for (const alongX of [w >= d, w < d]) {
+        const cw = alongX ? U : V, cd = alongX ? V : U;
+        // 1) open floor on every side
+        const fx = fit(top.x0, top.x1, cw, 2), fz = fit(top.z0, top.z1, cd, 2);
+        if (fx && fz) {
+          const cx = centre(fx, top.x0, top.x1, cw), cz = centre(fz, top.z0, top.z1, cd);
+          core = { x0: cx, z0: cz, x1: cx + cw - 1, z1: cz + cd - 1, kind, alongX };
+          break outer;
+        }
+        if (kind === 'spiral') continue;
+        // 2) straight flights only need the two ends open: sit flush on a long side
+        const endFit = alongX ? fit(top.x0, top.x1, cw, 2) : fit(top.z0, top.z1, cd, 2);
+        const sideFit = alongX ? fit(top.z0, top.z1, cd, 1) : fit(top.x0, top.x1, cw, 1);
+        if (endFit && sideFit) {
+          // back wall = away from the street, so the front door never opens onto a flight
+          const back = alongX ? (face === 'north' ? sideFit[1] : sideFit[0])
+                              : (face === 'west' ? sideFit[1] : sideFit[0]);
+          if (alongX) {
+            const cx = centre(endFit, top.x0, top.x1, cw);
+            core = { x0: cx, z0: back, x1: cx + cw - 1, z1: back + cd - 1, kind, alongX };
+          } else {
+            const cz = centre(endFit, top.z0, top.z1, cd);
+            core = { x0: back, z0: cz, x1: back + cw - 1, z1: cz + cd - 1, kind, alongX };
+          }
+          break outer;
+        }
+      }
     }
+    if (!core) floors = 1;
   }
+  top = rect(floors - 1);
 
   const roofY = gy + floors * P;
   const topFloorY = gy + (floors - 1) * P;
-  const inShaft = (x, z) => shaft && x >= shaft.x && x <= shaft.x + 2 && z >= shaft.z && z <= shaft.z + 2;
+  const inCore = (x, z) => core && x >= core.x0 && x <= core.x1 && z >= core.z0 && z <= core.z1;
 
-  const hut = !!(shaft && spec.roofAccess &&
-    shaft.x - 2 > top.x0 && shaft.x + 4 < top.x1 &&
-    shaft.z - 2 > top.z0 && shaft.z + 4 < top.z1);
+  // roof hut: needs a clear ring round the core and room for its door (+z face)
+  const hut = !!(core && spec.roofAccess &&
+    core.x0 - 2 > top.x0 && core.x1 + 2 < top.x1 &&
+    core.z0 - 2 > top.z0 && core.z1 + 3 < top.z1);
 
-  const stairBase = gy + 1;
-  const topStepY = shaft ? (hut ? roofY : topFloorY) : gy;
-  const stepCellAt = (y) => {
-    if (!shaft) return null;
-    const t = y - stairBase;
-    if (t < 0 || y > topStepY) return null;
-    return RING[t % 8];
-  };
+  // ---- steps: [{x, y, z, dir}] ---------------------------------------------
+  const steps = [];
+  if (core) {
+    const stairBase = gy + 1;
+    if (core.kind === 'spiral') {
+      const topStepY = hut ? roofY : topFloorY;
+      for (let y = stairBase; y <= topStepY; y++) {
+        const t = y - stairBase;
+        const c = RING[t % 8];
+        steps.push({ x: core.x0 + c[0], y, z: core.z0 + c[1], dir: RING_DIR[t % 8] });
+      }
+    } else {
+      const flights = floors - 1 + (hut ? 1 : 0);
+      const across = core.kind === 'wide' ? [[0, 1], [2, 3]] : [[0], [1]];
+      const plusU = core.alongX ? WEIRDO.east : WEIRDO.south;
+      const minusU = core.alongX ? WEIRDO.west : WEIRDO.north;
+      for (let f = 0; f < flights; f++) {
+        const F = gy + f * P;
+        const even = (f % 2) === 0;
+        for (let i = 0; i <= P - 2; i++) {
+          const u = even ? 1 + i : P - 1 - i;
+          for (const v of across[even ? 0 : 1]) {
+            const x = core.x0 + (core.alongX ? u : v);
+            const z = core.z0 + (core.alongX ? v : u);
+            steps.push({ x, y: F + 1 + i, z, dir: even ? plusU : minusU });
+          }
+        }
+      }
+    }
+  }
+  const stepsAt = new Map();   // y -> Set of "x,z"
+  for (const s of steps) {
+    if (!stepsAt.has(s.y)) stepsAt.set(s.y, new Set());
+    stepsAt.get(s.y).add(s.x + ',' + s.z);
+  }
 
   // ---- helpers -------------------------------------------------------------
   function slab(r, y, mat) {
     // keep the head room of the three steps below this slab open
-    const open = [stepCellAt(y - 1), stepCellAt(y - 2), stepCellAt(y - 3)];
+    const open = [stepsAt.get(y - 1), stepsAt.get(y - 2), stepsAt.get(y - 3)].filter(Boolean);
     for (let z = r.z0; z <= r.z1; z++) {
       for (let x = r.x0; x <= r.x1; x++) {
-        if (shaft && inShaft(x, z)) {
-          const lx = x - shaft.x, lz = z - shaft.z;
-          let skip = false;
-          for (const c of open) if (c && c[0] === lx && c[1] === lz) { skip = true; break; }
-          if (skip) continue;
+        if (open.length && inCore(x, z)) {
+          const k = x + ',' + z;
+          if (open.some((s) => s.has(k))) continue;
         }
         world.set(x, y, z, mat);
       }
@@ -122,7 +208,6 @@ export function makeBuilding(world, spec, rng) {
 
   // ---- door position (ground floor, street side) ---------------------------
   const r0 = rect(0);
-  const face = spec.facing || 'south';
   const outv = OUTWARD[face];
   let dx, dz;
   if (face === 'south') { dz = r0.z1; dx = Math.round((r0.x0 + r0.x1) / 2); }
@@ -167,11 +252,11 @@ export function makeBuilding(world, spec, rng) {
       }
     }
 
-    // ceiling lights
+    // ceiling lights (never over the stairs — they would eat the head room)
     if (spec.lights) {
       for (let z = r.z0 + 3; z <= r.z1 - 2; z += 6)
         for (let x = r.x0 + 3; x <= r.x1 - 2; x += 6)
-          if (!inShaft(x, z)) world.set(x, sy + P - 1, z, MAT.LANTERN);
+          if (!inCore(x, z)) world.set(x, sy + P - 1, z, MAT.LANTERN);
     }
   }
 
@@ -193,27 +278,24 @@ export function makeBuilding(world, spec, rng) {
     }
   }
 
-  // ---- stair core ----------------------------------------------------------
-  if (shaft) {
+  // ---- stairs --------------------------------------------------------------
+  if (steps.length) {
     const solidStep = STAIR_SOLID[theme.stair] !== undefined ? STAIR_SOLID[theme.stair] : theme.trim;
-    for (let y = stairBase; y <= topStepY; y++) {
-      const t = y - stairBase;
-      const c = RING[t % 8];
-      const mat = spec.useStairs ? stairId(theme.stair, RING_DIR[t % 8]) : solidStep;
-      world.set(shaft.x + c[0], y, shaft.z + c[1], mat);
+    for (const s of steps) {
+      world.set(s.x, s.y, s.z, spec.useStairs ? stairId(theme.stair, s.dir) : solidStep);
     }
   }
 
   // ---- roof access hut -----------------------------------------------------
   let hutDoor = null;
   if (hut) {
-    const h = { x0: shaft.x - 2, z0: shaft.z - 2, x1: shaft.x + 4, z1: shaft.z + 4 };
+    const h = { x0: core.x0 - 2, z0: core.z0 - 2, x1: core.x1 + 2, z1: core.z1 + 2 };
     world.ring(h.x0, h.z0, h.x1, h.z1, roofY + 1, roofY + 3, theme.wall);
     slab(h, roofY + 4, theme.trim);
-    const hx = shaft.x + 1, hz = h.z1;           // door on the +z face, centred
+    const hx = Math.round((core.x0 + core.x1) / 2), hz = h.z1;   // door on the +z face
     world.set(hx, roofY + 1, hz, doorId(theme.door, DIR.south, false));
     world.set(hx, roofY + 2, hz, doorId(theme.door, DIR.south, true));
-    world.set(shaft.x + 1, roofY + 3, shaft.z + 1, MAT.LANTERN);
+    world.set(hx, roofY + 3, core.z1 + 1, MAT.LANTERN);
     hutDoor = [hx, roofY + 1, hz];
   }
 
@@ -233,7 +315,9 @@ export function makeBuilding(world, spec, rng) {
     themeName: theme.name, facing: face,
     rects: Array.from({ length: floors }, (_, k) => rect(k)),
     floorYs, roofY, topY: hut ? roofY + 4 : roofY + (style === 'house' ? Math.ceil(Math.min(w, d) / 2) + 1 : 2),
-    shaft, hut, hutDoor, windows: windowCount,
+    core: core ? { x0: core.x0, z0: core.z0, x1: core.x1, z1: core.z1 } : null,
+    stairKind: core ? core.kind : null,
+    hut, hutDoor, windows: windowCount,
     door: { x: dx, y: gy + 1, z: dz, out: outv },
     outside: [dx + outv[0], gy + 1, dz + outv[1]],
   };

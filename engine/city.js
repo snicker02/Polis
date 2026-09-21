@@ -28,6 +28,7 @@ export const DEFAULTS = {
   setbackEvery: 7,
   roofAccess: true,
   useStairs: true,
+  stairStyle: 'mixed',
   lights: true,
   lamps: true,
   trees: true,
@@ -112,7 +113,7 @@ export function generateCity(cfgIn, onProgress) {
       x0: fx0, z0: fz0, x1: fx1, z1: fz1,
       floors: lot.floors, pitch: cfg.pitch, groundY: GROUND,
       style: lot.style, facing: front.side, theme,
-      roofAccess: cfg.roofAccess, useStairs: cfg.useStairs, lights: cfg.lights,
+      roofAccess: cfg.roofAccess, useStairs: cfg.useStairs, stairStyle: cfg.stairStyle, lights: cfg.lights,
       setback: cfg.setback, setbackEvery: cfg.setbackEvery,
     }, rng);
 
@@ -201,7 +202,7 @@ export function generateSingle(cfgIn) {
     x0: pad, z0: pad, x1: pad + w - 1, z1: pad + d - 1,
     floors: cfg.floors, pitch: cfg.pitch, groundY: GROUND,
     style: cfg.style, facing: 'south', theme,
-    roofAccess: cfg.roofAccess, useStairs: cfg.useStairs, lights: cfg.lights,
+    roofAccess: cfg.roofAccess, useStairs: cfg.useStairs, stairStyle: cfg.stairStyle, lights: cfg.lights,
     setback: cfg.setback, setbackEvery: cfg.setbackEvery,
   }, rng);
 

@@ -15,9 +15,9 @@ import zlib from 'node:zlib';
 import { generateCity, generateSingle, DEFAULTS } from '../engine/city.js';
 import { USE } from '../engine/plan.js';
 import { verifyAll } from '../engine/verify.js';
-import { MATERIALS } from '../engine/materials.js';
+import { MATERIALS, THEMES, DOOR_KINDS, doorId } from '../engine/materials.js';
 import { VoxelWorld, splitWorld, buildMcPack } from '../engine/blockcore.js';
-import { buildStructures, placementGuide, CHUNK, exportPack, tileList, functionFiles, GROUND_DROP } from '../engine/export.js';
+import { buildStructures, placementGuide, CHUNK, exportPack, tileList, functionFiles, GROUND_DROP, cityId } from '../engine/export.js';
 import { buildMesh, MAX_QUADS, STRIDE } from '../engine/mesher.js';
 import { decodeNbt, readZip, localPayload } from './nbt-read.js';
 
@@ -150,6 +150,71 @@ note(`${singleOk}/${SINGLE_CASES.length} single builds fully reachable · ` +
   const v = verifyAll(r.world, r.buildings);
   check('stair blocks off: still climbable', v.floorsReached === v.floorsChecked,
     `${v.floorsReached}/${v.floorsChecked}`);
+}
+
+// ===========================================================================
+// 2b. stair layouts and doors
+// ===========================================================================
+section('2b. stair layouts and doors');
+{
+  // every forced layout, every pitch, several footprints: all floors reachable
+  let total = 0, ok = 0;
+  const used = {};
+  for (const stairStyle of ['switchback', 'wide', 'spiral', 'mixed']) {
+    for (const pitch of [4, 5, 6, 7]) {
+      for (const [bw, bd] of [[9, 9], [12, 8], [8, 14], [17, 13], [24, 20]]) {
+        for (const style of ['house', 'mid', 'tower']) {
+          const r = generateSingle({ ...DEFAULTS, style, floors: 5, pitch, bw, bd, seed: total + 11, stairStyle });
+          total++;
+          const b = r.buildings[0];
+          if (!b) continue;
+          if (b.stairKind) used[stairStyle + ':' + b.stairKind] = (used[stairStyle + ':' + b.stairKind] || 0) + 1;
+          const v = verifyAll(r.world, r.buildings);
+          if (v.ok && v.floorsReached === v.floorsChecked) ok++;
+          else check(`${stairStyle} ${style} ${bw}x${bd} pitch ${pitch}: reachable`, false,
+            `${v.floorsReached}/${v.floorsChecked} (${b.stairKind})`);
+        }
+      }
+    }
+  }
+  check('stairs: every layout x pitch x footprint reachable', ok === total, `${ok}/${total}`);
+  check('stairs: switchback actually used', (used['switchback:switchback'] || 0) > 0);
+  check('stairs: wide switchback actually used', (used['wide:wide'] || 0) > 0);
+  check('stairs: spiral actually used', (used['spiral:spiral'] || 0) > 0);
+  check('stairs: mixed produces more than one layout',
+    Object.keys(used).filter((k) => k.startsWith('mixed:')).length >= 2,
+    Object.keys(used).filter((k) => k.startsWith('mixed:')).join(', '));
+  note(`${ok}/${total} single builds reachable · ` +
+    Object.entries(used).map(([k, n]) => `${k} ${n}`).join(' · '));
+
+  // stair blocks off: straight flights of full blocks must still be climbable
+  for (const stairStyle of ['switchback', 'wide']) {
+    const r = generateSingle({ ...DEFAULTS, style: 'tower', floors: 7, pitch: 5, bw: 20, bd: 16, seed: 5, stairStyle, useStairs: false });
+    const v = verifyAll(r.world, r.buildings);
+    check(`${stairStyle} with stair blocks off: climbable`, v.floorsReached === v.floorsChecked,
+      `${v.floorsReached}/${v.floorsChecked}`);
+  }
+
+  // doors: only real Bedrock door ids, and only ones a player can open by hand
+  const BEDROCK_WOOD_DOORS = new Set(['minecraft:wooden_door', 'minecraft:spruce_door',
+    'minecraft:birch_door', 'minecraft:jungle_door', 'minecraft:acacia_door',
+    'minecraft:dark_oak_door', 'minecraft:mangrove_door', 'minecraft:cherry_door',
+    'minecraft:bamboo_door', 'minecraft:crimson_door', 'minecraft:warped_door']);
+  const badKinds = DOOR_KINDS.filter((k) => !BEDROCK_WOOD_DOORS.has(MATERIALS.def(doorId(k, 0, false)).block));
+  check('doors: every door kind is a hand-openable Bedrock door', badKinds.length === 0, badKinds.join(', '));
+  check('doors: oak uses the Bedrock name wooden_door',
+    MATERIALS.def(doorId('oak', 0, false)).block === 'minecraft:wooden_door');
+  const themeDoors = [];
+  for (const list of Object.values(THEMES)) for (const t of list) themeDoors.push(t.door);
+  check('doors: no theme uses a door that needs redstone',
+    themeDoors.every((k) => DOOR_KINDS.includes(k)), themeDoors.filter((k) => !DOOR_KINDS.includes(k)).join(', '));
+  let placedBad = 0;
+  const cityD = generateCity({ ...DEFAULTS, size: 192, seed: 77 });
+  cityD.world.forEach((x, y, z, id) => {
+    const n = MATERIALS.def(id).block;
+    if (n.endsWith('_door') && !BEDROCK_WOOD_DOORS.has(n)) placedBad++;
+  });
+  check('doors: no invalid or iron door placed anywhere in a city', placedBad === 0, `${placedBad} bad`);
 }
 
 // ===========================================================================
@@ -438,6 +503,58 @@ section('6b. air fill and /function build');
   check('air off: no air in palettes', plainAir === 0);
   note(`${out.structures.length} tiles · ${(out.data.length / 1024).toFixed(0)} KiB pack · ` +
     `simulated both functions cell-for-cell against the source world`);
+}
+
+// ===========================================================================
+// 6c. per-city namespaces: packs must not collide
+// ===========================================================================
+section('6c. city ids');
+{
+  const A1 = generateCity({ ...DEFAULTS, size: 128, seed: 12345 });
+  const idA1 = cityId(A1.world, 12345);
+  // churn the material registry with other generations, then regenerate
+  generateCity({ ...DEFAULTS, size: 96, seed: 7, useStairs: false });
+  generateSingle({ ...DEFAULTS, style: 'house', floors: 3, pitch: 6, bw: 11, bd: 11, seed: 3 });
+  const A2 = generateCity({ ...DEFAULTS, size: 128, seed: 12345 });
+  const idA2 = cityId(A2.world, 12345);
+  const B = generateCity({ ...DEFAULTS, size: 128, seed: 12345, maxFloors: 9 });
+  const idB = cityId(B.world, 12345);
+  const C = generateCity({ ...DEFAULTS, size: 128, seed: 12346 });
+  const idC = cityId(C.world, 12346);
+
+  check('city id: valid Bedrock namespace', /^[a-z0-9_]+$/.test(idA1), idA1);
+  check('city id: starts with polis_ and carries the seed', idA1.startsWith('polis_12345_'), idA1);
+  check('city id: same city -> same id, even after other generations', idA1 === idA2, `${idA1} vs ${idA2}`);
+  check('city id: same seed, different settings -> different id', idA1 !== idB, `${idA1} vs ${idB}`);
+  check('city id: different seed -> different id', idA1 !== idC);
+  check('city id: negative seeds still valid', /^polis_\d+_[0-9a-f]{4}$/.test(cityId(A1.world, -5)));
+
+  // two packs exported together share no structure or function paths
+  const pa = await exportPack(A1.world, { namespace: idA1, seed: 12345, deflateRaw });
+  const pb = await exportPack(B.world, { namespace: idB, seed: 12345, deflateRaw });
+  const na = new Set(readZip(pa.data).entries.map((e) => e.name).filter((n) => n !== 'manifest.json' && n !== 'placement-guide.txt'));
+  const nb = readZip(pb.data).entries.map((e) => e.name).filter((n) => n !== 'manifest.json' && n !== 'placement-guide.txt');
+  const clash = nb.filter((n) => na.has(n));
+  check('two cities: no shared structure/function paths', clash.length === 0, clash.slice(0, 3).join(', '));
+
+  // functions reference their own namespace, and the files live under it
+  const za = readZip(pa.data);
+  const fe = za.entries.find((e) => e.name === `functions/${idA1}/build_centered.mcfunction`);
+  check('pack: function lives under the city namespace', !!fe);
+  if (fe) {
+    const p = localPayload(pa.data, fe);
+    const txt = new TextDecoder().decode(fe.method === 8 ? zlib.inflateRawSync(Buffer.from(p)) : p);
+    const loads = txt.split('\n').filter((l) => l.startsWith('structure load '));
+    check('function: every load uses the city namespace', loads.length > 0 && loads.every((l) => l.startsWith(`structure load ${idA1}:`)));
+    const paths = new Set(za.entries.map((e) => e.name));
+    check('function: every referenced structure exists in the pack',
+      loads.every((l) => paths.has(`structures/${idA1}/${l.split(' ')[2].split(':')[1]}.mcstructure`)));
+  }
+  // the guide leads with the exact command and names the seed
+  const first = pa.guide.split('\n').slice(0, 8).join('\n');
+  check('guide: the build command is in the first lines', first.includes(`/function ${idA1}/build_centered`));
+  check('guide: names the seed and city id', pa.guide.includes('seed 12345') && pa.guide.includes(`City id  ${idA1}`));
+  note(`${idA1} · ${idB} · ${idC}`);
 }
 
 // ===========================================================================
