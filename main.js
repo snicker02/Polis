@@ -8,14 +8,14 @@ import { Renderer } from './engine/renderer.js';
 import { exportPack, exportStructuresZip, tileList, commandList, cityId, POLIS_VERSION } from './engine/export.js';
 import { THEMES } from './engine/materials.js';
 
-const VERSION = '0.2.0';
+const VERSION = '0.2.2';
 const $ = (id) => document.getElementById(id);
 
 const SLIDERS = {
   size: 0, minBlock: 0, blockIrregularity: 2, avenueWidth: 0, streetWidth: 0,
   downtownRadius: 2, zoneNoise: 2, parkChance: 2, lotDowntown: 0, lotSuburb: 0,
   maxFloors: 0, pitch: 0, setbackEvery: 0, bw: 0, bd: 0, floors: 0, clip: 0,
-  farmChance: 2, pondChance: 2, villagers: 0,
+  farmChance: 2, pondChance: 2, villagers: 0, wallHeight: 0,
 };
 const CHECKS = ['setback', 'roofAccess', 'useStairs', 'lights', 'lamps', 'trees', 'markings'];
 
@@ -155,6 +155,7 @@ function readCfg() {
     cfg.lotDowntown = num('lotDowntown');
     cfg.lotSuburb = num('lotSuburb');
     cfg.maxFloors = num('maxFloors');
+    cfg.wallHeight = num('wallHeight');
     cfg.focal = focal.slice();
   } else {
     cfg.bw = num('bw');
@@ -290,7 +291,8 @@ function showStats(mesh, times) {
     line('farms / beds', `${s.farms} / ${s.beds}`);
     line('workstations / plants', `${s.stations} / ${s.plants}`);
     line('villagers / golems', `${s.villagers} / ${s.golems}` + (s.bell ? ' · bell' : ''));
-    if (s.railLines) line('rail lines / bridges / carts', `${s.railLines} / ${s.railBridges} / ${s.carts}`);
+    if (s.railLines) line('rail lines / bridges / carts', `${s.railLines} / ${s.railBridges} / ${s.carts}` + (s.railLoop ? ' · loop' : ''));
+    if (s.wallHeight) line('perimeter wall', `${s.wallHeight} high · ${s.gates} gates`);
   }
   const allOk = v.total > 0 && v.ok === v.total && v.floorsReached === v.floorsChecked;
   line('stairs verified', v.total === 0 ? '—' :
@@ -369,7 +371,8 @@ async function doExport(kind) {
     const out = kind === 'mcpack'
       ? await exportPack(result.world, opts)
       : await exportStructuresZip(result.world, opts);
-    const name = `${cityNs.replace(/_/g, '-')}-v${VERSION}.` + (kind === 'mcpack' ? 'mcpack' : 'zip');
+    // same spelling as the city id used in game: polis_<seed>_<hash>_v<version>
+    const name = `${cityNs}_v${VERSION}.` + (kind === 'mcpack' ? 'mcpack' : 'zip');
     download(out.data, name);
     toast(`${name} — in game: /function ${cityNs}/build_centered, then populate_centered`);
   } catch (e) {

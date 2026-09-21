@@ -1,4 +1,4 @@
-# Polis v0.2.0
+# Polis v0.2.2
 
 A procedural city generator that exports to **Minecraft Bedrock**. Plans a
 street grid, subdivides it into lots, raises buildings with real interiors —
@@ -88,6 +88,17 @@ streets and alleys with sidewalks, curbs, centre lines and crosswalks. Lot
 subdivision guarantees frontage through alleys, so there are no landlocked
 lots and every door opens onto pavement.
 
+## Perimeter wall
+
+A stone-brick wall runs round the city's outermost row (the outside edge of
+the ring road), 3 blocks high by default — the **Perimeter wall** slider sets
+0–8. It starts at ground level and the city's surface and stone base beneath
+it are already solid, so water has no way in at any height up to the top of
+the wall. Each side has a double wooden door in the middle; closed doors block
+water too, so the gates do not weaken it. Walls under 3 blocks have no gates —
+you can step or jump over them. If you build next to water that stands higher
+than the wall, raise the slider.
+
 ## Life
 
 **Farms** take over some suburban lots (**Farms** slider). Each is hedged in
@@ -138,6 +149,12 @@ they climb four blocks on powered rails, cross on a stone-brick bridge that
 leaves two clear blocks for a cart and rider underneath, and come back down.
 So there are no junctions anywhere: every line is a simple path with nothing
 to derail at.
+
+**The loop.** The ring road's four lines are joined into one closed track
+round the whole city, with a curved rail at each corner and powered boosters
+two blocks either side of every curve, so a cart can go round and round
+without stopping. Every other line ends one block inside the loop, so nothing
+ever crosses it.
 
 Every powered rail sits on a redstone block, so it is permanently on and needs
 no wiring. Flat track has a powered booster every 16 blocks. Each line ends at
@@ -280,6 +297,17 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.2.2** — Perimeter wall (default 3 high, 0–8) with a double-door gate on
+each side, so surrounding water can no longer flood the city. On railway
+cities the ring road's four lines are now one closed loop with curved rails at
+the corners and boosters either side, so carts can go round without stopping.
+Curve rail directions were confirmed against Bedrock's own table. The validator
+checks that the wall is water-tight all the way round, that the gates are proper double doors, and that there is
+exactly one loop with the right curves; the side-touch rule now handles curves.
+
+**0.2.1** — Exported files are named with underscores, matching the city id
+used in game: `polis_<seed>_<hash>_v<version>.mcpack` (was dashes).
 
 **0.2.0** — Population fixed. Villagers and iron golems now travel inside
 entity-only structures instead of being summoned, because `/summon` only works

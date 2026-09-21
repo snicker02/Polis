@@ -176,7 +176,9 @@ export function furnaceId(kind, facing) {
 // rail_direction (from Bedrock's own Java->Bedrock tables): 0 north-south,
 // 1 east-west, 2 ascending east, 3 ascending west, 4 ascending north,
 // 5 ascending south. A powered rail on a redstone block is permanently on.
-export const RAIL = { NS: 0, EW: 1, UP_E: 2, UP_W: 3, UP_N: 4, UP_S: 5 };
+// Curves (plain rails only): 6 south-east, 7 south-west, 8 north-west,
+// 9 north-east, also confirmed against Bedrock's Java->Bedrock table.
+export const RAIL = { NS: 0, EW: 1, UP_E: 2, UP_W: 3, UP_N: 4, UP_S: 5, SE: 6, SW: 7, NW: 8, NE: 9 };
 const FLAT = { passable: true, flowable: true, flat: true };
 export function railId(dir) {
   return MATERIALS.add(null, 'minecraft:rail', '#8d7b62', { rail_direction: I(dir) }, FLAT);

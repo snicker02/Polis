@@ -79,12 +79,38 @@ export function layTransit(world, plan, mode, G) {
     }
     return kept;
   };
-  const xRuns = pick(rows, W, (z, x) => road(x, z));
-  const zRuns = pick(cols, D, (x, z) => road(x, z));
+  let xRuns = pick(rows, W, (z, x) => road(x, z));
+  let zRuns = pick(cols, D, (x, z) => road(x, z));
+
+  // ---- the perimeter loop -----------------------------------------------------
+  // The ring road's four lines become one closed track with a curve at each
+  // corner, so a cart can go round the city without ever stopping. Every other
+  // line is shortened to end one block inside the loop, so nothing crosses it.
+  let loop = null;
+  {
+    const longX = xRuns.filter((r) => r.b - r.a + 1 >= W * 0.8);
+    const longZ = zRuns.filter((r) => r.b - r.a + 1 >= D * 0.8);
+    if (longX.length >= 2 && longZ.length >= 2) {
+      const top = longX.reduce((m, r) => (r.f < m.f ? r : m)), bot = longX.reduce((m, r) => (r.f > m.f ? r : m));
+      const lef = longZ.reduce((m, r) => (r.f < m.f ? r : m)), rig = longZ.reduce((m, r) => (r.f > m.f ? r : m));
+      const rt = top.f, rb = bot.f, cl = lef.f, cr = rig.f;
+      const covers = (r, lo, hi) => r.a <= lo && r.b >= hi;
+      if (rb - rt >= 24 && cr - cl >= 24 && covers(top, cl, cr) && covers(bot, cl, cr) &&
+          covers(lef, rt, rb) && covers(rig, rt, rb)) {
+        loop = { rt, rb, cl, cr };
+        xRuns = xRuns.filter((r) => r !== top && r !== bot)
+          .map((r) => ({ ...r, a: Math.max(r.a, cl + 1), b: Math.min(r.b, cr - 1) }))
+          .filter((r) => r.f > rt && r.f < rb && r.b - r.a >= 11);
+        zRuns = zRuns.filter((r) => r !== lef && r !== rig)
+          .map((r) => ({ ...r, a: Math.max(r.a, rt + 1), b: Math.min(r.b, rb - 1) }))
+          .filter((r) => r.f > cl && r.f < cr && r.b - r.a >= 11);
+      }
+    }
+  }
 
   const railAt = new Map();          // "x,z" -> rail height at ground crossing check
   const lines = [];
-  const stats = { lines: 0, rails: 0, bridges: 0, boosters: 0 };
+  const stats = { lines: 0, rails: 0, bridges: 0, boosters: 0, loop: false, loopLength: 0 };
   const key = (x, z) => x + ',' + z;
 
   const bed = (x, z) => { if (mode === 'rails') world.set(x, G, z, MAT.GRAVEL); };
@@ -193,6 +219,42 @@ export function layTransit(world, plan, mode, G) {
         lines.push(line);
       }
     }
+  }
+
+  // ---- lay the loop -------------------------------------------------------------
+  if (loop) {
+    const { rt, rb, cl, cr } = loop;
+    const cells = [];
+    for (let x = cl; x < cr; x++) cells.push([x, rt]);          // top, heading east
+    for (let z = rt; z < rb; z++) cells.push([cr, z]);          // right, heading south
+    for (let x = cr; x > cl; x--) cells.push([x, rb]);          // bottom, heading west
+    for (let z = rb; z > rt; z--) cells.push([cl, z]);          // left, heading north
+    const CURVE = { [key(cl, rt)]: RAIL.SE, [key(cr, rt)]: RAIL.SW, [key(cr, rb)]: RAIL.NW, [key(cl, rb)]: RAIL.NE };
+    const corner = (x, z) => CURVE[key(x, z)] !== undefined;
+    const nearCorner = (x, z) => [[cl, rt], [cr, rt], [cr, rb], [cl, rb]]
+      .some(([a, b]) => (x === a || z === b) && Math.abs(x - a) + Math.abs(z - b) === 2);
+    const line = { axis: 'loop', loop: true, stations: [], cells: [], ...loop };
+    for (const [x, z] of cells) {
+      if (corner(x, z)) {
+        bed(x, z);
+        world.set(x, G + 1, z, railId(CURVE[key(x, z)]));   // curves cannot be powered
+        for (let y = G + 2; y <= G + 3; y++) world.clear(x, y, z);
+        stats.rails++;
+      } else {
+        const dir = (z === rt || z === rb) ? RAIL.EW : RAIL.NS;
+        const along = (z === rt || z === rb) ? x - cl : z - rt;
+        // boosters two blocks either side of every corner, and every 16 blocks
+        flatRail(x, z, dir, nearCorner(x, z) || along % BOOST_EVERY === 8);
+      }
+      line.cells.push([x, G + 1, z]);
+    }
+    // the cart starts mid-way along the top, on plain track
+    let sx = cl + Math.floor((cr - cl) / 2);
+    while (world.get(sx, G, rt) === MAT.REDSTONE) sx++;
+    line.stations.push([sx, G + 1, rt]);
+    lines.push(line);
+    stats.loop = true;
+    stats.loopLength = cells.length;
   }
 
   stats.lines = lines.length;

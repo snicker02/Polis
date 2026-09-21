@@ -404,6 +404,8 @@ section('2d. railways');
     0: [[0, -1, 0], [0, 1, 0]], 1: [[-1, 0, 0], [1, 0, 0]],
     2: [[1, 0, 1], [-1, 0, 0]], 3: [[-1, 0, 1], [1, 0, 0]],
     4: [[0, -1, 1], [0, 1, 0]], 5: [[0, 1, 1], [0, -1, 0]],
+    6: [[0, 1, 0], [1, 0, 0]], 7: [[0, 1, 0], [-1, 0, 0]],        // curves: SE, SW
+    8: [[0, -1, 0], [-1, 0, 0]], 9: [[0, -1, 0], [1, 0, 0]],      // NW, NE
   };
   const isRail = (w, x, y, z) => { const id = w.get(x, y, z); return id >= 0 && /rail$/.test(MATERIALS.def(id).block); };
   const dirOf = (w, x, y, z) => MATERIALS.def(w.get(x, y, z)).states.rail_direction.value;
@@ -441,25 +443,40 @@ section('2d. railways');
         else if (!blocking(w, x + dx, y, z + dz)) noBuffer++;       // open end with no buffer
       }
       adj.set(key(x, y, z), links);
-      // no rail may touch this one from the side (Bedrock would re-curve them on a block update)
-      const axisX = ENDS[dirOf(w, x, y, z)][0][0] !== 0;
-      for (const [sx, sz] of axisX ? [[0, 1], [0, -1]] : [[1, 0], [-1, 0]])
+      // no rail may touch this one except at its two ends (Bedrock would
+      // re-curve them on a block update)
+      const endDirs = ENDS[dirOf(w, x, y, z)].map(([ex, ez]) => ex + ',' + ez);
+      for (const [sx, sz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        if (endDirs.includes(sx + ',' + sz)) continue;
         for (const yy of [y - 1, y, y + 1]) if (isRail(w, x + sx, yy, z + sz)) sideTouch++;
+      }
     }
     var dir;
     // links must be mutual; each connected piece is a line with exactly two ends
     for (const [k, links] of adj) for (const l of links) if (!(adj.get(l) || []).includes(k)) badLink++;
-    const seen = new Set(); let comps = 0, badComp = 0;
+    const seen = new Set(); let comps = 0, badComp = 0, cycles = 0, cycleLen = 0;
     for (const k of adj.keys()) {
       if (seen.has(k)) continue;
       comps++;
-      const stack = [k]; let ends = 0;
+      const stack = [k]; let ends = 0, size = 0;
       while (stack.length) {
-        const u = stack.pop(); if (seen.has(u)) continue; seen.add(u);
+        const u = stack.pop(); if (seen.has(u)) continue; seen.add(u); size++;
         const ls = adj.get(u); if (ls.length < 2) ends++;
         for (const v of ls) if (!seen.has(v)) stack.push(v);
       }
-      if (ends !== 2) badComp++;
+      if (ends === 0) { cycles++; cycleLen = size; }      // the perimeter loop
+      else if (ends !== 2) badComp++;
+    }
+    check(`${tag}: exactly one closed loop round the city, and only when planned`,
+      cycles === (r.transit.stats.loop ? 1 : 0) && (!r.transit.stats.loop || cycleLen === r.transit.stats.loopLength),
+      `${cycles} loops, ${cycleLen} vs ${r.transit.stats.loopLength} rails`);
+    if (r.transit.stats.loop) {
+      const L = r.transit.lines.find((l) => l.loop);
+      const curves = [[L.cl, L.rt], [L.cr, L.rt], [L.cr, L.rb], [L.cl, L.rb]].map(([x, z]) => dirOf(w, x, 2, z));
+      check(`${tag}: loop corners are the four curves in order (SE, SW, NW, NE)`, curves.join() === '6,7,8,9', curves.join());
+      const nearBoost = [[L.cl + 2, L.rt], [L.cl, L.rt + 2], [L.cr - 2, L.rt], [L.cr, L.rt + 2]]
+        .every(([x, z]) => MATERIALS.def(w.get(x, 2, z)).block === 'minecraft:golden_rail');
+      check(`${tag}: powered boosters just before and after the corners`, nearBoost);
     }
     const carts = r.spawns.filter((p) => p.type === 'minecart');
     const cartOnRail = carts.every((p) => isRail(w, p.x, p.y, p.z));
@@ -482,6 +499,63 @@ section('2d. railways');
   let anyRail = false; plain.world.forEach((x, y, z, id) => { if (/rail$/.test(MATERIALS.def(id).block)) anyRail = true; });
   check('roads mode: no rails at all', !anyRail && !plain.transit);
   note(`${totals.lines} lines · ${totals.bridges} bridges · ${totals.rails.toLocaleString()} rails · ${totals.carts} carts, all topology checks clean`);
+}
+
+// ===========================================================================
+// 2e. perimeter wall
+// ===========================================================================
+section('2e. perimeter wall');
+{
+  const G = 1;
+  let cities = 0;
+  for (const [c, h] of [[{ size: 160, seed: 12345 }, 3], [{ size: 192, seed: 5, transit: 'rails' }, 3],
+                        [{ size: 128, seed: 21, transit: 'trams' }, 5], [{ size: 160, seed: 8 }, 2], [{ size: 128, seed: 9 }, 0]]) {
+    const r = generateCity({ ...DEFAULTS, ...c, wallHeight: h });
+    const w = r.world, { W, D } = r.plan;
+    const tag = `wall ${h} ${c.size}/${c.seed}${c.transit ? ' ' + c.transit : ''}`;
+    cities++;
+    const ring = [];
+    for (let x = 0; x < W; x++) ring.push([x, 0], [x, D - 1]);
+    for (let z = 1; z < D - 1; z++) ring.push([0, z], [W - 1, z]);
+    const isDoor = (id) => id >= 0 && /_door$/.test(MATERIALS.def(id).block);
+    let gaps = 0, doors = 0;
+    for (const [x, z] of ring) {
+      for (let y = G; y <= G + h; y++) {
+        const id = w.get(x, y, z);
+        if (isDoor(id)) { doors++; continue; }
+        if (id === -1 || MATERIALS.isPassable(id) || MATERIALS.def(id).flowable) gaps++;
+      }
+    }
+    if (h === 0) {
+      check(`${tag}: no wall when switched off`, !r.wall);
+      continue;
+    }
+    check(`${tag}: wall is continuous from ground to top (water-tight)`, gaps === 0, `${gaps} gaps`);
+    check(`${tag}: top course is solid all the way round`,
+      ring.every(([x, z]) => { const id = w.get(x, G + h, z); return id >= 0 && !MATERIALS.isPassable(id); }));
+    if (h >= 3) {
+      check(`${tag}: a double-door gate on every side`, r.wall.gates.length === 4 && doors === 16, `${r.wall.gates.length} gates, ${doors} door halves`);
+      let badGate = 0;
+      for (const g of r.wall.gates) {
+        const [[ax, az], [bx, bz]] = g.cells;
+        const da = MATERIALS.def(w.get(ax, G + 1, az)), db = MATERIALS.def(w.get(bx, G + 1, bz));
+        if (da.states['minecraft:cardinal_direction'].value !== db.states['minecraft:cardinal_direction'].value) badGate++;
+        if (da.states.door_hinge_bit.value === db.states.door_hinge_bit.value) badGate++;
+        for (const [ix, iz] of g.inside) {
+          const floor = w.get(ix, G, iz), f1 = w.get(ix, G + 1, iz), f2 = w.get(ix, G + 2, iz);
+          if (floor === -1 || f1 !== -1 || f2 !== -1) badGate++;
+        }
+      }
+      check(`${tag}: gates are proper double doors with a clear way in`, badGate === 0, `${badGate} problems`);
+    } else {
+      check(`${tag}: walls under 3 high have no gates (step over)`, r.wall.gates.length === 0);
+    }
+    const v = verifyAll(w, r.buildings);
+    check(`${tag}: every building floor still reachable`, v.floorsReached === v.floorsChecked);
+    check(`${tag}: golems never stand on the wall`, r.spawns.filter((p) => p.type === 'golem')
+      .every((p) => p.x > 0 && p.z > 0 && p.x < W - 1 && p.z < D - 1));
+  }
+  note(`${cities} cities: continuous water-tight ring, gates on every side at 3+ blocks`);
 }
 
 // ===========================================================================

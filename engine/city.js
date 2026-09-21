@@ -5,6 +5,7 @@ import { makeRng, fbm2, clamp } from './rng.js';
 import { generatePlan, frontage, USE } from './plan.js';
 import { MAT, THEMES } from './materials.js';
 import { makeBuilding, OUTWARD } from './building.js';
+import { doorId, DIR } from './materials.js';
 import { farm, pond, scatterFlowers, furnish, bedSpawns, placeBell, golemSpawns } from './life.js';
 import { layTransit, trimOverRails } from './transit.js';
 
@@ -31,7 +32,8 @@ export const DEFAULTS = {
   roofAccess: true,
   useStairs: true,
   stairStyle: 'mixed',
-  transit: 'roads',          // 'roads' | 'rails' (railway instead of roads) | 'trams' (rails down the roads)
+  transit: 'roads',
+  wallHeight: 3,             // perimeter wall, blocks above ground (0 = none)          // 'roads' | 'rails' (railway instead of roads) | 'trams' (rails down the roads)
   farmChance: 0.2,
   pondChance: 0.5,
   furnish: true,
@@ -181,6 +183,7 @@ export function generateCity(cfgIn, onProgress) {
 
   clearDoorways(world, buildings);
   trimOverRails(world, transit);
+  const wall = perimeterWall(world, plan, cfg);
 
   // ---- the village ---------------------------------------------------------
   const bell = cfg.villagers > 0 ? placeBell(world, plan, GROUND) : null;
@@ -195,8 +198,52 @@ export function generateCity(cfgIn, onProgress) {
 
   if (transit) spawns = spawns.concat(transit.carts);
 
-  const stats = summarise(world, plan, buildings, cfg, { farms, beds, spawns, bell, transit });
-  return { world, plan, buildings, cfg, stats, farms, spawns, bell, transit };
+  const stats = summarise(world, plan, buildings, cfg, { farms, beds, spawns, bell, transit, wall });
+  return { world, plan, buildings, cfg, stats, farms, spawns, bell, transit, wall };
+}
+
+// ---- perimeter wall -------------------------------------------------------------
+// Keeps surrounding water out. It stands on the city's outermost row (the
+// edge of the ring road) from ground level up; below it the city's surface
+// and stone base are already solid, so water has no way in at any height up
+// to the top of the wall. Each side gets a double wooden door in the middle:
+// closed doors block water too, so the gates do not weaken it.
+function perimeterWall(world, plan, cfg) {
+  const h = Math.max(0, Math.min(12, cfg.wallHeight | 0));
+  if (!h) return null;
+  const { W, D } = plan;
+  const ring = [];
+  for (let x = 0; x < W; x++) { ring.push([x, 0]); ring.push([x, D - 1]); }
+  for (let z = 1; z < D - 1; z++) { ring.push([0, z]); ring.push([W - 1, z]); }
+  for (const [x, z] of ring) {
+    world.set(x, GROUND, z, MAT.STONEBRICK);
+    for (let y = GROUND + 1; y <= GROUND + h; y++) world.set(x, y, z, y === GROUND + h ? MAT.SMOOTH : MAT.STONEBRICK);
+  }
+  if (h < 3) return { height: h, gates: [] };      // too low for a doorway: step over it
+  // gates: two doors in the middle of each side, facing out, hinges on the outside edges
+  const CLOCKWISE = { north: 'east', east: 'south', south: 'west', west: 'north' };
+  const sides = [
+    { face: 'north', cells: [[Math.floor(W / 2) - 1, 0], [Math.floor(W / 2), 0]], along: 'east' },
+    { face: 'south', cells: [[Math.floor(W / 2) - 1, D - 1], [Math.floor(W / 2), D - 1]], along: 'east' },
+    { face: 'west', cells: [[0, Math.floor(D / 2) - 1], [0, Math.floor(D / 2)]], along: 'south' },
+    { face: 'east', cells: [[W - 1, Math.floor(D / 2) - 1], [W - 1, Math.floor(D / 2)]], along: 'south' },
+  ];
+  const gates = [];
+  for (const g of sides) {
+    const [ox, oz] = OUTWARD[g.face];
+    // the way in must be clear on the city side (never a rail or a lamp)
+    const inside = g.cells.map(([x, z]) => [x - ox, z - oz]);
+    const clear = inside.every(([x, z]) => !world.has(x, GROUND + 1, z) && !world.has(x, GROUND + 2, z) && world.has(x, GROUND, z));
+    if (!clear) continue;
+    const secondIsRight = CLOCKWISE[g.face] === g.along;
+    g.cells.forEach(([x, z], i) => {
+      const hinge = (i === 1) === secondIsRight ? 1 : 0;
+      world.set(x, GROUND + 1, z, doorId('spruce', DIR[g.face], false, hinge));
+      world.set(x, GROUND + 2, z, doorId('spruce', DIR[g.face], true, hinge));
+    });
+    gates.push({ face: g.face, cells: g.cells, inside });
+  }
+  return { height: h, gates };
 }
 
 // ---- keep the way in clear --------------------------------------------------
@@ -382,5 +429,8 @@ function summarise(world, plan, buildings, cfg, life = {}) {
     railLines: life.transit ? life.transit.stats.lines : 0,
     railBridges: life.transit ? life.transit.stats.bridges : 0,
     carts: (life.spawns || []).filter((p) => p.type === 'minecart').length,
+    railLoop: !!(life.transit && life.transit.stats.loop),
+    wallHeight: life.wall ? life.wall.height : 0,
+    gates: life.wall ? life.wall.gates.length : 0,
   };
 }
