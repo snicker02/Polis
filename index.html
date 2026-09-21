@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Polis — Minecraft Bedrock city generator</title>
+<style>
+  :root {
+    --bg: #0e1013;
+    --panel: #15181d;
+    --panel2: #1b1f25;
+    --line: #272c34;
+    --text: #d8dde3;
+    --dim: #868f9b;
+    --accent: #59b4d9;
+    --accent2: #d9a559;
+    --ok: #63c47a;
+    --bad: #d96a6a;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; height: 100%; overflow: hidden;
+    background: var(--bg); color: var(--text);
+    font: 13px/1.45 "Segoe UI", system-ui, -apple-system, sans-serif;
+  }
+  #app { display: flex; height: 100%; }
+
+  /* ---- panel ---- */
+  #panel {
+    width: 318px; flex: none; background: var(--panel);
+    border-right: 1px solid var(--line);
+    display: flex; flex-direction: column;
+  }
+  #panelScroll { overflow-y: auto; overflow-x: hidden; padding: 12px 12px 20px; flex: 1; }
+  #panelScroll::-webkit-scrollbar { width: 9px; }
+  #panelScroll::-webkit-scrollbar-thumb { background: #2c323a; border-radius: 5px; }
+
+  h1 {
+    font-size: 17px; letter-spacing: 3px; font-weight: 600;
+    margin: 2px 0 1px; color: #fff;
+  }
+  h1 span { color: var(--accent); }
+  .sub { color: var(--dim); font-size: 11px; margin-bottom: 12px; }
+
+  fieldset {
+    border: 1px solid var(--line); border-radius: 6px;
+    margin: 0 0 10px; padding: 8px 10px 10px; background: var(--panel2);
+  }
+  legend {
+    font-size: 10px; letter-spacing: 1.6px; text-transform: uppercase;
+    color: var(--dim); padding: 0 5px;
+  }
+  .row { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
+  .row label { flex: 1; color: var(--dim); font-size: 12px; }
+  .row .val { width: 46px; text-align: right; color: var(--text); font-variant-numeric: tabular-nums; font-size: 12px; }
+  input[type=range] {
+    flex: 1.5; -webkit-appearance: none; appearance: none;
+    height: 3px; background: #30363f; border-radius: 2px; outline: none;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 13px; height: 13px; border-radius: 50%;
+    background: var(--accent); cursor: pointer; border: none;
+  }
+  input[type=range]::-moz-range-thumb {
+    width: 13px; height: 13px; border-radius: 50%; background: var(--accent);
+    cursor: pointer; border: none;
+  }
+  input[type=number], select {
+    background: #0e1116; color: var(--text); border: 1px solid var(--line);
+    border-radius: 4px; padding: 3px 6px; font: inherit; font-size: 12px; width: 100%;
+  }
+  input[type=number] { text-align: right; }
+  .checks { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 8px; }
+  .chk { display: flex; align-items: center; gap: 5px; color: var(--dim); font-size: 12px; cursor: pointer; }
+  .chk input { accent-color: var(--accent); margin: 0; }
+
+  button {
+    background: #242a32; color: var(--text); border: 1px solid var(--line);
+    border-radius: 5px; padding: 7px 10px; font: inherit; font-size: 12px;
+    cursor: pointer; width: 100%;
+  }
+  button:hover:not(:disabled) { background: #2d343d; border-color: #3b444f; }
+  button:disabled { opacity: .45; cursor: default; }
+  button.primary { background: #1d3f52; border-color: #2b6280; color: #cfeaf7; }
+  button.primary:hover:not(:disabled) { background: #24576f; }
+  .btnrow { display: flex; gap: 6px; margin-top: 6px; }
+
+  #mapWrap { position: relative; margin-top: 4px; }
+  #map { width: 100%; display: block; border: 1px solid var(--line); border-radius: 4px; cursor: crosshair; image-rendering: pixelated; background: #0b0d10; }
+  .hint { color: var(--dim); font-size: 11px; margin-top: 5px; }
+
+  #stats { font-size: 11.5px; color: var(--dim); }
+  #stats b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+  #stats .line { display: flex; justify-content: space-between; padding: 1px 0; }
+  .ok { color: var(--ok); }
+  .bad { color: var(--bad); }
+
+  /* ---- view ---- */
+  #view { flex: 1; position: relative; min-width: 0; }
+  #gl { width: 100%; height: 100%; display: block; touch-action: none; }
+  #overlay {
+    position: absolute; left: 12px; bottom: 10px; color: var(--dim);
+    font-size: 11px; pointer-events: none; text-shadow: 0 1px 3px #000;
+  }
+  #toast {
+    position: absolute; left: 50%; top: 14px; transform: translateX(-50%);
+    background: #1b2129; border: 1px solid var(--line); border-radius: 5px;
+    padding: 7px 14px; font-size: 12px; opacity: 0; transition: opacity .25s;
+    pointer-events: none; max-width: 70%;
+  }
+  #toast.show { opacity: 1; }
+  #busy {
+    position: absolute; inset: 0; display: none; align-items: center; justify-content: center;
+    background: rgba(10,12,15,.55); font-size: 13px; color: var(--text);
+  }
+  #busy.show { display: flex; }
+  .single-only, .city-only { display: none; }
+  body.mode-single .single-only { display: block; }
+  body.mode-city .city-only { display: block; }
+  body.mode-city .row.city-only,
+  body.mode-single .row.single-only { display: flex; }
+  textarea {
+    width: 100%; height: 90px; background: #0e1116; color: var(--dim);
+    border: 1px solid var(--line); border-radius: 4px; font: 11px/1.4 ui-monospace, Menlo, Consolas, monospace;
+    padding: 6px; resize: vertical;
+  }
+</style>
+</head>
+<body class="mode-city">
+<div id="app">
+  <div id="panel">
+    <div id="panelScroll">
+      <h1>PO<span>L</span>IS</h1>
+      <div class="sub">procedural city → Minecraft Bedrock · v0.1.0</div>
+
+      <fieldset>
+        <legend>Mode</legend>
+        <div class="row">
+          <select id="mode">
+            <option value="city">City block plan</option>
+            <option value="single">Single building</option>
+          </select>
+        </div>
+        <div class="row">
+          <label for="seed">Seed</label>
+          <input type="number" id="seed" value="12345" style="width:110px">
+          <button id="reroll" style="width:auto;padding:3px 9px">↻</button>
+        </div>
+      </fieldset>
+
+      <fieldset class="city-only">
+        <legend>City</legend>
+        <div class="row"><label>Size</label><input type="range" id="size" min="64" max="256" step="8" value="160"><span class="val" id="size_v"></span></div>
+        <div class="row"><label>Block size</label><input type="range" id="minBlock" min="10" max="30" step="1" value="16"><span class="val" id="minBlock_v"></span></div>
+        <div class="row"><label>Irregularity</label><input type="range" id="blockIrregularity" min="0" max="1" step="0.05" value="0.8"><span class="val" id="blockIrregularity_v"></span></div>
+        <div class="row"><label>Avenue width</label><input type="range" id="avenueWidth" min="5" max="11" step="2" value="7"><span class="val" id="avenueWidth_v"></span></div>
+        <div class="row"><label>Street width</label><input type="range" id="streetWidth" min="3" max="9" step="2" value="5"><span class="val" id="streetWidth_v"></span></div>
+        <div class="row"><label>Downtown radius</label><input type="range" id="downtownRadius" min="0.1" max="0.7" step="0.02" value="0.34"><span class="val" id="downtownRadius_v"></span></div>
+        <div class="row"><label>Zone noise</label><input type="range" id="zoneNoise" min="0" max="2" step="0.05" value="1"><span class="val" id="zoneNoise_v"></span></div>
+        <div class="row"><label>Parks</label><input type="range" id="parkChance" min="0" max="0.4" step="0.01" value="0.12"><span class="val" id="parkChance_v"></span></div>
+        <div class="row"><label>Downtown lot</label><input type="range" id="lotDowntown" min="12" max="34" step="1" value="20"><span class="val" id="lotDowntown_v"></span></div>
+        <div class="row"><label>Suburb lot</label><input type="range" id="lotSuburb" min="8" max="20" step="1" value="10"><span class="val" id="lotSuburb_v"></span></div>
+        <div id="mapWrap"><canvas id="map" width="192" height="192"></canvas></div>
+        <div class="hint">Click the plan to move downtown.</div>
+      </fieldset>
+
+      <fieldset class="single-only">
+        <legend>Building</legend>
+        <div class="row"><label>Style</label><select id="style" style="width:130px">
+          <option value="tower">Tower</option><option value="mid" selected>Mid-rise</option><option value="house">House</option>
+        </select></div>
+        <div class="row"><label>Theme</label><select id="theme" style="width:130px"></select></div>
+        <div class="row"><label>Width</label><input type="range" id="bw" min="7" max="40" step="1" value="15"><span class="val" id="bw_v"></span></div>
+        <div class="row"><label>Depth</label><input type="range" id="bd" min="7" max="40" step="1" value="13"><span class="val" id="bd_v"></span></div>
+        <div class="row"><label>Floors</label><input type="range" id="floors" min="1" max="40" step="1" value="6"><span class="val" id="floors_v"></span></div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Buildings</legend>
+        <div class="row city-only"><label>Max floors</label><input type="range" id="maxFloors" min="1" max="40" step="1" value="18"><span class="val" id="maxFloors_v"></span></div>
+        <div class="row"><label>Floor height</label><input type="range" id="pitch" min="4" max="8" step="1" value="5"><span class="val" id="pitch_v"></span></div>
+        <div class="row"><label>Setback every</label><input type="range" id="setbackEvery" min="3" max="14" step="1" value="7"><span class="val" id="setbackEvery_v"></span></div>
+        <div class="checks">
+          <label class="chk"><input type="checkbox" id="setback" checked>Setbacks</label>
+          <label class="chk"><input type="checkbox" id="roofAccess" checked>Roof access</label>
+          <label class="chk"><input type="checkbox" id="useStairs" checked>Stair blocks</label>
+          <label class="chk"><input type="checkbox" id="lights" checked>Interior lights</label>
+          <label class="chk"><input type="checkbox" id="lamps" checked>Street lamps</label>
+          <label class="chk"><input type="checkbox" id="trees" checked>Trees</label>
+          <label class="chk"><input type="checkbox" id="markings" checked>Road markings</label>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>View</legend>
+        <div class="row"><label>Cutaway</label><input type="range" id="clip" min="0" max="100" step="1" value="100"><span class="val" id="clip_v"></span></div>
+        <div class="btnrow"><button id="reset">Reset camera</button></div>
+      </fieldset>
+
+      <div class="btnrow"><button id="gen" class="primary">Generate</button></div>
+
+      <fieldset style="margin-top:10px">
+        <legend>Statistics</legend>
+        <div id="stats"></div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Export to Bedrock</legend>
+        <div class="row">
+          <label>Place at X / Y / Z</label>
+        </div>
+        <div class="row">
+          <input type="number" id="baseX" value="0"><input type="number" id="baseY" value="64"><input type="number" id="baseZ" value="0">
+        </div>
+        <div class="btnrow"><button id="mcpack" class="primary">Export .mcpack</button></div>
+        <div class="btnrow"><button id="mcstruct">Export .mcstructure zip</button></div>
+        <div class="btnrow"><button id="copycmd">Copy /structure commands</button></div>
+        <div class="hint">Bedrock structure blocks cap at 64 wide, so the build ships as aligned chunks. Load them in the listed order.</div>
+        <textarea id="cmds" readonly placeholder="Generate to see the placement commands."></textarea>
+      </fieldset>
+    </div>
+  </div>
+
+  <div id="view">
+    <canvas id="gl"></canvas>
+    <div id="overlay">drag rotate · wheel zoom · shift-drag pan</div>
+    <div id="toast"></div>
+    <div id="busy">generating…</div>
+  </div>
+</div>
+<script type="module" src="./main.js"></script>
+</body>
+</html>

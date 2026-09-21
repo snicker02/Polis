@@ -1,0 +1,321 @@
+// main.js — Polis UI.
+
+import { generateCity, generateSingle, DEFAULTS } from './engine/city.js';
+import { USE } from './engine/plan.js';
+import { verifyAll } from './engine/verify.js';
+import { buildMesh } from './engine/mesher.js';
+import { Renderer } from './engine/renderer.js';
+import { exportPack, exportStructuresZip, buildStructures, placementGuide } from './engine/export.js';
+import { THEMES } from './engine/materials.js';
+
+const $ = (id) => document.getElementById(id);
+
+const SLIDERS = {
+  size: 0, minBlock: 0, blockIrregularity: 2, avenueWidth: 0, streetWidth: 0,
+  downtownRadius: 2, zoneNoise: 2, parkChance: 2, lotDowntown: 0, lotSuburb: 0,
+  maxFloors: 0, pitch: 0, setbackEvery: 0, bw: 0, bd: 0, floors: 0, clip: 0,
+};
+const CHECKS = ['setback', 'roofAccess', 'useStairs', 'lights', 'lamps', 'trees', 'markings'];
+
+let renderer = null;
+let result = null;       // { world, plan, buildings, cfg, stats }
+let verification = null;
+let focal = [0.5, 0.5];
+let busyDepth = 0;
+
+// ---- boot -------------------------------------------------------------------
+function boot() {
+  try {
+    renderer = new Renderer($('gl'));
+  } catch (e) {
+    $('busy').classList.add('show');
+    $('busy').textContent = e.message;
+    return;
+  }
+
+  for (const id of Object.keys(SLIDERS)) {
+    const el = $(id);
+    if (!el) continue;
+    const upd = () => { $(id + '_v').textContent = fmt(el.value, SLIDERS[id]); };
+    el.addEventListener('input', () => {
+      upd();
+      if (id === 'clip') applyClip();
+    });
+    upd();
+  }
+
+  $('mode').addEventListener('change', () => {
+    document.body.className = 'mode-' + $('mode').value;
+  });
+  $('style').addEventListener('change', fillThemes);
+  $('reroll').addEventListener('click', () => {
+    $('seed').value = (Math.random() * 1e9) | 0;
+    generate();
+  });
+  $('gen').addEventListener('click', generate);
+  $('reset').addEventListener('click', () => { renderer.frameAll(); });
+  $('mcpack').addEventListener('click', () => doExport('mcpack'));
+  $('mcstruct').addEventListener('click', () => doExport('zip'));
+  $('copycmd').addEventListener('click', copyCommands);
+  for (const b of ['baseX', 'baseY', 'baseZ']) $(b).addEventListener('change', refreshCommands);
+
+  $('map').addEventListener('click', (e) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    focal = [
+      Math.min(0.98, Math.max(0.02, (e.clientX - r.left) / r.width)),
+      Math.min(0.98, Math.max(0.02, (e.clientY - r.top) / r.height)),
+    ];
+    generate();
+  });
+
+  fillThemes();
+  document.body.className = 'mode-city';
+  window.addEventListener('resize', () => renderer.invalidate());
+  requestAnimationFrame(loop);
+  generate();
+}
+
+function fmt(v, dp) {
+  const n = Number(v);
+  return dp ? n.toFixed(dp) : String(n | 0);
+}
+
+function fillThemes() {
+  const sel = $('theme');
+  const list = THEMES[$('style').value] || THEMES.mid;
+  sel.innerHTML = '<option value="">random</option>' +
+    list.map((t) => `<option value="${t.name}">${t.name}</option>`).join('');
+}
+
+function loop() {
+  renderer.render(false);
+  requestAnimationFrame(loop);
+}
+
+function busy(on) {
+  busyDepth += on ? 1 : -1;
+  $('busy').classList.toggle('show', busyDepth > 0);
+}
+
+function toast(msg, bad) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.style.color = bad ? 'var(--bad)' : 'var(--text)';
+  t.classList.add('show');
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => t.classList.remove('show'), 2600);
+}
+
+// ---- config -----------------------------------------------------------------
+function readCfg() {
+  const cfg = { ...DEFAULTS };
+  const num = (id) => Number($(id).value);
+  cfg.seed = num('seed') | 0;
+  cfg.pitch = num('pitch');
+  cfg.setbackEvery = num('setbackEvery');
+  for (const c of CHECKS) cfg[c] = $(c).checked;
+  if ($('mode').value === 'city') {
+    cfg.size = num('size');
+    cfg.minBlock = num('minBlock');
+    cfg.blockIrregularity = num('blockIrregularity');
+    cfg.avenueWidth = num('avenueWidth');
+    cfg.streetWidth = num('streetWidth');
+    cfg.downtownRadius = num('downtownRadius');
+    cfg.zoneNoise = num('zoneNoise');
+    cfg.parkChance = num('parkChance');
+    cfg.lotDowntown = num('lotDowntown');
+    cfg.lotSuburb = num('lotSuburb');
+    cfg.maxFloors = num('maxFloors');
+    cfg.focal = focal.slice();
+  } else {
+    cfg.bw = num('bw');
+    cfg.bd = num('bd');
+    cfg.floors = num('floors');
+    cfg.style = $('style').value;
+    cfg.themeName = $('theme').value || null;
+  }
+  return cfg;
+}
+
+// ---- generate ---------------------------------------------------------------
+function generate() {
+  busy(true);
+  $('gen').disabled = true;
+  setTimeout(() => {
+    try {
+      const cfg = readCfg();
+      const t0 = performance.now();
+      result = ($('mode').value === 'city') ? generateCity(cfg) : generateSingle(cfg);
+      const t1 = performance.now();
+      verification = verifyAll(result.world, result.buildings);
+      const t2 = performance.now();
+      const mesh = buildMesh(result.world);
+      renderer.setMesh(mesh);
+      renderer.frameAll();
+      applyClip();
+      const t3 = performance.now();
+      drawMap();
+      showStats(mesh, [t1 - t0, t2 - t1, t3 - t2]);
+      refreshCommands();
+    } catch (e) {
+      console.error(e);
+      toast('Generation failed: ' + e.message, true);
+    } finally {
+      $('gen').disabled = false;
+      busy(false);
+    }
+  }, 16);
+}
+
+function applyClip() {
+  if (!result) return;
+  const bb = result.world.box;
+  const t = Number($('clip').value) / 100;
+  const span = (bb.y1 - bb.y0 + 1);
+  renderer.setClip(t >= 1 ? 1e9 : bb.y0 + span * t);
+}
+
+// ---- minimap ----------------------------------------------------------------
+const MAP_COL = {
+  [USE.EMPTY]: '#141a16',
+  [USE.ROAD]: '#33383d',
+  [USE.SIDEWALK]: '#5c646a',
+  [USE.LOT]: '#2a3a26',
+  [USE.PARK]: '#2f5a2c',
+  [USE.PLAZA]: '#6b6552',
+};
+
+function drawMap() {
+  const cv = $('map');
+  if (!result || !result.plan.use.length) { cv.getContext('2d').clearRect(0, 0, cv.width, cv.height); return; }
+  const { W, D, use } = result.plan;
+  cv.width = W; cv.height = D;
+  const ctx = cv.getContext('2d');
+  const img = ctx.createImageData(W, D);
+  const cache = {};
+  for (const k in MAP_COL) {
+    const h = MAP_COL[k];
+    cache[k] = [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+  }
+  for (let i = 0; i < W * D; i++) {
+    const c = cache[use[i]] || cache[USE.EMPTY];
+    img.data[i * 4] = c[0]; img.data[i * 4 + 1] = c[1];
+    img.data[i * 4 + 2] = c[2]; img.data[i * 4 + 3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+  // building footprints, brightness by height
+  const maxF = Math.max(1, result.stats.tallest);
+  for (const b of result.buildings) {
+    const t = b.floors / maxF;
+    const v = Math.round(90 + t * 150);
+    ctx.fillStyle = `rgb(${v},${Math.round(v * 0.93)},${Math.round(v * 0.82)})`;
+    ctx.fillRect(b.x0, b.z0, b.x1 - b.x0 + 1, b.z1 - b.z0 + 1);
+  }
+  // focal marker
+  if ($('mode').value === 'city') {
+    const fx = focal[0] * W, fz = focal[1] * D;
+    ctx.strokeStyle = '#d9a559';
+    ctx.lineWidth = Math.max(1, W / 140);
+    ctx.beginPath();
+    ctx.arc(fx, fz, Math.max(3, W * 0.03), 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(fx - 4, fz); ctx.lineTo(fx + 4, fz);
+    ctx.moveTo(fx, fz - 4); ctx.lineTo(fx, fz + 4);
+    ctx.stroke();
+  }
+}
+
+// ---- stats ------------------------------------------------------------------
+function showStats(mesh, times) {
+  const s = result.stats;
+  const v = verification;
+  const rows = [];
+  const line = (k, val, cls) => rows.push(
+    `<div class="line"><span>${k}</span><b class="${cls || ''}">${val}</b></div>`);
+  line('blocks', s.blocks.toLocaleString());
+  line('footprint', `${s.footprint[0]} × ${s.footprint[1]}`);
+  line('height', s.height + ' blocks');
+  line('buildings', `${s.buildings}`);
+  if (s.buildings) line('  houses / mid / tower', `${s.houses} / ${s.mids} / ${s.towers}`);
+  line('floors', `${s.floors} (tallest ${s.tallest})`);
+  line('windows', s.windows.toLocaleString());
+  const allOk = v.total > 0 && v.ok === v.total && v.floorsReached === v.floorsChecked;
+  line('stairs verified', v.total === 0 ? '—' :
+    (allOk ? `✓ ${v.floorsReached}/${v.floorsChecked} floors` : `✗ ${v.ok}/${v.total} buildings`),
+    allOk ? 'ok' : (v.total ? 'bad' : ''));
+  if (s.overflow) line('over budget', s.overflow.toLocaleString() + ' dropped', 'bad');
+  line('preview quads', mesh.quads.toLocaleString());
+  line('generate / verify / mesh',
+    times.map((t) => Math.round(t) + 'ms').join(' · '));
+  $('stats').innerHTML = rows.join('');
+}
+
+// ---- export -----------------------------------------------------------------
+function base() {
+  return [Number($('baseX').value) | 0, Number($('baseY').value) | 0, Number($('baseZ').value) | 0];
+}
+
+function refreshCommands() {
+  if (!result) return;
+  try {
+    const structures = buildStructures(result.world, { prefix: 'c' });
+    const guide = placementGuide(structures, { base: base() });
+    const cmds = guide.split('\n').filter((l) => l.includes('/structure load')).map((l) => l.trim());
+    $('cmds').value = cmds.join('\n');
+  } catch (e) {
+    $('cmds').value = 'error: ' + e.message;
+  }
+}
+
+function copyCommands() {
+  const t = $('cmds');
+  if (!t.value) { toast('Nothing to copy yet.', true); return; }
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(t.value)
+      .then(() => toast('Placement commands copied.'))
+      .catch(() => fallbackCopy(t));
+  } else fallbackCopy(t);
+}
+
+function fallbackCopy(t) {
+  t.removeAttribute('readonly');
+  t.select();
+  try { document.execCommand('copy'); toast('Placement commands copied.'); }
+  catch (e) { toast('Copy failed — select the text manually.', true); }
+  t.setAttribute('readonly', '');
+}
+
+async function doExport(kind) {
+  if (!result) { toast('Generate something first.', true); return; }
+  busy(true);
+  $('mcpack').disabled = $('mcstruct').disabled = true;
+  try {
+    const opts = { base: base(), namespace: 'polis', prefix: 'c', packName: 'Polis city' };
+    const out = kind === 'mcpack'
+      ? await exportPack(result.world, opts)
+      : await exportStructuresZip(result.world, opts);
+    const name = `polis-${result.cfg.seed}-v0.1.0.` + (kind === 'mcpack' ? 'mcpack' : 'zip');
+    download(out.data, name);
+    toast(`${out.structures.length} structure${out.structures.length === 1 ? '' : 's'} → ${name}`);
+  } catch (e) {
+    console.error(e);
+    toast('Export failed: ' + e.message, true);
+  } finally {
+    $('mcpack').disabled = $('mcstruct').disabled = false;
+    busy(false);
+  }
+}
+
+function download(data, name) {
+  const blob = new Blob([data], { type: 'application/octet-stream' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+
+boot();
