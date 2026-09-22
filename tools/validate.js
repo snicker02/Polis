@@ -24,7 +24,7 @@ import { buildMesh, MAX_QUADS, STRIDE } from '../engine/mesher.js';
 import { decodeNbt, readZip, localPayload } from './nbt-read.js';
 import { decodeTyped } from './nbt-typed.js';
 import { walkCity } from '../engine/terrain.js';
-import { CLOCK_FACE, signLayout } from '../engine/landmarks.js';
+import { CLOCK_FACE, LANDMARK_NAMES } from '../engine/landmarks.js';
 import { STYLES, remapTable } from '../engine/styles.js';
 import { CAT_COATS, SHEEP_COATS } from '../engine/entity-templates.js';
 
@@ -1148,9 +1148,7 @@ section('2l. canal, art, new landmarks');
   let canals = 0, badOpen = 0, badBridge = 0, nearWall = 0, bridges = 0, rails = 0, docks = 0, dockUnreached = 0, badDock = 0;
   let panels = 0, badPanel = 0, complete = 0, cities = 0;
   let pews = 0, spires = 0, bells = 0, classrooms = 0, lecterns = 0, bands = 0, lanterns = 0, lhFar = 0, castles = 0, notHighest = 0, merlons = 0, turrets = 0;
-  let schools = 0, porchBad = 0, signs = 0, signBad = 0, cupolas = 0, fields = 0, fieldBad = 0, desksN = 0, chairBad = 0;
-  const LET = { S: ['###', '#..', '###', '..#', '###'], C: ['###', '#..', '#..', '#..', '###'], H: ['#.#', '#.#', '###', '#.#', '#.#'],
-    O: ['###', '#.#', '#.#', '#.#', '###'], L: ['#..', '#..', '#..', '#..', '###'] };
+  let schools = 0, porchBad = 0, signs = 0, signBad = 0, signable = 0, cupolas = 0, fields = 0, fieldBad = 0, desksN = 0, chairBad = 0;
   const WDIR = [[1, 0], [-1, 0], [0, 1], [0, -1]];          // weirdo_direction 0..3: east, west, south, north
   for (const [size, seed, st, transit] of [[160, 12345, 'modern', 'roads'], [192, 1, 'medieval', 'rails'], [224, 3, 'desert', 'trams'], [256, 5, 'cherry', 'roads'], [128, 2, 'snowy', 'rails']]) {
     const r = generateCity({ ...DEFAULTS, size, seed, cityStyle: st, transit });
@@ -1206,6 +1204,26 @@ section('2l. canal, art, new landmarks');
     });
     // ---- new landmarks
     for (const L of r.landmarks) {
+      // the name sign
+      signable++;
+      if (L.nameSign) {
+        const [sx, sy, sz] = L.nameSign;
+        const id = w.get(sx, sy, sz), data = w.getData(sx, sy, sz);
+        const FACE = { south: 0, west: 4, north: 8, east: 12 };
+        const face = L.rec ? L.rec.facing : null;
+        if (id < 0 || MATERIALS.def(id).block !== 'minecraft:standing_sign') signBad++;
+        else {
+          signs++;
+          if (!data || data.id !== 'Sign' || data.tags.FrontText.v.Text.v !== LANDMARK_NAMES[L.kind]) signBad++;
+          if (face && MATERIALS.def(id).states.ground_sign_direction.value !== FACE[face]) signBad++;
+          if (!w.has(sx, sy - 1, sz)) signBad++;
+          if (L.rec) {
+            const near = L.rec.doorCells.some(([dx, dz]) => Math.abs(dx - sx) + Math.abs(dz - sz) <= 7);
+            const onPath = L.rec.doorCells.some(([dx, dz]) => { const [ox, oz] = L.rec.door.out; return dx + ox === sx && dz + oz === sz; });
+            if (!near || onPath) signBad++;
+          }
+        }
+      }
       if (L.kind === 'church') {
         pews += L.pews;
         if (name(w, ...L.spireTop) === 'minecraft:gold_block') spires++;
@@ -1214,23 +1232,6 @@ section('2l. canal, art, new landmarks');
         schools++;
         const g = r.groundAt(L.porch[0][0], L.porch[0][1]);
         for (const [x, z] of L.porch) if (!w.has(x, g + 4, z)) porchBad++;
-        // the sign: read it back cell by cell against the letter shapes
-        const sg = L.sign;
-        const lines = sg.letters.split('/');
-        const textW = Math.max(...lines.map((t) => t.length * 4 - 1));
-        const side = (sg.w - textW) / 2;
-        let bad = 0;
-        for (const [x, y, z, on] of sg.cells) {
-          const n = name(w, x, y, z);
-          if (n !== (on ? 'minecraft:black_concrete' : 'minecraft:white_concrete')) bad++;
-        }
-        // and that the "on" cells really form the letters
-        const onSet = new Set(sg.cells.filter((c) => c[3]).map((c) => c[0] + ',' + c[1] + ',' + c[2]));
-        let expectOn = 0;
-        lines.forEach((t) => { for (const ch of t) for (const row of LET[ch]) for (const c of row) if (c === '#') expectOn++; });
-        if (onSet.size !== expectOn) bad++;
-        if (sg.letters.replace('/', '') !== 'SCHOOL') bad++;
-        signBad += bad; signs++;
         if (name(w, ...L.cupolaBell) === 'minecraft:bell' && w.has(L.cupolaBell[0], L.cupolaBell[1] + 1, L.cupolaBell[2])) cupolas++;
         if (L.field) {
           fields++;
@@ -1303,13 +1304,43 @@ section('2l. canal, art, new landmarks');
   check('church: pews, a gold-topped spire and a bell in the tower', pews > 0 && spires === cities && bells === cities, `${pews} pews, ${spires} spires, ${bells} bells`);
   check('school: classrooms, each with a lectern', classrooms > 0 && lecterns === classrooms, `${lecterns}/${classrooms}`);
   check('school: a covered porch (two columns and a roof) over the entrance', porchBad === 0 && schools === cities, `${porchBad} problems`);
-  check('school: the sign on the roof spells SCHOOL, black letters on a white board', signBad === 0 && signs === cities, `${signBad} wrong cells, ${signs} signs`);
+  check('landmarks: every one has a standing sign with its name, beside the way to its door, facing the street',
+    signs === signable && signBad === 0, `${signs}/${signable} signs, ${signBad} problems`);
   check('school: a bell hung in a cupola on the roof', cupolas === cities, `${cupolas}/${cities}`);
   check('school: where there is room, a fenced sports field with a gate and two goals, reached from the street', fields > 0 && fieldBad === 0, `${fields} fields, ${fieldBad} problems`);
   check('school: desks and chairs in rows, every chair behind a desk and facing the lectern', desksN > 0 && chairBad === 0, `${desksN} chairs, ${chairBad} facing wrong`);
   check('lighthouse: red bands, a glass lantern room with a light, beside the canal', bands === cities && lanterns === cities && lhFar === 0, `${bands} banded, ${lanterns} lit, ${lhFar} far from the water`);
   check('castle: on the highest hill, crenellated, four turrets', castles === cities && notHighest === 0 && merlons > 0 && turrets === castles * 4, `${notHighest} not on the highest hill`);
   note(`${canals} canals · ${bridges} bridges · ${docks} docks · ${panels} art panels · ${pews} pews · ${classrooms} classrooms`);
+}
+
+// ===========================================================================
+// 2m. sign block entities in the export
+// ===========================================================================
+section('2m. signs in the export');
+{
+  const r = generateCity({ ...DEFAULTS, size: 160, seed: 12345 });
+  const structs = buildStructures(r.world, { prefix: 'c', fillAir: true });
+  const found = new Map();
+  let typedOk = true;
+  for (const st of structs) {
+    const t = decodeTyped(st.data);
+    const pal = t.v.structure.v.palette.v.default.v;
+    for (const [, cell] of Object.entries((pal.block_position_data || { v: {} }).v)) {
+      const be = cell.v.block_entity_data;
+      if (!be || be.v.id.v !== 'Sign') continue;
+      const ft = be.v.FrontText.v;
+      found.set(ft.Text.v, be);
+      // the field types, exactly as in a sign saved in game
+      const want = { FilteredText: 8, HideGlowOutline: 1, IgnoreLighting: 1, PersistFormatting: 1, SignTextColor: 3, Text: 8, TextOwner: 8 };
+      for (const [k, tt] of Object.entries(want)) if (!ft[k] || ft[k].t !== tt) typedOk = false;
+      if (be.v.IsWaxed.t !== 1 || be.v.BlockEntityVersion.t !== 3 || be.v.x.t !== 3) typedOk = false;
+    }
+  }
+  const names = r.landmarks.map((l) => LANDMARK_NAMES[l.kind]);
+  check('export: every landmark\'s sign reaches the structure file with its text', names.every((n) => found.has(n)), [...found.keys()].join(', '));
+  check('export: sign fields typed exactly as a sign saved in game', typedOk && found.size > 0);
+  note(`${found.size} signs in the structure files: ${[...found.keys()].join(', ')}`);
 }
 
 // ===========================================================================
@@ -1838,12 +1869,14 @@ refreshWalkThrough();
     const pd = t.structure.v.palette.v.default.v.block_position_data.v;
     for (const c of l0) if (c.v >= 0 && pal[c.v].v.name.v === 'minecraft:bed') bedHalves++;
     for (const [idx, v] of Object.entries(pd)) {
-      entities++;
       const be = v.v.block_entity_data.v;
-      if (be.id.v !== 'Bed' || be.color.t !== 1 || pal[l0[Number(idx)].v].v.name.v !== 'minecraft:bed') badBE++;
+      const block = pal[l0[Number(idx)].v].v.name.v;
+      if (be.id.v === 'Sign') { if (block !== 'minecraft:standing_sign') badBE++; continue; }   // name signs: checked in 2m
+      entities++;
+      if (be.id.v !== 'Bed' || be.color.t !== 1 || block !== 'minecraft:bed') badBE++;
     }
   }
-  check('nbt: one bed entity per bed half, each on a bed with a colour', entities === bedHalves && bedHalves > 0 && badBE === 0,
+  check('nbt: one bed entity per bed half, each on a bed with a colour (signs sit on sign blocks)', entities === bedHalves && bedHalves > 0 && badBE === 0,
     `${entities} vs ${bedHalves}, ${badBE} bad`);
   note(`${wantV} villagers + ${wantG} golems in ${out.mobStructures.length} mob structures · ${wantC} minecart summons · ${adds.length} ticking areas`);
 }

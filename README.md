@@ -1,4 +1,4 @@
-# Polis v0.3.3
+# Polis v0.3.4
 
 A procedural city generator that exports to **Minecraft Bedrock**. Plans a
 street grid, subdivides it into lots, raises buildings with real interiors —
@@ -280,9 +280,7 @@ water and the castle on the highest hill (the **Landmarks** checkbox turns them 
 - **Church** — a tall nave with stained-glass windows, pews facing the
   altar, and a bell tower rising over the entrance to a spire with a gold top.
 - **School** — three storeys, set back behind a front yard: a covered porch
-  over the entrance, SCHOOL spelled out in black letters on a white board along
-  the front of the roof (one line on a wide building, SCH / OOL on a narrow
-  one), a bell cupola, a flagpole, and — on a lot deep enough — a fenced sports
+  over the entrance, a bell cupola, a flagpole, and — on a lot deep enough — a fenced sports
   field behind with a gate, white lines and two goals. Inside, classrooms with
   a lectern and rows of desks and chairs facing it, aisles left clear. It
   prefers a big lot that runs deep from its street.
@@ -293,6 +291,12 @@ water and the castle on the highest hill (the **Landmarks** checkbox turns them 
 - **Market square** — a chequered square of striped wool-canopied stalls
   selling melons, pumpkins, hay and more, round a covered well in big squares
   or a lantern post in small ones.
+
+**Name signs.** Every landmark has a small standing sign with its name —
+Town Hall, Clock Tower, Library, Market, Church, School, Lighthouse, Castle —
+beside the path to its front door (never on it), facing the street; the
+market's stands on its street edge. The sign's block entity is laid out exactly
+as Bedrock saves one, field for field, from signs saved in game.
 
 The three buildings are made by the same engine as every other building, so
 they keep the same guarantees — stairs to every floor (wide switchbacks in the
@@ -479,6 +483,12 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.3.4** — The school's rooftop SCHOOL board is gone; instead every
+landmark has a small standing name sign by its front door, facing the street.
+Signs are written as block entities laid out exactly as Bedrock saves them (checked field
+by field against signs saved in game). The validator checks each landmark's sign (name, facing, beside
+but never on the door path) and that sign text reaches the structure files.
 
 **0.3.3** — Villagers at every level: most start with a trade, from novice
 to master, using the trade tables of villagers saved in game. The school is a

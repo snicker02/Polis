@@ -16,7 +16,8 @@
 // the ornament is new, and none of it sits on a floor a player walks.
 
 import { makeBuilding, OUTWARD } from './building.js';
-import { MAT, WOOLS, pumpkinId, smokerId, stairId, WEIRDO, STAINED, gateId } from './materials.js';
+import { MAT, WOOLS, pumpkinId, smokerId, stairId, WEIRDO, STAINED, gateId, signId, SIGN_FACING } from './materials.js';
+import { N } from './blockcore.js';
 import { USE, frontage } from './plan.js';
 import { styleOf } from './styles.js';
 
@@ -368,21 +369,9 @@ function church(world, lot, face, cfg, rng, G) {
 }
 
 // ---- school ------------------------------------------------------------------
-// Set back behind a front yard: a covered porch over the entrance, SCHOOL
-// spelled out on a sign board along the front of the roof, a bell cupola, a
-// flagpole, and (on a big enough lot) a fenced sports field behind. Inside,
-// classrooms with rows of desks facing the lectern (life.js).
-const LETTERS = {
-  S: ['###', '#..', '###', '..#', '###'],
-  C: ['###', '#..', '#..', '#..', '###'],
-  H: ['#.#', '#.#', '###', '#.#', '#.#'],
-  O: ['###', '#.#', '#.#', '#.#', '###'],
-  L: ['#..', '#..', '#..', '#..', '###'],
-};
-export function signLayout(width) {
-  // one line if it fits (3-wide letters, 1 apart: 23 blocks), else two
-  return width >= 23 ? [['SCHOOL']] : [['SCH'], ['OOL']];
-}
+// Set back behind a front yard: a covered porch over the entrance, a bell
+// cupola, a flagpole, and (on a big enough lot) a fenced sports field behind.
+// Inside, classrooms with rows of desks facing the lectern (life.js).
 // lot depth (back from the street) that fits yard, building, path and field
 export const SCHOOL_FIELD_DEPTH = 5 + 9 + 1 + 8;
 
@@ -435,30 +424,8 @@ function school(world, lot, face, cfg, rng, G) {
   }
   { const [x, z] = at(front - 2, doorA); world.set(x, G + 3, z, MAT.LAMP_HANG); }
 
-  // sign board on the front edge of the roof, reading SCHOOL from the street
-  const y0 = rec.roofY;
-  const lines = signLayout(wide);
-  const textW = Math.max(...lines.map(([t]) => t.length * 4 - 1));
-  const side = wide - textW >= 2 ? 1 : 0;            // a border at the sides if there is room
-  const boardW = textW + 2 * side, boardH = lines.length * 6 + 1;
-  const a0 = 1 + Math.floor((wide - boardW) / 2);
-  const sign = { cells: [], letters: lines.map(([t]) => t).join('/'), a0, y0: y0 + 1, w: boardW, h: boardH, d: front };
-  for (let row = 0; row < boardH; row++)
-    for (let col = 0; col < boardW; col++) {
-      const [x, z] = at(front, a0 + col);
-      const y = y0 + boardH - row;                     // row 0 at the top
-      let on = false;
-      const li = Math.floor((row - 1) / 6), lr = (row - 1) % 6;
-      if (row >= 1 && li < lines.length && lr < 5 && col >= side) {
-        const t = lines[li][0], tx = col - side - Math.floor((textW - (t.length * 4 - 1)) / 2);
-        const ci = Math.floor(tx / 4), cx2 = tx % 4;
-        if (tx >= 0 && ci < t.length && cx2 < 3) on = LETTERS[t[ci]][lr][cx2] === '#';
-      }
-      world.set(x, y, z, on ? MAT.C_BLACK2 : MAT.C_WHITE);
-      sign.cells.push([x, y, z, on]);
-    }
-
   // bell cupola towards the back of the roof
+  const y0 = rec.roofY;
   const cd = front + bDepth - 3, ca = 1 + Math.floor(wide / 2);
   for (const [od, oa] of [[-1, -1], [-1, 1], [1, -1], [1, 1]]) {
     const [x, z] = at(cd + od, ca + oa);
@@ -507,10 +474,10 @@ function school(world, lot, face, cfg, rng, G) {
     const [gx, gz] = at(d0, midA);
     field = { rect: rectOf(d0, d1, fa0, fa1), gate: [gx, gz], goals: [fa0 + 2, fa1 - 2].map((a) => at(midD, a)) };
   }
-  rec.topY = Math.max(rec.topY, y0 + boardH, y0 + 5);   // the sign and cupola stand above the roof
+  rec.topY = Math.max(rec.topY, y0 + 5);             // the cupola stands above the roof
   rec.useOverride = () => 'classrooms';
   rec.landmark = 'school';
-  return { kind: 'school', rec, lot, flag, porch, sign, cupolaBell, field };
+  return { kind: 'school', rec, lot, flag, porch, cupolaBell, field };
 }
 const OPPOSITE_FACE = { north: 'south', south: 'north', east: 'west', west: 'east' };
 
@@ -593,6 +560,52 @@ function castle(world, lot, face, cfg, rng, G) {
 }
 
 const BUILDERS = { townhall: townHall, clocktower: clockTower, library, market, church, school, lighthouse, castle };
+export const LANDMARK_NAMES = { townhall: 'Town Hall', clocktower: 'Clock Tower', library: 'Library', market: 'Market',
+  church: 'Church', school: 'School', lighthouse: 'Lighthouse', castle: 'Castle' };
+
 export function buildLandmark(world, lot, face, cfg, rng, G) {
-  return BUILDERS[lot.landmark](world, lot, face, cfg, rng, G);
+  const L = BUILDERS[lot.landmark](world, lot, face, cfg, rng, G);
+  if (L) L.nameSign = nameSign(world, L, face, G);
+  return L;
+}
+
+// A small standing sign with the landmark's name, beside the path to its
+// front door (never on it), facing the street. The sign's block entity is laid
+// out exactly as Bedrock saves one (from a structure saved in game).
+export function signTags(text) {
+  const side = (t) => N.comp({
+    FilteredText: N.str(''), HideGlowOutline: N.byte(0), IgnoreLighting: N.byte(0), PersistFormatting: N.byte(1),
+    SignTextColor: N.int(-16777216), Text: N.str(t), TextOwner: N.str(''),
+  });
+  return { BackText: side(''), BlockEntityVersion: N.int(0), FrontText: side(text), IsWaxed: N.byte(0) };
+}
+function nameSign(world, L, face, G) {
+  const text = LANDMARK_NAMES[L.kind];
+  const [Fx, Fz] = OUTWARD[face], [Rx, Rz] = right(face);
+  const lot = L.lot;
+  // where to stand it: out from the front door, two or three blocks to one side
+  let base, offsets;
+  if (L.rec && L.rec.doorCells) {
+    const [dx, dz] = L.rec.doorCells[0];
+    base = [dx, dz];
+    offsets = [];
+    for (const out of [1, 2, 3]) for (const k of [2, -2, 3, -3, 4, -4]) offsets.push([out, k]);
+  } else {
+    // the market: on its street edge, near the middle
+    const mx = Math.floor((lot.x0 + lot.x1) / 2), mz = Math.floor((lot.z0 + lot.z1) / 2);
+    base = face === 'south' ? [mx, lot.z1] : face === 'north' ? [mx, lot.z0] : face === 'east' ? [lot.x1, mz] : [lot.x0, mz];
+    offsets = [];
+    for (let k = 0; k <= 6; k++) for (const s of k ? [k, -k] : [0]) offsets.push([0, s]);
+  }
+  const doorAt = new Set((L.rec && L.rec.doorCells ? L.rec.doorCells : []).map(([a, b]) => a + ',' + b));
+  for (const [out, k] of offsets) {
+    const x = base[0] + out * Fx + k * Rx, z = base[1] + out * Fz + k * Rz;
+    if (x < lot.x0 || x > lot.x1 || z < lot.z0 || z > lot.z1) continue;
+    if (doorAt.has((x - Fx) + ',' + (z - Fz))) continue;          // never right in front of a door
+    if (!world.has(x, G, z) || world.has(x, G + 1, z) || world.has(x, G + 2, z)) continue;
+    world.set(x, G + 1, z, signId(SIGN_FACING[face]));
+    world.setData(x, G + 1, z, { id: 'Sign', tags: signTags(text) });
+    return [x, G + 1, z];
+  }
+  return null;
 }

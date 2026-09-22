@@ -196,6 +196,12 @@ Object.assign(MAT, {
   C_BLACK2: A('C_BLACK2', 'minecraft:black_concrete', '#141519'),
 });
 
+// A standing sign; ground_sign_direction 0..15 turning from south (0) through
+// west (4), north (8), east (12) — the same numbers as Java's rotation.
+export const SIGN_FACING = { south: 0, west: 4, north: 8, east: 12 };
+export const signId = (dir) => MATERIALS.add(null, 'minecraft:standing_sign', '#a2824e',
+  { ground_sign_direction: I(dir) }, { passable: true, transparent: true, flowable: true });
+
 export const pinkPetalsId = (facing) => MATERIALS.add(null, 'minecraft:pink_petals', '#f0a8c8',
   { growth: I(3), 'minecraft:cardinal_direction': S(facing) }, { passable: true, flowable: true, transparent: true });
 

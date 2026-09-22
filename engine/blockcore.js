@@ -304,7 +304,7 @@ export function writeMcStructure(keys, ids, box, materials, opts = {}) {
   }
   const layer1 = new Int32Array(n).fill(-1);
 
-  // block entities (bed colours): keyed by the flattened layer index
+  // block entities (bed colours, sign text): keyed by the flattened layer index
   const posData = {};
   let posCount = 0;
   if (opts.blockData && opts.blockData.size) {
@@ -317,6 +317,7 @@ export function writeMcStructure(keys, ids, box, materials, opts = {}) {
       const idx = ((x - box.x0) * sy + (y - box.y0)) * sz + (z - box.z0);
       const ent = { id: N.str(d.id), isMovable: N.byte(1), x: N.int(x), y: N.int(y), z: N.int(z) };
       for (const [bk, bv] of Object.entries(d.bytes || {})) ent[bk] = N.byte(bv);
+      for (const [bk, bv] of Object.entries(d.tags || {})) ent[bk] = bv;      // typed tags (signs)
       posData[String(idx)] = N.comp({ block_entity_data: N.comp(ent) });
       posCount++;
     }

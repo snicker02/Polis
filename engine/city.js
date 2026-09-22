@@ -259,8 +259,7 @@ export function generateCity(cfgIn, onProgress) {
       if (L.bell) L.bell[1] += elevAt(L.bell[0], L.bell[2]);
       if (L.belfryBell) L.belfryBell[1] += elevAt(L.belfryBell[0], L.belfryBell[2]);
       if (L.faces) for (const f of L.faces) f.centre[1] += elevAt(f.centre[0], f.centre[2]);
-      for (const key of ['spireTop', 'lantern', 'cupolaBell']) if (L[key]) L[key][1] += elevAt(L[key][0], L[key][2]);
-      if (L.sign) { const e = elevAt(L.sign.cells[0][0], L.sign.cells[0][2]); for (const c of L.sign.cells) c[1] += e; L.sign.y0 += e; }
+      for (const key of ['spireTop', 'lantern', 'cupolaBell', 'nameSign']) if (L[key]) L[key][1] += elevAt(L[key][0], L[key][2]);
     }
     if (transit) for (const l of transit.lines) {
       const e = elevAt(l.cells[0][0], l.cells[0][2]);       // alley lines ride up with their block
