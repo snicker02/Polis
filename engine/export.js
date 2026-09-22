@@ -17,7 +17,7 @@ import { makeRng } from './rng.js';
 // Must match main.js VERSION, package.json and index.html data-version;
 // tools/validate.js fails if they drift. The app refuses to export when the
 // browser has mixed cached copies of old and new files.
-export const POLIS_VERSION = '0.3.0';
+export const POLIS_VERSION = '0.3.2';
 
 export const CHUNK = 64;          // Bedrock structure limit per horizontal axis
 export const GROUND_DROP = 2;     // base layer y=0 sits 2 below feet; surface y=1 replaces the block you stand on
@@ -197,7 +197,7 @@ function rel(v) { return v === 0 ? '~' : `~${v}`; }
 // reference). Only minecarts are still summoned; villagers and golems come
 // from mob structures, where the game's own internal ids are used.
 // Only minecarts are still summoned; every mob travels in mob structures.
-export const SUMMON_IDS = { minecart: 'minecraft:minecart' };
+export const SUMMON_IDS = { minecart: 'minecraft:minecart', boat: 'minecraft:boat' };
 const FARM_ANIMALS = ['cow', 'sheep', 'pig', 'chicken'];
 
 // build     blocks only, safe to rerun; ends by adding ticking areas
@@ -215,6 +215,9 @@ export function functionFiles(tiles, world, opts = {}) {
   const cats = spawns.filter((p) => p.type === 'cat').length;
   const pandas = spawns.filter((p) => p.type === 'panda').length;
   const carts = spawns.filter((p) => p.type === 'minecart');
+  // Boats get a function of their own and are never in populate: if Bedrock
+  // ever rejected the entity name, only that one small file would be dropped.
+  const boats = spawns.filter((p) => p.type === 'boat');
   const animals = spawns.filter((p) => FARM_ANIMALS.includes(p.type));
   const summoned = carts;
   const sumLine = (p, dx, dz) => `summon ${SUMMON_IDS[p.type]} ${rel(p.x - dx)} ${rel(p.y - GROUND_DROP)} ${rel(p.z - dz)}`;
@@ -243,6 +246,7 @@ export function functionFiles(tiles, world, opts = {}) {
     ...summoned.map((p) => sumLine(p, dx, dz)),
     ...areas.map((a) => `tickingarea remove ${a.name}`),
     'say Polis: done. Villagers take jobs from the workstations and claim beds over the next few minutes.',
+    ...(boats.length ? [`say Polis: for boats at the dock, run /function ${ns}/${dx === wb.x0 ? 'boats' : 'boats_centered'}`] : []),
   ].join('\n') + '\n';
   const files = [
     { name: `functions/${ns}/build.mcfunction`, fn: `${ns}/build`,
@@ -255,7 +259,7 @@ export function functionFiles(tiles, world, opts = {}) {
       text: populate(cx, cz, 'Polis: villagers, golems and minecarts (pairs with build_centered)') },
   ];
   // fallbacks for the summoned kinds: run near any that are missing
-  for (const [group, list, noun] of [['minecarts', carts, 'minecarts']]) {
+  for (const [group, list, noun] of [['minecarts', carts, 'minecarts'], ['boats', boats, 'boats at the dock']]) {
     if (!list.length) continue;
     const only = (dx, dz, title) => [
       `# ${title}`,

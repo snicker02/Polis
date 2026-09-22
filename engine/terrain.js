@@ -11,10 +11,11 @@
 // flat ground stays verified. The terrace is solid underneath, faced with
 // stone bricks where it meets the street.
 //
-// Staircases are cut into the sidewalk along every side of a raised block,
-// climbing parallel to the kerb (so they never stick out into the street or
-// the railway): from the street, one step per block of height, up to the
-// terrace. verifyCity then walks from the streets and checks that every
+// Staircases are cut into every side of a raised block, climbing straight in
+// from the street and facing it (0.3.1; before that they ran along the kerb,
+// side-on to anyone arriving). One step per block of height, cut into the
+// sidewalk, so they never stick out into the street or the railway. Where a
+// straight flight will not fit, the steps run along the kerb instead. verifyCity then walks from the streets and checks that every
 // door, gate and landmark can be reached.
 
 import { MAT, MATERIALS, stairId, WEIRDO } from './materials.js';
@@ -76,45 +77,72 @@ export function cutStairs(world, plan, hills, G, avoid) {
   const { W, D, use } = plan;
   const blocked = (x, y, z) => { const id = world.get(x, y, z); return id !== -1 && !MATERIALS.isPassable(id); };
   const nearAvoid = (x, z) => avoid.some(([ax, az]) => Math.abs(ax - x) <= 2 && Math.abs(az - z) <= 2);
+  const UP = (dx, dz) => (dx === 1 ? WEIRDO.east : dx === -1 ? WEIRDO.west : dz === 1 ? WEIRDO.south : WEIRDO.north);
   const runs = [];
   for (const b of hills.blocks) {
     const e = b.e;
     if (!e) continue;
+    const inBlock = (x, z) => x >= b.x0 && x <= b.x1 && z >= b.z0 && z <= b.z1;
+    const claimed = new Set();                    // steps and landings already used on this block
     // each side: the cells along it, the direction along it, the way out to the street
     const sides = [
-      { cells: (i) => [b.x0 + i, b.z0], len: b.x1 - b.x0 + 1, along: [1, 0], out: [0, -1], up: WEIRDO.east },
-      { cells: (i) => [b.x0 + i, b.z1], len: b.x1 - b.x0 + 1, along: [1, 0], out: [0, 1], up: WEIRDO.east },
-      { cells: (i) => [b.x0, b.z0 + i], len: b.z1 - b.z0 + 1, along: [0, 1], out: [-1, 0], up: WEIRDO.south },
-      { cells: (i) => [b.x1, b.z0 + i], len: b.z1 - b.z0 + 1, along: [0, 1], out: [1, 0], up: WEIRDO.south },
+      { cells: (i) => [b.x0 + i, b.z0], len: b.x1 - b.x0 + 1, along: [1, 0], out: [0, -1] },
+      { cells: (i) => [b.x0 + i, b.z1], len: b.x1 - b.x0 + 1, along: [1, 0], out: [0, 1] },
+      { cells: (i) => [b.x0, b.z0 + i], len: b.z1 - b.z0 + 1, along: [0, 1], out: [-1, 0] },
+      { cells: (i) => [b.x1, b.z0 + i], len: b.z1 - b.z0 + 1, along: [0, 1], out: [1, 0] },
     ];
+    // the street cell a staircase starts from: solid ground, room to stand
+    const streetOk = (x, z) => x >= 0 && z >= 0 && x < W && z < D && use[z * W + x] === 1 /* ROAD */ &&
+      blocked(x, G, z) && !blocked(x, G + 1, z) && !blocked(x, G + 2, z) && !blocked(x, G + 3, z);
+    // a cell a step (or the landing) can take: in the block, not road, clear above the terrace, away from doors
+    const cellOk = (x, z) => inBlock(x, z) && use[z * W + x] !== 1 && !nearAvoid(x, z) && !claimed.has(x + ',' + z) &&
+      [1, 2, 3].every((h) => !world.has(x, G + e + h, z));
+    // steps: [[x, z], ...] from the street up; dir: the way they climb
+    const cut = (steps, dir, kind, out) => {
+      // reserve the steps, the landing above them, and a block either side of the
+      // flight, so no other staircase is cut across this one
+      const last = steps[steps.length - 1];
+      const landing = [last[0] + dir[0], last[1] + dir[1]];
+      for (const [x, z] of steps.concat([landing]))
+        for (const [ax, az] of [[0, 0], [dir[1], dir[0]], [-dir[1], -dir[0]]]) claimed.add((x + ax) + ',' + (z + az));
+      steps.forEach(([x, z], i) => {
+        for (let y = G + 1 + i; y <= G + e + 3; y++) world.clear(x, y, z);
+        for (let y = 1; y <= G + i; y++) if (!world.has(x, y, z)) world.set(x, y, z, MAT.BASE);
+        world.set(x, G + 1 + i, z, stairId('stonebrick', UP(dir[0], dir[1])));
+      });
+      runs.push({ block: b, cells: steps, dir, e, kind, out });
+    };
     for (const sd of sides) {
-      const fits = (i0) => {
-        if (i0 < 2 || i0 + e + 1 > sd.len - 3) return false;        // clear of the corners
-        for (let i = -1; i <= e; i++) {
-          const [x, z] = sd.cells(i0 + i);
-          if (use[z * W + x] !== USE.SIDEWALK || nearAvoid(x, z)) return false;
-          // open above the terrace along the run (nothing standing on the sidewalk)
-          for (let y = G + e + 1; y <= G + e + 3; y++) if (world.has(x, y, z)) return false;
-        }
-        // the street cell outside the bottom step: solid ground, room to stand
+      const inward = [-sd.out[0], -sd.out[1]];
+      // 1) straight in from the street, facing it: one step per block of height,
+      //    cut into the sidewalk (and the yard behind it for a 3-high terrace)
+      const straight = (i0) => {
+        if (i0 < 2 || i0 > sd.len - 3) return false;
         const [x0, z0] = sd.cells(i0);
-        const ox = x0 + sd.out[0], oz = z0 + sd.out[1];
-        if (ox < 0 || oz < 0 || ox >= W || oz >= D || use[oz * W + ox] !== USE.ROAD) return false;
-        if (!blocked(ox, G, oz) || blocked(ox, G + 1, oz) || blocked(ox, G + 2, oz) || blocked(ox, G + 3, oz)) return false;
+        if (!streetOk(x0 + sd.out[0], z0 + sd.out[1])) return false;
+        const steps = [], landing = [x0 + inward[0] * e, z0 + inward[1] * e];
+        for (let i = 0; i < e; i++) steps.push([x0 + inward[0] * i, z0 + inward[1] * i]);
+        if (!steps.every(([x, z]) => cellOk(x, z)) || !cellOk(...landing)) return false;
+        // the landing must be terrace you can stand on
+        if (!blocked(landing[0], G + e, landing[1])) return false;
+        cut(steps, inward, 'straight', sd.out);
         return true;
       };
-      const cut = (i0) => {
-        for (let i = 0; i < e; i++) {
+      // 2) along the kerb, where a straight flight will not fit
+      const along = (i0) => {
+        if (i0 < 2 || i0 + e + 1 > sd.len - 3) return false;
+        for (let i = -1; i <= e; i++) {
           const [x, z] = sd.cells(i0 + i);
-          for (let y = G + 1 + i; y <= G + e + 3; y++) world.clear(x, y, z);
-          for (let y = 1; y <= G + i; y++) if (!world.has(x, y, z)) world.set(x, y, z, MAT.BASE);
-          world.set(x, G + 1 + i, z, stairId('stonebrick', sd.up));
+          if (use[z * W + x] !== USE.SIDEWALK || !cellOk(x, z)) return false;
         }
-        runs.push({ block: b, cells: Array.from({ length: e }, (_, i) => sd.cells(i0 + i)), out: sd.out, e });
+        const [x0, z0] = sd.cells(i0);
+        if (!streetOk(x0 + sd.out[0], z0 + sd.out[1])) return false;
+        cut(Array.from({ length: e }, (_, i) => sd.cells(i0 + i)), sd.along, 'along', sd.out);
+        return true;
       };
       let placed = 0;
-      for (let i0 = 3; i0 < sd.len; i0 += 10) if (fits(i0)) { cut(i0); placed++; }
-      if (!placed) for (let i0 = 2; i0 < sd.len; i0++) if (fits(i0)) { cut(i0); break; }
+      for (let i0 = 3; i0 < sd.len; i0 += 10) if (straight(i0) || along(i0)) placed++;
+      if (!placed) for (let i0 = 2; i0 < sd.len; i0++) if (straight(i0) || along(i0)) break;
     }
   }
   return runs;

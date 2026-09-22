@@ -18,7 +18,7 @@
 // rooms stays part of the corridor. Nothing here touches the stair core or
 // the ring round it, and walls stop at the underside of the floor above.
 
-import { MAT, doorId, DIR } from './materials.js';
+import { MAT, doorId, DIR, glazedId, GLAZE_COLORS } from './materials.js';
 
 // What each floor is for.
 export function floorUse(style, k, floors) {
@@ -38,7 +38,7 @@ export function planRooms(rec, k, rng) {
   const uLo = alongX ? I.x0 : I.z0, uHi = alongX ? I.x1 : I.z1;
   const vLo = alongX ? I.z0 : I.x0, vHi = alongX ? I.z1 : I.x1;
   const xz = (u, v) => (alongX ? [u, v] : [v, u]);
-  const use = floorUse(rec.style, k, rec.floors);
+  const use = rec.useOverride ? rec.useOverride(k) : floorUse(rec.style, k, rec.floors);
 
   // corridor band across v
   let bLo, bHi;
@@ -90,6 +90,7 @@ export function planRooms(rec, k, rng) {
     const types = spans.map((_, i) => {
       if (use === 'apartments') return (i % 2 === 0 ? (i + 1 < spans.length ? 'kitchen' : 'studio') : 'bedroom');
       if (use === 'shops') return 'shop';
+      if (use === 'classrooms') return 'classroom';
       if (use === 'offices') return 'office';
       if (use === 'bedrooms') return 'bedroom';
       if (use === 'home') return i === 0 ? 'kitchen' : 'living';
@@ -143,7 +144,7 @@ export function planRooms(rec, k, rng) {
         const [x0, z0] = xz(u0, vLo), [x1, z1] = xz(u1, vHi);
         return { type, doors: [[dx, dz]], x0: Math.min(x0, x1), x1: Math.max(x0, x1), z0: Math.min(z0, z1), z1: Math.max(z0, z1) };
       };
-      const t1 = use === 'shops' ? 'shop' : use === 'offices' ? 'office' : use === 'bedrooms' ? 'bedroom' : use === 'apartments' ? 'studio' : 'kitchen';
+      const t1 = use === 'shops' ? 'shop' : use === 'classrooms' ? 'classroom' : use === 'offices' ? 'office' : use === 'bedrooms' ? 'bedroom' : use === 'apartments' ? 'studio' : 'kitchen';
       rooms.push(mk(e.u0, e.u1, t1));
       if (e.second) rooms.push(mk(e.second.u0, e.second.u1, use === 'shops' ? 'shop' : 'bedroom'));
     }
@@ -170,4 +171,40 @@ export function buildRooms(world, rec, k, plan, theme, put) {
     const cx = Math.floor((rm.x0 + rm.x1) / 2), cz = Math.floor((rm.z0 + rm.z1) / 2);
     if (!world.has(cx, top, cz)) put(cx, top, cz, MAT.LANTERN);
   }
+  plan.art = hangArt(world, rec, k, plan, put);
+}
+
+// Art on the inside walls: 2x2 panels of glazed terracotta at eye level, four
+// tiles of one colour each turned a quarter from the last, so they make a
+// motif. Inside walls are one block thick, so both rooms see the panel.
+// One panel per straight run of wall at least four long, clear of doors.
+function hangArt(world, rec, k, plan, put) {
+  const sy = rec.floorYs[k], top = sy + rec.pitch - 1;
+  if (top < sy + 3) return 0;
+  const lo = sy + 2, hi = sy + 3;
+  const wallSet = new Set(plan.walls.map(([x, z]) => x + ',' + z));
+  const doorSet = new Set(plan.doors.map((d) => d.x + ',' + d.z));
+  const nearDoor = (x, z) => plan.doors.some((d) => Math.abs(d.x - x) + Math.abs(d.z - z) <= 1);
+  const used = new Set();
+  let n = 0, pick = (rec.x0 * 7 + rec.z0 * 13 + k * 5) >>> 0;
+  for (const [x, z] of plan.walls) {
+    for (const [ax, az] of [[1, 0], [0, 1]]) {
+      // four wall cells in a line starting here, none a door or next to one
+      const run = [0, 1, 2, 3].map((i) => [x + ax * i, z + az * i]);
+      if (!run.every(([a, b]) => wallSet.has(a + ',' + b) && !doorSet.has(a + ',' + b) && !nearDoor(a, b) && !used.has(a + ',' + b))) continue;
+      const [p1, p2] = [run[1], run[2]];
+      const color = GLAZE_COLORS[pick++ % GLAZE_COLORS.length];
+      // clockwise round the 2x2: top-left, top-right, bottom-right, bottom-left
+      const faces = [2, 5, 3, 4];
+      put(p1[0], hi, p1[1], glazedId(color, faces[0]));
+      put(p2[0], hi, p2[1], glazedId(color, faces[1]));
+      put(p2[0], lo, p2[1], glazedId(color, faces[2]));
+      put(p1[0], lo, p1[1], glazedId(color, faces[3]));
+      for (const c of run) used.add(c[0] + ',' + c[1]);
+      // leave the next few cells bare so panels do not run into each other
+      for (let i = 4; i < 7; i++) used.add((x + ax * i) + ',' + (z + az * i));
+      n++;
+    }
+  }
+  return n;
 }

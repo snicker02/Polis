@@ -172,6 +172,26 @@ Object.assign(MAT, {
   CHERRY_FENCE: A('CHERRY_FENCE', 'minecraft:cherry_fence', '#e3b1a8'),
   ACACIA_FENCE: A('ACACIA_FENCE', 'minecraft:acacia_fence', '#a85a32'),
 });
+// ---- art, water, landmarks (0.3.2) ------------------------------------------
+// Glazed terracotta tiles: four of one colour, each turned a quarter from the
+// last, make a 2x2 motif. (Light grey is "silver" in Bedrock.)
+export const GLAZE_COLORS = ['blue', 'red', 'yellow', 'cyan', 'orange', 'purple', 'lime', 'magenta',
+  'white', 'pink', 'black', 'green', 'brown', 'light_blue', 'gray', 'silver'];
+export const glazedId = (color, facing) => MATERIALS.add(null, `minecraft:${color}_glazed_terracotta`, '#b87a4a',
+  { facing_direction: I(facing) });
+Object.assign(MAT, {
+  SG_RED:     A('SG_RED', 'minecraft:red_stained_glass', '#a33a3a', {}, { transparent: true }),
+  SG_BLUE:    A('SG_BLUE', 'minecraft:blue_stained_glass', '#3a4ea3', {}, { transparent: true }),
+  SG_YELLOW:  A('SG_YELLOW', 'minecraft:yellow_stained_glass', '#d8c23a', {}, { transparent: true }),
+  SG_PURPLE:  A('SG_PURPLE', 'minecraft:purple_stained_glass', '#7a3aa3', {}, { transparent: true }),
+  SG_GREEN:   A('SG_GREEN', 'minecraft:green_stained_glass', '#4f7a2e', {}, { transparent: true }),
+  C_RED2:     A('C_RED2', 'minecraft:red_concrete', '#8e2121'),
+  LIGHT_ROD:  A('LIGHT_ROD', 'minecraft:lightning_rod', '#c4703a', { facing_direction: I(1) }),
+  CANAL_BED:  A('CANAL_BED', 'minecraft:stone', '#7d7d7d', {}, { role: 'canalbed' }),
+  DOCK:       A('DOCK', 'minecraft:spruce_planks', '#7a5c37', {}, { role: 'dock' }),
+});
+export const STAINED = [MAT.SG_RED, MAT.SG_BLUE, MAT.SG_YELLOW, MAT.SG_PURPLE, MAT.SG_GREEN];
+
 export const pinkPetalsId = (facing) => MATERIALS.add(null, 'minecraft:pink_petals', '#f0a8c8',
   { growth: I(3), 'minecraft:cardinal_direction': S(facing) }, { passable: true, flowable: true, transparent: true });
 

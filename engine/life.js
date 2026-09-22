@@ -180,6 +180,8 @@ const ROOMS = {
   hall:      ['plant', 'shelf', 'lamp', 'plant', 'chest', 'plant', 'shelf'],
   living:    ['plant', 'shelf', 'lamp', 'rug', 'chest', 'plant', 'shelf', 'lamp'],
   studio:    ['bed', 'craft', 'furnace', 'plant', 'chest', 'lamp', 'shelf'],
+  classroom: ['lectern', 'shelf', 'plant', 'shelf', 'chest', 'lamp', 'shelf', 'plant'],
+  chapel:    ['plant', 'lamp', 'plant', 'plant'],
 };
 // in rooms (0.3.0) kitchens cook and bedrooms sleep
 ROOMS.kitchen = ['craft', 'furnace', 'smoker', 'barrel', 'chest', 'plant', 'lamp', 'shelf'];
@@ -313,7 +315,8 @@ export function furnish(world, rec, rng, opts = {}) {
           ring = ring.filter((c) => (thinZ ? c[1] : c[0]) !== aisle);
         }
         // the piece that makes the room what it is goes in first
-        const must = rm.type === 'bedroom' || rm.type === 'studio' ? 'bed' : rm.type === 'kitchen' ? 'craft' : null;
+        const must = rm.type === 'bedroom' || rm.type === 'studio' ? 'bed' : rm.type === 'kitchen' ? 'craft'
+          : rm.type === 'classroom' ? 'lectern' : null;
         if (must && !place(ring, [must], free, sy, k, true) && must === 'bed') rm.type = 'living';   // too cramped for a bed: a sitting room
         place(ring, ROOMS[rm.type] || ROOMS.office, free, sy, k);
       }

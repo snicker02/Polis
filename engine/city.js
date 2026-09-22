@@ -7,7 +7,8 @@ import { MAT, THEMES } from './materials.js';
 import { makeBuilding, OUTWARD } from './building.js';
 import { doorId, DIR, MATERIALS } from './materials.js';
 import { farm, pond, scatterFlowers, furnish, bedSpawns, placeBell, golemSpawns, ranch, pandaGrove, catSpawns, RANCH_ANIMALS } from './life.js';
-import { layTransit, trimOverRails } from './transit.js';
+import { layTransit, trimOverRails, edgeDistance } from './transit.js';
+import { planCanal, buildCanal, USE_CANAL } from './water.js';
 import { chooseLandmarks, buildLandmark } from './landmarks.js';
 import { planHills, liftBlocks, cutStairs, shiftBuilding, walkCity } from './terrain.js';
 import { styleOf, remapTable } from './styles.js';
@@ -39,6 +40,7 @@ export const DEFAULTS = {
   cityStyle: 'modern',       // modern | desert | snowy | cherry | medieval
   outline: 'organic',        // 'organic' (lobed outline along the street grid) | 'square'
   hills: 2,                  // city blocks raised 0..hills blocks on gentle terraces, with steps
+  canal: true,               // a canal through the city, with bridges and a dock
   landmarks: true,           // town hall, clock tower, library, market square near downtown
   transit: 'roads',
   wallHeight: 3,             // perimeter wall, blocks above ground (0 = none)          // 'roads' | 'rails' (railway instead of roads) | 'trams' (rails down the roads)
@@ -73,6 +75,8 @@ export function generateCity(cfgIn, onProgress) {
   const W = plan.W, D = plan.D;
   // organic cities carry their outline, so the export leaves the land outside it alone
   if (cfg.outline === 'organic') world.cityMask = { W, D, data: plan.mask };
+  // the canal takes over one long street before anything is laid on it
+  const canal = planCanal(plan, cfg, edgeDistance(plan));
   const at = (x, z) => z * W + x;
 
   // ---- base + surface ------------------------------------------------------
@@ -120,9 +124,13 @@ export function generateCity(cfgIn, onProgress) {
     }
   }
 
+  // ---- canal -----------------------------------------------------------------
+  if (canal) buildCanal(world, plan, canal, GROUND);
+
   // ---- railways ------------------------------------------------------------
   const transit = layTransit(world, plan, cfg.transit, GROUND);
-  chooseLandmarks(plan, cfg);
+  const hills = planHills(plan, cfg);                  // needed early: the castle goes on the highest hill
+  chooseLandmarks(plan, cfg, hills, canal);
   const landmarks = [];
 
   // ---- lots ----------------------------------------------------------------
@@ -238,7 +246,6 @@ export function generateCity(cfgIn, onProgress) {
   }
 
   // ---- hills: lift the blocks onto their terraces, then cut the steps -------
-  const hills = planHills(plan, cfg);
   const elevAt = (x, z) => (x >= 0 && z >= 0 && x < W && z < D ? hills.elev[z * W + x] : 0);
   let stairRuns = [];
   if (hills.H) {
@@ -250,6 +257,7 @@ export function generateCity(cfgIn, onProgress) {
       if (L.bell) L.bell[1] += elevAt(L.bell[0], L.bell[2]);
       if (L.belfryBell) L.belfryBell[1] += elevAt(L.belfryBell[0], L.belfryBell[2]);
       if (L.faces) for (const f of L.faces) f.centre[1] += elevAt(f.centre[0], f.centre[2]);
+      for (const key of ['spireTop', 'lantern']) if (L[key]) L[key][1] += elevAt(L[key][0], L[key][2]);
     }
     if (transit) for (const l of transit.lines) {
       const e = elevAt(l.cells[0][0], l.cells[0][2]);       // alley lines ride up with their block
@@ -282,6 +290,7 @@ export function generateCity(cfgIn, onProgress) {
   for (const rch of ranches) for (const a of rch.animals) spawns.push(a);
 
   if (transit) spawns = spawns.concat(transit.carts);
+  if (canal && canal.dock) spawns = spawns.concat(canal.dock.boats);
 
   // ---- city style: restyle the role materials, then snow -----------------------
   applyStyle(world, plan, STYLE, (x, z) => GROUND + elevAt(x, z));
@@ -291,8 +300,8 @@ export function generateCity(cfgIn, onProgress) {
   const unreached = buildings.filter((b) => !reached.has(`${b.outside[0]},${b.outside[1]},${b.outside[2]}`));
   const reach = { total: buildings.length, reached: buildings.length - unreached.length, unreached };
 
-  const stats = summarise(world, plan, buildings, cfg, { farms, beds, spawns, bell, transit, wall, ranches, landmarks, hills, stairRuns, reach });
-  return { world, plan, buildings, cfg, stats, farms, ranches, spawns, bell, transit, wall, landmarks,
+  const stats = summarise(world, plan, buildings, cfg, { farms, beds, spawns, bell, transit, wall, ranches, landmarks, hills, stairRuns, reach, canal });
+  return { world, plan, buildings, cfg, stats, farms, ranches, spawns, bell, transit, wall, landmarks, canal,
     hills, stairRuns, reach, groundAt: (x, z) => GROUND + elevAt(x, z) };
 }
 
@@ -624,6 +633,9 @@ function summarise(world, plan, buildings, cfg, life = {}) {
     railLoop: !!(life.transit && life.transit.stats.loop),
     ranches: (life.ranches || []).length,
     landmarks: (life.landmarks || []).map((l) => l.kind),
+    canal: life.canal ? `${life.canal.u1 - life.canal.u0 + 1} long · ${life.canal.bridges} bridges` : '',
+    dock: !!(life.canal && life.canal.dock),
+    art: buildings.reduce((a, b) => a + (b.roomPlans || []).reduce((c, p) => c + ((p && p.art) || 0), 0), 0),
     hillBlocks: life.hills ? life.hills.blocks.filter((b) => b.e > 0).length : 0,
     hillMax: life.hills ? Math.max(0, ...life.hills.blocks.map((b) => b.e)) : 0,
     staircases: (life.stairRuns || []).length,

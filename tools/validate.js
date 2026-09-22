@@ -408,6 +408,11 @@ section('2c. life');
     const solid = (x, y, z) => { const id = w.get(x, y, z); return id !== -1 && !MATERIALS.isPassable(id); };
     for (const p of r.spawns) {
       if (p.type === 'minecart') continue;                       // checked with the railways
+      if (p.type === 'boat') {                                    // on the water, open air above
+        const n = w.get(p.x, p.y, p.z), a1 = w.get(p.x, p.y + 1, p.z);
+        if (n < 0 || MATERIALS.def(n).block !== 'minecraft:water' || a1 !== -1) badSpawn++;
+        continue;
+      }
       const tall = p.type === 'golem' ? 3 : 2;
       let room = solid(p.x, p.y - 1, p.z);
       for (let h = 0; h < tall; h++) if (solid(p.x, p.y + h, p.z)) room = false;
@@ -892,6 +897,8 @@ section('2i. outline and hills');
 {
   let cities = 0, irregular = 0, badPiece = 0, outside = 0, raisedNoStairs = 0, unreached = 0, total = 0;
   let raised = 0, stairs = 0, streetsNotLevel = 0, hollow = 0, maxE = 0;
+  let badFacing = 0, straightRuns = 0, stairsAll = 0, badStraight = 0;
+  const WD = { '1,0': 0, '-1,0': 1, '0,1': 2, '0,-1': 3 };      // weirdo_direction: east, west, south, north
   for (const [size, seed, transit] of [[160, 12345, 'roads'], [192, 1, 'rails'], [128, 2, 'trams'], [224, 3, 'rails'],
                                          [96, 4, 'roads'], [256, 5, 'rails'], [160, 6, 'trams'], [192, 7, 'roads']]) {
     const r = generateCity({ ...DEFAULTS, size, seed, transit, hills: 3 });
@@ -937,6 +944,18 @@ section('2i. outline and hills');
     for (let z = 0; z < D; z++) for (let x = 0; x < W; x++)
       if (use[z * W + x] === USE.ROAD && r.groundAt(x, z) !== 1) streetsNotLevel++;
     total += r.reach.total; unreached += r.reach.unreached.length;
+    for (const run of r.stairRuns) {
+      stairsAll++;
+      if (run.kind === 'straight') {
+        straightRuns++;
+        if (run.dir[0] !== -run.out[0] || run.dir[1] !== -run.out[1]) badStraight++;
+      }
+      run.cells.forEach(([x, z], i) => {
+        const id = w.get(x, 2 + i, z);
+        const d = id < 0 ? null : MATERIALS.def(id);
+        if (!d || !/_stairs$/.test(d.block) || d.states.weirdo_direction.value !== WD[run.dir.join()]) badFacing++;
+      });
+    }
   }
   check('outline: every organic city is irregular, not the full rectangle', irregular === cities, `${irregular}/${cities}`);
   check('outline: every city is one connected piece', badPiece === 0, `${badPiece} split`);
@@ -945,6 +964,9 @@ section('2i. outline and hills');
   check('hills: every raised block has a staircase from the street', raisedNoStairs === 0, `${raisedNoStairs} without`);
   check('hills: every building door can be walked to from the streets', unreached === 0, `${unreached}/${total} unreachable`);
   check('hills: streets stay level (railway untouched)', streetsNotLevel === 0, `${streetsNotLevel}`);
+  check('hills: every step faces the way its staircase climbs', badFacing === 0, `${badFacing} wrong`);
+  check('hills: most staircases climb straight in from the street, facing it', straightRuns >= stairsAll * 0.75 && badStraight === 0,
+    `${straightRuns}/${stairsAll} straight, ${badStraight} not facing the street`);
   check('hills: terraces are solid underneath', hollow === 0, `${hollow} gaps`);
   note(`${cities} cities · ${raised} raised blocks · ${stairs} staircases · ${total - unreached}/${total} doors reachable from the streets`);
 
@@ -1041,7 +1063,7 @@ section('2k. rooms');
     const r = generateCity({ ...DEFAULTS, size, seed, cityStyle: st });
     const w = r.world;
     for (const b of r.buildings) {
-      if (b.landmark) { if (b.roomPlans && b.roomPlans.some(Boolean)) landmarkRooms++; continue; }
+      if (b.landmark && b.landmark !== 'school') { if (b.roomPlans && b.roomPlans.some(Boolean)) landmarkRooms++; continue; }
       buildings++;
       if (!b.roomPlans || !b.roomPlans.some(Boolean)) continue;
       withRooms++;
@@ -1112,8 +1134,123 @@ section('2k. rooms');
   check('rooms: every bedroom and studio has a bed', noBed === 0, `${noBed} without`);
   check('rooms: every kitchen has a crafting table, furnace or smoker', noKitchen === 0, `${noKitchen} without`);
   check('rooms: every room has a ceiling light', lit === rooms, `${lit}/${rooms}`);
-  check('rooms: landmarks keep their open halls', landmarkRooms === 0);
+  check('rooms: landmarks keep their open halls (the school has classrooms)', landmarkRooms === 0);
   note(`${withRooms}/${buildings} buildings divided · ${rooms} rooms: ` + Object.entries(types).map(([t, n]) => `${n} ${t}`).join(', '));
+}
+
+// ===========================================================================
+// 2l. canal, dock, art, new landmarks
+// ===========================================================================
+section('2l. canal, art, new landmarks');
+{
+  const name = (w, x, y, z) => { const id = w.get(x, y, z); return id < 0 ? null : MATERIALS.def(id).block; };
+  const { edgeDistance } = await import('../engine/transit.js');
+  let canals = 0, badOpen = 0, badBridge = 0, nearWall = 0, bridges = 0, rails = 0, docks = 0, dockUnreached = 0, badDock = 0;
+  let panels = 0, badPanel = 0, complete = 0, cities = 0;
+  let pews = 0, spires = 0, bells = 0, classrooms = 0, lecterns = 0, bands = 0, lanterns = 0, lhFar = 0, castles = 0, notHighest = 0, merlons = 0, turrets = 0;
+  for (const [size, seed, st, transit] of [[160, 12345, 'modern', 'roads'], [192, 1, 'medieval', 'rails'], [224, 3, 'desert', 'trams'], [256, 5, 'cherry', 'roads'], [128, 2, 'snowy', 'rails']]) {
+    const r = generateCity({ ...DEFAULTS, size, seed, cityStyle: st, transit });
+    const w = r.world, { W, D, use } = r.plan, G = 1;
+    cities++;
+    const kinds = r.landmarks.map((l) => l.kind);
+    if (['townhall', 'clocktower', 'library', 'market', 'church', 'school', 'lighthouse', 'castle'].every((k) => kinds.includes(k))) complete++;
+    // ---- canal
+    const c = r.canal;
+    if (c) {
+      canals++;
+      const O = edgeDistance(r.plan);
+      for (let u = c.u0; u <= c.u1; u++) for (let a = c.ch0; a <= c.ch1; a++) {
+        const [x, z] = c.cell(u, a);
+        if (O[z * W + x] < 4) nearWall++;
+        if (name(w, x, -3, z) !== 'minecraft:water' || name(w, x, -2, z) !== 'minecraft:water') badOpen++;
+        if (w.has(x, -1, z) || w.has(x, 0, z)) (use[z * W + x] === USE.ROAD ? badBridge++ : badOpen++);   // two clear blocks over the water
+        if (use[z * W + x] === 8) { for (let y = G; y <= G + 2; y++) if (w.has(x, y, z)) badOpen++; }       // open to the sky
+        else if (use[z * W + x] === USE.ROAD) { if (!w.has(x, G, z)) badBridge++; }                          // a deck to walk on
+      }
+      bridges += c.bridges;
+      if (c.railed) for (let u = c.u0; u <= c.u1; u++) { const [x, z] = c.cell(u, c.ch0 - 1); if (name(w, x, G + 1, z) === 'minecraft:oak_fence') rails++; }
+      if (c.dock) {
+        docks++;
+        const d = c.dock;
+        if (!d.steps.every(([x, y, z]) => /_stairs$/.test(name(w, x, y, z) || '')) || d.steps.map((s2) => s2[1]).join() !== '1,0,-1') badDock++;
+        for (const [x, y, z] of d.landing) if (!w.has(x, y - 1, z) || w.has(x, y, z) || w.has(x, y + 1, z)) badDock++;
+        const walked = walkCity(w, r.plan, 1, r.hills.H + 4, true);
+        // the city walk stays at street level and above; follow the dock steps down by hand
+        const [sx, sy, sz] = d.steps[0];
+        const top = walked.has(`${sx},${sy + 1},${sz}`) || [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dz]) => walked.has(`${sx + dx},${G + 1},${sz + dz}`));
+        if (!top) dockUnreached++;
+        for (const b of d.boats) if (name(w, b.x, b.y, b.z) !== 'minecraft:water' || w.has(b.x, b.y + 1, b.z)) badDock++;
+      }
+    }
+    // ---- art: every panel is four tiles of one glaze, each facing a different way
+    for (const b of r.buildings) for (const plan of b.roomPlans || []) if (plan && plan.art) panels += plan.art;
+    const seenTiles = new Set();
+    w.forEach((x, y, z, id) => {
+      const n = MATERIALS.def(id).block;
+      if (!/_glazed_terracotta$/.test(n) || seenTiles.has(`${x},${y},${z}`)) return;
+      // find its 2x2 group (in x or z) and check it
+      for (const [ax, az] of [[1, 0], [0, 1]]) {
+        const cells = [[x, y, z], [x + ax, y, z + az], [x, y - 1, z], [x + ax, y - 1, z + az]];
+        const names = cells.map(([a, b2, c2]) => name(w, a, b2, c2));
+        if (names.every((q) => q === n)) {
+          const facings = new Set(cells.map(([a, b2, c2]) => MATERIALS.def(w.get(a, b2, c2)).states.facing_direction.value));
+          if (facings.size !== 4) badPanel++;
+          for (const c2 of cells) seenTiles.add(c2.join());
+          return;
+        }
+      }
+    });
+    // ---- new landmarks
+    for (const L of r.landmarks) {
+      if (L.kind === 'church') {
+        pews += L.pews;
+        if (name(w, ...L.spireTop) === 'minecraft:gold_block') spires++;
+        if (name(w, ...L.belfryBell) === 'minecraft:bell') bells++;
+      } else if (L.kind === 'school') {
+        for (const plan of L.rec.roomPlans || []) if (plan) for (const rm of plan.rooms) if (rm.type === 'classroom') {
+          classrooms++;
+          const y = L.rec.floorYs[L.rec.roomPlans.indexOf(plan)] + 1;
+          let lec = false;
+          for (let z = rm.z0; z <= rm.z1; z++) for (let x = rm.x0; x <= rm.x1; x++) if (name(w, x, y, z) === 'minecraft:lectern') lec = true;
+          if (lec) lecterns++;
+        }
+      } else if (L.kind === 'lighthouse') {
+        if (L.red > 0) bands++;
+        const [lx, ly, lz] = L.lantern;
+        if (name(w, lx, ly, lz) === 'minecraft:glowstone' && name(w, lx + 3, ly, lz) === 'minecraft:glass') lanterns++;
+        if (c) {
+          let near = false;
+          for (let u = c.u0; u <= c.u1; u++) { const [x, z] = c.cell(u, c.ch0); if (Math.max(0, Math.abs(x - (L.lot.x0 + L.lot.x1) / 2) - (L.lot.x1 - L.lot.x0) / 2) + Math.max(0, Math.abs(z - (L.lot.z0 + L.lot.z1) / 2) - (L.lot.z1 - L.lot.z0) / 2) <= 8) near = true; }
+          if (!near) lhFar++;
+        }
+      } else if (L.kind === 'castle') {
+        castles++;
+        merlons += L.merlons; turrets += L.turrets.length;
+        // on the highest hill among the lots it could have had
+        const e = (l) => r.hills.elev[Math.round((l.z0 + l.z1) / 2) * W + Math.round((l.x0 + l.x1) / 2)];
+        const others = r.plan.lots.filter((l) => l.kind === USE.LOT && (!l.landmark || l.landmark === 'castle') &&
+          Math.min(l.x1 - l.x0 + 1, l.z1 - l.z0 + 1) >= 13);
+        if (e(L.lot) < Math.max(...others.map(e))) notHighest++;
+      }
+    }
+    const v = verifyAll(w, r.buildings);
+    check(`${st} ${size}/${seed}: every floor of every building (landmarks too) reachable`, v.ok === v.total && v.floorsReached === v.floorsChecked);
+    check(`${st} ${size}/${seed}: every door reachable from the streets`, r.reach.unreached.length === 0);
+  }
+  check('canal: in every test city', canals === cities, `${canals}/${cities}`);
+  check('canal: water two deep, open to the sky, two clear blocks above it', badOpen === 0, `${badOpen}`);
+  check('canal: every crossing street carries over on a bridge deck, two blocks above the water', badBridge === 0 && bridges > 0, `${badBridge} bad, ${bridges} bridges`);
+  check('canal: kept well inside the wall', nearWall === 0, `${nearWall}`);
+  check('canal: railings along the banks where the street is wide enough', rails > 0, String(rails));
+  check('dock: in every canal, three steps down to a landing at the water', docks === canals && badDock === 0, `${docks} docks, ${badDock} problems`);
+  check('dock: reached from the streets', dockUnreached === 0);
+  check('art: panels on the inside walls, each four tiles of one glaze facing four ways', panels > 0 && badPanel === 0, `${panels} panels, ${badPanel} bad`);
+  check('landmarks: all eight in every test city', complete === cities, `${complete}/${cities}`);
+  check('church: pews, a gold-topped spire and a bell in the tower', pews > 0 && spires === cities && bells === cities, `${pews} pews, ${spires} spires, ${bells} bells`);
+  check('school: classrooms, each with a lectern', classrooms > 0 && lecterns === classrooms, `${lecterns}/${classrooms}`);
+  check('lighthouse: red bands, a glass lantern room with a light, beside the canal', bands === cities && lanterns === cities && lhFar === 0, `${bands} banded, ${lanterns} lit, ${lhFar} far from the water`);
+  check('castle: on the highest hill, crenellated, four turrets', castles === cities && notHighest === 0 && merlons > 0 && turrets === castles * 4, `${notHighest} not on the highest hill`);
+  note(`${canals} canals · ${bridges} bridges · ${docks} docks · ${panels} art panels · ${pews} pews · ${classrooms} classrooms`);
 }
 
 // ===========================================================================
@@ -1665,7 +1802,7 @@ section('6e. versions');
 
   // every command in every function is one of the three forms we emit
   const FORMS = [/^structure load [a-z0-9_]+:[a-z0-9_]+ ~-?\d* ~-?\d* ~-?\d*$/,
-    /^summon minecraft:minecart ~-?\d* ~-?\d* ~-?\d*$/, /^say [^\n]+$/,
+    /^summon minecraft:(minecart|boat) ~-?\d* ~-?\d* ~-?\d*$/, /^say [^\n]+$/,
     /^tickingarea add ~-?\d* ~-?\d* ~-?\d* ~-?\d* ~-?\d* ~-?\d* [a-z0-9_]+$/, /^tickingarea remove [a-z0-9_]+$/];
   let badCmd = null;
   for (const f of out.functions) for (const l of f.text.split('\n')) {

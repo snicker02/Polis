@@ -1,4 +1,4 @@
-# Polis v0.3.0
+# Polis v0.3.2
 
 A procedural city generator that exports to **Minecraft Bedrock**. Plans a
 street grid, subdivides it into lots, raises buildings with real interiors —
@@ -145,6 +145,12 @@ After furnishing, every room is walked to from the front door (stepping up
 only onto stairs); if any room cannot be reached, the building keeps an open
 plan instead.
 
+**Art.** The inside walls carry 2x2 panels of glazed terracotta at eye level —
+four tiles of one colour, each turned a quarter from the last, so they form a
+motif. Walls are one block thick, so both rooms see each panel. Real paintings
+are entities in Bedrock rather than blocks; a structure saved in game with a
+few paintings hung in it would let Polis add them the way it adds animals.
+
 ## Life
 
 **Farms** take over some suburban lots (**Farms** slider). Each is hedged in
@@ -242,17 +248,17 @@ rise and fall gently. The streets stay level, which keeps the railway, its
 bridges and the loop exactly as they are. Each block is generated flat and
 lifted whole, so buildings, stairs and furniture keep every guarantee they had;
 the terrace is solid underneath with a stone-brick face towards the street.
-Staircases are cut into the sidewalk on every side of a raised block, climbing
-parallel to the kerb so they never stick out into the street: one step per
-block of height, from the street to the terrace. After generation the whole
-city is walked from the streets — step up one block, down up to three, through
-doors and gates — and every building door is checked to be reachable. The
-stats panel shows the result.
+Staircases are cut into every side of a raised block, climbing straight in
+from the street and facing it: one step per block of height, cut into the
+sidewalk (and the yard behind it for a 3-high terrace), so they never stick
+out into the street. Where a straight flight will not fit, the steps run along
+the kerb instead.
 
 ## Landmarks
 
-Each city builds up to four one-off landmarks on the lots nearest its downtown
-focal point (the **Landmarks** checkbox turns them off):
+Each city builds up to eight one-off landmarks — the civic ones on the lots
+nearest its downtown focal point, the school halfway out, the lighthouse by the
+water and the castle on the highest hill (the **Landmarks** checkbox turns them off):
 
 - **Town hall** — smooth quartz, set back behind an andesite forecourt with
   a two-storey colonnade and entablature, a copper dome with a gold finial,
@@ -263,6 +269,14 @@ focal point (the **Landmarks** checkbox turns them off):
   a copper spire.
 - **Library** — brick with dark-oak floors, bookshelves and lecterns on every
   floor, lantern posts flanking the entrance.
+- **Church** — a tall nave with stained-glass windows, pews facing the
+  altar, and a bell tower rising over the entrance to a spire with a gold top.
+- **School** — classrooms (each with a lectern at the front) and a flagpole in
+  the yard.
+- **Lighthouse** — a slender tower banded red and white with a glass lantern
+  room and a light at the top, beside the canal (or out at the edge).
+- **Castle** — a stone keep on the highest hill: crenellated roof and four
+  corner turrets.
 - **Market square** — a chequered square of striped wool-canopied stalls
   selling melons, pumpkins, hay and more, round a covered well in big squares
   or a lantern post in small ones.
@@ -272,6 +286,22 @@ they keep the same guarantees — stairs to every floor (wide switchbacks in the
 town hall, a spiral up the clock tower), doors, windows, head room — and are
 checked by the same player flood fill. The copper is waxed, so it stays green.
 The minimap outlines each landmark in gold.
+
+## Canal
+
+One long street through the middle of the city becomes a canal (the **Canal**
+checkbox turns it off): a stone channel of water two deep, its surface three
+blocks below the street, with walkways along both banks and railings where the
+street is wide enough. Every street that meets the canal carries straight over
+on its own road deck — two blocks of air between the water and the deck — so
+streets and railway lines cross at street level with no ramps, and a boat fits
+underneath. It follows the rule that keeps all water in Polis in place: every
+water block has solid stone or water on all four sides and underneath (the
+city's stone base is extended down to hold it, and the channel stops well
+inside the wall). A dock has three stairs down from the walkway to a wooden
+landing at the water's edge; `/function <city id>/boats_centered` (or `boats`)
+puts two boats there — boats get their own function, never in `populate`, so
+if Bedrock ever rejected the name only that small file would be affected.
 
 ## Railways
 
@@ -436,6 +466,20 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.3.2** — Canal with bridges, embankments, railings, a dock and boats;
+four new landmarks (church, school, lighthouse, castle on the highest hill);
+glazed-terracotta art panels on inside walls. Light grey glazed terracotta is
+`silver_glazed_terracotta` in Bedrock. Landmark positions recorded for checks
+now move up with their terrace. The validator adds the canal (water levels, bridges, open water,
+distance from the wall), dock reachability and boats, art panel shape, and each
+new landmark's defining features.
+
+**0.3.1** — Terrace steps face the street. They used to climb along the kerb,
+side-on to anyone arriving from the street; now they climb straight in from
+the street (about nine in ten), cut into the sidewalk, and only run along the
+kerb where a straight flight will not fit. The validator checks every step
+faces the way its staircase climbs and that straight flights face the street.
 
 **0.3.0** — Real rooms: corridors, inside walls and doors; apartments
 (kitchen + bedroom), studios, shops, offices, kitchens, living rooms and

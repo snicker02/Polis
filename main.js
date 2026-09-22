@@ -8,7 +8,7 @@ import { Renderer } from './engine/renderer.js';
 import { exportPack, exportStructuresZip, tileList, commandList, cityId, exportSalt, POLIS_VERSION } from './engine/export.js';
 import { THEMES } from './engine/materials.js';
 
-const VERSION = '0.3.0';
+const VERSION = '0.3.2';
 const $ = (id) => document.getElementById(id);
 
 const SLIDERS = {
@@ -17,7 +17,7 @@ const SLIDERS = {
   maxFloors: 0, pitch: 0, setbackEvery: 0, bw: 0, bd: 0, floors: 0, clip: 0,
   farmChance: 2, pondChance: 2, villagers: 0, wallHeight: 0, foundation: 0, clearAbove: 0, hills: 0, golemsPer10: 0,
 };
-const CHECKS = ['setback', 'roofAccess', 'useStairs', 'lights', 'lamps', 'trees', 'markings', 'landmarks'];
+const CHECKS = ['setback', 'roofAccess', 'useStairs', 'lights', 'lamps', 'trees', 'markings', 'landmarks', 'canal'];
 
 let renderer = null;
 let result = null;       // { world, plan, buildings, cfg, stats }
@@ -221,6 +221,7 @@ const MAP_COL = {
   [USE.PLAZA]: '#6b6552',
   6: '#8a7a2a',              // farm
   7: '#6d8a3a',              // animal pen
+  8: '#2f6fb3',              // canal
 };
 
 function drawMap() {
@@ -306,7 +307,10 @@ function showStats(mesh, times) {
     if (s.hillBlocks) line('hills', `${s.hillBlocks} raised blocks (up to ${s.hillMax}) · ${s.staircases} staircases`);
     if (s.reachable) line('doors reachable from streets', s.reachable, s.reachable.split('/')[0] === s.reachable.split('/')[1] ? 'ok' : 'bad');
     if (s.landmarks && s.landmarks.length) line('landmarks', s.landmarks.map((k) =>
-      ({ townhall: 'town hall', clocktower: 'clock tower', library: 'library', market: 'market' }[k])).join(' · '));
+      ({ townhall: 'town hall', clocktower: 'clock tower', library: 'library', market: 'market', church: 'church',
+        school: 'school', lighthouse: 'lighthouse', castle: 'castle' }[k])).join(' · '));
+    if (s.canal) line('canal', s.canal + (s.dock ? ' · dock' : ''));
+    if (s.art) line('art panels', String(s.art));
     if (s.ranches !== undefined) line('pens / farm animals', `${s.ranches} / ${s.animals}`);
     if (s.cats !== undefined) line('cats / pandas', `${s.cats} / ${s.pandas}`);
     if (s.railLines) line('rail lines / bridges / carts', `${s.railLines} / ${s.railBridges} / ${s.carts}` + (s.railLoop ? ' · loop' : ''));
