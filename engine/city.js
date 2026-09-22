@@ -6,7 +6,7 @@ import { generatePlan, frontage, USE } from './plan.js';
 import { MAT, THEMES } from './materials.js';
 import { makeBuilding, OUTWARD } from './building.js';
 import { doorId, DIR, MATERIALS } from './materials.js';
-import { farm, pond, scatterFlowers, furnish, bedSpawns, placeBell, golemSpawns } from './life.js';
+import { farm, pond, scatterFlowers, furnish, bedSpawns, placeBell, golemSpawns, ranch, pandaGrove, catSpawns, RANCH_ANIMALS } from './life.js';
 import { layTransit, trimOverRails } from './transit.js';
 
 export const DEFAULTS = {
@@ -35,6 +35,9 @@ export const DEFAULTS = {
   transit: 'roads',
   wallHeight: 3,             // perimeter wall, blocks above ground (0 = none)          // 'roads' | 'rails' (railway instead of roads) | 'trams' (rails down the roads)
   farmChance: 0.2,
+  ranchChance: 0.1,          // suburban lots that become animal pens
+  pandaChance: 0.35,         // parks that get a fenced bamboo grove with pandas
+  cats: true,
   pondChance: 0.5,
   furnish: true,
   flowers: true,
@@ -108,17 +111,26 @@ export function generateCity(cfgIn, onProgress) {
   // ---- lots ----------------------------------------------------------------
   const buildings = [];
   const farms = [];
+  const ranches = [];
+  const pandas = [];
   const beds = [];
   const themeRng = rng.fork();
   const lifeRng = rng.fork();
+  const penOrder = lifeRng.shuffle(RANCH_ANIMALS.slice());
   for (const lot of plan.lots) {
-    if (lot.kind === USE.PARK) { park(world, lot, rng, cfg); continue; }
+    if (lot.kind === USE.PARK) { park(world, lot, rng, cfg, lifeRng, pandas); continue; }
     if (lot.kind === USE.PLAZA) { plaza(world, lot, rng, cfg); continue; }
 
     if (lot.style === 'house' && cfg.farmChance > 0 &&
         lot.x1 - lot.x0 + 1 >= 7 && lot.z1 - lot.z0 + 1 >= 7 && lifeRng.chance(cfg.farmChance)) {
       const f = farm(world, lot, frontage(plan, lot).side, lifeRng, GROUND, plan);
       if (f) { farms.push(f); continue; }
+    }
+    if (lot.style === 'house' && cfg.ranchChance > 0 &&
+        lot.x1 - lot.x0 + 1 >= 7 && lot.z1 - lot.z0 + 1 >= 7 && lifeRng.chance(cfg.ranchChance)) {
+      // each city deals the four kinds out in a shuffled order, so pens vary
+      const rch = ranch(world, lot, frontage(plan, lot).side, lifeRng, GROUND, plan, penOrder[ranches.length % penOrder.length]);
+      if (rch) { ranches.push(rch); continue; }
     }
 
     const m = lot.margin;
@@ -194,12 +206,15 @@ export function generateCity(cfgIn, onProgress) {
     spawns = vs.slice(0, cfg.villagers);
     const golems = Math.min(cfg.golemMax, Math.ceil(spawns.length / Math.max(1, cfg.villagersPerGolem)));
     spawns = spawns.concat(golemSpawns(world, plan, buildings, golems, lifeRng, GROUND));
+    if (cfg.cats) spawns = spawns.concat(catSpawns(world, plan, buildings, Math.min(16, Math.ceil(spawns.length / 5)), lifeRng, GROUND));
   }
+  for (const p of pandas) spawns.push(p);
+  for (const rch of ranches) for (const a of rch.animals) spawns.push(a);
 
   if (transit) spawns = spawns.concat(transit.carts);
 
-  const stats = summarise(world, plan, buildings, cfg, { farms, beds, spawns, bell, transit, wall });
-  return { world, plan, buildings, cfg, stats, farms, spawns, bell, transit, wall };
+  const stats = summarise(world, plan, buildings, cfg, { farms, beds, spawns, bell, transit, wall, ranches });
+  return { world, plan, buildings, cfg, stats, farms, ranches, spawns, bell, transit, wall };
 }
 
 // ---- perimeter wall -------------------------------------------------------------
@@ -326,21 +341,36 @@ export function generateSingle(cfgIn) {
 }
 
 // ---- open space ------------------------------------------------------------
-function park(world, lot, rng, cfg) {
+function park(world, lot, rng, cfg, lifeRng, pandas) {
   for (let z = lot.z0; z <= lot.z1; z++)
     for (let x = lot.x0; x <= lot.x1; x++) world.set(x, GROUND, z, MAT.GRASS);
   // crossing paths
   const cx = Math.round((lot.x0 + lot.x1) / 2), cz = Math.round((lot.z0 + lot.z1) / 2);
   for (let x = lot.x0; x <= lot.x1; x++) world.set(x, GROUND, cz, MAT.PATH);
   for (let z = lot.z0; z <= lot.z1; z++) world.set(cx, GROUND, z, MAT.PATH);
-  if (cfg.pondChance > 0 && rng.chance(cfg.pondChance)) pond(world, lot, cx, cz, rng, GROUND);
+  const pd = (cfg.pondChance > 0 && rng.chance(cfg.pondChance)) ? pond(world, lot, cx, cz, rng, GROUND) : null;
+  let grove = null;
+  if (lifeRng && cfg.pandaChance > 0 && lifeRng.chance(cfg.pandaChance)) {
+    grove = pandaGrove(world, lot, cx, cz, lifeRng, GROUND, pd);
+    if (grove && pandas) for (const p of grove.pandas) pandas.push(p);
+  }
+  const inGrove = (x, z) => grove && x >= grove.x0 && x <= grove.x1 && z >= grove.z0 && z <= grove.z1;
   if (cfg.trees) {
     for (let z = lot.z0 + 1; z <= lot.z1 - 1; z++) {
       for (let x = lot.x0 + 1; x <= lot.x1 - 1; x++) {
-        if (x === cx || z === cz) continue;
+        if (x === cx || z === cz || inGrove(x, z)) continue;
         if (world.get(x, GROUND, z) !== MAT.GRASS || world.has(x, GROUND + 1, z)) continue;
         if (fbm2(x, z, cfg.seed ^ 0x77e2, 4) > 0.72 && rng.chance(0.45)) tree(world, x, z, rng);
       }
+    }
+  }
+  // lantern posts at the four corners of the crossing
+  if (cfg.lamps) {
+    for (const [dx, dz] of [[1, 1], [-1, 1], [1, -1], [-1, -1]]) {
+      const x = cx + dx, z = cz + dz;
+      if (inGrove(x, z) || world.get(x, GROUND, z) !== MAT.GRASS) continue;
+      if (world.has(x, GROUND + 1, z) || world.has(x, GROUND + 2, z) || world.has(x, GROUND + 3, z)) continue;
+      world.set(x, GROUND + 1, z, MAT.FENCE); world.set(x, GROUND + 2, z, MAT.FENCE); world.set(x, GROUND + 3, z, MAT.LAMP);
     }
   }
   if (cfg.flowers) scatterFlowers(world, lot, 0.07, rng, GROUND);
@@ -445,6 +475,10 @@ function summarise(world, plan, buildings, cfg, life = {}) {
     railBridges: life.transit ? life.transit.stats.bridges : 0,
     carts: (life.spawns || []).filter((p) => p.type === 'minecart').length,
     railLoop: !!(life.transit && life.transit.stats.loop),
+    ranches: (life.ranches || []).length,
+    cats: (life.spawns || []).filter((p) => p.type === 'cat').length,
+    pandas: (life.spawns || []).filter((p) => p.type === 'panda').length,
+    animals: (life.spawns || []).filter((p) => ['cow', 'sheep', 'pig', 'chicken'].includes(p.type)).length,
     wallHeight: life.wall ? life.wall.height : 0,
     gates: life.wall ? life.wall.gates.length : 0,
   };

@@ -8,7 +8,7 @@ import { Renderer } from './engine/renderer.js';
 import { exportPack, exportStructuresZip, tileList, commandList, cityId, exportSalt, POLIS_VERSION } from './engine/export.js';
 import { THEMES } from './engine/materials.js';
 
-const VERSION = '0.2.3';
+const VERSION = '0.2.4';
 const $ = (id) => document.getElementById(id);
 
 const SLIDERS = {
@@ -216,6 +216,7 @@ const MAP_COL = {
   [USE.PARK]: '#2f5a2c',
   [USE.PLAZA]: '#6b6552',
   6: '#8a7a2a',              // farm
+  7: '#6d8a3a',              // animal pen
 };
 
 function drawMap() {
@@ -292,6 +293,8 @@ function showStats(mesh, times) {
     line('farms / beds', `${s.farms} / ${s.beds}`);
     line('workstations / plants', `${s.stations} / ${s.plants}`);
     line('villagers / golems', `${s.villagers} / ${s.golems}` + (s.bell ? ' · bell' : ''));
+    if (s.ranches !== undefined) line('pens / farm animals', `${s.ranches} / ${s.animals}`);
+    if (s.cats !== undefined) line('cats / pandas', `${s.cats} / ${s.pandas}`);
     if (s.railLines) line('rail lines / bridges / carts', `${s.railLines} / ${s.railBridges} / ${s.carts}` + (s.railLoop ? ' · loop' : ''));
     if (s.wallHeight) line('perimeter wall', `${s.wallHeight} high · ${s.gates} gates`);
   }

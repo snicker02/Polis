@@ -125,6 +125,7 @@ Object.assign(MAT, {
   BREWING:     A('BREWING', 'minecraft:brewing_stand', '#8b7a5c',
                  { brewing_stand_slot_a_bit: B(0), brewing_stand_slot_b_bit: B(0), brewing_stand_slot_c_bit: B(0) }),
   CAULDRON:    A('CAULDRON', 'minecraft:cauldron', '#3f3f44', { cauldron_liquid: S('water'), fill_level: I(0) }),
+  CAULDRON_FULL: A('CAULDRON_FULL', 'minecraft:cauldron', '#3f5f94', { cauldron_liquid: S('water'), fill_level: I(6) }),
   BELL:        A('BELL', 'minecraft:bell', '#e2b93b', { attachment: S('standing'), direction: I(0), toggle_bit: B(0) }),
   AZALEA:      A('AZALEA', 'minecraft:azalea', '#5f7d2e'),
   AZALEA_FL:   A('AZALEA_FL', 'minecraft:flowering_azalea', '#7d6b8a'),
@@ -138,14 +139,51 @@ Object.assign(MAT, {
   CARPET_BROWN:A('CARPET_BROWN', 'minecraft:brown_carpet', '#724728', {}, RUG),
   CARPET_GRAY: A('CARPET_GRAY', 'minecraft:gray_carpet', '#3e4447', {}, RUG),
 });
-export const FLOWERS = [MAT.DANDELION, MAT.CORNFLOWER, MAT.ALLIUM, MAT.AZURE_BLUET, MAT.BLUE_ORCHID];
+// ---- more variety (0.2.4): every id/state checked against Bedrock 1.21.60,
+// every orientation against Bedrock's Java->Bedrock table ------------------
+const GATE = { passable: true };                  // a closed gate opens for the player, like a door
+Object.assign(MAT, {
+  POPPY:       A('POPPY', 'minecraft:poppy', '#c8302a', {}, PLANT),
+  OXEYE:       A('OXEYE', 'minecraft:oxeye_daisy', '#e9e7d8', {}, PLANT),
+  LILY_VALLEY: A('LILY_VALLEY', 'minecraft:lily_of_the_valley', '#f2f2ea', {}, PLANT),
+  TULIP_PINK:  A('TULIP_PINK', 'minecraft:pink_tulip', '#e7a3c0', {}, PLANT),
+  TULIP_RED:   A('TULIP_RED', 'minecraft:red_tulip', '#d23c2d', {}, PLANT),
+  LAMP:        A('LAMP', 'minecraft:lantern', '#e8b04a', { hanging: B(0) }, { passable: false }),
+  LAMP_HANG:   A('LAMP_HANG', 'minecraft:lantern', '#e8b04a', { hanging: B(1) }),
+  HAY:         A('HAY', 'minecraft:hay_block', '#c9a43a', { deprecated: I(0), pillar_axis: S('y') }),
+  FENCE:       A('FENCE', 'minecraft:oak_fence', '#a2824e'),
+  SMITHING:    A('SMITHING', 'minecraft:smithing_table', '#3c3f4b'),
+  MELON:       A('MELON', 'minecraft:melon_block', '#6f9a2c'),
+});
+export const FLOWERS = [MAT.DANDELION, MAT.CORNFLOWER, MAT.ALLIUM, MAT.AZURE_BLUET, MAT.BLUE_ORCHID,
+  MAT.POPPY, MAT.OXEYE, MAT.LILY_VALLEY, MAT.TULIP_PINK, MAT.TULIP_RED];
+
+// Blocks whose minecraft:cardinal_direction is simply the way they face
+// (fence gate, chest, lectern, smoker, stonecutter, pumpkin) — unlike doors.
+const faced = (block, color, extra = {}, flags = {}) => (facing) =>
+  MATERIALS.add(null, block, color, { 'minecraft:cardinal_direction': S(facing), ...extra }, flags);
+export const gateId = faced('minecraft:fence_gate', '#a2824e', { in_wall_bit: B(0), open_bit: B(0) }, GATE);
+export const chestId = faced('minecraft:chest', '#9a6a2f');
+export const lecternId = faced('minecraft:lectern', '#a5824f', { powered_bit: B(0) });
+export const smokerId = faced('minecraft:smoker', '#5b5750');
+export const stonecutterId = faced('minecraft:stonecutter_block', '#8a8a8a');
+export const pumpkinId = faced('minecraft:pumpkin', '#d98323');
+// Looms and grindstones use the old number (0 south, 1 west, 2 north, 3 east).
+const LEGACY = { south: 0, west: 1, north: 2, east: 3 };
+export const loomId = (facing) => MATERIALS.add(null, 'minecraft:loom', '#b58b5a', { direction: I(LEGACY[facing]) });
+export const grindstoneId = (facing) => MATERIALS.add(null, 'minecraft:grindstone', '#8d8d8d',
+  { attachment: S('standing'), direction: I(LEGACY[facing]) });
+// bamboo: a stalk of plain segments with leaves at the top
+export const bambooId = (leaves) => MATERIALS.add(null, 'minecraft:bamboo', '#6c9a2e',
+  { age_bit: B(0), bamboo_leaf_size: S(leaves), bamboo_stalk_thickness: S('thin') });
 export const CARPETS = [MAT.CARPET_BLUE, MAT.CARPET_CYAN, MAT.CARPET_BROWN, MAT.CARPET_GRAY];
 
-// crops: wheat / carrots / beetroot, growth 0..7
+// crops: wheat / carrots / beetroot / potatoes, growth 0..7
 const CROP_BLOCKS = {
   wheat: ['minecraft:wheat', '#c9b64a'],
   carrots: ['minecraft:carrots', '#e08a2c'],
   beetroot: ['minecraft:beetroot', '#9c2f3a'],
+  potatoes: ['minecraft:potatoes', '#a8903f'],
 };
 export const CROP_KINDS = Object.keys(CROP_BLOCKS);
 export function cropId(kind, growth) {

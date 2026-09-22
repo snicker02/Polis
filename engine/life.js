@@ -11,11 +11,13 @@
 // building is furnished it is re-verified with the player flood fill; if any
 // floor became unreachable, the furniture comes back out.
 
-import { MAT, MATERIALS, FLOWERS, CARPETS, CROP_KINDS, cropId, bedId, furnaceId, BED_VEC } from './materials.js';
+import { MAT, MATERIALS, FLOWERS, CARPETS, CROP_KINDS, cropId, bedId, furnaceId, BED_VEC,
+  gateId, chestId, lecternId, smokerId, stonecutterId, loomId, grindstoneId, bambooId } from './materials.js';
 import { verifyBuilding } from './verify.js';
 import { USE } from './plan.js';
 
 export const USE_FARM = 6;
+export const USE_RANCH = 7;
 const BED_COLORS = [14, 11, 13, 1, 4, 3, 10, 0];   // red blue green orange yellow lblue purple white
 
 const solidAt = (world, x, y, z) => {
@@ -97,6 +99,15 @@ export function farm(world, lot, side, rng, G, plan) {
   else if (side === 'west') comp = [L.x0 + 1, L.z0 + 1];
   else comp = [L.x1 - 1, L.z0 + 1];
   world.set(comp[0], G + 1, comp[1], MAT.COMPOSTER);
+  // hay bales stacked in the two inner corners on the far side
+  const far = (side === 'north' || side === 'west')
+    ? [[L.x1 - 1, L.z1 - 1], side === 'north' ? [L.x0 + 1, L.z1 - 1] : [L.x1 - 1, L.z0 + 1]]
+    : [[L.x0 + 1, L.z0 + 1], side === 'south' ? [L.x1 - 1, L.z0 + 1] : [L.x0 + 1, L.z1 - 1]];
+  for (const [hx, hz] of far) {
+    if (hx === comp[0] && hz === comp[1]) continue;
+    world.set(hx, G + 1, hz, MAT.HAY);
+    if (rng.chance(0.6)) world.set(hx, G + 2, hz, MAT.HAY);
+  }
 
   if (plan) {
     for (let z = L.z0; z <= L.z1; z++)
@@ -158,15 +169,17 @@ export function scatterFlowers(world, r, chance, rng, G) {
 // interiors
 // ============================================================================
 const ROOMS = {
-  kitchen:   ['craft', 'furnace', 'barrel', 'plant', 'shelf', 'bed', 'furnace', 'plant'],
-  bedroom:   ['bed', 'plant', 'bed', 'shelf', 'bed', 'rug', 'plant'],
-  apartment: ['bed', 'craft', 'furnace', 'plant', 'bed', 'shelf', 'barrel', 'bed', 'plant'],
-  shop:      ['station', 'plant', 'craft', 'station', 'furnace', 'station', 'shelf', 'plant'],
-  lobby:     ['plant', 'shelf', 'plant', 'plant', 'shelf'],
-  office:    ['shelf', 'shelf', 'station', 'plant', 'craft', 'shelf', 'plant'],
-  library:   ['shelf', 'shelf', 'shelf', 'plant', 'shelf', 'shelf', 'rug'],
+  kitchen:   ['craft', 'furnace', 'smoker', 'chest', 'plant', 'shelf', 'barrel', 'lamp', 'bed', 'plant'],
+  bedroom:   ['bed', 'plant', 'chest', 'bed', 'shelf', 'lamp', 'bed', 'rug', 'plant'],
+  apartment: ['bed', 'craft', 'furnace', 'plant', 'bed', 'chest', 'shelf', 'lamp', 'barrel', 'bed', 'plant'],
+  shop:      ['station', 'plant', 'craft', 'station', 'chest', 'station', 'lamp', 'shelf', 'station', 'plant'],
+  lobby:     ['plant', 'shelf', 'lamp', 'plant', 'plant', 'shelf'],
+  office:    ['shelf', 'lectern', 'station', 'plant', 'craft', 'shelf', 'lamp', 'chest', 'plant'],
+  library:   ['shelf', 'shelf', 'lectern', 'shelf', 'plant', 'shelf', 'lamp', 'shelf', 'rug'],
 };
-const STATIONS = ['cartography', 'fletching', 'blast', 'brewing', 'cauldron', 'barrel'];
+// every villager profession's workstation appears somewhere
+const STATIONS = ['cartography', 'fletching', 'blast', 'brewing', 'cauldron', 'barrel',
+  'smoker', 'lectern', 'stonecutter', 'loom', 'grindstone', 'smithing'];
 
 function roomFor(style, k, floors, rng) {
   if (style === 'house') return (k === 0) ? (floors === 1 ? 'apartment' : 'kitchen') : 'bedroom';
@@ -246,13 +259,19 @@ export function furnish(world, rec, rng) {
           put(x, y + 1, z, rng.chance(0.3) ? (rng.chance(0.5) ? MAT.AZALEA : MAT.AZALEA_FL) : rng.pick(FLOWERS));
           plants++;
         } else if (item === 'station') {
-          const s = rng.pick(STATIONS);
+          const s = rng.pick(STATIONS), f = DIRNAME(nx, nz);
           const id = s === 'cartography' ? MAT.CARTOGRAPHY : s === 'fletching' ? MAT.FLETCHING
-            : s === 'blast' ? furnaceId('blast', DIRNAME(nx, nz)) : s === 'brewing' ? MAT.BREWING
-            : s === 'cauldron' ? MAT.CAULDRON : MAT.BARREL;
+            : s === 'blast' ? furnaceId('blast', f) : s === 'brewing' ? MAT.BREWING
+            : s === 'cauldron' ? MAT.CAULDRON : s === 'smoker' ? smokerId(f)
+            : s === 'lectern' ? lecternId(f) : s === 'stonecutter' ? stonecutterId(f)
+            : s === 'loom' ? loomId(f) : s === 'grindstone' ? grindstoneId(f)
+            : s === 'smithing' ? MAT.SMITHING : MAT.BARREL;
           put(x, y, z, id);
           stations++;
-        }
+        } else if (item === 'smoker') { put(x, y, z, smokerId(DIRNAME(nx, nz))); stations++; }
+        else if (item === 'lectern') { put(x, y, z, lecternId(DIRNAME(nx, nz))); stations++; }
+        else if (item === 'chest') put(x, y, z, chestId(DIRNAME(nx, nz)));
+        else if (item === 'lamp') { put(x, y, z, MAT.BARREL); put(x, y + 1, z, MAT.LAMP); }
         i += 1;                       // leave a gap after every piece
       }
       step++;
@@ -326,3 +345,113 @@ export function golemSpawns(world, plan, buildings, count, rng, G) {
   }
   return out;
 }
+
+// ============================================================================
+// animal pens: a fenced paddock with a gate on the street side, hay, a water
+// trough, and a few cows, sheep, pigs or chickens
+// ============================================================================
+export const RANCH_ANIMALS = ['cow', 'sheep', 'pig', 'chicken'];
+export function ranch(world, lot, side, rng, G, plan, kind = null) {
+  const L = { x0: lot.x0, z0: lot.z0, x1: lot.x1, z1: lot.z1 };
+  if (L.x1 - L.x0 + 1 < 7 || L.z1 - L.z0 + 1 < 7) return null;
+  for (let z = L.z0; z <= L.z1; z++)
+    for (let x = L.x0; x <= L.x1; x++) {
+      for (let y = G + 1; y <= G + 4; y++) world.clear(x, y, z);
+      world.set(x, G, z, MAT.GRASS);
+    }
+  let gate;
+  if (side === 'north') gate = [Math.floor((L.x0 + L.x1) / 2), L.z0];
+  else if (side === 'south') gate = [Math.floor((L.x0 + L.x1) / 2), L.z1];
+  else if (side === 'west') gate = [L.x0, Math.floor((L.z0 + L.z1) / 2)];
+  else gate = [L.x1, Math.floor((L.z0 + L.z1) / 2)];
+  for (let z = L.z0; z <= L.z1; z++)
+    for (let x = L.x0; x <= L.x1; x++) {
+      if (!(x === L.x0 || x === L.x1 || z === L.z0 || z === L.z1)) continue;
+      if (x === gate[0] && z === gate[1]) world.set(x, G + 1, z, gateId(side));
+      else world.set(x, G + 1, z, MAT.FENCE);
+    }
+  // hay in the far corner, a water trough in another
+  const farX = (side === 'east') ? L.x0 + 1 : L.x1 - 1, farZ = (side === 'south') ? L.z0 + 1 : L.z1 - 1;
+  world.set(farX, G + 1, farZ, MAT.HAY);
+  if (rng.chance(0.5)) world.set(farX, G + 2, farZ, MAT.HAY);
+  const tx = farX === L.x1 - 1 ? L.x0 + 1 : L.x1 - 1;
+  world.set(tx, G + 1, farZ, MAT.CAULDRON_FULL);
+  kind = kind || rng.pick(RANCH_ANIMALS);
+  const cells = [];
+  for (let z = L.z0 + 2; z <= L.z1 - 2; z++)
+    for (let x = L.x0 + 2; x <= L.x1 - 2; x++)
+      if (!world.has(x, G + 1, z) && !world.has(x, G + 2, z)) cells.push([x, z]);
+  rng.shuffle(cells);
+  const n = Math.min(cells.length, rng.int(3, 6) + (kind === 'chicken' ? 2 : 0));
+  const animals = cells.slice(0, n).map(([x, z]) => ({ type: kind, x, y: G + 1, z }));
+  if (plan) {
+    for (let z = L.z0; z <= L.z1; z++)
+      for (let x = L.x0; x <= L.x1; x++)
+        if (x >= 0 && z >= 0 && x < plan.W && z < plan.D) plan.use[z * plan.W + x] = USE_RANCH;
+  }
+  return { ...L, side, gate, kind, animals };
+}
+
+// ============================================================================
+// panda grove: a fenced bamboo garden in one quarter of a park
+// ============================================================================
+export function pandaGrove(world, lot, cx, cz, rng, G, avoid) {
+  const quads = [
+    { x0: lot.x0 + 1, z0: lot.z0 + 1, x1: cx - 2, z1: cz - 2, gate: 'east' },
+    { x0: cx + 2, z0: lot.z0 + 1, x1: lot.x1 - 1, z1: cz - 2, gate: 'west' },
+    { x0: lot.x0 + 1, z0: cz + 2, x1: cx - 2, z1: lot.z1 - 1, gate: 'east' },
+    { x0: cx + 2, z0: cz + 2, x1: lot.x1 - 1, z1: lot.z1 - 1, gate: 'west' },
+  ].filter((q) => q.x1 - q.x0 + 1 >= 6 && q.z1 - q.z0 + 1 >= 6)
+   .filter((q) => !avoid || q.x1 < avoid.x0 || q.x0 > avoid.x1 || q.z1 < avoid.z0 || q.z0 > avoid.z1);
+  if (!quads.length) return null;
+  const q = rng.pick(quads);
+  // gate in the middle of the side facing the park's north-south path
+  const gx = q.gate === 'east' ? q.x1 : q.x0, gz = Math.floor((q.z0 + q.z1) / 2);
+  for (let z = q.z0; z <= q.z1; z++)
+    for (let x = q.x0; x <= q.x1; x++) {
+      for (let y = G + 1; y <= G + 6; y++) world.clear(x, y, z);
+      world.set(x, G, z, MAT.GRASS);
+      const edge = x === q.x0 || x === q.x1 || z === q.z0 || z === q.z1;
+      if (edge) world.set(x, G + 1, z, (x === gx && z === gz) ? gateId(q.gate) : MAT.FENCE);
+    }
+  // bamboo stalks, leaving open ground for the pandas and a clear cell inside the gate
+  const inX = q.gate === 'east' ? gx - 1 : gx + 1;
+  const open = [];
+  for (let z = q.z0 + 1; z <= q.z1 - 1; z++)
+    for (let x = q.x0 + 1; x <= q.x1 - 1; x++) {
+      if ((x === inX && z === gz) || !rng.chance(0.35)) { open.push([x, z]); continue; }
+      const h = rng.int(3, 5);
+      for (let i = 0; i < h; i++) {
+        const leaves = i === h - 1 ? 'large_leaves' : i === h - 2 ? 'small_leaves' : 'no_leaves';
+        world.set(x, G + 1 + i, z, bambooId(leaves));
+      }
+    }
+  rng.shuffle(open);
+  const pandas = open.filter(([x, z]) => !(x === inX && z === gz)).slice(0, rng.int(1, 2))
+    .map(([x, z]) => ({ type: 'panda', x, y: G + 1, z }));
+  return { ...q, pandas };
+}
+
+// cats: outdoors on pavement, plazas and park paths, spread out
+export function catSpawns(world, plan, buildings, count, rng, G) {
+  if (count <= 0) return [];
+  const { W, D, use } = plan;
+  const inside = (x, z) => buildings.some((b) => x >= b.x0 - 1 && x <= b.x1 + 1 && z >= b.z0 - 1 && z <= b.z1 + 1);
+  const cand = [];
+  for (let z = 1; z < D - 1; z++)
+    for (let x = 1; x < W - 1; x++) {
+      const u = use[z * W + x];
+      if (u !== USE.SIDEWALK && u !== USE.PLAZA) continue;
+      if (inside(x, z) || !standable(world, x, G + 1, z)) continue;
+      cand.push([x, z]);
+    }
+  rng.shuffle(cand);
+  const out = [];
+  for (const [x, z] of cand) {
+    if (out.length >= count) break;
+    if (out.some((c) => Math.abs(c.x - x) + Math.abs(c.z - z) < 10)) continue;
+    out.push({ type: 'cat', x, y: G + 1, z });
+  }
+  return out;
+}
+

@@ -11,13 +11,13 @@
 
 import { splitWorld, writeMcStructure, buildMcPack, makeZip, crc32 } from './blockcore.js';
 import { MATERIALS, MAT } from './materials.js';
-import { makeEntity } from './entities.js';
+import { makeEntity, STRUCTURE_MOBS } from './entities.js';
 import { makeRng } from './rng.js';
 
 // Must match main.js VERSION, package.json and index.html data-version;
 // tools/validate.js fails if they drift. The app refuses to export when the
 // browser has mixed cached copies of old and new files.
-export const POLIS_VERSION = '0.2.3';
+export const POLIS_VERSION = '0.2.4';
 
 export const CHUNK = 64;          // Bedrock structure limit per horizontal axis
 export const GROUND_DROP = 2;     // base layer y=0 sits 2 below feet; surface y=1 replaces the block you stand on
@@ -125,7 +125,7 @@ export function mobTiles(spawns, opts = {}) {
   const size = opts.chunkSize || CHUNK;
   const groups = new Map();
   for (const p of spawns || []) {
-    if (p.type !== 'villager' && p.type !== 'golem') continue;
+    if (!STRUCTURE_MOBS.has(p.type)) continue;
     const cx = Math.floor(p.x / size), cz = Math.floor(p.z / size);
     const k = cx + ',' + cz;
     if (!groups.has(k)) groups.set(k, { cx, cz, mobs: [] });
@@ -136,7 +136,7 @@ export function mobTiles(spawns, opts = {}) {
     for (const p of g.mobs) {
       box.x0 = Math.min(box.x0, p.x); box.x1 = Math.max(box.x1, p.x);
       box.z0 = Math.min(box.z0, p.z); box.z1 = Math.max(box.z1, p.z);
-      box.y0 = Math.min(box.y0, p.y); box.y1 = Math.max(box.y1, p.y + (p.type === 'golem' ? 2 : 1));
+      box.y0 = Math.min(box.y0, p.y); box.y1 = Math.max(box.y1, p.y + (p.type === 'golem' ? 2 : 1));   // cats, pandas fit in 2
     }
     return {
       name: `m_x${g.cx}_z${g.cz}`, box, mobs: g.mobs,
@@ -156,6 +156,8 @@ export function buildMobStructures(spawns, opts = {}) {
       cells: 0, paletteSize: 0, entities: 0, mobs: res.mobs,
       villagers: t.mobs.filter((p) => p.type === 'villager').length,
       golems: t.mobs.filter((p) => p.type === 'golem').length,
+      cats: t.mobs.filter((p) => p.type === 'cat').length,
+      pandas: t.mobs.filter((p) => p.type === 'panda').length,
     };
   });
 }
@@ -178,7 +180,9 @@ function rel(v) { return v === 0 ? '~' : `~${v}`; }
 // Entity names as the /summon command accepts them (Microsoft's /summon
 // reference). Only minecarts are still summoned; villagers and golems come
 // from mob structures, where the game's own internal ids are used.
-export const SUMMON_IDS = { minecart: 'minecraft:minecart' };
+export const SUMMON_IDS = { minecart: 'minecraft:minecart', cow: 'minecraft:cow', sheep: 'minecraft:sheep',
+  pig: 'minecraft:pig', chicken: 'minecraft:chicken' };
+const FARM_ANIMALS = ['cow', 'sheep', 'pig', 'chicken'];
 
 // build     blocks only, safe to rerun; ends by adding ticking areas
 // populate  mob structures + minecart summons; run once, after the city has
@@ -192,7 +196,12 @@ export function functionFiles(tiles, world, opts = {}) {
   const cz = Math.floor((wb.z0 + wb.z1 + 1) / 2);
   const villagers = spawns.filter((p) => p.type === 'villager').length;
   const golems = spawns.filter((p) => p.type === 'golem').length;
+  const cats = spawns.filter((p) => p.type === 'cat').length;
+  const pandas = spawns.filter((p) => p.type === 'panda').length;
   const carts = spawns.filter((p) => p.type === 'minecart');
+  const animals = spawns.filter((p) => FARM_ANIMALS.includes(p.type));
+  const summoned = carts.concat(animals);
+  const sumLine = (p, dx, dz) => `summon ${SUMMON_IDS[p.type]} ${rel(p.x - dx)} ${rel(p.y - GROUND_DROP)} ${rel(p.z - dz)}`;
   const areas = tickingAreas(world, ns);
   const top = wb.y1 - wb.y0 + 2;
   const load = (t, dx, dz) =>
@@ -208,12 +217,14 @@ export function functionFiles(tiles, world, opts = {}) {
   ].join('\n') + '\n';
   const populate = (dx, dz, title) => [
     `# ${title}`,
-    `# ${villagers} villagers and ${golems} iron golems arrive inside ${mobs.length} mob structure${mobs.length === 1 ? '' : 's'}` +
-      (carts.length ? `; ${carts.length} minecarts are summoned onto the railway.` : '.'),
+    `# ${villagers} villagers, ${golems} iron golems, ${cats} cats and ${pandas} pandas arrive inside ` +
+      `${mobs.length} mob structure${mobs.length === 1 ? '' : 's'}; ${animals.length} farm animals` +
+      (carts.length ? ` and ${carts.length} minecarts are summoned.` : ' are summoned.'),
     '# Run ONCE, from the same spot you ran build from, after the city has appeared.',
-    `say Polis: bringing in ${villagers} villagers, ${golems} iron golems` + (carts.length ? ` and ${carts.length} minecarts...` : '...'),
+    `say Polis: bringing in ${villagers} villagers, ${golems} golems, ${cats} cats, ${pandas} pandas, ` +
+      `${animals.length} farm animals` + (carts.length ? ` and ${carts.length} minecarts...` : '...'),
     ...mobs.map((t) => load(t, dx, dz)),
-    ...carts.map((p) => `summon ${SUMMON_IDS.minecart} ${rel(p.x - dx)} ${rel(p.y - GROUND_DROP)} ${rel(p.z - dz)}`),
+    ...summoned.map((p) => sumLine(p, dx, dz)),
     ...areas.map((a) => `tickingarea remove ${a.name}`),
     'say Polis: done. Villagers take jobs from the workstations and claim beds over the next few minutes.',
   ].join('\n') + '\n';
@@ -227,16 +238,18 @@ export function functionFiles(tiles, world, opts = {}) {
     { name: `functions/${ns}/populate_centered.mcfunction`, fn: `${ns}/populate_centered`,
       text: populate(cx, cz, 'Polis: villagers, golems and minecarts (pairs with build_centered)') },
   ];
-  if (carts.length) {
+  // fallbacks for the summoned kinds: run near any that are missing
+  for (const [group, list, noun] of [['minecarts', carts, 'minecarts'], ['animals', animals, 'farm animals']]) {
+    if (!list.length) continue;
     const only = (dx, dz, title) => [
       `# ${title}`,
-      '# Summons only reach simulated chunks: walk along the railway if some carts are missing.',
-      `say Polis: summoning ${carts.length} minecarts...`,
-      ...carts.map((p) => `summon ${SUMMON_IDS.minecart} ${rel(p.x - dx)} ${rel(p.y - GROUND_DROP)} ${rel(p.z - dz)}`),
+      `# Summons only reach simulated chunks: walk closer if some ${noun} are missing.`,
+      `say Polis: summoning ${list.length} ${noun}...`,
+      ...list.map((p) => sumLine(p, dx, dz)),
     ].join('\n') + '\n';
     files.push(
-      { name: `functions/${ns}/minecarts.mcfunction`, fn: `${ns}/minecarts`, text: only(wb.x0, wb.z0, 'Polis: minecarts only (pairs with build)') },
-      { name: `functions/${ns}/minecarts_centered.mcfunction`, fn: `${ns}/minecarts_centered`, text: only(cx, cz, 'Polis: minecarts only (pairs with build_centered)') });
+      { name: `functions/${ns}/${group}.mcfunction`, fn: `${ns}/${group}`, text: only(wb.x0, wb.z0, `Polis: ${noun} only (pairs with build)`) },
+      { name: `functions/${ns}/${group}_centered.mcfunction`, fn: `${ns}/${group}_centered`, text: only(cx, cz, `Polis: ${noun} only (pairs with build_centered)`) });
   }
   return files;
 }
@@ -258,7 +271,7 @@ export function placementGuide(tiles, opts = {}) {
   L.push(`    /function ${ns}/populate_centered`);
   L.push('');
   L.push(`Functions in this pack: ${ns}/build, build_centered, populate, populate_centered`);
-  L.push('(plus minecarts / minecarts_centered on railway cities).');
+  L.push('(plus minecarts / animals and their _centered twins, to re-summon one kind near you).');
   L.push(`Made with Polis v${POLIS_VERSION}. If /function says one is "not found", an older`);
   L.push('Polis pack is probably still active on this world: remove old Polis packs.');
   L.push('');

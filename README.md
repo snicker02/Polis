@@ -1,4 +1,4 @@
-# Polis v0.2.3
+# Polis v0.2.4
 
 A procedural city generator that exports to **Minecraft Bedrock**. Plans a
 street grid, subdivides it into lots, raises buildings with real interiors —
@@ -142,6 +142,21 @@ throughout. Beds come in eight colours, stored in the bed's block entity.
 Furniture only goes against the outer walls, never within one cell of the
 stairs or two cells of the front door, and every furnished building is
 re-verified: if furniture ever cost a floor its reachability, it is removed.
+
+**Animals.** Some suburban lots become fenced paddocks with a gate on the
+street side, hay and a water trough, holding cows, sheep, pigs or chickens
+(each city deals the four kinds out in turn). About a third of parks get a
+fenced bamboo grove with a panda or two. Cats — five coats, wild and
+unowned — wander the pavements and plazas. Cats and pandas travel in the mob
+structures like the villagers (templates from a structure saved in game);
+farm animals are summoned by `populate` while the ticking areas are up, with
+an `animals` fallback function.
+
+**Workstations for every profession.** Interiors now include smokers,
+lecterns, stonecutters, looms, grindstones and smithing tables alongside the
+earlier ones, plus chests and table lanterns, so all thirteen professions have
+somewhere to work. Farms get potatoes as a fourth crop and hay bales; parks
+get lantern posts at the path crossing.
 
 **Villagers and golems.** The populate function places villagers next to beds
 (**Villagers** slider caps the number) and one iron golem per eight villagers.
@@ -314,6 +329,17 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.2.4** — Animals and block variety. Animal pens with cows, sheep, pigs
+and chickens (summoned); panda groves in parks and cats on the streets (in mob
+structures, from in-game templates with no owner or village link). New blocks:
+lecterns, smokers, stonecutters, looms, grindstones, smithing tables (every
+profession now has a workstation), chests, lanterns, hay, oak fences and fence
+gates, bamboo, potatoes, and five more flowers. Every new block and state was
+checked against Bedrock's 1.21.60 state list, and every orientation against
+Bedrock's own mapping table (fence gates, chests, lecterns, smokers and
+stonecutters face directly; looms and grindstones use the old numbering). The validator checks the pens, groves and
+workstations, and places every cat and panda in the population simulation.
 
 **0.2.3** — Foundations for uneven ground: **Foundation depth** (solid
 stone under the city, stone-brick retaining face) and **Clear above ground**

@@ -15,13 +15,15 @@ import zlib from 'node:zlib';
 import { generateCity, generateSingle, DEFAULTS } from '../engine/city.js';
 import { USE } from '../engine/plan.js';
 import { verifyAll } from '../engine/verify.js';
-import { MATERIALS, THEMES, DOOR_KINDS, doorId, MAT, BED_VEC, stairId, cropId, CROP_KINDS, bedId, furnaceId, railId, poweredRailId } from '../engine/materials.js';
+import { MATERIALS, THEMES, DOOR_KINDS, doorId, MAT, BED_VEC, stairId, cropId, CROP_KINDS, bedId, furnaceId, railId, poweredRailId,
+  gateId, chestId, lecternId, smokerId, stonecutterId, pumpkinId, loomId, grindstoneId, bambooId } from '../engine/materials.js';
 import { BLOCK_VERSION } from '../engine/blockcore.js';
 import { VoxelWorld, splitWorld, buildMcPack } from '../engine/blockcore.js';
 import { buildStructures, placementGuide, CHUNK, exportPack, tileList, functionFiles, GROUND_DROP, cityId, exportSalt, POLIS_VERSION, SUMMON_IDS } from '../engine/export.js';
 import { buildMesh, MAX_QUADS, STRIDE } from '../engine/mesher.js';
 import { decodeNbt, readZip, localPayload } from './nbt-read.js';
 import { decodeTyped } from './nbt-typed.js';
+import { CAT_COATS } from '../engine/entity-templates.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const deflateRaw = (b) => new Uint8Array(zlib.deflateRawSync(Buffer.from(b)));
@@ -329,15 +331,14 @@ section('2c. life');
     const inB = (x, z, pad) => r.buildings.some((b) => x >= b.x0 - pad && x <= b.x1 + pad && z >= b.z0 - pad && z <= b.z1 + pad);
     const solid = (x, y, z) => { const id = w.get(x, y, z); return id !== -1 && !MATERIALS.isPassable(id); };
     for (const p of r.spawns) {
-      if (p.type === 'villager') {
-        villagers++;
-        if (!inB(p.x, p.z, 0)) villagersOutside++;
-        if (!solid(p.x, p.y - 1, p.z) || solid(p.x, p.y, p.z) || solid(p.x, p.y + 1, p.z)) badSpawn++;
-      } else {
-        golems++;
-        if (inB(p.x, p.z, 0)) golemsInside++;
-        if (!solid(p.x, p.y - 1, p.z) || solid(p.x, p.y, p.z) || solid(p.x, p.y + 1, p.z) || solid(p.x, p.y + 2, p.z)) badSpawn++;
-      }
+      if (p.type === 'minecart') continue;                       // checked with the railways
+      const tall = p.type === 'golem' ? 3 : 2;
+      let room = solid(p.x, p.y - 1, p.z);
+      for (let h = 0; h < tall; h++) if (solid(p.x, p.y + h, p.z)) room = false;
+      if (!room) badSpawn++;
+      if (p.type === 'villager') { villagers++; if (!inB(p.x, p.z, 0)) villagersOutside++; }
+      else if (inB(p.x, p.z, 0)) golemsInside++;                 // everything else lives outdoors
+      if (p.type === 'golem') golems++;
     }
     if (r.villagers !== 0 && r.bell) bells++;
     check(`life ${c.size}/${c.seed}: villager cap respected`,
@@ -359,7 +360,7 @@ section('2c. life');
   check('villagers: summoned', villagers > 0, String(villagers));
   check('villagers: all inside buildings', villagersOutside === 0, `${villagersOutside} outside`);
   check('golems: summoned', golems > 0, String(golems));
-  check('golems: never inside a building footprint', golemsInside === 0, `${golemsInside} inside`);
+  check('golems, cats, pandas and farm animals: never inside a building footprint', golemsInside === 0, `${golemsInside} inside`);
   check('spawns: every mob has floor under it and room to stand', badSpawn === 0, `${badSpawn} bad`);
   check('village: a bell in every city', bells === 6, `${bells}/6`);
   note(`${waterCells.toLocaleString()} water blocks, 0 leaks · ${farmsTotal} farms · ${bedsTotal} beds · ` +
@@ -372,7 +373,10 @@ section('2c. life');
   for (const k of CROP_KINDS) for (let g = 0; g < 8; g++) cropId(k, g);
   for (let d = 0; d < 4; d++) { bedId(d, 0); bedId(d, 1); }
   for (const f of ['north', 'south', 'east', 'west']) { furnaceId('furnace', f); furnaceId('blast', f); }
-  for (let d = 0; d < 6; d++) { railId(d); poweredRailId(d); }
+  for (let d = 0; d < 10; d++) railId(d);
+  for (let d = 0; d < 6; d++) poweredRailId(d);
+  for (const f of ['north', 'south', 'east', 'west']) { gateId(f); chestId(f); lecternId(f); smokerId(f); stonecutterId(f); pumpkinId(f); loomId(f); grindstoneId(f); }
+  for (const l of ['no_leaves', 'small_leaves', 'large_leaves']) bambooId(l);
   for (const t of Object.keys(THEMES)) for (const th of THEMES[t]) for (const [dir, up] of [[0, 0], [1, 0], [2, 1], [3, 1]]) stairId(th.stair, dir, !!up);
   generateCity({ ...DEFAULTS, size: 128, seed: 4, transit: 'rails' });
   const problems = [];
@@ -625,6 +629,78 @@ section('2f. foundations');
   check('city id: changes with air fill, foundation and clearance', ids.size === 4, [...ids].join(' '));
   check('city id: clearance ignored when air fill is off (it changes nothing)',
     exportSalt({ fillAir: false, foundation: 8, clearAbove: 32 }) === exportSalt({ fillAir: false, foundation: 8, clearAbove: 64 }));
+}
+
+// ===========================================================================
+// 2g. animals and block variety
+// ===========================================================================
+section('2g. animals and variety');
+{
+  const name = (w, x, y, z) => { const id = w.get(x, y, z); return id < 0 ? null : MATERIALS.def(id).block; };
+  const def = (w, x, y, z) => { const id = w.get(x, y, z); return id < 0 ? null : MATERIALS.def(id); };
+  let pens = 0, badPen = 0, grovesN = 0, badGrove = 0, badBamboo = 0, kinds = new Set(), stations = new Set(), crops = new Set();
+  let hay = 0, lamps = 0, chests = 0, lecterns = 0;
+  const STATION_BLOCKS = ['cartography_table', 'fletching_table', 'blast_furnace', 'brewing_stand', 'cauldron', 'barrel',
+    'smoker', 'lectern', 'stonecutter_block', 'loom', 'grindstone', 'smithing_table', 'composter'];
+  for (const seed of [12345, 2, 3, 7]) {
+    const r = generateCity({ ...DEFAULTS, size: 192, seed, ranchChance: 0.2, pandaChance: 1 });
+    const w = r.world, G = 1;
+    for (const p of r.ranches) {
+      pens++; kinds.add(p.kind);
+      // fence all round except the gate, gate facing the street
+      for (let z = p.z0; z <= p.z1; z++) for (let x = p.x0; x <= p.x1; x++) {
+        if (!(x === p.x0 || x === p.x1 || z === p.z0 || z === p.z1)) continue;
+        const n = name(w, x, G + 1, z);
+        if (x === p.gate[0] && z === p.gate[1]) {
+          const d = def(w, x, G + 1, z);
+          if (n !== 'minecraft:fence_gate' || d.states['minecraft:cardinal_direction'].value !== p.side) badPen++;
+        } else if (n !== 'minecraft:oak_fence') badPen++;
+      }
+      for (const a of p.animals) if (a.x <= p.x0 || a.x >= p.x1 || a.z <= p.z0 || a.z >= p.z1 || a.type !== p.kind) badPen++;
+      if (!p.animals.length) badPen++;
+    }
+    // groves: pandas inside a fenced bamboo garden; every bamboo stands on grass or bamboo
+    const pandas = r.spawns.filter((q) => q.type === 'panda');
+    w.forEach((x, y, z, id) => {
+      if (MATERIALS.def(id).block !== 'minecraft:bamboo') return;
+      const below = name(w, x, y - 1, z);
+      if (below !== 'minecraft:bamboo' && below !== 'minecraft:grass_block') badBamboo++;
+    });
+    for (const p of pandas) {
+      grovesN++;
+      // walk out from the panda until a fence or gate is hit in all four directions (it is enclosed)
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        let hit = false;
+        for (let k = 1; k < 24 && !hit; k++) {
+          const n = name(w, p.x + dx * k, G + 1, p.z + dz * k);
+          if (n === 'minecraft:oak_fence' || n === 'minecraft:fence_gate') hit = true;
+        }
+        if (!hit) badGrove++;
+      }
+    }
+    w.forEach((x, y, z, id) => {
+      const b = MATERIALS.def(id).block.replace('minecraft:', '');
+      if (STATION_BLOCKS.includes(b)) stations.add(b);
+      if (/^(wheat|carrots|beetroot|potatoes)$/.test(b)) crops.add(b);
+      if (b === 'hay_block') hay++;
+      if (b === 'lantern') lamps++;
+      if (b === 'chest') chests++;
+      if (b === 'lectern') lecterns++;
+    });
+    const v = verifyAll(w, r.buildings);
+    check(`animals ${seed}: every building floor still reachable`, v.floorsReached === v.floorsChecked);
+  }
+  check('pens: fenced all round, one gate facing the street, animals inside', pens > 0 && badPen === 0, `${badPen} problems in ${pens} pens`);
+  check('pens: all four kinds of farm animal appear', kinds.size === 4, [...kinds].join(','));
+  check('groves: every panda is fenced in on all sides', grovesN > 0 && badGrove === 0, `${badGrove} open sides`);
+  check('groves: every bamboo stalk stands on grass or bamboo', badBamboo === 0, `${badBamboo}`);
+  check('interiors: every villager workstation appears (all 13 professions)', stations.size === 13,
+    STATION_BLOCKS.filter((b) => !stations.has(b)).join(','));
+  check('farms: all four crops grow, including potatoes', crops.size === 4, [...crops].join(','));
+  check('variety: hay, lanterns, chests and lecterns placed', hay > 0 && lamps > 0 && chests > 0 && lecterns > 0,
+    `hay ${hay} lanterns ${lamps} chests ${chests} lecterns ${lecterns}`);
+  note(`${pens} pens (${[...kinds].join(', ')}) · ${grovesN} pandas in groves · ${stations.size} workstation types · ` +
+    `${hay} hay · ${lamps} lanterns · ${chests} chests · ${lecterns} lecterns`);
 }
 
 // ===========================================================================
@@ -993,14 +1069,18 @@ section('6d. population');
   const wantG = r.spawns.filter((p) => p.type === 'golem').length;
   const wantC = r.spawns.filter((p) => p.type === 'minecart').length;
   check('population: this city has villagers, golems and carts to place', wantV > 0 && wantG > 0 && wantC > 0);
-  check('functions: nobody summons villagers or golems any more',
-    !/summon minecraft:(villager|iron_golem)/.test(build + popul));
+  check('functions: nobody summons villagers, golems, cats or pandas (they travel in structures)',
+    !/summon minecraft:(villager|iron_golem|cat|panda)/.test(build + popul));
   check('functions: build summons nothing and loads no mob structures',
     !build.includes('summon') && !lines(build).some((l) => / \S+:m_x/.test(l)));
   const mobLoads = lines(popul).filter((l) => /^structure load \S+:m_x-?\d+_z-?\d+ /.test(l));
   check('populate: one structure load per mob structure', mobLoads.length === out.mobStructures.length && mobLoads.length > 0,
     `${mobLoads.length} vs ${out.mobStructures.length}`);
   check('populate: one summon per minecart', lines(popul).filter((l) => l.startsWith('summon minecraft:minecart ')).length === wantC);
+  const wantA = r.spawns.filter((p) => ['cow', 'sheep', 'pig', 'chicken'].includes(p.type)).length;
+  check('populate: one summon per farm animal', wantA > 0 &&
+    lines(popul).filter((l) => /^summon minecraft:(cow|sheep|pig|chicken) /.test(l)).length === wantA);
+  check('functions: animals fallback present', !!text(`functions/${ns}/animals_centered.mcfunction`));
   const adds = lines(build).filter((l) => l.startsWith('tickingarea add '));
   const removes = lines(popul).filter((l) => l.startsWith('tickingarea remove '));
   check('ticking areas: build adds them, populate removes the same ones', adds.length > 0 && adds.length <= 10 &&
@@ -1025,7 +1105,7 @@ section('6d. population');
   // off-centre player position the way the game would, and check each mob
   const typed = {};
   for (const st of out.structures.concat(out.mobStructures)) typed[st.name] = decodeTyped(raw(`structures/${ns}/${st.name}.mcstructure`));
-  let entCount = 0, badEnt = 0, uids = new Set(), dupUid = 0, vCount = 0, gCount = 0, blocksInMob = 0;
+  let entCount = 0, badEnt = 0, uids = new Set(), dupUid = 0, vCount = 0, gCount = 0, cCount = 0, pCount = 0, blocksInMob = 0;
   for (const st of out.mobStructures) {
     const t = typed[st.name].v;
     const l0 = t.structure.v.block_indices.v[0].v;
@@ -1033,18 +1113,28 @@ section('6d. population');
     for (const e of t.structure.v.entities.v) {
       entCount++;
       const v = e.v, id = v.identifier.v;
+      const d = v.definitions.v.map((x) => x.v);
+      if ('DwellingUniqueID' in v) badEnt++;                     // never tied to the village it was copied from
       if (id === 'minecraft:villager_v2') {
         vCount++;
-        const d = v.definitions.v.map((x) => x.v);
-        if (!d.includes('+unskilled') || !d.includes('+adult') || d.includes('+nitwit') || 'DwellingUniqueID' in v || 'Offers' in v) badEnt++;
+        if (!d.includes('+unskilled') || !d.includes('+adult') || d.includes('+nitwit') || 'Offers' in v) badEnt++;
       } else if (id === 'minecraft:iron_golem') gCount++;
+      else if (id === 'minecraft:cat') {
+        cCount++;
+        const coat = CAT_COATS.find((c) => d.includes(c.def));
+        if (!coat || coat.variant !== v.Variant.v || v.IsTamed.v !== 0 || v.OwnerNew.v !== -1n || !d.includes('+minecraft:cat_wild')) badEnt++;
+      } else if (id === 'minecraft:panda') pCount++;
       else badEnt++;
       if (v.Pos.et !== 5 || v.Pos.v.length !== 3 || v.UniqueID.t !== 4) badEnt++;
       const k = v.UniqueID.v.toString(); if (uids.has(k)) dupUid++; uids.add(k);
     }
   }
   check('mob structures: exactly the planned villagers and golems', vCount === wantV && gCount === wantG, `${vCount}/${wantV} villagers, ${gCount}/${wantG} golems`);
-  check('mob structures: villagers are fresh unskilled adults with no village or trades', badEnt === 0, `${badEnt} bad`);
+  const wantCat = r.spawns.filter((p) => p.type === 'cat').length, wantPanda = r.spawns.filter((p) => p.type === 'panda').length;
+  check('mob structures: exactly the planned cats and pandas', cCount === wantCat && pCount === wantPanda && wantCat > 0,
+    `${cCount}/${wantCat} cats, ${pCount}/${wantPanda} pandas`);
+  check('mob structures: villagers fresh unskilled adults; cats wild with a real coat; nobody tied to a village',
+    badEnt === 0, `${badEnt} bad`);
   check('mob structures: every entity has a unique id', dupUid === 0);
   check('mob structures: contain no blocks at all (never overwrite the city)', blocksInMob === 0, `${blocksInMob} blocks`);
   check('mob structures: palette holds one unused entry, like game-saved structures',
@@ -1076,14 +1166,14 @@ section('6d. population');
         total++;
         const [px, py, pz] = e.v.Pos.v.map((q) => q.v);
         const bx = Math.floor(L.at[0] + (px - origin[0])), by = Math.floor(L.at[1] + (py - origin[1])), bz = Math.floor(L.at[2] + (pz - origin[2]));
-        const tall = e.v.identifier.v === 'minecraft:iron_golem' ? 3 : 2;
+        const tall = e.v.identifier.v === 'minecraft:iron_golem' ? 3 : 2;   // villagers, cats, pandas: 2
         let ok = blocking(`${bx},${by - 1},${bz}`);
         for (let h = 0; h < tall; h++) if (blocking(`${bx},${by + h},${bz}`)) ok = false;
         if (!ok) { bad++; if (!first) first = `${e.v.identifier.v} at ${bx},${by},${bz}`; }
       }
     }
-    check(`simulated load from ${player.join(',')}: every villager and golem lands on a floor with room to stand`,
-      bad === 0 && total === wantV + wantG, `${bad}/${total} bad, e.g. ${first}`);
+    check(`simulated load from ${player.join(',')}: every villager, golem, cat and panda lands on a floor with room to stand`,
+      bad === 0 && total === wantV + wantG + wantCat + wantPanda, `${bad}/${total} bad, e.g. ${first}`);
   }
 
   // bed colours still land in block_position_data at the right index
@@ -1128,7 +1218,7 @@ section('6e. versions');
 
   // every command in every function is one of the three forms we emit
   const FORMS = [/^structure load [a-z0-9_]+:[a-z0-9_]+ ~-?\d* ~-?\d* ~-?\d*$/,
-    /^summon minecraft:minecart ~-?\d* ~-?\d* ~-?\d*$/, /^say [^\n]+$/,
+    /^summon minecraft:(minecart|cow|sheep|pig|chicken) ~-?\d* ~-?\d* ~-?\d*$/, /^say [^\n]+$/,
     /^tickingarea add ~-?\d* ~-?\d* ~-?\d* ~-?\d* ~-?\d* ~-?\d* [a-z0-9_]+$/, /^tickingarea remove [a-z0-9_]+$/];
   let badCmd = null;
   for (const f of out.functions) for (const l of f.text.split('\n')) {
