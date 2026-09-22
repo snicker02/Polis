@@ -8,7 +8,7 @@ import { Renderer } from './engine/renderer.js';
 import { exportPack, exportStructuresZip, tileList, commandList, cityId, exportSalt, POLIS_VERSION } from './engine/export.js';
 import { THEMES } from './engine/materials.js';
 
-const VERSION = '0.3.5';
+const VERSION = '0.4.0';
 const $ = (id) => document.getElementById(id);
 
 const SLIDERS = {
@@ -17,7 +17,7 @@ const SLIDERS = {
   maxFloors: 0, pitch: 0, setbackEvery: 0, bw: 0, bd: 0, floors: 0, clip: 0,
   farmChance: 2, pondChance: 2, villagers: 0, wallHeight: 0, foundation: 0, clearAbove: 0, hills: 0, golemsPer10: 0,
 };
-const CHECKS = ['setback', 'roofAccess', 'useStairs', 'lights', 'lamps', 'trees', 'markings', 'landmarks', 'canal'];
+const CHECKS = ['setback', 'roofAccess', 'useStairs', 'lights', 'lamps', 'trees', 'markings', 'landmarks', 'canal', 'detail', 'streetSigns'];
 
 let renderer = null;
 let result = null;       // { world, plan, buildings, cfg, stats }
@@ -309,6 +309,8 @@ function showStats(mesh, times) {
     if (s.landmarks && s.landmarks.length) line('landmarks', s.landmarks.map((k) =>
       ({ townhall: 'town hall', clocktower: 'clock tower', library: 'library', market: 'market', church: 'church',
         school: 'school', lighthouse: 'lighthouse', castle: 'castle' }[k])).join(' · '));
+    if (s.streets) line('streets named', s.streets);
+    if (s.shops) line('shopfronts', String(s.shops));
     if (s.centre) line('centre marker', s.centre);
     if (s.canal) line('canal', s.canal + (s.dock ? ' · dock' : ''));
     if (s.art) line('art panels', String(s.art));

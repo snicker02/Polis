@@ -326,6 +326,13 @@ export function makeBuilding(world, spec, rng) {
     for (const [cx, cz] of doorCells) world.set(cx, gy + 3, cz, MAT.GLOWSTONE);
   }
 
+  if (spec.detail !== false) {
+    facadeDetail(world, {
+      rects: Array.from({ length: floors }, (_, k) => rect(k)), floorYs, roofY, top, theme, style, face, P,
+      doorCells, outv, gy, floors, core, hut, hutDoor,
+    }, rng);
+  }
+
   return {
     x0, z0, x1, z1, w, d, floors, pitch: P, groundY: gy, style,
     themeName: theme.name, theme, facing: face,
@@ -338,6 +345,138 @@ export function makeBuilding(world, spec, rng) {
     doorCells: doorCells.map((c) => c.slice()),
     outside: [dx + outv[0], gy + 1, dz + outv[1]],
   };
+}
+
+// ---- facade detail ----------------------------------------------------------
+// Relief on the outside so a building is not a flat box: quoins at the
+// corners, pilasters between the windows, an eave at the roofline, balconies
+// and a bay window on the street front, a framed doorway, and clutter on the
+// roof. Everything that sticks out is only placed into empty space and always
+// above head height, so it can never block a street, a doorway or a lamp.
+function facadeDetail(world, c, rng) {
+  const { rects, floorYs, roofY, top, theme, style, face, P, doorCells, outv, gy, floors, core, hut, hutDoor } = c;
+  // the way out onto the roof stays clear: the hut and the space round its door
+  const roofBusy = (x, z) => {
+    if (hut && core && x >= core.x0 - 2 && x <= core.x1 + 2 && z >= core.z0 - 2 && z <= core.z1 + 2) return true;
+    if (hutDoor && Math.abs(x - hutDoor[0]) <= 2 && Math.abs(z - hutDoor[2]) <= 2) return true;
+    return false;
+  };
+  const put = (x, y, z, m) => { if (!world.has(x, y, z)) world.set(x, y, z, m); };
+  const isDoor = (x, z) => doorCells.some(([a, b]) => a === x && b === z);
+
+  // quoins: alternating corner blocks, all the way up
+  for (let k = 0; k < floors; k++) {
+    const r = rects[k], sy = floorYs[k];
+    for (const [cx, cz] of [[r.x0, r.z0], [r.x1, r.z0], [r.x0, r.z1], [r.x1, r.z1]])
+      for (let y = sy + 1; y <= sy + P - 1; y += 2) world.set(cx, y, cz, theme.trim);
+  }
+
+  // pilasters: the blank columns between window runs, in the trim material
+  if (style !== 'house') {
+    for (let k = 0; k < floors; k++) {
+      const r = rects[k], sy = floorYs[k];
+      for (const [px, pz, , i, len] of perimeter(r.x0, r.z0, r.x1, r.z1)) {
+        if (i === 0 || i === len - 1) continue;
+        if (style === 'tower' ? i % 4 !== 0 : i % 5 !== 0) continue;
+        for (let y = sy + 1; y <= sy + P - 2; y++) {
+          if (k === 0 && isDoor(px, pz)) continue;
+          const id = world.get(px, y, pz);
+          if (id === theme.wall) world.set(px, y, pz, theme.trim);
+        }
+      }
+    }
+  }
+
+  // eave: upside-down stairs one block out all round the roofline
+  {
+    const r = top, y = roofY;
+    // the way out is read from the cell itself, not the side index (corners get both)
+    for (const [px, pz] of perimeter(r.x0, r.z0, r.x1, r.z1)) {
+      const outs = [];
+      if (px === r.x0) outs.push([-1, 0]);
+      if (px === r.x1) outs.push([1, 0]);
+      if (pz === r.z0) outs.push([0, -1]);
+      if (pz === r.z1) outs.push([0, 1]);
+      for (const [ox, oz] of outs) {
+        const dir = ox === 1 ? WEIRDO.west : ox === -1 ? WEIRDO.east : oz === 1 ? WEIRDO.north : WEIRDO.south;
+        put(px + ox, y, pz + oz, stairId(theme.stair, dir, true));
+      }
+    }
+  }
+
+  // balconies and a bay window on the street front
+  const front = (k) => {
+    const r = rects[k];
+    const cells = [];
+    if (face === 'south') for (let x = r.x0 + 1; x <= r.x1 - 1; x++) cells.push([x, r.z1]);
+    else if (face === 'north') for (let x = r.x0 + 1; x <= r.x1 - 1; x++) cells.push([x, r.z0]);
+    else if (face === 'east') for (let z = r.z0 + 1; z <= r.z1 - 1; z++) cells.push([r.x1, z]);
+    else for (let z = r.z0 + 1; z <= r.z1 - 1; z++) cells.push([r.x0, z]);
+    return cells;
+  };
+  if (style !== 'house') {
+    for (let k = 1; k < floors; k++) {
+      if (k % 2 === 0 || !rng.chance(0.7)) continue;
+      const cells = front(k);
+      if (cells.length < 5) continue;
+      const start = 1 + Math.floor(rng() * Math.max(1, cells.length - 4));
+      const sy = floorYs[k];
+      for (let i = start; i < start + 3 && i < cells.length; i++) {
+        const [x, z] = cells[i];
+        put(x + outv[0], sy, z + outv[1], theme.trim);            // the ledge, at floor level
+        put(x + outv[0], sy + 1, z + outv[1], MAT.FENCE);         // its railing
+      }
+    }
+  }
+  if (style === 'mid' && floors >= 2 && rng.chance(0.5)) {
+    const cells = front(1);
+    if (cells.length >= 5) {
+      const start = 1 + Math.floor(rng() * Math.max(1, cells.length - 4));
+      const sy = floorYs[1], hi = sy + P - 1;
+      for (let i = start; i < start + 3 && i < cells.length; i++) {
+        const [x, z] = cells[i];
+        const bx = x + outv[0], bz = z + outv[1];
+        put(bx, sy, bz, theme.trim);                              // floor of the bay
+        put(bx, hi, bz, theme.trim);                              // and its little roof
+        for (let y = sy + 1; y < hi; y++) put(bx, y, bz, i === start || i === start + 2 ? theme.trim : theme.glass);
+      }
+    }
+  }
+
+  // a framed doorway
+  for (const [x, z] of doorCells) {
+    const alongX = outv[1] !== 0;
+    for (const s of [-1, 1]) {
+      const fx = x + (alongX ? s : 0), fz = z + (alongX ? 0 : s);
+      if (isDoor(fx, fz)) continue;
+      for (let y = gy + 1; y <= gy + 3; y++) world.set(fx, y, fz, theme.trim);
+    }
+    world.set(x, gy + 3, z, theme.trim);
+  }
+
+  // roof clutter
+  const r = top, cx = Math.floor((r.x0 + r.x1) / 2), cz = Math.floor((r.z0 + r.z1) / 2);
+  if (style === 'house') {
+    const chx = rng.chance(0.5) ? r.x0 + 1 : r.x1 - 1, chz = rng.chance(0.5) ? r.z0 + 1 : r.z1 - 1;
+    if (!roofBusy(chx, chz))
+      for (let y = roofY; y <= roofY + Math.ceil(Math.min(r.x1 - r.x0, r.z1 - r.z0) / 2) + 2; y++) world.set(chx, y, chz, MAT.BRICK);
+  } else if (r.x1 - r.x0 >= 6 && r.z1 - r.z0 >= 6) {
+    const tx = r.x0 + 2, tz = r.z0 + 2;
+    let free = true;
+    for (let dz = 0; dz <= 2 && free; dz++) for (let dx = 0; dx <= 2 && free; dx++) if (roofBusy(tx + dx, tz + dz)) free = false;
+    if (free && rng.chance(0.6)) {                                // water tank on legs
+      for (const [ox, oz] of [[0, 0], [2, 0], [0, 2], [2, 2]]) put(tx + ox, roofY + 1, tz + oz, MAT.FENCE);
+      for (let dz = 0; dz <= 2; dz++) for (let dx = 0; dx <= 2; dx++)
+        for (let y = roofY + 2; y <= roofY + 3; y++) put(tx + dx, y, tz + dz, theme.trim);
+    }
+    if (rng.chance(0.7)) {                                        // vents
+      for (const [ox, oz] of [[1, -1], [-1, 1]]) {
+        if (roofBusy(cx + ox, cz + oz)) continue;
+        put(cx + ox, roofY + 1, cz + oz, MAT.SMOOTH);
+        put(cx + ox, roofY + 2, cz + oz, MAT.IRON);
+      }
+    }
+  }
 }
 
 // ---- pitched roof ----------------------------------------------------------

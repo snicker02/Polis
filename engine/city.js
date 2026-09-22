@@ -43,6 +43,8 @@ export const DEFAULTS = {
   cityStyle: 'modern',       // modern | desert | snowy | cherry | medieval
   outline: 'organic',        // 'organic' (lobed outline along the street grid) | 'square'
   hills: 2,                  // city blocks raised 0..hills blocks on gentle terraces, with steps
+  detail: true,              // relief on the outside of buildings (quoins, eaves, balconies, bays)
+  streetSigns: true,         // street names on signs at the junctions
   centreMark: true,          // a gold block and sign marking where build_centered puts you
   canal: true,               // a canal through the city, with bridges and a dock
   landmarks: true,           // town hall, clock tower, library, market square near downtown
@@ -63,7 +65,7 @@ export const DEFAULTS = {
   lamps: true,
   trees: true,
   markings: true,
-  budget: 4000000,
+  budget: 9000000,          // room for a 512-block city
 };
 
 const GROUND = 1;   // surface layer; players walk at GROUND+1
@@ -165,6 +167,16 @@ export function generateCity(cfgIn, onProgress) {
       const L = buildLandmark(world, lot, frontage(plan, lot).side, cfg, rng, GROUND);
       if (L) {
         landmarks.push(L);
+        // a landmark can be more than one building (the mansion's wings): every
+        // one gets furnished, lifted with its terrace and verified like the rest
+        for (const wing of L.wings || []) {
+          buildings.push(wing);
+          if (cfg.furnish) {
+            const fw = furnish(world, wing, lifeRng);
+            wing.beds = fw.beds; wing.furniture = fw;
+            for (const b of fw.beds) beds.push(b);
+          } else wing.beds = [];
+        }
         if (L.rec) {
           buildings.push(L.rec);
           if (cfg.furnish) {
@@ -203,6 +215,7 @@ export function generateCity(cfgIn, onProgress) {
     const front = frontage(plan, lot);
     const theme = themeRng.pick(STYLE.themes[lot.style] || STYLE.themes.mid);
     const rec = makeBuilding(world, {
+      detail: cfg.detail,
       x0: fx0, z0: fz0, x1: fx1, z1: fz1,
       floors: lot.floors, pitch: cfg.pitch, groundY: GROUND,
       style: lot.style, facing: front.side, theme,
@@ -250,12 +263,33 @@ export function generateCity(cfgIn, onProgress) {
     }
   }
 
+  // Pen animals were placed when the pen was built; a tree in a neighbouring
+  // yard can spread its canopy over the fence afterwards. Re-check every
+  // animal now the city is finished, and move any that lost its head room.
+  for (const rch of ranches) {
+    const free = [];
+    for (let z = rch.z0 + 1; z <= rch.z1 - 1; z++)
+      for (let x = rch.x0 + 1; x <= rch.x1 - 1; x++)
+        if (world.has(x, GROUND, z) && !world.has(x, GROUND + 1, z) && !world.has(x, GROUND + 2, z)) free.push([x, z]);
+    const used = new Set();
+    for (const a of rch.animals) {
+      if (!world.has(a.x, GROUND + 1, a.z) && !world.has(a.x, GROUND + 2, a.z)) { used.add(a.x + ',' + a.z); continue; }
+      const spot = free.find(([x, z]) => !used.has(x + ',' + z));
+      if (spot) { a.x = spot[0]; a.z = spot[1]; used.add(spot.join()); }
+    }
+    rch.animals = rch.animals.filter((a) => !world.has(a.x, GROUND + 1, a.z) && !world.has(a.x, GROUND + 2, a.z));
+  }
+
   // ---- hills: lift the blocks onto their terraces, then cut the steps -------
   const elevAt = (x, z) => (x >= 0 && z >= 0 && x < W && z < D ? hills.elev[z * W + x] : 0);
   let stairRuns = [];
   if (hills.H) {
     liftBlocks(world, plan, hills, GROUND);
-    for (const rec of buildings) shiftBuilding(rec, elevAt(rec.door.x, rec.door.z));
+    for (const rec of buildings) {
+      const e = elevAt(rec.door.x, rec.door.z);
+      shiftBuilding(rec, e);
+      for (const sf of (rec.furniture && rec.furniture.shops) || []) sf.at[1] += e;   // shop signs ride up too
+    }
     for (const rch of ranches) for (const a of rch.animals) a.y += elevAt(a.x, a.z);
     for (const p of pandas) p.y += elevAt(p.x, p.z);
     for (const L of landmarks) {
@@ -281,6 +315,9 @@ export function generateCity(cfgIn, onProgress) {
   // ---- the village ---------------------------------------------------------
   // the town hall's bell is the village bell; otherwise one goes in a plaza or park
   const hall = landmarks.find((l) => l.kind === 'townhall' && l.bell);
+  // ---- street names ----------------------------------------------------------
+  const streets = cfg.streetSigns ? streetNameSigns(world, plan, cfg, GROUND, elevAt, rng.fork()) : null;
+
   const bell = hall ? hall.bell : (cfg.villagers > 0 ? placeBell(world, plan, GROUND, elevAt) : null);
   let spawns = [];
   if (cfg.villagers > 0) {
@@ -311,7 +348,7 @@ export function generateCity(cfgIn, onProgress) {
   applyStyle(world, plan, STYLE, (x, z) => GROUND + elevAt(x, z));
 
   // ---- the centre marker -----------------------------------------------------
-  const centre = cfg.centreMark ? markCentre(world, plan, buildings, GROUND, elevAt) : null;
+  const centre = cfg.centreMark ? markCentre(world, plan, buildings, GROUND, elevAt, spawns) : null;
   if (centre) world.centre = [centre.block[0], centre.block[2]];   // the export centres on it
 
   // ---- can everything be reached from the streets? ---------------------------
@@ -319,9 +356,61 @@ export function generateCity(cfgIn, onProgress) {
   const unreached = buildings.filter((b) => !reached.has(`${b.outside[0]},${b.outside[1]},${b.outside[2]}`));
   const reach = { total: buildings.length, reached: buildings.length - unreached.length, unreached };
 
-  const stats = summarise(world, plan, buildings, cfg, { farms, beds, spawns, bell, transit, wall, ranches, landmarks, hills, stairRuns, reach, canal, centre });
-  return { world, plan, buildings, cfg, stats, farms, ranches, spawns, bell, transit, wall, landmarks, canal, centre,
+  const stats = summarise(world, plan, buildings, cfg, { farms, beds, spawns, bell, transit, wall, ranches, landmarks, hills, stairRuns, reach, canal, centre, streets });
+  return { world, plan, buildings, cfg, stats, farms, ranches, spawns, bell, transit, wall, landmarks, canal, centre, streets,
     hills, stairRuns, reach, groundAt: (x, z) => GROUND + elevAt(x, z) };
+}
+
+// ---- street names ------------------------------------------------------------
+// Every avenue and street gets a name; each junction of two named streets gets
+// a sign on a corner of the pavement, facing the crossing, with both names on
+// it. Alleys inside the blocks are left unnamed.
+const AVENUE_NAMES = ['First', 'Second', 'Third', 'Fourth', 'Fifth', 'Sixth', 'Seventh', 'Eighth', 'Ninth', 'Tenth', 'Park', 'Grand'];
+const STREET_NAMES = ['Oak', 'Elm', 'Maple', 'Cedar', 'Birch', 'Willow', 'Aspen', 'Poplar', 'Alder', 'Hazel', 'Linden', 'Rowan',
+  'Chestnut', 'Walnut', 'Laurel', 'Juniper', 'Mulberry', 'Sycamore'];
+
+function streetNameSigns(world, plan, cfg, G, elevAt, rng) {
+  const { W, D, use, mask } = plan;
+  const wide = Math.max(5, cfg.avenueWidth - 1);
+  let av = 0, st = 0;
+  const named = plan.corridors
+    .filter((c) => c.w >= 5)
+    .map((c) => ({ ...c, name: c.w >= wide ? `${AVENUE_NAMES[av++ % AVENUE_NAMES.length]} Ave` : `${STREET_NAMES[st++ % STREET_NAMES.length]} St` }));
+  const xs = named.filter((c) => c.axis === 'x'), zs = named.filter((c) => c.axis === 'z');
+  // a pavement corner, at whatever height its block sits on
+  const free = (x, z) => {
+    if (x <= 0 || z <= 0 || x >= W - 1 || z >= D - 1) return false;
+    if (mask && !mask[z * W + x]) return false;
+    if (use[z * W + x] !== USE.SIDEWALK) return false;
+    const g = G + elevAt(x, z);
+    return world.has(x, g, z) && !world.has(x, g + 1, z) && !world.has(x, g + 2, z);
+  };
+  // a sign faces a direction as one of sixteen turns, 0 south, 4 west, 8 north, 12 east
+  const dir16 = (fx, fz) => (Math.round(Math.atan2(-fx, fz) / (Math.PI / 8)) + 16) % 16;
+  const signs = [];
+  for (const a of xs) {
+    for (const b of zs) {
+      // where they meet: crossing, or (far more often in this grid) one street
+      // running into the side of the other
+      const oz0 = Math.max(a.z0, b.z0), oz1 = Math.min(a.z1, b.z1);
+      if (oz0 > oz1) continue;
+      const ox0 = Math.max(a.x0, b.x0), ox1 = Math.min(a.x1, b.x1);
+      let x0, x1, z0, z1;
+      if (ox0 <= ox1) { x0 = ox0; x1 = ox1; z0 = oz0; z1 = oz1; }                     // crossing
+      else if (b.x1 + 1 === a.x0 || b.x0 - 1 === a.x1) { x0 = b.x0; x1 = b.x1; z0 = oz0; z1 = oz1; }   // T-junction
+      else continue;
+      const mx = (x0 + x1) / 2, mz = (z0 + z1) / 2;
+      for (const [cx, cz] of [[x0 - 1, z0 - 1], [x1 + 1, z0 - 1], [x0 - 1, z1 + 1], [x1 + 1, z1 + 1]]) {
+        if (!free(cx, cz)) continue;
+        const g = G + elevAt(cx, cz);
+        world.set(cx, g + 1, cz, signId(dir16(mx - cx, mz - cz)));
+        world.setData(cx, g + 1, cz, { id: 'Sign', tags: signTags(`${a.name}\n${b.name}`) });
+        signs.push({ at: [cx, g + 1, cz], text: `${a.name} / ${b.name}` });
+        break;                                                   // one corner per junction
+      }
+    }
+  }
+  return { names: named.map((c) => c.name), signs };
 }
 
 // ---- the centre marker -----------------------------------------------------
@@ -330,14 +419,16 @@ export function generateCity(cfgIn, onProgress) {
 // way) says so, with a lantern on a post opposite. It goes as near the middle
 // of the city as it can while staying outdoors, on level ground, off the
 // railway and clear of buildings.
-function markCentre(world, plan, buildings, G, elevAt) {
+function markCentre(world, plan, buildings, G, elevAt, spawns = []) {
   const { W, D, use, mask } = plan;
   const wb = world.box;
   const cx0 = Math.floor((wb.x0 + wb.x1 + 1) / 2), cz0 = Math.floor((wb.z0 + wb.z1 + 1) / 2);
   const inBuilding = (x, z) => buildings.some((b) => x >= b.x0 - 1 && x <= b.x1 + 1 && z >= b.z0 - 1 && z <= b.z1 + 1);
   const OUTDOOR = new Set([USE.ROAD, USE.SIDEWALK, USE.PLAZA, USE.PARK]);
+  const taken = new Set(spawns.map((p) => p.x + ',' + p.z));     // never on top of a villager, golem or cat
   const free = (x, z) => {
     if (x < 1 || z < 1 || x >= W - 1 || z >= D - 1) return false;
+    if (taken.has(x + ',' + z)) return false;
     if (mask && !mask[z * W + x]) return false;
     if (!OUTDOOR.has(use[z * W + x]) || elevAt(x, z) !== 0) return false;     // outdoors, at street level
     if (inBuilding(x, z)) return false;
@@ -705,6 +796,8 @@ function summarise(world, plan, buildings, cfg, life = {}) {
     ranches: (life.ranches || []).length,
     landmarks: (life.landmarks || []).map((l) => l.kind),
     centre: life.centre ? life.centre.block.join(', ') : '',
+    streets: life.streets ? `${life.streets.names.length} named · ${life.streets.signs.length} signs` : '',
+    shops: buildings.reduce((a, b) => a + ((b.furniture && b.furniture.shops) || []).length, 0),
     canal: life.canal ? `${life.canal.u1 - life.canal.u0 + 1} long · ${life.canal.bridges} bridges` : '',
     dock: !!(life.canal && life.canal.dock),
     art: buildings.reduce((a, b) => a + (b.roomPlans || []).reduce((c, p) => c + ((p && p.art) || 0), 0), 0),

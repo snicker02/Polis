@@ -11,10 +11,12 @@
 // building is furnished it is re-verified with the player flood fill; if any
 // floor became unreachable, the furniture comes back out.
 
-import { MAT, MATERIALS, FLOWERS, CARPETS, CROP_KINDS, cropId, bedId, furnaceId, BED_VEC, stairId, WEIRDO,
+import { MAT, MATERIALS, FLOWERS, CARPETS, CROP_KINDS, cropId, bedId, furnaceId, BED_VEC, stairId, WEIRDO, wallSignId, signId, SIGN_FACING,
   gateId, chestId, lecternId, smokerId, stonecutterId, loomId, grindstoneId, bambooId } from './materials.js';
 import { verifyBuilding } from './verify.js';
+import { OUTWARD } from './building.js';
 import { planRooms, buildRooms } from './rooms.js';
+import { signTags } from './landmarks.js';
 import { USE } from './plan.js';
 
 export const USE_FARM = 6;
@@ -327,6 +329,54 @@ export function furnish(world, rec, rng, opts = {}) {
     }
   };
 
+  // A shop at street level: a glass front between the piers, an awning over
+  // the pavement, a counter inside, and a sign on the pier with its name.
+  const SHOPS = ['Bakery', 'Butcher', 'Grocer', 'Florist', 'Tailor', 'Bookshop', 'Apothecary', 'Cobbler',
+    'Tea House', 'Toy Shop', 'Fishmonger', 'Barber', 'Cafe', 'Hardware', 'Sweet Shop', 'Cheesemonger'];
+  const shopFronts = [];
+  const shopFront = (rm, sy, rng2) => {
+    const face = rec.facing, [ox, oz] = OUTWARD[face];
+    const r0 = rec.rects[0];
+    // the room's cells along the street wall
+    const cells = [];
+    if (face === 'south' && rm.z1 === r0.z1 - 1) for (let x = rm.x0; x <= rm.x1; x++) cells.push([x, r0.z1]);
+    else if (face === 'north' && rm.z0 === r0.z0 + 1) for (let x = rm.x0; x <= rm.x1; x++) cells.push([x, r0.z0]);
+    else if (face === 'east' && rm.x1 === r0.x1 - 1) for (let z = rm.z0; z <= rm.z1; z++) cells.push([r0.x1, z]);
+    else if (face === 'west' && rm.x0 === r0.x0 + 1) for (let z = rm.z0; z <= rm.z1; z++) cells.push([r0.x0, z]);
+    if (cells.length < 3) return;
+    const doorCells = rec.doorCells || [];
+    const isDoor = (x, z) => doorCells.some(([a, b]) => a === x && b === z);
+    const win = cells.filter(([x, z]) => !isDoor(x, z));
+    if (win.length < 3) return;
+    const glassCells = win.slice(1, -1).length >= 2 ? win.slice(1, -1) : win;
+    for (const [x, z] of glassCells) {
+      for (let y = sy + 1; y <= sy + 2; y++) world.set(x, y, z, rec.theme.glass);   // a proper shop window
+      const ax = x + ox, az = z + oz;
+      if (!world.has(ax, sy + 3, az)) put(ax, sy + 3, az, stairId(rec.theme.stair, DIRNAME(-ox, -oz) === 'north' ? WEIRDO.north
+        : DIRNAME(-ox, -oz) === 'south' ? WEIRDO.south : DIRNAME(-ox, -oz) === 'east' ? WEIRDO.east : WEIRDO.west, true));  // awning
+    }
+    // counter just inside the window
+    const mid = glassCells[Math.floor(glassCells.length / 2)];
+    for (const d of [-1, 0, 1]) {
+      const cxx = mid[0] - ox + (oz ? d : 0), czz = mid[1] - oz + (ox ? d : 0);
+      if (cxx < rm.x0 || cxx > rm.x1 || czz < rm.z0 || czz > rm.z1) continue;
+      if (!world.has(cxx, sy + 1, czz)) put(cxx, sy + 1, czz, MAT.DESK);
+    }
+    // the name, on a pier beside the window
+    const name = rng2.pick(SHOPS);
+    for (const [x, z] of [win[0], win[win.length - 1]]) {
+      const ax = x + ox, az = z + oz;
+      if (world.has(ax, sy + 2, az) || world.has(x, sy + 2, z) === false) {
+        if (world.has(ax, sy + 2, az)) continue;
+      }
+      if (!world.has(x, sy + 2, z)) continue;                    // needs a solid pier behind it
+      put(ax, sy + 2, az, wallSignId(face));
+      world.setData(ax, sy + 2, az, { id: 'Sign', tags: signTags(name) });
+      shopFronts.push({ name, at: [ax, sy + 2, az], room: rm.type });
+      break;
+    }
+  };
+
   for (let k = 0; k < rec.floors; k++) {
     const r = rec.rects[k];
     const sy = rec.floorYs[k], y = sy + 1;
@@ -352,6 +402,7 @@ export function furnish(world, rec, rng, opts = {}) {
           : rm.type === 'classroom' ? 'lectern' : null;
         if (must && !place(ring, [must], free, sy, k, true) && must === 'bed') rm.type = 'living';   // too cramped for a bed: a sitting room
         if (rm.type === 'classroom') classroomDesks(rm, sy, free, allDoors);
+        if (rm.type === 'shop' && k === 0) shopFront(rm, sy, rng);
         place(ring, ROOMS[rm.type] || ROOMS.office, free, sy, k);
       }
     } else {
@@ -405,7 +456,7 @@ export function furnish(world, rec, rng, opts = {}) {
   const rooms = [];
   plans.forEach((p, k) => { if (p) for (const rm of p.rooms) rooms.push({ ...rm, floor: k }); });
   rec.roomPlans = plans;
-  return { ok: true, beds, placed: placed.length, stations, plants, shelves, rooms, desks: desks.length / 2 };
+  return { ok: true, beds, placed: placed.length, stations, plants, shelves, rooms, desks: desks.length / 2, shops: shopFronts };
 }
 
 // Walk from the front door (up only onto stairs, down up to three, through

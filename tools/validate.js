@@ -1063,7 +1063,7 @@ section('2k. rooms');
     const r = generateCity({ ...DEFAULTS, size, seed, cityStyle: st });
     const w = r.world;
     for (const b of r.buildings) {
-      if (b.landmark && b.landmark !== 'school') { if (b.roomPlans && b.roomPlans.some(Boolean)) landmarkRooms++; continue; }
+      if (b.landmark && b.landmark !== 'school' && b.landmark !== 'mansion') { if (b.roomPlans && b.roomPlans.some(Boolean)) landmarkRooms++; continue; }
       buildings++;
       if (!b.roomPlans || !b.roomPlans.some(Boolean)) continue;
       withRooms++;
@@ -1134,7 +1134,7 @@ section('2k. rooms');
   check('rooms: every bedroom and studio has a bed', noBed === 0, `${noBed} without`);
   check('rooms: every kitchen has a crafting table, furnace or smoker', noKitchen === 0, `${noKitchen} without`);
   check('rooms: every room has a ceiling light', lit === rooms, `${lit}/${rooms}`);
-  check('rooms: landmarks keep their open halls (the school has classrooms)', landmarkRooms === 0);
+  check('rooms: landmarks keep their open halls (the school and mansion have rooms)', landmarkRooms === 0);
   note(`${withRooms}/${buildings} buildings divided · ${rooms} rooms: ` + Object.entries(types).map(([t, n]) => `${n} ${t}`).join(', '));
 }
 
@@ -1382,6 +1382,93 @@ section('2n. centre marker');
   const off = generateCity({ ...DEFAULTS, size: 160, seed: 12345, centreMark: false });
   check('centre marker: none when switched off, and the export falls back to the middle', !off.centre && !off.world.centre);
   note(`${marked} markers, at most ${maxDrift} blocks from the exact middle (it must stand outdoors, level and off the railway)`);
+}
+
+// ===========================================================================
+// 2o. facade detail, shopfronts, street names, the mansion
+// ===========================================================================
+section('2o. detail, shops, street names, mansion');
+{
+  const name = (w, x, y, z) => { const id = w.get(x, y, z); return id < 0 ? null : MATERIALS.def(id).block; };
+  let cities = 0, blockedStreet = 0, eaves = 0, balconies = 0, roofClutter = 0;
+  let shops = 0, shopBad = 0, junctions = 0, signBad = 0, mansions = 0, mansionBad = 0, gardens = 0;
+  const shopNames = new Set();
+  for (const [size, seed, st] of [[160, 12345, 'modern'], [192, 1, 'medieval'], [224, 3, 'desert'], [256, 7, 'cherry']]) {
+    const r = generateCity({ ...DEFAULTS, size, seed, cityStyle: st });
+    const w = r.world, { W, D, use } = r.plan;
+    cities++;
+    // Nothing a building sticks out with may block the pavement beside it at
+    // head height. Street furniture that belongs there is allowed.
+    const STREET_FURNITURE = /(_fence|iron_bars|lantern|sea_lantern|standing_sign|wall_sign|bell)$/;
+    for (const b of r.buildings) {
+      const rr = b.rects[0];
+      for (let x = rr.x0 - 1; x <= rr.x1 + 1; x++)
+        for (let z = rr.z0 - 1; z <= rr.z1 + 1; z++) {
+          if (x > rr.x0 - 1 && x < rr.x1 + 1 && z > rr.z0 - 1 && z < rr.z1 + 1) continue;   // the ring only
+          if (x < 0 || z < 0 || x >= W || z >= D || use[z * W + x] !== USE.SIDEWALK) continue;
+          const g = r.groundAt(x, z);
+          for (const y of [g + 1, g + 2]) {
+            const id = w.get(x, y, z);
+            if (id >= 0 && !MATERIALS.isPassable(id) && !STREET_FURNITURE.test(MATERIALS.def(id).block)) blockedStreet++;
+          }
+        }
+    }
+    // the details themselves
+    for (const b of r.buildings) {
+      const top = b.rects[b.floors - 1];
+      for (let x = top.x0 - 1; x <= top.x1 + 1; x++) {
+        if (/_stairs$/.test(name(w, x, b.roofY, top.z0 - 1) || '')) eaves++;
+        if (/_stairs$/.test(name(w, x, b.roofY, top.z1 + 1) || '')) eaves++;
+      }
+      for (let y = b.roofY + 1; y <= b.roofY + 3; y++)
+        for (let x = top.x0; x <= top.x1; x++) for (let z = top.z0; z <= top.z1; z++) if (w.has(x, y, z)) roofClutter++;
+      for (let k = 1; k < b.floors; k++) {
+        const rr = b.rects[k], sy = b.floorYs[k];
+        for (let x = rr.x0 - 1; x <= rr.x1 + 1; x++) for (const z of [rr.z0 - 1, rr.z1 + 1])
+          if (name(w, x, sy + 1, z) === 'minecraft:oak_fence') balconies++;
+      }
+    }
+    // shopfronts
+    for (const b of r.buildings) for (const sf of (b.furniture && b.furniture.shops) || []) {
+      shops++; shopNames.add(sf.name);
+      const [sx, sy, sz] = sf.at;
+      const d = w.getData(sx, sy, sz);
+      if (name(w, sx, sy, sz) !== 'minecraft:wall_sign' || !d || d.tags.FrontText.v.Text.v !== sf.name) shopBad++;
+    }
+    // street names
+    for (const sg of r.streets.signs) {
+      junctions++;
+      const [x, y, z] = sg.at;
+      const d = w.getData(x, y, z);
+      if (name(w, x, y, z) !== 'minecraft:standing_sign' || !d) { signBad++; continue; }
+      const text = d.tags.FrontText.v.Text.v.split('\n');
+      if (text.length !== 2 || !/(Ave|St)$/.test(text[0]) || !/(Ave|St)$/.test(text[1])) signBad++;
+      if (use[z * W + x] !== USE.SIDEWALK) signBad++;
+    }
+    // the mansion
+    const m = r.landmarks.find((l) => l.kind === 'mansion');
+    if (m) {
+      mansions++;
+      if (m.garden) gardens++;
+      const g = r.groundAt(m.portico[0][0], m.portico[0][1]);
+      for (const [x, z] of m.portico) if (!w.has(x, g + 4, z)) mansionBad++;       // the portico roof
+      const [gx, gz] = m.gate;
+      if (w.has(gx, g + 1, gz)) mansionBad++;                                       // the way in through the hedge
+      const v2 = verifyAll(w, [m.rec, ...m.wings]);
+      if (v2.ok !== v2.total || v2.floorsReached !== v2.floorsChecked) mansionBad++;
+    }
+    const v = verifyAll(w, r.buildings);
+    check(`${st} ${size}/${seed}: every floor and door still reachable with the detail on`,
+      v.ok === v.total && v.floorsReached === v.floorsChecked && r.reach.unreached.length === 0);
+  }
+  check('facade detail: nothing sticking out blocks the pavement at head height', blockedStreet === 0, `${blockedStreet} blocked`);
+  check('facade detail: eaves, balconies and roof clutter present', eaves > 0 && balconies > 0 && roofClutter > 0,
+    `${eaves} eave blocks, ${balconies} balcony rails, ${roofClutter} roof blocks`);
+  check('shopfronts: each has a wall sign with its name', shops > 0 && shopBad === 0, `${shops} shops, ${shopBad} bad`);
+  check('street names: signs at junctions, two street names each, on the pavement', junctions > 0 && signBad === 0, `${junctions} signs, ${signBad} bad`);
+  check('mansion: in every test city, with its portico, an open gate and sound wings', mansions === cities && mansionBad === 0,
+    `${mansions}/${cities}, ${mansionBad} problems`);
+  note(`${shops} shopfronts (${[...shopNames].slice(0, 6).join(', ')}...) · ${junctions} street signs · ${mansions} mansions (${gardens} with formal gardens)`);
 }
 
 // ===========================================================================
@@ -1912,7 +1999,7 @@ refreshWalkThrough();
     for (const [idx, v] of Object.entries(pd)) {
       const be = v.v.block_entity_data.v;
       const block = pal[l0[Number(idx)].v].v.name.v;
-      if (be.id.v === 'Sign') { if (block !== 'minecraft:standing_sign') badBE++; continue; }   // name signs: checked in 2m
+      if (be.id.v === 'Sign') { if (!/(standing|wall)_sign$/.test(block)) badBE++; continue; }   // name, street and shop signs: checked in 2m
       entities++;
       if (be.id.v !== 'Bed' || be.color.t !== 1 || block !== 'minecraft:bed') badBE++;
     }

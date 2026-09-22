@@ -19,12 +19,13 @@ import { makeBuilding, OUTWARD } from './building.js';
 import { MAT, WOOLS, pumpkinId, smokerId, stairId, WEIRDO, STAINED, gateId, signId, SIGN_FACING } from './materials.js';
 import { N } from './blockcore.js';
 import { USE, frontage } from './plan.js';
+import { FLOWERS as FLOWERS_M } from './materials.js';
 import { styleOf } from './styles.js';
 
-export const LANDMARKS = ['townhall', 'clocktower', 'library', 'market', 'church', 'school', 'lighthouse', 'castle'];
+export const LANDMARKS = ['townhall', 'clocktower', 'library', 'market', 'church', 'mansion', 'school', 'lighthouse', 'castle'];
 const NEED = {                       // [shorter side, longer side] of the lot
   townhall: [13, 15], clocktower: [9, 9], library: [11, 12], market: [12, 12],
-  church: [13, 15], school: [16, 22], lighthouse: [9, 9], castle: [13, 13],
+  church: [13, 15], mansion: [15, 20], school: [16, 22], lighthouse: [9, 9], castle: [13, 13],
 };
 
 // Mark the lots, each kind at most once:
@@ -49,6 +50,9 @@ export function chooseLandmarks(plan, cfg, hills = null, canal = null) {
   const maxD = Math.max(1, ...all.map((c) => c.d));
   // the school wants a big lot (building, porch, yard and a sports field);
   // if the city has none, it makes do with a smaller one
+  // the mansion takes the biggest lot it can find out of the middle of town
+  const byArea = all.slice().filter((c) => c.d > maxD * 0.25).sort((p, q) => (q.a * q.b) - (p.a * p.b));
+  take('mansion', byArea);
   // prefer a lot that runs deep back from its street: room for a sports field behind
   const depthOf = (c) => { const side = frontage(plan, c.l).side; return side === 'north' || side === 'south' ? c.l.z1 - c.l.z0 + 1 : c.l.x1 - c.l.x0 + 1; };
   const halfway = all.slice().sort((p, q) => {
@@ -559,9 +563,125 @@ function castle(world, lot, face, cfg, rng, G) {
   return { kind: 'castle', rec, lot, merlons, turrets };
 }
 
-const BUILDERS = { townhall: townHall, clocktower: clockTower, library, market, church, school, lighthouse, castle };
+// ---- mansion -------------------------------------------------------------------
+// An estate: a main house with a portico and two flanking wings, a hedge round
+// the grounds with gate piers, a driveway up to the door, and a formal garden
+// behind with paths, a fountain, flower beds and benches.
+function mansion(world, lot, face, cfg, rng, G) {
+  const LP = styleOf(cfg.cityStyle).landmark;
+  const alongFace = face === 'north' || face === 'south';
+  const lotDepth = alongFace ? lot.z1 - lot.z0 + 1 : lot.x1 - lot.x0 + 1;
+  const lotWidth = alongFace ? lot.x1 - lot.x0 + 1 : lot.z1 - lot.z0 + 1;
+  const at = (d, a) => {
+    if (face === 'south') return [lot.x0 + a, lot.z1 - d];
+    if (face === 'north') return [lot.x1 - a, lot.z0 + d];
+    if (face === 'east') return [lot.x1 - d, lot.z1 - a];
+    return [lot.x0 + d, lot.z0 + a];
+  };
+  const rectOf = (d0, d1, a0, a1) => {
+    const [x0, z0] = at(d0, a0), [x1, z1] = at(d1, a1);
+    return { x0: Math.min(x0, x1), x1: Math.max(x0, x1), z0: Math.min(z0, z1), z1: Math.max(z0, z1) };
+  };
+  const front = 6;                                     // lawn, driveway and portico
+  const avail = lotDepth - front - 1;
+  const rear = avail >= 16 ? Math.min(12, avail - 10) : 0;     // formal garden behind, if there is room
+  const mainD = Math.min(11, avail - rear);
+  // wings flank the house where the frontage allows; otherwise the house takes it all
+  let wingW = lotWidth >= 28 ? 6 : lotWidth >= 24 ? 5 : 0;
+  let mainW = wingW ? lotWidth - 2 - 2 * (wingW + 1) : lotWidth - 2;
+  if (mainW < 9 && wingW) { wingW = 0; mainW = lotWidth - 2; }
+  if (mainW < 9 || mainD < 8) return null;
+  pave(world, lot, G, () => MAT.GRASS);
+  const mainA0 = wingW ? 1 + wingW + 1 : 1;
+  const main = rectOf(front, front + mainD - 1, mainA0, mainA0 + mainW - 1);
+  const theme = { name: 'mansion', wall: LP.mansionWall || MAT.C_WHITE, trim: LP.hallColumn || MAT.QUARTZ_PILLAR,
+    floor: LP.libFloor, glass: MAT.PANE, stair: LP.hallStair, door: LP.hallDoor };
+  const rec = makeBuilding(world, { ...main, floors: 3, pitch: cfg.pitch, groundY: G, style: 'house', facing: face, theme,
+    roofAccess: false, useStairs: cfg.useStairs, stairStyle: 'switchback', lights: cfg.lights, setback: false, setbackEvery: 99 }, rng);
+  if (!rec) return null;
+  // two wings, set back a little, each with its own door to the grounds
+  const wings = [];
+  for (const a0 of wingW ? [1, lotWidth - 1 - wingW] : []) {
+    const wr = rectOf(front + 2, front + mainD - 2, a0, a0 + wingW - 1);
+    const w2 = makeBuilding(world, { ...wr, floors: 2, pitch: cfg.pitch, groundY: G, style: 'house', facing: face, theme,
+      roofAccess: false, useStairs: cfg.useStairs, stairStyle: 'spiral', lights: cfg.lights, setback: false, setbackEvery: 99 }, rng);
+    if (w2) { w2.landmark = 'mansion'; wings.push(w2); }
+  }
+  // portico: columns two deep in front of the door, with a roof over them
+  const [dx, dz] = rec.doorCells[0];
+  let doorA = 0;
+  for (let a = 0; a < lotWidth; a++) { const [x, z] = at(front, a); if (x === dx && z === dz) doorA = a; }
+  const portico = [];
+  for (let d = front - 2; d <= front - 1; d++)
+    for (let a = doorA - 2; a <= doorA + 2; a++) {
+      const [x, z] = at(d, a);
+      world.set(x, G + 4, z, theme.trim);
+      portico.push([x, z]);
+    }
+  for (const a of [doorA - 2, doorA + 2])
+    for (const d of [front - 2, front - 1]) {
+      const [x, z] = at(d, a);
+      for (let y = G + 1; y <= G + 3; y++) world.set(x, y, z, theme.trim);
+    }
+  { const [x, z] = at(front - 1, doorA); world.set(x, G + 3, z, MAT.LAMP_HANG); }
+
+  // driveway from the street to the portico, and a hedge round the grounds
+  for (let d = 0; d < front - 2; d++)
+    for (const a of [doorA - 1, doorA, doorA + 1]) { const [x, z] = at(d, a); world.set(x, G, z, MAT.ANDESITE); }
+  const gateA = [doorA - 1, doorA, doorA + 1];
+  for (let a = 0; a < lotWidth; a++) {
+    const [x, z] = at(0, a);
+    if (gateA.includes(a)) continue;
+    world.set(x, G + 1, z, MAT.LEAVES); world.set(x, G + 2, z, MAT.LEAVES);
+  }
+  for (const a of [doorA - 2, doorA + 2]) {                     // gate piers with lanterns
+    const [x, z] = at(0, a);
+    for (let y = G + 1; y <= G + 3; y++) world.set(x, y, z, theme.trim);
+    world.set(x, G + 4, z, MAT.LAMP);
+  }
+  // formal garden behind: crossing paths, a fountain, flower beds, benches
+  let garden = null;
+  if (rear >= 7) {
+    const d0 = front + mainD, d1 = Math.min(lotDepth - 1, d0 + rear - 1);
+    const cd = Math.floor((d0 + d1) / 2), ca = Math.floor(lotWidth / 2);
+    for (let d = d0; d <= d1; d++)
+      for (let a = 1; a < lotWidth - 1; a++) {
+        const [x, z] = at(d, a);
+        const path = d === cd || a === ca;
+        world.set(x, G, z, path ? MAT.PATH : MAT.GRASS);
+        for (let y = G + 1; y <= G + 3; y++) world.clear(x, y, z);
+      }
+    // fountain at the crossing
+    for (let dd = -1; dd <= 1; dd++)
+      for (let da = -1; da <= 1; da++) {
+        const [x, z] = at(cd + dd, ca + da);
+        if (dd === 0 && da === 0) { world.set(x, G, z, MAT.WATER); continue; }
+        world.set(x, G, z, MAT.STONEBRICK);
+        world.set(x, G + 1, z, MAT.STONEBRICK);
+      }
+    { const [x, z] = at(cd, ca); world.set(x, G + 1, z, MAT.WATER); }
+    // benches facing the fountain, flower beds in the quarters
+    for (const [dd, da, dir] of [[-3, 0, WEIRDO.south], [3, 0, WEIRDO.north]]) {
+      for (const off of [-1, 0, 1]) {
+        const [x, z] = at(cd + dd, ca + da + off);
+        if (!world.has(x, G + 1, z)) world.set(x, G + 1, z, stairId(theme.stair, dir));
+      }
+    }
+    for (let d = d0 + 1; d <= d1 - 1; d++)
+      for (let a = 2; a < lotWidth - 2; a++) {
+        if (d === cd || a === ca || Math.abs(d - cd) <= 2 && Math.abs(a - ca) <= 2) continue;
+        const [x, z] = at(d, a);
+        if ((d + a) % 3 === 0 && !world.has(x, G + 1, z)) world.set(x, G + 1, z, rng.pick(FLOWERS_M));
+      }
+    garden = { rect: rectOf(d0, d1, 1, lotWidth - 2), fountain: at(cd, ca) };
+  }
+  rec.landmark = 'mansion';
+  return { kind: 'mansion', rec, wings, lot, portico, garden, gate: at(0, doorA) };
+}
+
+const BUILDERS = { townhall: townHall, clocktower: clockTower, library, market, church, mansion, school, lighthouse, castle };
 export const LANDMARK_NAMES = { townhall: 'Town Hall', clocktower: 'Clock Tower', library: 'Library', market: 'Market',
-  church: 'Church', school: 'School', lighthouse: 'Lighthouse', castle: 'Castle' };
+  church: 'Church', school: 'School', lighthouse: 'Lighthouse', castle: 'Castle', mansion: 'Mansion' };
 
 export function buildLandmark(world, lot, face, cfg, rng, G) {
   const L = BUILDERS[lot.landmark](world, lot, face, cfg, rng, G);

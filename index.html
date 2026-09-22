@@ -126,12 +126,12 @@
   }
 </style>
 </head>
-<body class="mode-city" data-version="0.3.5">
+<body class="mode-city" data-version="0.4.0">
 <div id="app">
   <div id="panel">
     <div id="panelScroll">
       <h1>PO<span>L</span>IS</h1>
-      <div class="sub">procedural city → Minecraft Bedrock · v0.3.5</div>
+      <div class="sub">procedural city → Minecraft Bedrock · v0.4.0</div>
 
       <fieldset>
         <legend>Mode</legend>
@@ -150,7 +150,7 @@
 
       <fieldset class="city-only">
         <legend>City</legend>
-        <div class="row"><label>Size</label><input type="range" id="size" min="64" max="256" step="8" value="160"><span class="val" id="size_v"></span></div>
+        <div class="row"><label>Size</label><input type="range" id="size" min="64" max="512" step="16" value="160"><span class="val" id="size_v"></span></div>
         <div class="row"><label>City style</label><select id="cityStyle" style="width:150px">
           <option value="modern" selected>Modern</option>
           <option value="desert">Desert</option>
@@ -214,6 +214,8 @@
           <label class="chk"><input type="checkbox" id="markings" checked>Road markings</label>
           <label class="chk"><input type="checkbox" id="landmarks" checked>Landmarks</label>
           <label class="chk"><input type="checkbox" id="canal" checked>Canal</label>
+          <label class="chk"><input type="checkbox" id="detail" checked>Facade detail</label>
+          <label class="chk"><input type="checkbox" id="streetSigns" checked>Street name signs</label>
         </div>
       </fieldset>
 
@@ -271,6 +273,6 @@
     <div id="busy">generating…</div>
   </div>
 </div>
-<script type="module" src="./main.js?v=0.3.5"></script>
+<script type="module" src="./main.js?v=0.4.0"></script>
 </body>
 </html>

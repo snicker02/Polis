@@ -1,4 +1,4 @@
-# Polis v0.3.5
+# Polis v0.4.0
 
 A procedural city generator that exports to **Minecraft Bedrock**. Plans a
 street grid, subdivides it into lots, raises buildings with real interiors —
@@ -117,6 +117,28 @@ Two export settings let a city sit properly into real terrain:
 Both are built into the structure files at export time; the preview shows the
 city itself. The city id includes these settings, so packs of the same city
 exported differently never collide.
+
+## Detail on the outside
+
+Buildings are no longer plain boxes. Every one gets quoins at the corners,
+pilasters between the window runs, an eave of upside-down stairs projecting at
+the roofline, a framed doorway, and clutter on the roof — a chimney on a house,
+a water tank on legs or vents on anything taller. Above the ground floor there
+are railed balconies and, on mid-rises, a projecting bay window. Everything that
+sticks out is placed only into empty space and always above head height, so it
+can never block a street, a doorway or a lamp; the **Facade detail** checkbox
+turns it off.
+
+## Shopfronts and street names
+
+**Shops.** A shop at street level gets a proper glass front between the piers,
+an awning over the pavement, a counter just inside, and a **wall sign** with
+its name (Bakery, Cobbler, Tea House, Fishmonger...).
+
+**Street names.** Every avenue and street is named — First Ave, Oak St, Maple
+St — and each junction gets a standing sign on a pavement corner with both
+names on it, facing the crossing. The **Street name signs** checkbox turns
+them off.
 
 ## Rooms
 
@@ -297,6 +319,11 @@ water and the castle on the highest hill (the **Landmarks** checkbox turns them 
   prefers a big lot that runs deep from its street.
 - **Lighthouse** — a slender tower banded red and white with a glass lantern
   room and a light at the top, beside the canal (or out at the edge).
+- **Mansion** — an estate on the biggest lot out of the centre: a three-storey
+  house with a columned portico, two flanking wings (where the frontage
+  allows), a hedge round the grounds with lit gate piers, a driveway to the
+  door, and — on a deep lot — a formal garden behind with crossing paths, a
+  fountain, flower beds and benches.
 - **Castle** — a stone keep on the highest hill: crenellated roof and four
   corner turrets.
 - **Market square** — a chequered square of striped wool-canopied stalls
@@ -494,6 +521,15 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.4.0** — Detail on the outside of every building (quoins, pilasters, eaves,
+framed doorways, balconies, bay windows, chimneys, water tanks, vents);
+shopfronts at street level with glass, awnings, counters and named wall signs;
+street names on signs at the junctions; a mansion landmark with wings, portico,
+hedged grounds and a formal garden; cities up to 512 blocks (a 512 city
+generates in about five seconds and exports in three). Pen animals are
+re-checked at the end, in case a neighbour's tree grew over the fence. The
+validator adds facade, shopfront, street-name and mansion checks.
 
 **0.3.5** — The spot you build from is marked: a gold block with clear space
 above, a sign beside it and a lantern opposite, placed near the middle of the

@@ -202,6 +202,12 @@ export const SIGN_FACING = { south: 0, west: 4, north: 8, east: 12 };
 export const signId = (dir) => MATERIALS.add(null, 'minecraft:standing_sign', '#a2824e',
   { ground_sign_direction: I(dir) }, { passable: true, transparent: true, flowable: true });
 
+// A sign on a wall; facing_direction is the way it faces (2 north, 3 south,
+// 4 west, 5 east), confirmed against Bedrock's own table.
+export const WALL_SIGN_FACING = { north: 2, south: 3, west: 4, east: 5 };
+export const wallSignId = (facing) => MATERIALS.add(null, 'minecraft:wall_sign', '#a2824e',
+  { facing_direction: I(WALL_SIGN_FACING[facing]) }, { passable: true, transparent: true });
+
 export const pinkPetalsId = (facing) => MATERIALS.add(null, 'minecraft:pink_petals', '#f0a8c8',
   { growth: I(3), 'minecraft:cardinal_direction': S(facing) }, { passable: true, flowable: true, transparent: true });
 
