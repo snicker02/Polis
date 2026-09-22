@@ -8,7 +8,7 @@ import { Renderer } from './engine/renderer.js';
 import { exportPack, exportStructuresZip, tileList, commandList, cityId, exportSalt, POLIS_VERSION } from './engine/export.js';
 import { THEMES } from './engine/materials.js';
 
-const VERSION = '0.3.4';
+const VERSION = '0.3.5';
 const $ = (id) => document.getElementById(id);
 
 const SLIDERS = {
@@ -309,6 +309,7 @@ function showStats(mesh, times) {
     if (s.landmarks && s.landmarks.length) line('landmarks', s.landmarks.map((k) =>
       ({ townhall: 'town hall', clocktower: 'clock tower', library: 'library', market: 'market', church: 'church',
         school: 'school', lighthouse: 'lighthouse', castle: 'castle' }[k])).join(' · '));
+    if (s.centre) line('centre marker', s.centre);
     if (s.canal) line('canal', s.canal + (s.dock ? ' · dock' : ''));
     if (s.art) line('art panels', String(s.art));
     if (s.ranches !== undefined) line('pens / farm animals', `${s.ranches} / ${s.animals}`);
@@ -336,7 +337,8 @@ let exactCommands = [];
 
 // export settings that shape the structure files (and so the city id)
 function exportOpts() {
-  return { fillAir: $('fillAir').checked, foundation: Number($('foundation').value) | 0, clearAbove: Number($('clearAbove').value) | 0 };
+  return { fillAir: $('fillAir').checked, foundation: Number($('foundation').value) | 0, clearAbove: Number($('clearAbove').value) | 0,
+    centre: result && result.centre ? [result.centre.block[0], result.centre.block[2]] : undefined };
 }
 function nsNow() {
   return result ? cityId(result.world, result.cfg.seed, POLIS_VERSION, exportSalt(exportOpts())) : 'polis';

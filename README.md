@@ -1,4 +1,4 @@
-# Polis v0.3.4
+# Polis v0.3.5
 
 A procedural city generator that exports to **Minecraft Bedrock**. Plans a
 street grid, subdivides it into lots, raises buildings with real interiors —
@@ -262,6 +262,17 @@ sidewalk (and the yard behind it for a 3-high terrace), so they never stick
 out into the street. Where a straight flight will not fit, the steps run along
 the kerb instead.
 
+## The centre marker
+
+The block you build from is marked, so it is easy to find in game: a **gold
+block** with the space above it left clear, a **sign** beside it (never in the
+way) reading "Polis / city centre / you built from here", and a lantern on a
+post opposite. It stands as near the middle of the city as it can while staying
+outdoors, on level ground, clear of buildings and off the railway — and
+`build_centered` then centres the city on that exact block, so it lands
+directly under your feet. The **centreMark** setting turns it off, in which
+case the centred functions fall back to the middle of the footprint.
+
 ## Landmarks
 
 Each city builds up to eight one-off landmarks — the civic ones on the lots
@@ -483,6 +494,12 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.3.5** — The spot you build from is marked: a gold block with clear space
+above, a sign beside it and a lantern opposite, placed near the middle of the
+city (outdoors, level, off the railway). `build_centered` now centres on that
+block, so it lands under your feet. The validator checks the marker, its sign
+and that the centred build puts it exactly there.
 
 **0.3.4** — The school's rooftop SCHOOL board is gone; instead every
 landmark has a small standing name sign by its front door, facing the street.

@@ -1344,6 +1344,47 @@ section('2m. signs in the export');
 }
 
 // ===========================================================================
+// 2n. the centre marker
+// ===========================================================================
+section('2n. centre marker');
+{
+  const name = (w, x, y, z) => { const id = w.get(x, y, z); return id < 0 ? null : MATERIALS.def(id).block; };
+  let cities = 0, marked = 0, bad = 0, landedWrong = 0, maxDrift = 0;
+  for (const [size, seed, transit] of [[160, 12345, 'roads'], [192, 1, 'rails'], [224, 3, 'trams'], [128, 2, 'rails'], [96, 4, 'roads']]) {
+    const r = generateCity({ ...DEFAULTS, size, seed, transit });
+    const w = r.world;
+    cities++;
+    if (!r.centre) continue;
+    marked++;
+    const [mx, my, mz] = r.centre.block;
+    maxDrift = Math.max(maxDrift, r.centre.drift);
+    if (name(w, mx, my, mz) !== 'minecraft:gold_block') bad++;
+    for (let k = 1; k <= 3; k++) if (w.has(mx, my + k, mz)) bad++;               // room to stand
+    const [sx, sy, sz] = r.centre.sign;
+    const sd = w.getData(sx, sy, sz);
+    if (name(w, sx, sy, sz) !== 'minecraft:standing_sign' || !sd || !/city centre/.test(sd.tags.FrontText.v.Text.v)) bad++;
+    if (Math.abs(sx - mx) + Math.abs(sz - mz) !== 1) bad++;                      // right beside it
+    // the sign faces the marker, so it reads from the gold block
+    const FACE = { 0: [0, 1], 4: [-1, 0], 8: [0, -1], 12: [1, 0] };              // sign direction -> way it faces
+    const f = FACE[MATERIALS.def(w.get(sx, sy, sz)).states.ground_sign_direction.value];
+    if (sx + f[0] !== mx || sz + f[1] !== mz) bad++;
+    // build_centered must drop the marker right under the player's feet
+    const tiles = tileList(w, { prefix: 'c', fillAir: true });
+    const cx = w.centre[0], cz = w.centre[1];
+    const rel = tiles.map((t) => [t.box.x0 - cx, t.box.y0 - GROUND_DROP, t.box.z0 - cz]);
+    const host = tiles.findIndex((t) => mx >= t.box.x0 && mx <= t.box.x1 && mz >= t.box.z0 && mz <= t.box.z1);
+    const [rx, ry, rz] = rel[host];
+    const landed = [rx + (mx - tiles[host].box.x0), ry + (my - tiles[host].box.y0), rz + (mz - tiles[host].box.z0)];
+    if (landed.join() !== '0,-1,0') landedWrong++;
+  }
+  check('centre marker: in every city, a gold block with room to stand', marked === cities && bad === 0, `${marked}/${cities}, ${bad} problems`);
+  check('centre marker: build_centered puts it directly under the player', landedWrong === 0, `${landedWrong} wrong`);
+  const off = generateCity({ ...DEFAULTS, size: 160, seed: 12345, centreMark: false });
+  check('centre marker: none when switched off, and the export falls back to the middle', !off.centre && !off.world.centre);
+  note(`${marked} markers, at most ${maxDrift} blocks from the exact middle (it must stand outdoors, level and off the railway)`);
+}
+
+// ===========================================================================
 // 3. chunk split coverage
 // ===========================================================================
 section('3. chunk split');

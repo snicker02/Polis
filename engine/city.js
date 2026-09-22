@@ -12,6 +12,8 @@ import { planCanal, buildCanal, USE_CANAL } from './water.js';
 import { chooseLandmarks, buildLandmark } from './landmarks.js';
 import { planHills, liftBlocks, cutStairs, shiftBuilding, walkCity } from './terrain.js';
 import { styleOf, remapTable } from './styles.js';
+import { signTags } from './landmarks.js';
+import { signId, SIGN_FACING } from './materials.js';
 import { PROFESSION_NAMES } from './entities.js';
 import { FLOWERS } from './materials.js';
 
@@ -41,6 +43,7 @@ export const DEFAULTS = {
   cityStyle: 'modern',       // modern | desert | snowy | cherry | medieval
   outline: 'organic',        // 'organic' (lobed outline along the street grid) | 'square'
   hills: 2,                  // city blocks raised 0..hills blocks on gentle terraces, with steps
+  centreMark: true,          // a gold block and sign marking where build_centered puts you
   canal: true,               // a canal through the city, with bridges and a dock
   landmarks: true,           // town hall, clock tower, library, market square near downtown
   transit: 'roads',
@@ -307,14 +310,69 @@ export function generateCity(cfgIn, onProgress) {
   // ---- city style: restyle the role materials, then snow -----------------------
   applyStyle(world, plan, STYLE, (x, z) => GROUND + elevAt(x, z));
 
+  // ---- the centre marker -----------------------------------------------------
+  const centre = cfg.centreMark ? markCentre(world, plan, buildings, GROUND, elevAt) : null;
+  if (centre) world.centre = [centre.block[0], centre.block[2]];   // the export centres on it
+
   // ---- can everything be reached from the streets? ---------------------------
   const reached = walkCity(world, plan, GROUND, hills.H + 4);
   const unreached = buildings.filter((b) => !reached.has(`${b.outside[0]},${b.outside[1]},${b.outside[2]}`));
   const reach = { total: buildings.length, reached: buildings.length - unreached.length, unreached };
 
-  const stats = summarise(world, plan, buildings, cfg, { farms, beds, spawns, bell, transit, wall, ranches, landmarks, hills, stairRuns, reach, canal });
-  return { world, plan, buildings, cfg, stats, farms, ranches, spawns, bell, transit, wall, landmarks, canal,
+  const stats = summarise(world, plan, buildings, cfg, { farms, beds, spawns, bell, transit, wall, ranches, landmarks, hills, stairRuns, reach, canal, centre });
+  return { world, plan, buildings, cfg, stats, farms, ranches, spawns, bell, transit, wall, landmarks, canal, centre,
     hills, stairRuns, reach, groundAt: (x, z) => GROUND + elevAt(x, z) };
+}
+
+// ---- the centre marker -----------------------------------------------------
+// Where /function <city>/build_centered puts you. The block you stand on is
+// gold, the space above it is left clear, and a sign beside it (never in the
+// way) says so, with a lantern on a post opposite. It goes as near the middle
+// of the city as it can while staying outdoors, on level ground, off the
+// railway and clear of buildings.
+function markCentre(world, plan, buildings, G, elevAt) {
+  const { W, D, use, mask } = plan;
+  const wb = world.box;
+  const cx0 = Math.floor((wb.x0 + wb.x1 + 1) / 2), cz0 = Math.floor((wb.z0 + wb.z1 + 1) / 2);
+  const inBuilding = (x, z) => buildings.some((b) => x >= b.x0 - 1 && x <= b.x1 + 1 && z >= b.z0 - 1 && z <= b.z1 + 1);
+  const OUTDOOR = new Set([USE.ROAD, USE.SIDEWALK, USE.PLAZA, USE.PARK]);
+  const free = (x, z) => {
+    if (x < 1 || z < 1 || x >= W - 1 || z >= D - 1) return false;
+    if (mask && !mask[z * W + x]) return false;
+    if (!OUTDOOR.has(use[z * W + x]) || elevAt(x, z) !== 0) return false;     // outdoors, at street level
+    if (inBuilding(x, z)) return false;
+    if (!world.has(x, G, z) || world.get(x, G, z) === MAT.WATER) return false;
+    for (let y = G + 1; y <= G + 3; y++) if (world.has(x, y, z)) return false;  // nothing here (no rails, no lamps)
+    return true;
+  };
+  let spot = null;
+  for (let r = 0; r <= 32 && !spot; r++)
+    for (let dz = -r; dz <= r && !spot; dz++)
+      for (let dx = -r; dx <= r && !spot; dx++) {
+        if (Math.max(Math.abs(dx), Math.abs(dz)) !== r) continue;
+        const x = cx0 + dx, z = cz0 + dz;
+        if (!free(x, z)) continue;
+        // a neighbour for the sign, and ideally one opposite for the lantern
+        const sides = [['north', 0, -1], ['south', 0, 1], ['west', -1, 0], ['east', 1, 0]]
+          .filter(([, ox, oz]) => free(x + ox, z + oz));
+        if (!sides.length) continue;
+        spot = { x, z, sides };
+      }
+  if (!spot) return null;
+  const { x, z, sides } = spot;
+  world.set(x, G, z, MAT.GOLD);
+  for (let y = G + 1; y <= G + 3; y++) world.clear(x, y, z);
+  // the sign faces the marker, so you read it standing on the gold block
+  const [sideName, ox, oz] = sides[0];
+  const facing = { north: 'south', south: 'north', west: 'east', east: 'west' }[sideName];
+  world.set(x + ox, G + 1, z + oz, signId(SIGN_FACING[facing]));
+  world.setData(x + ox, G + 1, z + oz, { id: 'Sign', tags: signTags('Polis\ncity centre\nyou built\nfrom here') });
+  const opp = sides.find(([n]) => n === { north: 'south', south: 'north', west: 'east', east: 'west' }[sideName]);
+  if (opp) {
+    world.set(x + opp[1], G + 1, z + opp[2], MAT.FENCE);
+    world.set(x + opp[1], G + 2, z + opp[2], MAT.LAMP);
+  }
+  return { block: [x, G, z], sign: [x + ox, G + 1, z + oz], drift: Math.abs(x - cx0) + Math.abs(z - cz0) };
 }
 
 // ---- city style ----------------------------------------------------------------
@@ -646,6 +704,7 @@ function summarise(world, plan, buildings, cfg, life = {}) {
     railLoop: !!(life.transit && life.transit.stats.loop),
     ranches: (life.ranches || []).length,
     landmarks: (life.landmarks || []).map((l) => l.kind),
+    centre: life.centre ? life.centre.block.join(', ') : '',
     canal: life.canal ? `${life.canal.u1 - life.canal.u0 + 1} long · ${life.canal.bridges} bridges` : '',
     dock: !!(life.canal && life.canal.dock),
     art: buildings.reduce((a, b) => a + (b.roomPlans || []).reduce((c, p) => c + ((p && p.art) || 0), 0), 0),

@@ -17,7 +17,7 @@ import { makeRng } from './rng.js';
 // Must match main.js VERSION, package.json and index.html data-version;
 // tools/validate.js fails if they drift. The app refuses to export when the
 // browser has mixed cached copies of old and new files.
-export const POLIS_VERSION = '0.3.4';
+export const POLIS_VERSION = '0.3.5';
 
 export const CHUNK = 64;          // Bedrock structure limit per horizontal axis
 export const GROUND_DROP = 2;     // base layer y=0 sits 2 below feet; surface y=1 replaces the block you stand on
@@ -208,8 +208,11 @@ export function functionFiles(tiles, world, opts = {}) {
   const spawns = opts.spawns || [];
   const mobs = opts.mobTiles || mobTiles(spawns, opts);
   const wb = world.box;
-  const cx = Math.floor((wb.x0 + wb.x1 + 1) / 2);
-  const cz = Math.floor((wb.z0 + wb.z1 + 1) / 2);
+  // The centred functions put the city's marked centre block under the
+  // player's feet (opts.centre); failing that, the middle of the footprint.
+  const mid = opts.centre || world.centre;
+  const cx = mid ? mid[0] : Math.floor((wb.x0 + wb.x1 + 1) / 2);
+  const cz = mid ? mid[1] : Math.floor((wb.z0 + wb.z1 + 1) / 2);
   const villagers = spawns.filter((p) => p.type === 'villager').length;
   const golems = spawns.filter((p) => p.type === 'golem').length;
   const cats = spawns.filter((p) => p.type === 'cat').length;
@@ -290,6 +293,7 @@ export function placementGuide(tiles, opts = {}) {
   L.push('');
   L.push(`    /function ${ns}/populate_centered`);
   L.push('');
+  if (opts.centre) L.push('The city centre is a gold block with a sign beside it: build_centered drops it right under your feet.');
   L.push(`Functions in this pack: ${ns}/build, build_centered, populate, populate_centered`);
   L.push('(plus minecarts / minecarts_centered on railway cities, to re-summon carts near you).');
   L.push(`Made with Polis v${POLIS_VERSION}. If /function says one is "not found", an older`);
@@ -344,7 +348,9 @@ export function commandList(tiles, opts = {}) {
 }
 
 // ---- packages -----------------------------------------------------------------
-export async function exportPack(world, opts = {}) {
+export async function exportPack(world, optsIn = {}) {
+  // the city's marked centre unless the caller names one
+  const opts = { ...optsIn, centre: optsIn.centre || world.centre };
   const tiles = tileList(world, opts);
   const structures = buildStructures(world, opts);
   const mobStructs = buildMobStructures(opts.spawns, opts);
