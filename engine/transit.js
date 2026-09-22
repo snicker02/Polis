@@ -83,30 +83,24 @@ export function layTransit(world, plan, mode, G) {
   let zRuns = pick(cols, D, (x, z) => road(x, z));
 
   // ---- the perimeter loop -----------------------------------------------------
-  // The ring road's four lines become one closed track with a curve at each
-  // corner, so a cart can go round the city without ever stopping. Every other
-  // line is shortened to end one block inside the loop, so nothing crosses it.
+  // O = how far each cell is from the edge of the city (Chebyshev, so the
+  // contour has square corners). The wall stands at O = 1. The loop runs
+  // along the contour O = k in the outer streets: on a square city that is
+  // the ring road's middle row; on an organic one it follows every bend,
+  // with a curved rail at each corner. Every other line stays at O >= k + 2,
+  // so nothing crosses or touches the loop, and no rail is ever under the wall.
+  const O = edgeDistance(plan);
   let loop = null;
-  {
-    const longX = xRuns.filter((r) => r.b - r.a + 1 >= W * 0.8);
-    const longZ = zRuns.filter((r) => r.b - r.a + 1 >= D * 0.8);
-    if (longX.length >= 2 && longZ.length >= 2) {
-      const top = longX.reduce((m, r) => (r.f < m.f ? r : m)), bot = longX.reduce((m, r) => (r.f > m.f ? r : m));
-      const lef = longZ.reduce((m, r) => (r.f < m.f ? r : m)), rig = longZ.reduce((m, r) => (r.f > m.f ? r : m));
-      const rt = top.f, rb = bot.f, cl = lef.f, cr = rig.f;
-      const covers = (r, lo, hi) => r.a <= lo && r.b >= hi;
-      if (rb - rt >= 24 && cr - cl >= 24 && covers(top, cl, cr) && covers(bot, cl, cr) &&
-          covers(lef, rt, rb) && covers(rig, rt, rb)) {
-        loop = { rt, rb, cl, cr };
-        xRuns = xRuns.filter((r) => r !== top && r !== bot)
-          .map((r) => ({ ...r, a: Math.max(r.a, cl + 1), b: Math.min(r.b, cr - 1) }))
-          .filter((r) => r.f > rt && r.f < rb && r.b - r.a >= 11);
-        zRuns = zRuns.filter((r) => r !== lef && r !== rig)
-          .map((r) => ({ ...r, a: Math.max(r.a, rt + 1), b: Math.min(r.b, rb - 1) }))
-          .filter((r) => r.f > cl && r.f < cr && r.b - r.a >= 11);
-      }
-    }
+  for (const k of [3, 2]) {
+    const ring = [];
+    for (let z = 0; z < D; z++) for (let x = 0; x < W; x++) if (O[z * W + x] === k) ring.push([x, z]);
+    const cyc = traceCycle(ring, (x, z) => road(x, z));
+    if (cyc) { loop = { k, cells: cyc }; break; }
   }
+  const minO = loop ? loop.k + 2 : 2;
+  const inner = (x, z) => road(x, z) && O[z * W + x] >= minO;
+  xRuns = pick(rows, W, (z, x) => inner(x, z));
+  zRuns = pick(cols, D, (x, z) => inner(x, z));
 
   const railAt = new Map();          // "x,z" -> rail height at ground crossing check
   const lines = [];
@@ -223,38 +217,48 @@ export function layTransit(world, plan, mode, G) {
 
   // ---- lay the loop -------------------------------------------------------------
   if (loop) {
-    const { rt, rb, cl, cr } = loop;
-    const cells = [];
-    for (let x = cl; x < cr; x++) cells.push([x, rt]);          // top, heading east
-    for (let z = rt; z < rb; z++) cells.push([cr, z]);          // right, heading south
-    for (let x = cr; x > cl; x--) cells.push([x, rb]);          // bottom, heading west
-    for (let z = rb; z > rt; z--) cells.push([cl, z]);          // left, heading north
-    const CURVE = { [key(cl, rt)]: RAIL.SE, [key(cr, rt)]: RAIL.SW, [key(cr, rb)]: RAIL.NW, [key(cl, rb)]: RAIL.NE };
-    const corner = (x, z) => CURVE[key(x, z)] !== undefined;
-    const nearCorner = (x, z) => [[cl, rt], [cr, rt], [cr, rb], [cl, rb]]
-      .some(([a, b]) => (x === a || z === b) && Math.abs(x - a) + Math.abs(z - b) === 2);
-    const line = { axis: 'loop', loop: true, stations: [], cells: [], ...loop };
-    for (const [x, z] of cells) {
-      if (corner(x, z)) {
+    const cells = loop.cells;                   // in order round the cycle
+    const n = cells.length;
+    const dirOf = (i) => {
+      const [x, z] = cells[i], [px, pz] = cells[(i - 1 + n) % n], [nx, nz] = cells[(i + 1) % n];
+      const has = (dx, dz) => (px - x === dx && pz - z === dz) || (nx - x === dx && nz - z === dz);
+      if (has(0, -1) && has(0, 1)) return RAIL.NS;
+      if (has(-1, 0) && has(1, 0)) return RAIL.EW;
+      if (has(0, 1) && has(1, 0)) return RAIL.SE;
+      if (has(0, 1) && has(-1, 0)) return RAIL.SW;
+      if (has(0, -1) && has(-1, 0)) return RAIL.NW;
+      return RAIL.NE;
+    };
+    const dirs = cells.map((_, i) => dirOf(i));
+    const curve = (i) => dirs[(i + n) % n] >= 6;
+    // path distance to the nearest curve, both ways round
+    const toCurve = cells.map((_, i) => {
+      for (let d = 0; d < n; d++) if (curve(i + d) || curve(i - d)) return d;
+      return n;
+    });
+    const line = { axis: 'loop', loop: true, stations: [], cells: [], k: loop.k };
+    let sinceBoost = 0;
+    cells.forEach(([x, z], i) => {
+      if (curve(i)) {
         bed(x, z);
-        world.set(x, G + 1, z, railId(CURVE[key(x, z)]));   // curves cannot be powered
+        world.set(x, G + 1, z, railId(dirs[i]));          // curves cannot be powered
         for (let y = G + 2; y <= G + 3; y++) world.clear(x, y, z);
         stats.rails++;
+        sinceBoost++;
       } else {
-        const dir = (z === rt || z === rb) ? RAIL.EW : RAIL.NS;
-        const along = (z === rt || z === rb) ? x - cl : z - rt;
-        // boosters two blocks either side of every corner, and every 16 blocks
-        flatRail(x, z, dir, nearCorner(x, z) || along % BOOST_EVERY === 8);
+        // boosters two blocks either side of every curve, and at least every 16 blocks
+        const boost = toCurve[i] === 2 || sinceBoost >= BOOST_EVERY;
+        flatRail(x, z, dirs[i], boost);
+        sinceBoost = boost ? 0 : sinceBoost + 1;
       }
       line.cells.push([x, G + 1, z]);
-    }
-    // the cart starts mid-way along the top, on plain track
-    let sx = cl + Math.floor((cr - cl) / 2);
-    while (world.get(sx, G, rt) === MAT.REDSTONE) sx++;
-    line.stations.push([sx, G + 1, rt]);
+    });
+    // the cart starts on plain straight track
+    const start = cells.findIndex(([x, z], i) => !curve(i) && world.get(x, G, z) !== MAT.REDSTONE);
+    line.stations.push([cells[start][0], G + 1, cells[start][1]]);
     lines.push(line);
     stats.loop = true;
-    stats.loopLength = cells.length;
+    stats.loopLength = n;
   }
 
   stats.lines = lines.length;
@@ -279,5 +283,57 @@ export function trimOverRails(world, transit) {
     }
   }
   return n;
+}
+
+// Chebyshev distance of every city cell to the nearest non-city cell (or the
+// edge of the plan). 0 outside the city.
+export function edgeDistance(plan) {
+  const { W, D } = plan;
+  const inCity = (i) => (plan.mask ? plan.mask[i] === 1 : plan.use[i] !== USE.EMPTY);
+  const O = new Int16Array(W * D);
+  const q = [];
+  for (let z = 0; z < D; z++)
+    for (let x = 0; x < W; x++) {
+      const i = z * W + x;
+      if (!inCity(i)) continue;
+      let edge = false;
+      for (let dz = -1; dz <= 1 && !edge; dz++) for (let dx = -1; dx <= 1 && !edge; dx++) {
+        const nx = x + dx, nz = z + dz;
+        if (nx < 0 || nz < 0 || nx >= W || nz >= D || !inCity(nz * W + nx)) edge = true;
+      }
+      if (edge) { O[i] = 1; q.push(i); }
+    }
+  for (let h = 0; h < q.length; h++) {
+    const i = q[h], x = i % W, z = (i - x) / W;
+    for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
+      const nx = x + dx, nz = z + dz;
+      if (nx < 0 || nz < 0 || nx >= W || nz >= D) continue;
+      const j = nz * W + nx;
+      if (!inCity(j) || O[j]) continue;
+      O[j] = O[i] + 1; q.push(j);
+    }
+  }
+  return O;
+}
+
+// The cells must form one simple closed loop: every cell a road cell with
+// exactly two loop neighbours (4-connected), all in a single cycle. Returns
+// the cells in order round the loop, or null.
+function traceCycle(ring, ok) {
+  if (ring.length < 16) return null;
+  const set = new Set(ring.map(([x, z]) => x + ',' + z));
+  const nb = (x, z) => [[1, 0], [-1, 0], [0, 1], [0, -1]].map(([dx, dz]) => [x + dx, z + dz]).filter(([a, b]) => set.has(a + ',' + b));
+  for (const [x, z] of ring) if (!ok(x, z) || nb(x, z).length !== 2) return null;
+  const out = [ring[0]];
+  const seen = new Set([ring[0].join()]);
+  let cur = ring[0], prev = null;
+  for (;;) {
+    const next = nb(cur[0], cur[1]).find((c) => !prev || c.join() !== prev.join());
+    if (!next) return null;
+    if (next.join() === ring[0].join()) break;
+    if (seen.has(next.join())) return null;
+    seen.add(next.join()); out.push(next); prev = cur; cur = next;
+  }
+  return out.length === ring.length ? out : null;
 }
 

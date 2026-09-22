@@ -1,4 +1,4 @@
-# Polis v0.2.5
+# Polis v0.2.6
 
 A procedural city generator that exports to **Minecraft Bedrock**. Plans a
 street grid, subdivides it into lots, raises buildings with real interiors —
@@ -165,6 +165,31 @@ footprint, with three clear blocks of headroom. A bell in a plaza or park gives
 the village its gathering point. Workstations — composters, cartography and
 fletching tables, blast furnaces, brewing stands, cauldrons, barrels — let
 villagers take up professions.
+
+## Outline and hills
+
+**Organic outline** (default; **Outline** can switch back to Square). The
+city keeps only the blocks inside a lobed shape and the streets that border
+them, so its edge follows the street grid in an irregular outline instead of
+filling the square. Holes are filled and stray islands dropped, so the city is
+always one piece with a single edge. The perimeter wall follows that edge (with
+a gate on each compass side), and the rail loop follows it too, laid along a
+contour a fixed distance in from the wall, with a curved rail at every corner.
+Land outside the outline is left exactly as it was: no ground layer, no air
+fill, no foundation.
+
+**Hills** (0–3, default 2). Each city block sits on a terrace 0 to 3 blocks
+above the streets, following a smooth hill pattern, so neighbouring blocks
+rise and fall gently. The streets stay level, which keeps the railway, its
+bridges and the loop exactly as they are. Each block is generated flat and
+lifted whole, so buildings, stairs and furniture keep every guarantee they had;
+the terrace is solid underneath with a stone-brick face towards the street.
+Staircases are cut into the sidewalk on every side of a raised block, climbing
+parallel to the kerb so they never stick out into the street: one step per
+block of height, from the street to the terrace. After generation the whole
+city is walked from the streets — step up one block, down up to three, through
+doors and gates — and every building door is checked to be reachable. The
+stats panel shows the result.
 
 ## Landmarks
 
@@ -353,6 +378,18 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.2.6** — Organic outline and gentle hills. The city now keeps only the
+blocks inside a lobed shape (the **Outline** setting can switch back to
+Square); the wall and the rail loop follow the new edge, the loop now built
+along a contour so it works for any shape, and land outside the outline is
+left untouched on export. **Hills** raise city blocks 0–3 blocks on terraces
+with staircases up from every side; streets stay level. A new city-wide walk
+checks every door is reachable from the streets. Animal pen and panda grove
+fences are now two blocks high, with hay and troughs kept clear of the fence
+line. Road centre lines no longer run past the outline. The validator adds the
+outline and hills checks; its walk-through block list now comes from the
+registry, so new plants cannot be missed.
 
 **0.2.5** — Landmarks: town hall (colonnade, copper dome, the village bell),
 clock tower (four clock faces, belfry, spire), library, and market square,

@@ -184,7 +184,117 @@ export function generatePlan(cfg, rng) {
     lots.push({ ...lot, w, d, floors, style, margin });
   }
 
-  return { W, D, use, roadAxis, roadWidthAt, corridors, cityBlocks, lots, zoneAt, focal: [fx, fz] };
+  // ---- 5. organic outline ----------------------------------------------------
+  let keptBlocks = cityBlocks, keptLots = lots;
+  if (cfg.outline === 'organic') ({ keptBlocks, keptLots } = organicOutline(W, D, use, roadWidthAt, cityBlocks, lots, cfg, [fx, fz]));
+  const mask = new Uint8Array(W * D);
+  for (let i = 0; i < W * D; i++) mask[i] = use[i] !== USE.EMPTY ? 1 : 0;
+
+  return { W, D, use, roadAxis, roadWidthAt, corridors, cityBlocks: keptBlocks, lots: keptLots, zoneAt, focal: [fx, fz], mask };
+}
+
+// The city keeps only the blocks inside a lobed shape and the streets that
+// border them, so its edge follows the street grid in an irregular outline
+// instead of filling the square. Holes are filled and stray islands dropped,
+// so the city is one piece with a single outer edge (the wall and the rail
+// loop run round it).
+function organicOutline(W, D, use, roadWidthAt, blocks, lots, cfg, focal) {
+  const at = (x, z) => z * W + x;
+  const cx = W / 2, cz = D / 2;
+  const radius = (theta) => {
+    const n = fbm2(Math.cos(theta) * 60 + 500, Math.sin(theta) * 60 + 500, cfg.seed ^ 0x0a11ce, 40);
+    return 0.62 + 0.42 * n;                 // 0.62 .. 1.04 of the half-size: lobes and bays
+  };
+  const inside = (x, z) => {
+    const dx = (x - cx) / (W / 2), dz = (z - cz) / (D / 2);
+    return Math.hypot(dx, dz) < radius(Math.atan2(dz, dx));
+  };
+  const blockOf = new Int32Array(W * D).fill(-1);
+  blocks.forEach((b, i) => { for (let z = b.z0; z <= b.z1; z++) for (let x = b.x0; x <= b.x1; x++) blockOf[at(x, z)] = i; });
+  let keep = blocks.map((b) => inside((b.x0 + b.x1) / 2, (b.z0 + b.z1) / 2));
+  const fb = blockOf[at(Math.max(0, Math.min(W - 1, Math.round(focal[0]))), Math.max(0, Math.min(D - 1, Math.round(focal[1]))))];
+  if (fb >= 0) keep[fb] = true;
+
+  // kept area = kept blocks + every road cell within its own street width of one
+  const build = () => {
+    const dist = new Int16Array(W * D).fill(32767);
+    const q = [];
+    for (let i = 0; i < W * D; i++) if (blockOf[i] >= 0 && keep[blockOf[i]]) { dist[i] = 0; q.push(i); }
+    for (let h = 0; h < q.length; h++) {
+      const i = q[h], x = i % W, z = (i - x) / W, d = dist[i] + 1;
+      for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
+        const nx = x + dx, nz = z + dz;
+        if (nx < 0 || nz < 0 || nx >= W || nz >= D) continue;
+        const j = at(nx, nz);
+        if (dist[j] <= d || use[j] !== 1 /* ROAD */) continue;
+        dist[j] = d; q.push(j);
+      }
+    }
+    return dist;
+  };
+  for (let pass = 0; pass < 3; pass++) {
+    const dist = build();
+    const inCity = (i) => (blockOf[i] >= 0 ? keep[blockOf[i]] : use[i] === 1 && dist[i] <= Math.max(1, roadWidthAt[i]));
+    // fill holes: unkept blocks not connected to the outside through non-city cells
+    const outside = new Uint8Array(W * D);
+    const q = [];
+    for (let x = 0; x < W; x++) for (const z of [0, D - 1]) q.push(at(x, z));
+    for (let z = 0; z < D; z++) for (const x of [0, W - 1]) q.push(at(x, z));
+    for (const i of q) if (!inCity(i)) outside[i] = 1;
+    for (let h = 0; h < q.length; h++) {
+      const i = q[h]; if (!outside[i]) continue;
+      const x = i % W, z = (i - x) / W;
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = x + dx, nz = z + dz;
+        if (nx < 0 || nz < 0 || nx >= W || nz >= D) continue;
+        const j = at(nx, nz);
+        if (outside[j] || inCity(j)) continue;
+        outside[j] = 1; q.push(j);
+      }
+    }
+    let changed = false;
+    blocks.forEach((b, i) => {
+      if (keep[i]) return;
+      const c = at(Math.round((b.x0 + b.x1) / 2), Math.round((b.z0 + b.z1) / 2));
+      if (!outside[c]) { keep[i] = true; changed = true; }
+    });
+    // keep only the kept blocks connected to the focal block through kept roads
+    const comp = new Int8Array(blocks.length);
+    const start = fb >= 0 ? fb : keep.findIndex(Boolean);
+    const seen = new Uint8Array(W * D), bq = [];
+    if (start >= 0) {
+      const b = blocks[start];
+      bq.push(at(b.x0, b.z0)); seen[at(b.x0, b.z0)] = 1;
+      for (let h = 0; h < bq.length; h++) {
+        const i = bq[h], x = i % W, z = (i - x) / W;
+        if (blockOf[i] >= 0) comp[blockOf[i]] = 1;
+        for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const nx = x + dx, nz = z + dz;
+          if (nx < 0 || nz < 0 || nx >= W || nz >= D) continue;
+          const j = at(nx, nz);
+          if (seen[j] || !inCity(j)) continue;
+          seen[j] = 1; bq.push(j);
+        }
+      }
+    }
+    blocks.forEach((b, i) => { if (keep[i] && !comp[i]) { keep[i] = false; changed = true; } });
+    if (!changed) break;
+  }
+
+  // clear everything that is not city
+  const dist = build();
+  for (let i = 0; i < W * D; i++) {
+    const kb = blockOf[i] >= 0 ? keep[blockOf[i]] : (use[i] === 1 && dist[i] <= Math.max(1, roadWidthAt[i]));
+    if (!kb) use[i] = 0;                    // EMPTY: natural ground, nothing placed
+  }
+  // a road cell only stays if it is within its own street's width of a kept block
+  // (so a street bordering the city is kept whole, one beyond it is not)
+  const keptBlocks = blocks.filter((b, i) => keep[i]);
+  const keptLots = lots.filter((l) => {
+    const i = blockOf[at(Math.round((l.x0 + l.x1) / 2), Math.round((l.z0 + l.z1) / 2))];
+    return i >= 0 && keep[i];
+  });
+  return { keptBlocks, keptLots };
 }
 
 // Which side of a lot faces public space? Returns {side, score}.

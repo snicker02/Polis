@@ -17,7 +17,7 @@ import { makeRng } from './rng.js';
 // Must match main.js VERSION, package.json and index.html data-version;
 // tools/validate.js fails if they drift. The app refuses to export when the
 // browser has mixed cached copies of old and new files.
-export const POLIS_VERSION = '0.2.5';
+export const POLIS_VERSION = '0.2.6';
 
 export const CHUNK = 64;          // Bedrock structure limit per horizontal axis
 export const GROUND_DROP = 2;     // base layer y=0 sits 2 below feet; surface y=1 replaces the block you stand on
@@ -101,7 +101,22 @@ export function tileList(world, opts = {}) {
 // outside face (it shows where the ground falls away), stone inside.
 export function foundationFill(world) {
   const wb = world.box;
-  return (x, y, z) => (x === wb.x0 || x === wb.x1 || z === wb.z0 || z === wb.z1) ? MAT.STONEBRICK : MAT.BASE;
+  const inside = cityInside(world);
+  if (!inside) return (x, y, z) => (x === wb.x0 || x === wb.x1 || z === wb.z0 || z === wb.z1) ? MAT.STONEBRICK : MAT.BASE;
+  // organic outline: only under the city, stone bricks on the outline itself
+  return (x, y, z) => {
+    if (!inside(x, z)) return -1;
+    for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) if (!inside(x + dx, z + dz)) return MAT.STONEBRICK;
+    return MAT.BASE;
+  };
+}
+
+// The city's outline, if it has one (organic cities): a test for "is this
+// column part of the city". Square cities return null (everything is).
+export function cityInside(world) {
+  const m = world.cityMask;
+  if (!m) return null;
+  return (x, z) => x >= 0 && z >= 0 && x < m.W && z < m.D && m.data[z * m.W + x] === 1;
 }
 
 export function buildStructures(world, opts = {}) {
@@ -109,7 +124,8 @@ export function buildStructures(world, opts = {}) {
   const F = Math.max(0, Math.min(48, opts.foundation | 0));
   const fill = F ? { fillFn: foundationFill(world), fillBelowY: world.box.y0 } : {};
   return tileList(world, opts).map((t) => {
-    const res = writeMcStructure(t.chunk.keys, t.chunk.ids, t.box, MATERIALS, { airId, blockData: world.data, ...fill });
+    const res = writeMcStructure(t.chunk.keys, t.chunk.ids, t.box, MATERIALS,
+      { airId, blockData: world.data, inside: cityInside(world), ...fill });
     return {
       name: t.name, data: res.data, box: t.box,
       size: res.size, cells: res.cells, paletteSize: res.paletteSize, entities: res.entities,

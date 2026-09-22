@@ -30,6 +30,12 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const deflateRaw = (b) => new Uint8Array(zlib.deflateRawSync(Buffer.from(b)));
 
 let pass = 0, fail = 0;
+// block names a player or mob can stand inside (doors, flowers, crops, rails,
+// carpet): taken from the registry, so a new plant can never be missed
+const WALK_THROUGH = new Set();
+function refreshWalkThrough() {
+  for (let i = 0; i < MATERIALS.length; i++) if (MATERIALS.def(i).passable) WALK_THROUGH.add(MATERIALS.def(i).block);
+}
 const failures = [];
 function check(name, cond, detail) {
   if (cond) { pass++; return true; }
@@ -476,12 +482,22 @@ section('2d. railways');
       cycles === (r.transit.stats.loop ? 1 : 0) && (!r.transit.stats.loop || cycleLen === r.transit.stats.loopLength),
       `${cycles} loops, ${cycleLen} vs ${r.transit.stats.loopLength} rails`);
     if (r.transit.stats.loop) {
+      // any outline: the loop's curves are where it turns, and every straight
+      // two steps from a curve is a powered booster
       const L = r.transit.lines.find((l) => l.loop);
-      const curves = [[L.cl, L.rt], [L.cr, L.rt], [L.cr, L.rb], [L.cl, L.rb]].map(([x, z]) => dirOf(w, x, 2, z));
-      check(`${tag}: loop corners are the four curves in order (SE, SW, NW, NE)`, curves.join() === '6,7,8,9', curves.join());
-      const nearBoost = [[L.cl + 2, L.rt], [L.cl, L.rt + 2], [L.cr - 2, L.rt], [L.cr, L.rt + 2]]
-        .every(([x, z]) => MATERIALS.def(w.get(x, 2, z)).block === 'minecraft:golden_rail');
-      check(`${tag}: powered boosters just before and after the corners`, nearBoost);
+      const n = L.cells.length;
+      const isCurve = (i) => dirOf(w, L.cells[(i + n) % n][0], L.cells[(i + n) % n][1], L.cells[(i + n) % n][2]) >= 6;
+      let curves = 0, badBoost = 0, onWall = 0;
+      for (let i = 0; i < n; i++) {
+        if (isCurve(i)) { curves++; continue; }
+        let d = 0; while (d < n && !isCurve(i + d) && !isCurve(i - d)) d++;
+        const [x, y, z] = L.cells[i];
+        if (d === 2 && MATERIALS.def(w.get(x, y, z)).block !== 'minecraft:golden_rail') badBoost++;
+        if (r.wall && r.wall.ring.some(([a, b]) => a === x && b === z)) onWall++;
+      }
+      check(`${tag}: the loop turns with curved rails (at least four corners)`, curves >= 4, `${curves}`);
+      check(`${tag}: powered boosters two blocks either side of every curve`, badBoost === 0, `${badBoost} missing`);
+      check(`${tag}: no loop rail under the wall`, onWall === 0);
     }
     const carts = r.spawns.filter((p) => p.type === 'minecart');
     const cartOnRail = carts.every((p) => isRail(w, p.x, p.y, p.z));
@@ -522,9 +538,15 @@ section('2e. perimeter wall');
     const w = r.world, { W, D } = r.plan;
     const tag = `wall ${h} ${c.size}/${c.seed}${c.transit ? ' ' + c.transit : ''}`;
     cities++;
+    // the city's actual edge: every city cell with a non-city neighbour (diagonals too)
+    const inC = (x, z) => x >= 0 && z >= 0 && x < W && z < D && r.plan.mask[z * W + x] === 1;
     const ring = [];
-    for (let x = 0; x < W; x++) ring.push([x, 0], [x, D - 1]);
-    for (let z = 1; z < D - 1; z++) ring.push([0, z], [W - 1, z]);
+    for (let z = 0; z < D; z++) for (let x = 0; x < W; x++) {
+      if (!inC(x, z)) continue;
+      let e = false;
+      for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) if (!inC(x + dx, z + dz)) e = true;
+      if (e) ring.push([x, z]);
+    }
     const isDoor = (id) => id >= 0 && /_door$/.test(MATERIALS.def(id).block);
     let gaps = 0, doors = 0;
     for (const [x, z] of ring) {
@@ -560,8 +582,16 @@ section('2e. perimeter wall');
     }
     const v = verifyAll(w, r.buildings);
     check(`${tag}: every building floor still reachable`, v.floorsReached === v.floorsChecked);
-    check(`${tag}: golems never stand on the wall`, r.spawns.filter((p) => p.type === 'golem')
-      .every((p) => p.x > 0 && p.z > 0 && p.x < W - 1 && p.z < D - 1));
+    const onRing = new Set(ring.map(([x, z]) => x + ',' + z));
+    check(`${tag}: golems never stand on the wall`, r.spawns.filter((p) => p.type === 'golem').every((p) => !onRing.has(p.x + ',' + p.z)));
+    // water-tightness in the sense that matters: no city cell inside the wall
+    // touches the outside, even diagonally
+    let leak = 0;
+    for (let z = 0; z < D; z++) for (let x = 0; x < W; x++) {
+      if (!inC(x, z) || onRing.has(x + ',' + z)) continue;
+      for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) if (!inC(x + dx, z + dz)) leak++;
+    }
+    check(`${tag}: every cell inside the wall is enclosed by it`, leak === 0, `${leak}`);
   }
   // gates across every size and street width
   let combos = 0, missing = 0;
@@ -586,7 +616,9 @@ section('2f. foundations');
     const tiles = tileList(w, opts);
     const structs = buildStructures(w, opts);
     const tag = `foundation ${F}, clear ${air ? C : '-'}`;
-    let bottomOk = true, topOk = true, holes = 0, ringBad = 0, worldBad = 0, over = 0, spanned = 0;
+    let bottomOk = true, topOk = true, holes = 0, ringBad = 0, worldBad = 0, over = 0, spanned = 0, outsideTouched = 0;
+    const cm = w.cityMask;
+    const inCityF = (x, z) => !cm || (x >= 0 && z >= 0 && x < cm.W && z < cm.D && cm.data[z * cm.W + x] === 1);
     for (const st of structs) {
       const { root } = decodeNbt(st.data);
       const [sx, sy, sz] = root.size, [ox, oy, oz] = root.structure_world_origin;
@@ -597,9 +629,12 @@ section('2f. foundations');
       for (let x = 0; x < sx; x++) for (let y = 0; y < sy; y++) for (let z = 0; z < sz; z++) {
         const v = l0[(x * sy + y) * sz + z];
         const wx = ox + x, wy = oy + y, wz = oz + z;
+        const inside = inCityF(wx, wz);
+        if (!inside) { if (v >= 0) outsideTouched++; continue; }     // land outside the outline is left alone
         if (wy < wb.y0) {
           if (v < 0 || pal[v].name === 'minecraft:air') { holes++; continue; }
-          const edge = wx === wb.x0 || wx === wb.x1 || wz === wb.z0 || wz === wb.z1;
+          let edge = false;
+          for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) if (!inCityF(wx + dx, wz + dz)) edge = true;
           if (pal[v].name !== (edge ? 'minecraft:stone_bricks' : 'minecraft:stone')) ringBad++;
         } else {
           const id = w.get(wx, wy, wz);
@@ -613,6 +648,7 @@ section('2f. foundations');
     check(`${tag}: structures start ${F} blocks below the city base`, bottomOk);
     check(`${tag}: the foundation is solid, no gaps`, holes === 0, `${holes} holes`);
     check(`${tag}: stone-brick retaining face at the edge, stone inside`, ringBad === 0, `${ringBad} wrong`);
+    check(`${tag}: nothing written outside the city outline`, outsideTouched === 0, `${outsideTouched} cells`);
     check(`${tag}: the city itself is unchanged above the foundation`, worldBad === 0, `${worldBad} cells differ`);
     check(`${tag}: tiles cover the whole footprint`, spanned === (wb.x1 - wb.x0 + 1) * (wb.z1 - wb.z0 + 1));
     if (air) {
@@ -651,11 +687,12 @@ section('2g. animals and variety');
       // fence all round except the gate, gate facing the street
       for (let z = p.z0; z <= p.z1; z++) for (let x = p.x0; x <= p.x1; x++) {
         if (!(x === p.x0 || x === p.x1 || z === p.z0 || z === p.z1)) continue;
-        const n = name(w, x, G + 1, z);
+        const g = r.groundAt(x, z);
+        const n = name(w, x, g + 1, z);
         if (x === p.gate[0] && z === p.gate[1]) {
-          const d = def(w, x, G + 1, z);
+          const d = def(w, x, g + 1, z);
           if (n !== 'minecraft:fence_gate' || d.states['minecraft:cardinal_direction'].value !== p.side) badPen++;
-        } else if (n !== 'minecraft:oak_fence') badPen++;
+        } else if (n !== 'minecraft:oak_fence' || name(w, x, g + 2, z) !== 'minecraft:oak_fence') badPen++;   // two high
       }
       for (const a of p.animals) if (a.x <= p.x0 || a.x >= p.x1 || a.z <= p.z0 || a.z >= p.z1 || a.type !== p.kind) badPen++;
       if (!p.animals.length) badPen++;
@@ -673,7 +710,7 @@ section('2g. animals and variety');
       for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
         let hit = false;
         for (let k = 1; k < 24 && !hit; k++) {
-          const n = name(w, p.x + dx * k, G + 1, p.z + dz * k);
+          const n = name(w, p.x + dx * k, p.y, p.z + dz * k);
           if (n === 'minecraft:oak_fence' || n === 'minecraft:fence_gate') hit = true;
         }
         if (!hit) badGrove++;
@@ -691,7 +728,7 @@ section('2g. animals and variety');
     const v = verifyAll(w, r.buildings);
     check(`animals ${seed}: every building floor still reachable`, v.floorsReached === v.floorsChecked);
   }
-  check('pens: fenced all round, one gate facing the street, animals inside', pens > 0 && badPen === 0, `${badPen} problems in ${pens} pens`);
+  check('pens: fenced two high all round, one gate facing the street, animals inside', pens > 0 && badPen === 0, `${badPen} problems in ${pens} pens`);
   check('pens: all four kinds of farm animal appear', kinds.size === 4, [...kinds].join(','));
   check('groves: every panda is fenced in on all sides', grovesN > 0 && badGrove === 0, `${badGrove} open sides`);
   check('groves: every bamboo stalk stands on grass or bamboo', badBamboo === 0, `${badBamboo}`);
@@ -750,6 +787,7 @@ section('2h. landmarks');
     const mkt = r.landmarks.find((l) => l.kind === 'market');
     if (mkt) for (const st of mkt.stalls) {
       stalls++;
+      const G = r.groundAt(st.x0, st.z0);
       for (const [x, z] of [[st.x0, st.z0], [st.x1, st.z0], [st.x0, st.z1], [st.x1, st.z1]])
         if (name(w, x, G + 1, z) !== 'minecraft:oak_fence' || name(w, x, G + 2, z) !== 'minecraft:oak_fence') badStall++;
       for (let z = st.z0; z <= st.z1; z++) for (let x = st.x0; x <= st.x1; x++) if (!/_wool$/.test(name(w, x, G + 3, z) || '')) badStall++;
@@ -776,6 +814,78 @@ section('2h. landmarks');
   const off = generateCity({ ...DEFAULTS, size: 160, seed: 12345, landmarks: false });
   check('landmarks: none when switched off', off.landmarks.length === 0);
   note(`${cities} cities, all four landmarks in ${complete} · ${faces} clock faces · ${stalls} market stalls`);
+}
+
+// ===========================================================================
+// 2i. organic outline and hills
+// ===========================================================================
+section('2i. outline and hills');
+{
+  let cities = 0, irregular = 0, badPiece = 0, outside = 0, raisedNoStairs = 0, unreached = 0, total = 0;
+  let raised = 0, stairs = 0, streetsNotLevel = 0, hollow = 0, maxE = 0;
+  for (const [size, seed, transit] of [[160, 12345, 'roads'], [192, 1, 'rails'], [128, 2, 'trams'], [224, 3, 'rails'],
+                                         [96, 4, 'roads'], [256, 5, 'rails'], [160, 6, 'trams'], [192, 7, 'roads']]) {
+    const r = generateCity({ ...DEFAULTS, size, seed, transit, hills: 3 });
+    const w = r.world, { W, D, mask, use } = r.plan;
+    cities++;
+    // outline: irregular (clearly not the full rectangle), one connected piece, nothing outside it
+    let area = 0; for (let i = 0; i < W * D; i++) if (mask[i]) area++;
+    if (area < W * D * 0.95) irregular++;
+    const seen = new Uint8Array(W * D); let first = mask.indexOf(1), comps = 0;
+    for (let i0 = 0; i0 < W * D; i0++) {
+      if (!mask[i0] || seen[i0]) continue;
+      comps++;
+      const q = [i0]; seen[i0] = 1;
+      for (let h = 0; h < q.length; h++) {
+        const i = q[h], x = i % W, z = (i - x) / W;
+        for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const nx = x + dx, nz = z + dz, j = nz * W + nx;
+          if (nx < 0 || nz < 0 || nx >= W || nz >= D || !mask[j] || seen[j]) continue;
+          seen[j] = 1; q.push(j);
+        }
+      }
+    }
+    if (comps !== 1 || first < 0) badPiece++;
+    w.forEach((x, y, z) => { if (x < 0 || z < 0 || x >= W || z >= D || !mask[z * W + x]) outside++; });
+    // hills
+    for (const b of r.hills.blocks) {
+      if (!b.e) continue;
+      raised++; maxE = Math.max(maxE, b.e);
+      const n = r.stairRuns.filter((s2) => s2.block.x0 === b.x0 && s2.block.z0 === b.z0).length;
+      stairs += n;
+      if (!n) raisedNoStairs++;
+      // the terrace is solid from the base up to its surface (staircase cells
+      // are cut down on purpose; below each step they must still be solid)
+      const stairAt = new Map();
+      for (const s2 of r.stairRuns) s2.cells.forEach(([sx, sz], i) => stairAt.set(sx + ',' + sz, i));
+      for (let z = b.z0; z <= b.z1; z++) for (let x = b.x0; x <= b.x1; x++) {
+        const i = stairAt.get(x + ',' + z);
+        const topSolid = i === undefined ? 1 + b.e : 1 + i;       // step i sits on solid ground up to y = 1 + i
+        for (let y = 0; y <= topSolid; y++) if (!w.has(x, y, z)) hollow++;
+      }
+    }
+    // streets stay level: every road cell has its surface at the street level
+    for (let z = 0; z < D; z++) for (let x = 0; x < W; x++)
+      if (use[z * W + x] === USE.ROAD && r.groundAt(x, z) !== 1) streetsNotLevel++;
+    total += r.reach.total; unreached += r.reach.unreached.length;
+  }
+  check('outline: every organic city is irregular, not the full rectangle', irregular === cities, `${irregular}/${cities}`);
+  check('outline: every city is one connected piece', badPiece === 0, `${badPiece} split`);
+  check('outline: nothing is placed outside the city outline', outside === 0, `${outside} blocks`);
+  check('hills: blocks are raised, up to three', raised > 0 && maxE === 3, `${raised} raised, max ${maxE}`);
+  check('hills: every raised block has a staircase from the street', raisedNoStairs === 0, `${raisedNoStairs} without`);
+  check('hills: every building door can be walked to from the streets', unreached === 0, `${unreached}/${total} unreachable`);
+  check('hills: streets stay level (railway untouched)', streetsNotLevel === 0, `${streetsNotLevel}`);
+  check('hills: terraces are solid underneath', hollow === 0, `${hollow} gaps`);
+  note(`${cities} cities · ${raised} raised blocks · ${stairs} staircases · ${total - unreached}/${total} doors reachable from the streets`);
+
+  // the other settings still work: square outline, no hills
+  const sq = generateCity({ ...DEFAULTS, size: 160, seed: 12345, outline: 'square', transit: 'rails' });
+  let sqArea = 0; for (const v of sq.plan.mask) if (v) sqArea++;
+  check('square outline: fills the whole plan, loop and gates intact', sqArea === sq.plan.W * sq.plan.D && sq.transit.stats.loop && sq.wall.gates.length === 4);
+  check('square outline: every door reachable', sq.reach.unreached.length === 0);
+  const flat = generateCity({ ...DEFAULTS, size: 160, seed: 12345, hills: 0 });
+  check('hills off: no raised blocks, no staircases', flat.hills.blocks.every((b) => !b.e) && flat.stairRuns.length === 0);
 }
 
 // ===========================================================================
@@ -957,6 +1067,7 @@ section('6. mcpack zip');
 // 6b. air fill + one-command functions, end to end
 // ===========================================================================
 section('6b. air fill and /function build');
+refreshWalkThrough();
 {
   const city = generateCity({ ...DEFAULTS, size: 160, seed: 41 });
   const w = city.world, wb = w.box;
@@ -993,25 +1104,45 @@ section('6b. air fill and /function build');
 
   // decode every tile and check the air fill
   const tiles = new Map();
-  let voids = 0, notAir0 = 0, heightBad = 0, footprint = 0, wideBad = 0;
+  let voidsInside = 0, voidsOutside = 0, notAir0 = 0, heightBad = 0, footprint = 0, wideBad = 0;
+  const cityMask = w.cityMask;
+  const insideCity = (x, z) => !cityMask || (x >= 0 && z >= 0 && x < cityMask.W && z < cityMask.D && cityMask.data[z * cityMask.W + x] === 1);
   for (const st of out.structures) {
     const e = byName.get(`structures/polis/${st.name}.mcstructure`);
     const { root } = decodeNbt(inflate(e));
     const pal = root.structure.palette.default.block_palette;
     const l0 = root.structure.block_indices[0];
-    for (let i = 0; i < l0.length; i++) if (l0[i] === -1) voids++;
+    const [ox, oy, oz] = root.structure_world_origin, [ssx, ssy, ssz] = root.size;
+    for (let i = 0; i < l0.length; i++) {
+      if (l0[i] !== -1) continue;
+      const zz = i % ssz, rr = (i - zz) / ssz, x = (rr - (rr % ssy)) / ssy;
+      if (insideCity(ox + x, oz + zz)) voidsInside++; else voidsOutside++;
+    }
     if (pal[0].name !== 'minecraft:air') notAir0++;
     if (root.size[1] !== wb.y1 - wb.y0 + 1) heightBad++;
     if (root.size[0] > 64 || root.size[2] > 64) wideBad++;
     footprint += root.size[0] * root.size[2];
     tiles.set(st.name, { size: [...root.size], pal, l0 });
   }
-  check('air fill: no structure-void cells remain', voids === 0, `${voids} void`);
+  check('air fill: no structure-void cells inside the outline (void only outside it)', voidsInside === 0, `${voidsInside} void inside`);
+  check('air fill: land outside an organic outline is left untouched', !cityMask || voidsOutside > 0);
   check('air fill: air is in every palette', notAir0 === 0, `${notAir0} tiles without`);
   check('air fill: every tile spans the full city height', heightBad === 0, `${heightBad} short`);
   check('air fill: tiles stay within 64 across', wideBad === 0);
-  check('air fill: tiles cover the footprint exactly',
-    footprint === (wb.x1 - wb.x0 + 1) * (wb.z1 - wb.z0 + 1), `${footprint} vs ${(wb.x1 - wb.x0 + 1) * (wb.z1 - wb.z0 + 1)}`);
+  // every column of the city lies in exactly one tile (tiles outside an
+  // organic outline, where there is nothing, are simply not written)
+  {
+    const covered = new Map();
+    for (const st of out.structures) for (let x = st.box.x0; x <= st.box.x1; x++) for (let z = st.box.z0; z <= st.box.z1; z++)
+      covered.set(x + ',' + z, (covered.get(x + ',' + z) || 0) + 1);
+    let missingCols = 0, doubled = 0;
+    for (let z = wb.z0; z <= wb.z1; z++) for (let x = wb.x0; x <= wb.x1; x++) {
+      const n = covered.get(x + ',' + z) || 0;
+      if (insideCity(x, z) && n === 0) missingCols++;
+      if (n > 1) doubled++;
+    }
+    check('air fill: every city column lies in exactly one tile', missingCols === 0 && doubled === 0, `${missingCols} missing, ${doubled} doubled`);
+  }
 
   // simulate running each function from a player position into a world that
   // already contains junk, then compare cell-for-cell with the source city
@@ -1023,7 +1154,7 @@ section('6b. air fill and /function build');
       const ox = player[0] + ln.d[0], oy = player[1] + ln.d[1], oz = player[2] + ln.d[2];
       for (let x = 0; x < sx; x++) for (let y = 0; y < sy; y++) for (let zz = 0; zz < sz; zz++) {
         const v = t.l0[(x * sy + y) * sz + zz];
-        placed.set(`${ox + x},${oy + y},${oz + zz}`, t.pal[v].name);
+        if (v >= 0) placed.set(`${ox + x},${oy + y},${oz + zz}`, t.pal[v].name);
       }
     }
     return placed;
@@ -1041,10 +1172,12 @@ section('6b. air fill and /function build');
     });
     let airCount = 0;
     for (const v of placed.values()) if (v === 'minecraft:air') airCount++;
-    const vol = (wb.x1 - wb.x0 + 1) * (wb.y1 - wb.y0 + 1) * (wb.z1 - wb.z0 + 1);
+    let area = 0;
+    for (let z = wb.z0; z <= wb.z1; z++) for (let x = wb.x0; x <= wb.x1; x++) if (insideCity(x, z)) area++;
+    const vol = area * (wb.y1 - wb.y0 + 1);          // the city's columns, full height
     extra = placed.size - vol;
     check(`${label}: every block lands in the right place`, wrong === 0 && missing === 0, `${wrong} wrong, ${missing} missing`);
-    check(`${label}: whole volume written, nothing outside it`, extra === 0, `${extra} extra`);
+    check(`${label}: every column inside the outline written, nothing outside it`, extra === 0, `${extra} extra`);
     check(`${label}: every empty cell is air`, airCount === vol - w.size, `${airCount} vs ${vol - w.size}`);
   };
   verifyPlacement(simulate(build, player), player[0], player[2], 'build');
@@ -1123,6 +1256,7 @@ section('6c. city ids');
 // 6d. population: mob structures, minecart summons, ticking areas, bed colours
 // ===========================================================================
 section('6d. population');
+refreshWalkThrough();
 {
   const r = generateCity({ ...DEFAULTS, size: 192, seed: 12345, transit: 'rails' });
   const ns = cityId(r.world, 12345);
@@ -1232,7 +1366,7 @@ section('6d. population');
         if (iv >= 0) placed.set(`${L.at[0] + x},${L.at[1] + y},${L.at[2] + zz}`, pal[iv].v.name.v);
       }
     }
-    const blocking = (k) => { const nm = placed.get(k); return !!nm && nm !== 'minecraft:air' && !/_door$|carpet|dandelion|cornflower|allium|bluet|orchid|wheat|carrots|beetroot|rail$/.test(nm); };
+    const blocking = (k) => { const nm = placed.get(k); return !!nm && nm !== 'minecraft:air' && !WALK_THROUGH.has(nm); };
     let bad = 0, total = 0, first = '';
     for (const ln of mobLoads) {
       const L = loadAt(ln); const t = typed[L.name].v;

@@ -302,7 +302,7 @@ export function bedSpawns(world, beds) {
 // ============================================================================
 // the village: a bell to gather at, golems on the street
 // ============================================================================
-export function placeBell(world, plan, G) {
+export function placeBell(world, plan, G0, elevAt = () => 0) {
   // prefer a plaza, then a park crossing
   for (const kind of [USE.PLAZA, USE.PARK]) {
     for (const lot of plan.lots) {
@@ -311,6 +311,7 @@ export function placeBell(world, plan, G) {
       for (const [dx, dz] of [[3, 3], [-3, 3], [3, -3], [-3, -3], [2, 2], [1, 1]]) {
         const x = cx + dx, z = cz + dz;
         if (x <= lot.x0 || x >= lot.x1 || z <= lot.z0 || z >= lot.z1) continue;
+        const G = G0 + elevAt(x, z);
         if (world.has(x, G + 1, z) || !solidAt(world, x, G, z) || world.get(x, G, z) === MAT.WATER) continue;
         world.set(x, G + 1, z, MAT.BELL);
         return [x, G + 1, z];
@@ -322,7 +323,7 @@ export function placeBell(world, plan, G) {
 
 // Golems: outdoors only — on pavement or plaza, three clear cells tall, never
 // inside any building footprint, spread out across the city.
-export function golemSpawns(world, plan, buildings, count, rng, G) {
+export function golemSpawns(world, plan, buildings, count, rng, G, elevAt = () => 0) {
   if (count <= 0) return [];
   const { W, D, use } = plan;
   const inside = (x, z) => buildings.some((b) => x >= b.x0 - 1 && x <= b.x1 + 1 && z >= b.z0 - 1 && z <= b.z1 + 1);
@@ -332,7 +333,7 @@ export function golemSpawns(world, plan, buildings, count, rng, G) {
       const u = use[z * W + x];
       if (u !== USE.SIDEWALK && u !== USE.PLAZA) continue;
       if (inside(x, z)) continue;
-      if (!standable(world, x, G + 1, z, 3)) continue;
+      if (!standable(world, x, G + elevAt(x, z) + 1, z, 3)) continue;
       cand.push([x, z]);
     }
   }
@@ -342,7 +343,7 @@ export function golemSpawns(world, plan, buildings, count, rng, G) {
   for (const [x, z] of cand) {
     if (out.length >= count) break;
     if (out.some((g) => Math.abs(g.x - x) + Math.abs(g.z - z) < minGap)) continue;
-    out.push({ type: 'golem', x, y: G + 1, z });
+    out.push({ type: 'golem', x, y: G + elevAt(x, z) + 1, z });
   }
   return out;
 }
@@ -368,19 +369,21 @@ export function ranch(world, lot, side, rng, G, plan, kind = null) {
   for (let z = L.z0; z <= L.z1; z++)
     for (let x = L.x0; x <= L.x1; x++) {
       if (!(x === L.x0 || x === L.x1 || z === L.z0 || z === L.z1)) continue;
+      // two blocks high: animals cannot jump it even from on top of something
       if (x === gate[0] && z === gate[1]) world.set(x, G + 1, z, gateId(side));
-      else world.set(x, G + 1, z, MAT.FENCE);
+      else { world.set(x, G + 1, z, MAT.FENCE); world.set(x, G + 2, z, MAT.FENCE); }
     }
-  // hay in the far corner, a water trough in another
-  const farX = (side === 'east') ? L.x0 + 1 : L.x1 - 1, farZ = (side === 'south') ? L.z0 + 1 : L.z1 - 1;
+  // hay and a water trough, kept a block clear of the fence so nothing can
+  // use them as a step to get out
+  const farX = (side === 'east') ? L.x0 + 2 : L.x1 - 2, farZ = (side === 'south') ? L.z0 + 2 : L.z1 - 2;
   world.set(farX, G + 1, farZ, MAT.HAY);
   if (rng.chance(0.5)) world.set(farX, G + 2, farZ, MAT.HAY);
-  const tx = farX === L.x1 - 1 ? L.x0 + 1 : L.x1 - 1;
+  const tx = farX === L.x1 - 2 ? L.x0 + 2 : L.x1 - 2;
   world.set(tx, G + 1, farZ, MAT.CAULDRON_FULL);
   kind = kind || rng.pick(RANCH_ANIMALS);
   const cells = [];
-  for (let z = L.z0 + 2; z <= L.z1 - 2; z++)
-    for (let x = L.x0 + 2; x <= L.x1 - 2; x++)
+  for (let z = L.z0 + 1; z <= L.z1 - 1; z++)
+    for (let x = L.x0 + 1; x <= L.x1 - 1; x++)
       if (!world.has(x, G + 1, z) && !world.has(x, G + 2, z)) cells.push([x, z]);
   rng.shuffle(cells);
   const n = Math.min(cells.length, rng.int(3, 6) + (kind === 'chicken' ? 2 : 0));
@@ -413,7 +416,10 @@ export function pandaGrove(world, lot, cx, cz, rng, G, avoid) {
       for (let y = G + 1; y <= G + 6; y++) world.clear(x, y, z);
       world.set(x, G, z, MAT.GRASS);
       const edge = x === q.x0 || x === q.x1 || z === q.z0 || z === q.z1;
-      if (edge) world.set(x, G + 1, z, (x === gx && z === gz) ? gateId(q.gate) : MAT.FENCE);
+      if (edge) {
+        if (x === gx && z === gz) world.set(x, G + 1, z, gateId(q.gate));
+        else { world.set(x, G + 1, z, MAT.FENCE); world.set(x, G + 2, z, MAT.FENCE); }
+      }
     }
   // bamboo stalks, leaving open ground for the pandas and a clear cell inside the gate
   const inX = q.gate === 'east' ? gx - 1 : gx + 1;
@@ -434,7 +440,7 @@ export function pandaGrove(world, lot, cx, cz, rng, G, avoid) {
 }
 
 // cats: outdoors on pavement, plazas and park paths, spread out
-export function catSpawns(world, plan, buildings, count, rng, G) {
+export function catSpawns(world, plan, buildings, count, rng, G, elevAt = () => 0) {
   if (count <= 0) return [];
   const { W, D, use } = plan;
   const inside = (x, z) => buildings.some((b) => x >= b.x0 - 1 && x <= b.x1 + 1 && z >= b.z0 - 1 && z <= b.z1 + 1);
@@ -443,7 +449,7 @@ export function catSpawns(world, plan, buildings, count, rng, G) {
     for (let x = 1; x < W - 1; x++) {
       const u = use[z * W + x];
       if (u !== USE.SIDEWALK && u !== USE.PLAZA) continue;
-      if (inside(x, z) || !standable(world, x, G + 1, z)) continue;
+      if (inside(x, z) || !standable(world, x, G + elevAt(x, z) + 1, z)) continue;
       cand.push([x, z]);
     }
   rng.shuffle(cand);
@@ -451,7 +457,7 @@ export function catSpawns(world, plan, buildings, count, rng, G) {
   for (const [x, z] of cand) {
     if (out.length >= count) break;
     if (out.some((c) => Math.abs(c.x - x) + Math.abs(c.z - z) < 10)) continue;
-    out.push({ type: 'cat', x, y: G + 1, z });
+    out.push({ type: 'cat', x, y: G + elevAt(x, z) + 1, z });
   }
   return out;
 }

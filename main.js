@@ -8,14 +8,14 @@ import { Renderer } from './engine/renderer.js';
 import { exportPack, exportStructuresZip, tileList, commandList, cityId, exportSalt, POLIS_VERSION } from './engine/export.js';
 import { THEMES } from './engine/materials.js';
 
-const VERSION = '0.2.5';
+const VERSION = '0.2.6';
 const $ = (id) => document.getElementById(id);
 
 const SLIDERS = {
   size: 0, minBlock: 0, blockIrregularity: 2, avenueWidth: 0, streetWidth: 0,
   downtownRadius: 2, zoneNoise: 2, parkChance: 2, lotDowntown: 0, lotSuburb: 0,
   maxFloors: 0, pitch: 0, setbackEvery: 0, bw: 0, bd: 0, floors: 0, clip: 0,
-  farmChance: 2, pondChance: 2, villagers: 0, wallHeight: 0, foundation: 0, clearAbove: 0,
+  farmChance: 2, pondChance: 2, villagers: 0, wallHeight: 0, foundation: 0, clearAbove: 0, hills: 0,
 };
 const CHECKS = ['setback', 'roofAccess', 'useStairs', 'lights', 'lamps', 'trees', 'markings', 'landmarks'];
 
@@ -157,6 +157,8 @@ function readCfg() {
     cfg.lotSuburb = num('lotSuburb');
     cfg.maxFloors = num('maxFloors');
     cfg.wallHeight = num('wallHeight');
+    cfg.outline = $('outline').value;
+    cfg.hills = num('hills');
     cfg.focal = focal.slice();
   } else {
     cfg.bw = num('bw');
@@ -299,6 +301,8 @@ function showStats(mesh, times) {
     line('farms / beds', `${s.farms} / ${s.beds}`);
     line('workstations / plants', `${s.stations} / ${s.plants}`);
     line('villagers / golems', `${s.villagers} / ${s.golems}` + (s.bell ? ' · bell' : ''));
+    if (s.hillBlocks) line('hills', `${s.hillBlocks} raised blocks (up to ${s.hillMax}) · ${s.staircases} staircases`);
+    if (s.reachable) line('doors reachable from streets', s.reachable, s.reachable.split('/')[0] === s.reachable.split('/')[1] ? 'ok' : 'bad');
     if (s.landmarks && s.landmarks.length) line('landmarks', s.landmarks.map((k) =>
       ({ townhall: 'town hall', clocktower: 'clock tower', library: 'library', market: 'market' }[k])).join(' · '));
     if (s.ranches !== undefined) line('pens / farm animals', `${s.ranches} / ${s.animals}`);

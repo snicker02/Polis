@@ -9,6 +9,7 @@ import { doorId, DIR, MATERIALS } from './materials.js';
 import { farm, pond, scatterFlowers, furnish, bedSpawns, placeBell, golemSpawns, ranch, pandaGrove, catSpawns, RANCH_ANIMALS } from './life.js';
 import { layTransit, trimOverRails } from './transit.js';
 import { chooseLandmarks, buildLandmark } from './landmarks.js';
+import { planHills, liftBlocks, cutStairs, shiftBuilding, walkCity } from './terrain.js';
 
 export const DEFAULTS = {
   seed: 12345,
@@ -33,6 +34,8 @@ export const DEFAULTS = {
   roofAccess: true,
   useStairs: true,
   stairStyle: 'mixed',
+  outline: 'organic',        // 'organic' (lobed outline along the street grid) | 'square'
+  hills: 2,                  // city blocks raised 0..hills blocks on gentle terraces, with steps
   landmarks: true,           // town hall, clock tower, library, market square near downtown
   transit: 'roads',
   wallHeight: 3,             // perimeter wall, blocks above ground (0 = none)          // 'roads' | 'rails' (railway instead of roads) | 'trams' (rails down the roads)
@@ -61,12 +64,15 @@ export function generateCity(cfgIn, onProgress) {
   const plan = generatePlan(cfg, rng);
   const world = new VoxelWorld({ budget: cfg.budget });
   const W = plan.W, D = plan.D;
+  // organic cities carry their outline, so the export leaves the land outside it alone
+  if (cfg.outline === 'organic') world.cityMask = { W, D, data: plan.mask };
   const at = (x, z) => z * W + x;
 
   // ---- base + surface ------------------------------------------------------
   for (let z = 0; z < D; z++) {
     for (let x = 0; x < W; x++) {
       const u = plan.use[at(x, z)];
+      if (u === USE.EMPTY && plan.mask && cfg.outline === 'organic') continue;   // outside the city: leave the land alone
       world.set(x, 0, z, MAT.BASE);
       let surf = MAT.GRASS;
       if (u === USE.ROAD) surf = MAT.ASPHALT;
@@ -84,13 +90,13 @@ export function generateCity(cfgIn, onProgress) {
       if (c.axis === 'x') {
         const cz = Math.floor((c.z0 + c.z1) / 2);
         for (let x = Math.max(0, c.x0); x <= Math.min(W - 1, c.x1); x++) {
-          if (plan.roadAxis[at(x, cz)] !== 1) continue;
+          if (plan.roadAxis[at(x, cz)] !== 1 || plan.use[at(x, cz)] !== USE.ROAD) continue;   // not past the outline
           if (x % 4 < 2) world.set(x, GROUND, cz, MAT.LINE);
         }
       } else {
         const cx = Math.floor((c.x0 + c.x1) / 2);
         for (let z = Math.max(0, c.z0); z <= Math.min(D - 1, c.z1); z++) {
-          if (plan.roadAxis[at(cx, z)] !== 2) continue;
+          if (plan.roadAxis[at(cx, z)] !== 2 || plan.use[at(cx, z)] !== USE.ROAD) continue;
           if (z % 4 < 2) world.set(cx, GROUND, z, MAT.LINE);
         }
       }
@@ -212,6 +218,30 @@ export function generateCity(cfgIn, onProgress) {
     }
   }
 
+  // ---- hills: lift the blocks onto their terraces, then cut the steps -------
+  const hills = planHills(plan, cfg);
+  const elevAt = (x, z) => (x >= 0 && z >= 0 && x < W && z < D ? hills.elev[z * W + x] : 0);
+  let stairRuns = [];
+  if (hills.H) {
+    liftBlocks(world, plan, hills, GROUND);
+    for (const rec of buildings) shiftBuilding(rec, elevAt(rec.door.x, rec.door.z));
+    for (const rch of ranches) for (const a of rch.animals) a.y += elevAt(a.x, a.z);
+    for (const p of pandas) p.y += elevAt(p.x, p.z);
+    for (const L of landmarks) {
+      if (L.bell) L.bell[1] += elevAt(L.bell[0], L.bell[2]);
+      if (L.belfryBell) L.belfryBell[1] += elevAt(L.belfryBell[0], L.belfryBell[2]);
+      if (L.faces) for (const f of L.faces) f.centre[1] += elevAt(f.centre[0], f.centre[2]);
+    }
+    if (transit) for (const l of transit.lines) {
+      const e = elevAt(l.cells[0][0], l.cells[0][2]);       // alley lines ride up with their block
+      if (e) { for (const c of l.cells) c[1] += e; for (const st of l.stations) st[1] += e; l.lifted = e; }
+    }
+    if (transit) for (const c of transit.carts) c.y += elevAt(c.x, c.z);
+    const avoid = buildings.map((b) => [b.outside[0], b.outside[2]])
+      .concat(ranches.map((r) => r.gate), farms.map((f) => [(f.x0 + f.x1) >> 1, (f.z0 + f.z1) >> 1]));
+    stairRuns = cutStairs(world, plan, hills, GROUND, avoid);
+  }
+
   clearDoorways(world, buildings);
   trimOverRails(world, transit);
   const wall = perimeterWall(world, plan, cfg);
@@ -219,23 +249,29 @@ export function generateCity(cfgIn, onProgress) {
   // ---- the village ---------------------------------------------------------
   // the town hall's bell is the village bell; otherwise one goes in a plaza or park
   const hall = landmarks.find((l) => l.kind === 'townhall' && l.bell);
-  const bell = hall ? hall.bell : (cfg.villagers > 0 ? placeBell(world, plan, GROUND) : null);
+  const bell = hall ? hall.bell : (cfg.villagers > 0 ? placeBell(world, plan, GROUND, elevAt) : null);
   let spawns = [];
   if (cfg.villagers > 0) {
     const vs = bedSpawns(world, beds);
     lifeRng.shuffle(vs);
     spawns = vs.slice(0, cfg.villagers);
     const golems = Math.min(cfg.golemMax, Math.ceil(spawns.length / Math.max(1, cfg.villagersPerGolem)));
-    spawns = spawns.concat(golemSpawns(world, plan, buildings, golems, lifeRng, GROUND));
-    if (cfg.cats) spawns = spawns.concat(catSpawns(world, plan, buildings, Math.min(16, Math.ceil(spawns.length / 5)), lifeRng, GROUND));
+    spawns = spawns.concat(golemSpawns(world, plan, buildings, golems, lifeRng, GROUND, elevAt));
+    if (cfg.cats) spawns = spawns.concat(catSpawns(world, plan, buildings, Math.min(16, Math.ceil(spawns.length / 5)), lifeRng, GROUND, elevAt));
   }
   for (const p of pandas) spawns.push(p);
   for (const rch of ranches) for (const a of rch.animals) spawns.push(a);
 
   if (transit) spawns = spawns.concat(transit.carts);
 
-  const stats = summarise(world, plan, buildings, cfg, { farms, beds, spawns, bell, transit, wall, ranches, landmarks });
-  return { world, plan, buildings, cfg, stats, farms, ranches, spawns, bell, transit, wall, landmarks };
+  // ---- can everything be reached from the streets? ---------------------------
+  const reached = walkCity(world, plan, GROUND, hills.H + 4);
+  const unreached = buildings.filter((b) => !reached.has(`${b.outside[0]},${b.outside[1]},${b.outside[2]}`));
+  const reach = { total: buildings.length, reached: buildings.length - unreached.length, unreached };
+
+  const stats = summarise(world, plan, buildings, cfg, { farms, beds, spawns, bell, transit, wall, ranches, landmarks, hills, stairRuns, reach });
+  return { world, plan, buildings, cfg, stats, farms, ranches, spawns, bell, transit, wall, landmarks,
+    hills, stairRuns, reach, groundAt: (x, z) => GROUND + elevAt(x, z) };
 }
 
 // ---- perimeter wall -------------------------------------------------------------
@@ -247,54 +283,66 @@ export function generateCity(cfgIn, onProgress) {
 function perimeterWall(world, plan, cfg) {
   const h = Math.max(0, Math.min(12, cfg.wallHeight | 0));
   if (!h) return null;
-  const { W, D } = plan;
+  const { W, D, mask } = plan;
+  const inCity = (x, z) => x >= 0 && z >= 0 && x < W && z < D && mask[z * W + x] === 1;
+  // the wall runs on the city's outermost ring: every city cell with a
+  // non-city neighbour (including diagonals, so water can never slip past
+  // a corner) or on the edge of the plan
   const ring = [];
-  for (let x = 0; x < W; x++) { ring.push([x, 0]); ring.push([x, D - 1]); }
-  for (let z = 1; z < D - 1; z++) { ring.push([0, z]); ring.push([W - 1, z]); }
+  for (let z = 0; z < D; z++)
+    for (let x = 0; x < W; x++) {
+      if (!inCity(x, z)) continue;
+      let edge = false;
+      for (let dz = -1; dz <= 1 && !edge; dz++) for (let dx = -1; dx <= 1 && !edge; dx++) if (!inCity(x + dx, z + dz)) edge = true;
+      if (edge) ring.push([x, z]);
+    }
   for (const [x, z] of ring) {
+    world.set(x, 0, z, MAT.BASE);
     world.set(x, GROUND, z, MAT.STONEBRICK);
     for (let y = GROUND + 1; y <= GROUND + h; y++) world.set(x, y, z, y === GROUND + h ? MAT.SMOOTH : MAT.STONEBRICK);
+    for (let y = GROUND + h + 1; y <= GROUND + h + 3; y++) world.clear(x, y, z);
   }
-  if (h < 3) return { height: h, gates: [] };      // too low for a doorway: step over it
-  // Gates: a double door near the middle of each side, facing out, hinges on
-  // the outer edges. The way in only has to be walkable: rails are fine to
-  // step onto (on a narrow ring road the loop track runs right behind the
-  // wall). If the middle is blocked (a buffer, a lamp) the gate slides along
-  // the wall to the nearest spot that is clear.
+  if (h < 3) return { height: h, gates: [], ring };      // too low for a doorway: step over it
+  // Gates: a double door on each compass side, as near the middle of that
+  // side as possible, facing out, hinges on the outer edges. A gate needs two
+  // wall cells in a straight line with open land outside and walkable ground
+  // (rails are fine) inside.
+  const isRing = new Set(ring.map(([x, z]) => x + ',' + z));
   const CLOCKWISE = { north: 'east', east: 'south', south: 'west', west: 'north' };
   const walkIn = (x, z) => {
     const f1 = world.get(x, GROUND + 1, z), f2 = world.get(x, GROUND + 2, z);
-    return world.has(x, GROUND, z) && (f1 === -1 || MATERIALS.isPassable(f1)) && f2 === -1;
+    return inCity(x, z) && !isRing.has(x + ',' + z) && world.has(x, GROUND, z) &&
+      (f1 === -1 || MATERIALS.isPassable(f1)) && f2 === -1;
   };
-  const sides = [
-    { face: 'north', len: W, cell: (i) => [i, 0], along: 'east' },
-    { face: 'south', len: W, cell: (i) => [i, D - 1], along: 'east' },
-    { face: 'west', len: D, cell: (i) => [0, i], along: 'south' },
-    { face: 'east', len: D, cell: (i) => [W - 1, i], along: 'south' },
-  ];
+  let sx = 0, sz = 0;
+  for (const [x, z] of ring) { sx += x; sz += z; }
+  const mx = sx / ring.length, mz = sz / ring.length;
   const gates = [];
-  for (const g of sides) {
-    const [ox, oz] = OUTWARD[g.face];
-    const mid = Math.floor(g.len / 2) - 1;
-    let placed = null;
-    for (let d = 0; d < g.len / 2 && !placed; d++) {
-      for (const i of d === 0 ? [mid] : [mid - d, mid + d]) {
-        if (i < 2 || i + 1 > g.len - 3) continue;          // keep clear of the corners
-        const cells = [g.cell(i), g.cell(i + 1)];
-        const inside = cells.map(([x, z]) => [x - ox, z - oz]);
-        if (inside.every(([x, z]) => walkIn(x, z))) { placed = { cells, inside }; break; }
-      }
+  for (const face of ['north', 'south', 'west', 'east']) {
+    const [ox, oz] = OUTWARD[face];
+    const along = (face === 'north' || face === 'south') ? [1, 0] : [0, 1];
+    let best = null;
+    for (const [x, z] of ring) {
+      const x2 = x + along[0], z2 = z + along[1];
+      if (!isRing.has(x2 + ',' + z2)) continue;
+      const cells = [[x, z], [x2, z2]];
+      // open land straight outside both, walkable ground straight inside both
+      if (!cells.every(([a, b]) => !inCity(a + ox, b + oz) && walkIn(a - ox, b - oz))) continue;
+      const off = face === 'north' || face === 'south' ? Math.abs(x + 0.5 - mx) : Math.abs(z + 0.5 - mz);
+      const reach = face === 'north' ? -z : face === 'south' ? z : face === 'west' ? -x : x;   // prefer the outermost
+      const score = off - reach * 0.5;
+      if (!best || score < best.score) best = { cells, score };
     }
-    if (!placed) continue;
-    const secondIsRight = CLOCKWISE[g.face] === g.along;
-    placed.cells.forEach(([x, z], i) => {
+    if (!best) continue;
+    const secondIsRight = CLOCKWISE[face] === (along[0] ? 'east' : 'south');
+    best.cells.forEach(([x, z], i) => {
       const hinge = (i === 1) === secondIsRight ? 1 : 0;
-      world.set(x, GROUND + 1, z, doorId('spruce', DIR[g.face], false, hinge));
-      world.set(x, GROUND + 2, z, doorId('spruce', DIR[g.face], true, hinge));
+      world.set(x, GROUND + 1, z, doorId('spruce', DIR[face], false, hinge));
+      world.set(x, GROUND + 2, z, doorId('spruce', DIR[face], true, hinge));
     });
-    gates.push({ face: g.face, cells: placed.cells, inside: placed.inside });
+    gates.push({ face, cells: best.cells, inside: best.cells.map(([a, b]) => [a - ox, b - oz]) });
   }
-  return { height: h, gates };
+  return { height: h, gates, ring };
 }
 
 // ---- keep the way in clear --------------------------------------------------
@@ -498,6 +546,10 @@ function summarise(world, plan, buildings, cfg, life = {}) {
     railLoop: !!(life.transit && life.transit.stats.loop),
     ranches: (life.ranches || []).length,
     landmarks: (life.landmarks || []).map((l) => l.kind),
+    hillBlocks: life.hills ? life.hills.blocks.filter((b) => b.e > 0).length : 0,
+    hillMax: life.hills ? Math.max(0, ...life.hills.blocks.map((b) => b.e)) : 0,
+    staircases: (life.stairRuns || []).length,
+    reachable: life.reach ? `${life.reach.reached}/${life.reach.total}` : '',
     cats: (life.spawns || []).filter((p) => p.type === 'cat').length,
     pandas: (life.spawns || []).filter((p) => p.type === 'panda').length,
     animals: (life.spawns || []).filter((p) => ['cow', 'sheep', 'pig', 'chicken'].includes(p.type)).length,

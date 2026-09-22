@@ -260,6 +260,16 @@ export function writeMcStructure(keys, ids, box, materials, opts = {}) {
   // structure the game itself saves does. Cells stay structure void.
   if (opts.placeholderId !== undefined && !palette.length) { palette.push(opts.placeholderId); remap.set(opts.placeholderId, 0); }
   const layer0 = new Int32Array(n).fill(fill);
+  // With an outline mask, air only fills columns inside the city: land
+  // outside an organic outline is left exactly as it was.
+  if (fill !== -1 && opts.inside) {
+    layer0.fill(-1);
+    for (let x = box.x0; x <= box.x1; x++)
+      for (let z = box.z0; z <= box.z1; z++) {
+        if (!opts.inside(x, z)) continue;
+        for (let y = box.y0; y <= box.y1; y++) layer0[((x - box.x0) * sy + (y - box.y0)) * sz + (z - box.z0)] = fill;
+      }
+  }
   // Generated fill (foundations): opts.fillFn(x, y, z) returns a material id
   // for cells with y < opts.fillBelowY, filled before the world's own cells.
   if (opts.fillFn && opts.fillBelowY !== undefined) {
