@@ -158,6 +158,22 @@ Object.assign(MAT, {
 export const FLOWERS = [MAT.DANDELION, MAT.CORNFLOWER, MAT.ALLIUM, MAT.AZURE_BLUET, MAT.BLUE_ORCHID,
   MAT.POPPY, MAT.OXEYE, MAT.LILY_VALLEY, MAT.TULIP_PINK, MAT.TULIP_RED];
 
+// ---- landmarks (0.2.5) -------------------------------------------------------
+Object.assign(MAT, {
+  SMOOTH_QUARTZ:  A('SMOOTH_QUARTZ', 'minecraft:smooth_quartz', '#ece7df', { pillar_axis: S('y') }),
+  QUARTZ_PILLAR:  A('QUARTZ_PILLAR', 'minecraft:quartz_pillar', '#e6e0d5', { pillar_axis: S('y') }),
+  CHISELED_QUARTZ:A('CHISELED_QUARTZ', 'minecraft:chiseled_quartz_block', '#e3ddd1', { pillar_axis: S('y') }),
+  CHISELED_STONE: A('CHISELED_STONE', 'minecraft:chiseled_stone_bricks', '#77776f'),
+  ANDESITE:       A('ANDESITE', 'minecraft:polished_andesite', '#8f9190'),
+  COPPER_ROOF:    A('COPPER_ROOF', 'minecraft:waxed_oxidized_copper', '#4fa888'),   // waxed: stays green
+  GOLD:           A('GOLD', 'minecraft:gold_block', '#f2cf3e'),
+  BELL_HANG:      A('BELL_HANG', 'minecraft:bell', '#e2b93b', { attachment: S('hanging'), direction: I(0), toggle_bit: B(0) }),
+  DARK_PLANKS:    A('DARK_PLANKS', 'minecraft:dark_oak_planks', '#4a3520'),
+});
+export const WOOLS = ['red', 'yellow', 'blue', 'white', 'lime', 'orange', 'cyan', 'purple']
+  .map((c) => MATERIALS.add(null, `minecraft:${c}_wool`, { red: '#a12722', yellow: '#f8c627', blue: '#35399d', white: '#e9ecec',
+    lime: '#70b919', orange: '#f07613', cyan: '#158991', purple: '#792aac' }[c]));
+
 // Blocks whose minecraft:cardinal_direction is simply the way they face
 // (fence gate, chest, lectern, smoker, stonecutter, pumpkin) — unlike doors.
 const faced = (block, color, extra = {}, flags = {}) => (facing) =>

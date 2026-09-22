@@ -8,6 +8,7 @@ import { makeBuilding, OUTWARD } from './building.js';
 import { doorId, DIR, MATERIALS } from './materials.js';
 import { farm, pond, scatterFlowers, furnish, bedSpawns, placeBell, golemSpawns, ranch, pandaGrove, catSpawns, RANCH_ANIMALS } from './life.js';
 import { layTransit, trimOverRails } from './transit.js';
+import { chooseLandmarks, buildLandmark } from './landmarks.js';
 
 export const DEFAULTS = {
   seed: 12345,
@@ -32,6 +33,7 @@ export const DEFAULTS = {
   roofAccess: true,
   useStairs: true,
   stairStyle: 'mixed',
+  landmarks: true,           // town hall, clock tower, library, market square near downtown
   transit: 'roads',
   wallHeight: 3,             // perimeter wall, blocks above ground (0 = none)          // 'roads' | 'rails' (railway instead of roads) | 'trams' (rails down the roads)
   farmChance: 0.2,
@@ -107,6 +109,8 @@ export function generateCity(cfgIn, onProgress) {
 
   // ---- railways ------------------------------------------------------------
   const transit = layTransit(world, plan, cfg.transit, GROUND);
+  chooseLandmarks(plan, cfg);
+  const landmarks = [];
 
   // ---- lots ----------------------------------------------------------------
   const buildings = [];
@@ -118,6 +122,21 @@ export function generateCity(cfgIn, onProgress) {
   const lifeRng = rng.fork();
   const penOrder = lifeRng.shuffle(RANCH_ANIMALS.slice());
   for (const lot of plan.lots) {
+    if (lot.landmark) {
+      const L = buildLandmark(world, lot, frontage(plan, lot).side, cfg, rng, GROUND);
+      if (L) {
+        landmarks.push(L);
+        if (L.rec) {
+          buildings.push(L.rec);
+          if (cfg.furnish) {
+            const f = furnish(world, L.rec, lifeRng);
+            L.rec.beds = f.beds; L.rec.furniture = f;
+            for (const b of f.beds) beds.push(b);
+          } else L.rec.beds = [];
+        }
+        continue;
+      }
+    }
     if (lot.kind === USE.PARK) { park(world, lot, rng, cfg, lifeRng, pandas); continue; }
     if (lot.kind === USE.PLAZA) { plaza(world, lot, rng, cfg); continue; }
 
@@ -198,7 +217,9 @@ export function generateCity(cfgIn, onProgress) {
   const wall = perimeterWall(world, plan, cfg);
 
   // ---- the village ---------------------------------------------------------
-  const bell = cfg.villagers > 0 ? placeBell(world, plan, GROUND) : null;
+  // the town hall's bell is the village bell; otherwise one goes in a plaza or park
+  const hall = landmarks.find((l) => l.kind === 'townhall' && l.bell);
+  const bell = hall ? hall.bell : (cfg.villagers > 0 ? placeBell(world, plan, GROUND) : null);
   let spawns = [];
   if (cfg.villagers > 0) {
     const vs = bedSpawns(world, beds);
@@ -213,8 +234,8 @@ export function generateCity(cfgIn, onProgress) {
 
   if (transit) spawns = spawns.concat(transit.carts);
 
-  const stats = summarise(world, plan, buildings, cfg, { farms, beds, spawns, bell, transit, wall, ranches });
-  return { world, plan, buildings, cfg, stats, farms, ranches, spawns, bell, transit, wall };
+  const stats = summarise(world, plan, buildings, cfg, { farms, beds, spawns, bell, transit, wall, ranches, landmarks });
+  return { world, plan, buildings, cfg, stats, farms, ranches, spawns, bell, transit, wall, landmarks };
 }
 
 // ---- perimeter wall -------------------------------------------------------------
@@ -476,6 +497,7 @@ function summarise(world, plan, buildings, cfg, life = {}) {
     carts: (life.spawns || []).filter((p) => p.type === 'minecart').length,
     railLoop: !!(life.transit && life.transit.stats.loop),
     ranches: (life.ranches || []).length,
+    landmarks: (life.landmarks || []).map((l) => l.kind),
     cats: (life.spawns || []).filter((p) => p.type === 'cat').length,
     pandas: (life.spawns || []).filter((p) => p.type === 'panda').length,
     animals: (life.spawns || []).filter((p) => ['cow', 'sheep', 'pig', 'chicken'].includes(p.type)).length,

@@ -1,4 +1,4 @@
-# Polis v0.2.4
+# Polis v0.2.5
 
 A procedural city generator that exports to **Minecraft Bedrock**. Plans a
 street grid, subdivides it into lots, raises buildings with real interiors —
@@ -166,6 +166,30 @@ the village its gathering point. Workstations — composters, cartography and
 fletching tables, blast furnaces, brewing stands, cauldrons, barrels — let
 villagers take up professions.
 
+## Landmarks
+
+Each city builds up to four one-off landmarks on the lots nearest its downtown
+focal point (the **Landmarks** checkbox turns them off):
+
+- **Town hall** — smooth quartz, set back behind an andesite forecourt with
+  a two-storey colonnade and entablature, a copper dome with a gold finial,
+  and the **village bell** standing in the forecourt beside the path in.
+- **Clock tower** — a slender stone-brick tower with a clock face on all four
+  sides (minute hand at 12, hour hand at 3, gold centre — each face mirrored
+  so it reads correctly from outside), an open belfry with a hanging bell, and
+  a copper spire.
+- **Library** — brick with dark-oak floors, bookshelves and lecterns on every
+  floor, lantern posts flanking the entrance.
+- **Market square** — a chequered square of striped wool-canopied stalls
+  selling melons, pumpkins, hay and more, round a covered well in big squares
+  or a lantern post in small ones.
+
+The three buildings are made by the same engine as every other building, so
+they keep the same guarantees — stairs to every floor (wide switchbacks in the
+town hall, a spiral up the clock tower), doors, windows, head room — and are
+checked by the same player flood fill. The copper is waxed, so it stays green.
+The minimap outlines each landmark in gold.
+
 ## Railways
 
 The **Streets** setting chooses what runs between the blocks:
@@ -329,6 +353,12 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.2.5** — Landmarks: town hall (colonnade, copper dome, the village bell),
+clock tower (four clock faces, belfry, spire), library, and market square,
+placed on the lots nearest downtown. The validator checks all four appear once each, near
+downtown, that every clock face reads correctly from outside, that the market
+stalls are complete, and that every landmark floor is reachable.
 
 **0.2.4** — Animals and block variety. Animal pens with cows, sheep, pigs
 and chickens (summoned); panda groves in parks and cats on the streets (in mob

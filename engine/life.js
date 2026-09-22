@@ -176,6 +176,7 @@ const ROOMS = {
   lobby:     ['plant', 'shelf', 'lamp', 'plant', 'plant', 'shelf'],
   office:    ['shelf', 'lectern', 'station', 'plant', 'craft', 'shelf', 'lamp', 'chest', 'plant'],
   library:   ['shelf', 'shelf', 'lectern', 'shelf', 'plant', 'shelf', 'lamp', 'shelf', 'rug'],
+  hall:      ['plant', 'shelf', 'lamp', 'plant', 'chest', 'plant', 'shelf'],
 };
 // every villager profession's workstation appears somewhere
 const STATIONS = ['cartography', 'fletching', 'blast', 'brewing', 'cauldron', 'barrel',
@@ -217,7 +218,7 @@ export function furnish(world, rec, rng) {
     const free = (x, z) => !nearCore(x, z) && !nearDoor(x, z, k) &&
       solidAt(world, x, sy, z) && !world.has(x, y, z) && !world.has(x, y + 1, z);
 
-    const plan = ROOMS[roomFor(rec.style, k, rec.floors, rng)];
+    const plan = ROOMS[rec.rooms ? rec.rooms(k) : roomFor(rec.style, k, rec.floors, rng)];   // landmarks choose their own
     let step = rng.int(0, plan.length - 1);
     for (let i = 0; i < ring.length; i++) {
       const [x, z, nx, nz, side] = ring[i];

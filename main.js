@@ -8,7 +8,7 @@ import { Renderer } from './engine/renderer.js';
 import { exportPack, exportStructuresZip, tileList, commandList, cityId, exportSalt, POLIS_VERSION } from './engine/export.js';
 import { THEMES } from './engine/materials.js';
 
-const VERSION = '0.2.4';
+const VERSION = '0.2.5';
 const $ = (id) => document.getElementById(id);
 
 const SLIDERS = {
@@ -17,7 +17,7 @@ const SLIDERS = {
   maxFloors: 0, pitch: 0, setbackEvery: 0, bw: 0, bd: 0, floors: 0, clip: 0,
   farmChance: 2, pondChance: 2, villagers: 0, wallHeight: 0, foundation: 0, clearAbove: 0,
 };
-const CHECKS = ['setback', 'roofAccess', 'useStairs', 'lights', 'lamps', 'trees', 'markings'];
+const CHECKS = ['setback', 'roofAccess', 'useStairs', 'lights', 'lamps', 'trees', 'markings', 'landmarks'];
 
 let renderer = null;
 let result = null;       // { world, plan, buildings, cfg, stats }
@@ -256,6 +256,12 @@ function drawMap() {
     ctx.fillStyle = `rgb(${v},${Math.round(v * 0.93)},${Math.round(v * 0.82)})`;
     ctx.fillRect(b.x0, b.z0, b.x1 - b.x0 + 1, b.z1 - b.z0 + 1);
   }
+  // landmarks: gold outline round their lots
+  if (result.landmarks) {
+    ctx.strokeStyle = '#f2cf3e';
+    ctx.lineWidth = Math.max(1, W / 160);
+    for (const l of result.landmarks) ctx.strokeRect(l.lot.x0 + 0.5, l.lot.z0 + 0.5, l.lot.x1 - l.lot.x0, l.lot.z1 - l.lot.z0);
+  }
   // focal marker
   if ($('mode').value === 'city') {
     const fx = focal[0] * W, fz = focal[1] * D;
@@ -293,6 +299,8 @@ function showStats(mesh, times) {
     line('farms / beds', `${s.farms} / ${s.beds}`);
     line('workstations / plants', `${s.stations} / ${s.plants}`);
     line('villagers / golems', `${s.villagers} / ${s.golems}` + (s.bell ? ' · bell' : ''));
+    if (s.landmarks && s.landmarks.length) line('landmarks', s.landmarks.map((k) =>
+      ({ townhall: 'town hall', clocktower: 'clock tower', library: 'library', market: 'market' }[k])).join(' · '));
     if (s.ranches !== undefined) line('pens / farm animals', `${s.ranches} / ${s.animals}`);
     if (s.cats !== undefined) line('cats / pandas', `${s.cats} / ${s.pandas}`);
     if (s.railLines) line('rail lines / bridges / carts', `${s.railLines} / ${s.railBridges} / ${s.carts}` + (s.railLoop ? ' · loop' : ''));
