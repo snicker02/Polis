@@ -17,7 +17,7 @@ import { makeRng } from './rng.js';
 // Must match main.js VERSION, package.json and index.html data-version;
 // tools/validate.js fails if they drift. The app refuses to export when the
 // browser has mixed cached copies of old and new files.
-export const POLIS_VERSION = '0.2.2';
+export const POLIS_VERSION = '0.2.3';
 
 export const CHUNK = 64;          // Bedrock structure limit per horizontal axis
 export const GROUND_DROP = 2;     // base layer y=0 sits 2 below feet; surface y=1 replaces the block you stand on
@@ -28,7 +28,21 @@ export const GROUND_DROP = 2;     // base layer y=0 sits 2 below feet; surface y
 // The suffix is a content hash: same seed with different sliders -> different id;
 // the same city regenerated later -> the same id. It hashes block names and
 // states, not registry ids, because door/stair ids depend on session history.
-export function cityId(world, seed, version = POLIS_VERSION) {
+// The export settings that change the structure files (air fill, foundation,
+// clearance) are part of the id too: two packs of the same city exported with
+// different settings must not share names.
+export function exportSalt(opts = {}) {
+  return `a${opts.fillAir ? 1 : 0}f${opts.foundation | 0}c${opts.fillAir ? (opts.clearAbove | 0) : 0}`;
+}
+const hashCache = new WeakMap();
+export function cityId(world, seed, version = POLIS_VERSION, salt = '') {
+  const enc = new TextEncoder();
+  let h = hashCache.get(world);
+  if (!h || h.size !== world.size) { h = { size: world.size, v: cellHash(world) }; hashCache.set(world, h); }
+  const hex = ((h.v ^ crc32(enc.encode(`polis ${version} ${salt}`))) >>> 0).toString(16).padStart(8, '0').slice(0, 4);
+  return `polis_${seed >>> 0}_${hex}`;
+}
+function cellHash(world) {
   const n = MATERIALS.length;
   const enc = new TextEncoder();
   const matHash = new Uint32Array(n);
@@ -37,10 +51,10 @@ export function cityId(world, seed, version = POLIS_VERSION) {
     const st = Object.keys(d.states).sort().map((k) => k + '=' + d.states[k].value).join(',');
     matHash[i] = crc32(enc.encode(d.block + '|' + st));
   }
-  // The Polis version is part of the id: packs from different versions carry
-  // different functions, so they must never share a namespace, even for an
-  // identical city. (0.1.4 and 0.1.5 did, and Bedrock picked the older pack.)
-  let a = crc32(enc.encode('polis ' + version)), b = 0;
+  // The Polis version (mixed in by cityId) is part of the id: packs from
+  // different versions carry different functions, so they must never share a
+  // namespace, even for an identical city. (0.1.4 and 0.1.5 did.)
+  let a = 0, b = 0;
   for (const [k, id] of world.cells) {
     // order-independent: sum two differently mixed per-cell hashes
     let h = (Math.imul(k, 0x9e3779b1) ^ matHash[id]) >>> 0;
@@ -50,8 +64,7 @@ export function cityId(world, seed, version = POLIS_VERSION) {
     a = (a + h) >>> 0;
     b = (b + Math.imul(h, 0x27d4eb2f)) >>> 0;
   }
-  const hex = ((a ^ (b >>> 7)) >>> 0).toString(16).padStart(8, '0').slice(0, 4);
-  return `polis_${seed >>> 0}_${hex}`;
+  return (a ^ (b >>> 7)) >>> 0;
 }
 
 // Tile layout without encoding anything — cheap enough to call on every UI change.
@@ -60,14 +73,17 @@ export function tileList(world, opts = {}) {
   const prefix = opts.prefix || 'c';
   const chunks = splitWorld(world, size);
   const wb = world.box;
+  const F = Math.max(0, Math.min(48, opts.foundation | 0));
+  const topY = opts.fillAir ? Math.max(wb.y1, wb.y0 + 1 + Math.max(0, Math.min(200, opts.clearAbove | 0))) : wb.y1;
   return chunks.map((c) => {
     let box = { x0: c.x0, y0: c.y0, z0: c.z0, x1: c.x1, y1: c.y1, z1: c.z1 };
-    if (opts.fillAir) {
-      // Full tile footprint, full city height: loading carves the whole volume.
+    if (opts.fillAir || F) {
+      // Full tile footprint: loading carves (air fill) and/or founds the whole
+      // column, from the bottom of the foundation to the clearance height.
       box = {
         x0: Math.max(wb.x0, c.cx * size), x1: Math.min(wb.x1, c.cx * size + size - 1),
         z0: Math.max(wb.z0, c.cz * size), z1: Math.min(wb.z1, c.cz * size + size - 1),
-        y0: wb.y0, y1: wb.y1,
+        y0: wb.y0 - F, y1: opts.fillAir ? topY : wb.y1,
       };
     }
     return {
@@ -80,10 +96,20 @@ export function tileList(world, opts = {}) {
   });
 }
 
+// Foundation: solid ground under the city's stone base, so on sloping land the
+// low side becomes a retaining wall instead of a gap. Stone bricks round the
+// outside face (it shows where the ground falls away), stone inside.
+export function foundationFill(world) {
+  const wb = world.box;
+  return (x, y, z) => (x === wb.x0 || x === wb.x1 || z === wb.z0 || z === wb.z1) ? MAT.STONEBRICK : MAT.BASE;
+}
+
 export function buildStructures(world, opts = {}) {
   const airId = opts.fillAir ? MAT.AIR : undefined;
+  const F = Math.max(0, Math.min(48, opts.foundation | 0));
+  const fill = F ? { fillFn: foundationFill(world), fillBelowY: world.box.y0 } : {};
   return tileList(world, opts).map((t) => {
-    const res = writeMcStructure(t.chunk.keys, t.chunk.ids, t.box, MATERIALS, { airId, blockData: world.data });
+    const res = writeMcStructure(t.chunk.keys, t.chunk.ids, t.box, MATERIALS, { airId, blockData: world.data, ...fill });
     return {
       name: t.name, data: res.data, box: t.box,
       size: res.size, cells: res.cells, paletteSize: res.paletteSize, entities: res.entities,
@@ -243,8 +269,9 @@ export function placementGuide(tiles, opts = {}) {
   L.push('');
   L.push(`${tiles.length} structure${tiles.length === 1 ? '' : 's'}, each at most ${CHUNK}x${CHUNK} blocks across.`);
   L.push(opts.fillAir
-    ? 'Air fill is ON: loading clears terrain, trees and water out of the whole city volume.'
+    ? `Air fill is ON: loading clears terrain, trees and water out of the city volume, up to ${Math.max(0, opts.clearAbove | 0)} blocks above ground or the tallest roof.`
     : 'Air fill is OFF: empty cells keep whatever was already there (best on a flat world).');
+  if (opts.foundation | 0) L.push(`Foundation: ${opts.foundation | 0} solid blocks under the city, so it sits into sloping ground.`);
   L.push('');
   L.push('HOW TO BUILD IT:');
   L.push('  1. Import the .mcpack and enable the behaviour pack on your world. Cheats on.');

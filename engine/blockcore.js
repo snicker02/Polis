@@ -260,6 +260,20 @@ export function writeMcStructure(keys, ids, box, materials, opts = {}) {
   // structure the game itself saves does. Cells stay structure void.
   if (opts.placeholderId !== undefined && !palette.length) { palette.push(opts.placeholderId); remap.set(opts.placeholderId, 0); }
   const layer0 = new Int32Array(n).fill(fill);
+  // Generated fill (foundations): opts.fillFn(x, y, z) returns a material id
+  // for cells with y < opts.fillBelowY, filled before the world's own cells.
+  if (opts.fillFn && opts.fillBelowY !== undefined) {
+    const yTop = Math.min(box.y1, opts.fillBelowY - 1);
+    for (let x = box.x0; x <= box.x1; x++)
+      for (let y = box.y0; y <= yTop; y++)
+        for (let z = box.z0; z <= box.z1; z++) {
+          const id = opts.fillFn(x, y, z);
+          if (id < 0) continue;
+          let pi = remap.get(id);
+          if (pi === undefined) { pi = palette.length; palette.push(id); remap.set(id, pi); }
+          layer0[((x - box.x0) * sy + (y - box.y0)) * sz + (z - box.z0)] = pi;
+        }
+  }
 
   for (let i = 0; i < keys.length; i++) {
     const k = keys[i];

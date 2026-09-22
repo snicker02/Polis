@@ -5,17 +5,17 @@ import { USE } from './engine/plan.js';
 import { verifyAll } from './engine/verify.js';
 import { buildMesh } from './engine/mesher.js';
 import { Renderer } from './engine/renderer.js';
-import { exportPack, exportStructuresZip, tileList, commandList, cityId, POLIS_VERSION } from './engine/export.js';
+import { exportPack, exportStructuresZip, tileList, commandList, cityId, exportSalt, POLIS_VERSION } from './engine/export.js';
 import { THEMES } from './engine/materials.js';
 
-const VERSION = '0.2.2';
+const VERSION = '0.2.3';
 const $ = (id) => document.getElementById(id);
 
 const SLIDERS = {
   size: 0, minBlock: 0, blockIrregularity: 2, avenueWidth: 0, streetWidth: 0,
   downtownRadius: 2, zoneNoise: 2, parkChance: 2, lotDowntown: 0, lotSuburb: 0,
   maxFloors: 0, pitch: 0, setbackEvery: 0, bw: 0, bd: 0, floors: 0, clip: 0,
-  farmChance: 2, pondChance: 2, villagers: 0, wallHeight: 0,
+  farmChance: 2, pondChance: 2, villagers: 0, wallHeight: 0, foundation: 0, clearAbove: 0,
 };
 const CHECKS = ['setback', 'roofAccess', 'useStairs', 'lights', 'lamps', 'trees', 'markings'];
 
@@ -79,7 +79,8 @@ function boot() {
   $('mcpack').addEventListener('click', () => doExport('mcpack'));
   $('mcstruct').addEventListener('click', () => doExport('zip'));
   $('copycmd').addEventListener('click', copyCommands);
-  for (const b of ['baseX', 'baseY', 'baseZ', 'fillAir']) $(b).addEventListener('change', refreshCommands);
+  for (const b of ['baseX', 'baseY', 'baseZ', 'fillAir', 'foundation', 'clearAbove'])
+    $(b).addEventListener(b === 'foundation' || b === 'clearAbove' ? 'input' : 'change', () => { if (result) { cityNs = nsNow(); refreshCommands(); } });
 
   $('map').addEventListener('click', (e) => {
     const r = e.currentTarget.getBoundingClientRect();
@@ -178,7 +179,7 @@ function generate() {
       result = ($('mode').value === 'city') ? generateCity(cfg) : generateSingle(cfg);
       const t1 = performance.now();
       verification = verifyAll(result.world, result.buildings);
-      cityNs = cityId(result.world, result.cfg.seed);
+      cityNs = nsNow();
       const t2 = performance.now();
       const mesh = buildMesh(result.world);
       renderer.setMesh(mesh);
@@ -311,12 +312,20 @@ function base() {
 }
 
 let exactCommands = [];
+
+// export settings that shape the structure files (and so the city id)
+function exportOpts() {
+  return { fillAir: $('fillAir').checked, foundation: Number($('foundation').value) | 0, clearAbove: Number($('clearAbove').value) | 0 };
+}
+function nsNow() {
+  return result ? cityId(result.world, result.cfg.seed, POLIS_VERSION, exportSalt(exportOpts())) : 'polis';
+}
 let cityNs = 'polis';
 
 function refreshCommands() {
   if (!result) return;
   try {
-    const tiles = tileList(result.world, { prefix: 'c', fillAir: $('fillAir').checked });
+    const tiles = tileList(result.world, { prefix: 'c', ...exportOpts() });
     exactCommands = commandList(tiles, { base: base(), namespace: cityNs });
     $('cmds').value = [
       `# city id ${cityNs} — after importing its pack, stand where you want it:`,
@@ -361,8 +370,9 @@ async function doExport(kind) {
   busy(true);
   $('mcpack').disabled = $('mcstruct').disabled = true;
   try {
+    cityNs = nsNow();
     const opts = {
-      base: base(), namespace: cityNs, prefix: 'c', fillAir: $('fillAir').checked,
+      base: base(), namespace: cityNs, prefix: 'c', ...exportOpts(),
       seed: result.cfg.seed, spawns: result.spawns || [],
       summary: summaryLine(),
       packName: `Polis ${cityNs}`,

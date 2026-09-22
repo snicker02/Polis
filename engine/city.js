@@ -5,7 +5,7 @@ import { makeRng, fbm2, clamp } from './rng.js';
 import { generatePlan, frontage, USE } from './plan.js';
 import { MAT, THEMES } from './materials.js';
 import { makeBuilding, OUTWARD } from './building.js';
-import { doorId, DIR } from './materials.js';
+import { doorId, DIR, MATERIALS } from './materials.js';
 import { farm, pond, scatterFlowers, furnish, bedSpawns, placeBell, golemSpawns } from './life.js';
 import { layTransit, trimOverRails } from './transit.js';
 
@@ -220,28 +220,43 @@ function perimeterWall(world, plan, cfg) {
     for (let y = GROUND + 1; y <= GROUND + h; y++) world.set(x, y, z, y === GROUND + h ? MAT.SMOOTH : MAT.STONEBRICK);
   }
   if (h < 3) return { height: h, gates: [] };      // too low for a doorway: step over it
-  // gates: two doors in the middle of each side, facing out, hinges on the outside edges
+  // Gates: a double door near the middle of each side, facing out, hinges on
+  // the outer edges. The way in only has to be walkable: rails are fine to
+  // step onto (on a narrow ring road the loop track runs right behind the
+  // wall). If the middle is blocked (a buffer, a lamp) the gate slides along
+  // the wall to the nearest spot that is clear.
   const CLOCKWISE = { north: 'east', east: 'south', south: 'west', west: 'north' };
+  const walkIn = (x, z) => {
+    const f1 = world.get(x, GROUND + 1, z), f2 = world.get(x, GROUND + 2, z);
+    return world.has(x, GROUND, z) && (f1 === -1 || MATERIALS.isPassable(f1)) && f2 === -1;
+  };
   const sides = [
-    { face: 'north', cells: [[Math.floor(W / 2) - 1, 0], [Math.floor(W / 2), 0]], along: 'east' },
-    { face: 'south', cells: [[Math.floor(W / 2) - 1, D - 1], [Math.floor(W / 2), D - 1]], along: 'east' },
-    { face: 'west', cells: [[0, Math.floor(D / 2) - 1], [0, Math.floor(D / 2)]], along: 'south' },
-    { face: 'east', cells: [[W - 1, Math.floor(D / 2) - 1], [W - 1, Math.floor(D / 2)]], along: 'south' },
+    { face: 'north', len: W, cell: (i) => [i, 0], along: 'east' },
+    { face: 'south', len: W, cell: (i) => [i, D - 1], along: 'east' },
+    { face: 'west', len: D, cell: (i) => [0, i], along: 'south' },
+    { face: 'east', len: D, cell: (i) => [W - 1, i], along: 'south' },
   ];
   const gates = [];
   for (const g of sides) {
     const [ox, oz] = OUTWARD[g.face];
-    // the way in must be clear on the city side (never a rail or a lamp)
-    const inside = g.cells.map(([x, z]) => [x - ox, z - oz]);
-    const clear = inside.every(([x, z]) => !world.has(x, GROUND + 1, z) && !world.has(x, GROUND + 2, z) && world.has(x, GROUND, z));
-    if (!clear) continue;
+    const mid = Math.floor(g.len / 2) - 1;
+    let placed = null;
+    for (let d = 0; d < g.len / 2 && !placed; d++) {
+      for (const i of d === 0 ? [mid] : [mid - d, mid + d]) {
+        if (i < 2 || i + 1 > g.len - 3) continue;          // keep clear of the corners
+        const cells = [g.cell(i), g.cell(i + 1)];
+        const inside = cells.map(([x, z]) => [x - ox, z - oz]);
+        if (inside.every(([x, z]) => walkIn(x, z))) { placed = { cells, inside }; break; }
+      }
+    }
+    if (!placed) continue;
     const secondIsRight = CLOCKWISE[g.face] === g.along;
-    g.cells.forEach(([x, z], i) => {
+    placed.cells.forEach(([x, z], i) => {
       const hinge = (i === 1) === secondIsRight ? 1 : 0;
       world.set(x, GROUND + 1, z, doorId('spruce', DIR[g.face], false, hinge));
       world.set(x, GROUND + 2, z, doorId('spruce', DIR[g.face], true, hinge));
     });
-    gates.push({ face: g.face, cells: g.cells, inside });
+    gates.push({ face: g.face, cells: placed.cells, inside: placed.inside });
   }
   return { height: h, gates };
 }

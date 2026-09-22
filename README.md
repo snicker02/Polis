@@ -1,4 +1,4 @@
-# Polis v0.2.2
+# Polis v0.2.3
 
 A procedural city generator that exports to **Minecraft Bedrock**. Plans a
 street grid, subdivides it into lots, raises buildings with real interiors —
@@ -94,10 +94,27 @@ A stone-brick wall runs round the city's outermost row (the outside edge of
 the ring road), 3 blocks high by default — the **Perimeter wall** slider sets
 0–8. It starts at ground level and the city's surface and stone base beneath
 it are already solid, so water has no way in at any height up to the top of
-the wall. Each side has a double wooden door in the middle; closed doors block
+the wall. Each side has a double wooden door near the middle (it slides along the
+wall if something is in the way); closed doors block
 water too, so the gates do not weaken it. Walls under 3 blocks have no gates —
 you can step or jump over them. If you build next to water that stands higher
 than the wall, raise the slider.
+
+## Uneven ground
+
+Two export settings let a city sit properly into real terrain:
+
+- **Foundation depth** (default 8) — solid ground under the city's stone
+  base, stone inside with a stone-brick retaining face round the edge. On a
+  slope the low side becomes a retaining wall instead of the city floating
+  over a gap, and caves under the city are filled.
+- **Clear above ground** (default 32, with air fill on) — terrain inside the
+  city is cleared up to that height even where no building reaches it, so a
+  hillside does not leave overhangs above the streets.
+
+Both are built into the structure files at export time; the preview shows the
+city itself. The city id includes these settings, so packs of the same city
+exported differently never collide.
 
 ## Life
 
@@ -297,6 +314,16 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.2.3** — Foundations for uneven ground: **Foundation depth** (solid
+stone under the city, stone-brick retaining face) and **Clear above ground**
+(removes hills inside the city), both at export time. Gate fix: on a 3-wide
+ring road the loop track runs right behind the wall and 0.2.2 refused to open
+a door onto it, silently dropping every gate; gates now open onto walkable
+track and slide along the wall if the middle is blocked. The city id now also
+covers air fill, foundation and clearance. The validator adds the foundation checks and gate
+checks across every size and street width, and reruns the population
+simulation on a founded, cleared city.
 
 **0.2.2** — Perimeter wall (default 3 high, 0–8) with a double-door gate on
 each side, so surrounding water can no longer flood the city. On railway

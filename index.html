@@ -126,12 +126,12 @@
   }
 </style>
 </head>
-<body class="mode-city" data-version="0.2.2">
+<body class="mode-city" data-version="0.2.3">
 <div id="app">
   <div id="panel">
     <div id="panelScroll">
       <h1>PO<span>L</span>IS</h1>
-      <div class="sub">procedural city → Minecraft Bedrock · v0.2.2</div>
+      <div class="sub">procedural city → Minecraft Bedrock · v0.2.3</div>
 
       <fieldset>
         <legend>Mode</legend>
@@ -237,6 +237,9 @@
           <input type="number" id="baseX" value="0"><input type="number" id="baseY" value="64"><input type="number" id="baseZ" value="0">
         </div>
         <label class="chk" style="margin:4px 0 2px"><input type="checkbox" id="fillAir" checked>Fill open areas with air (clears terrain, trees, water)</label>
+        <div class="row"><label>Clear above ground</label><input type="range" id="clearAbove" min="0" max="96" step="4" value="32"><span class="val" id="clearAbove_v"></span></div>
+        <div class="row"><label>Foundation depth</label><input type="range" id="foundation" min="0" max="32" step="1" value="8"><span class="val" id="foundation_v"></span></div>
+        <div class="hint">For uneven ground: the foundation fills solid ground under the city (stone-brick retaining face at the edge); clearing removes hills inside the city up to that height.</div>
         <div class="btnrow"><button id="mcpack" class="primary">Export .mcpack</button></div>
         <div class="btnrow"><button id="mcstruct">Export .mcstructure zip</button></div>
         <div class="btnrow"><button id="copycmd">Copy exact /structure commands</button></div>
@@ -253,6 +256,6 @@
     <div id="busy">generating…</div>
   </div>
 </div>
-<script type="module" src="./main.js?v=0.2.2"></script>
+<script type="module" src="./main.js?v=0.2.3"></script>
 </body>
 </html>
