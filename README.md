@@ -1,4 +1,4 @@
-# Polis v0.2.6
+# Polis v0.2.8
 
 A procedural city generator that exports to **Minecraft Bedrock**. Plans a
 street grid, subdivides it into lots, raises buildings with real interiors —
@@ -54,8 +54,10 @@ npm run validate                 # node tools/validate.js
 the **Stairs** setting:
 
 - **Switchback** — 1-wide straight flights that alternate direction each
-  storey, with a landing at both ends. Core is (pitch+1) × 2.
-- **Wide switchback** — the same with 2-wide flights. Core is (pitch+1) × 4.
+  storey, with a landing at both ends. Core is (pitch+2) × 2. Each flight has
+  one step per block of height, the top one set into the floor above, so you
+  walk straight off onto the landing without a hop.
+- **Wide switchback** — the same with 2-wide flights. Core is (pitch+2) × 4.
 - **Spiral** — the original 3×3 ring. Compact, but tight to walk.
 - **Mixed** (default) — towers get wide switchbacks, most mid-rises and houses
   get switchbacks, and about a third of mid-rises keep a spiral for variety.
@@ -159,12 +161,40 @@ somewhere to work. Farms get potatoes as a fourth crop and hay bales; parks
 get lantern posts at the path crossing.
 
 **Villagers and golems.** The populate function places villagers next to beds
-(**Villagers** slider caps the number) and one iron golem per eight villagers.
+(**Villagers** slider caps the number) and iron golems — **Golems per 10
+villagers** sets how many (default 3, up to 10 for a well-guarded city).
 Golems are placed only on pavement and plazas, outside every building
 footprint, with three clear blocks of headroom. A bell in a plaza or park gives
 the village its gathering point. Workstations — composters, cartography and
 fletching tables, blast furnaces, brewing stands, cauldrons, barrels — let
 villagers take up professions.
+
+## City styles
+
+**City style** restyles the whole city in one setting:
+
+- **Modern** — concrete, glass and asphalt (the original look).
+- **Desert** — sandstone, terracotta and acacia; sand underfoot, acacia trees
+  and cacti, dead bushes in place of flowers, sandstone roads and wall.
+- **Snowy** — spruce, stone and deepslate; snow over every open patch of
+  ground, spruce trees, dark stone roads, cobblestone wall.
+- **Cherry blossom** — cherry wood, calcite, white and pink; cherry trees,
+  pink petals among the flowers, gravel lanes, calcite sidewalks.
+- **Medieval** — stone brick, cobblestone and timber frame (white walls with
+  oak or dark-oak framing); cobbled streets, dirt park paths, lantern posts.
+
+Each style has its own building palettes (walls, trims, floors, doors and
+stair kinds for houses, mid-rises and towers) and its own landmarks — a
+sandstone town hall with a terracotta dome, a calcite one with cherry columns,
+and so on. Ground, roads, sidewalks, markings, park paths, trees, flowers,
+street lamps, the perimeter wall and terrace faces are *role materials*,
+separate from other uses of the same block, so a style restyles the roads
+without touching a grey-concrete wall; indoor planters keep their own soil so
+flowers still grow in them in the desert. Every block in every style is checked
+against Bedrock's own state list (plain terracotta is `hardened_clay`, the dead
+bush is `deadbush`, cobblestone stairs are `stone_stairs`), and the validator
+checks that plants stand on soil they can grow on, cacti stand on sand with
+nothing solid beside them, and snow lies only on solid ground.
 
 ## Outline and hills
 
@@ -378,6 +408,23 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.2.8** — No more hop at the top of the stairs. Switchback flights had one
+step too few: the top step stopped a block below the floor above, so the last
+move was up onto a full block. Each flight now has one step per block of
+height, the top step set into the floor above, level with it. The validator
+adds a no-hop walk (stepping up only onto stair blocks, as in game) through
+every floor of every building and from the streets to every door; the old
+flights fail it, the new ones pass.
+
+**0.2.7** — City styles: Modern, Desert, Snowy, Cherry blossom and Medieval,
+each with its own building palettes, landmarks, ground, roads, trees, flowers,
+lamps and wall; snow cover and cacti where they belong. More iron golems: a
+**Golems per 10 villagers** slider (default 3, was about 1 per 8) with the cap
+raised to 60. Materials now carry roles so styles can restyle roads, ground and
+lamps independently of walls built from the same block; the structure writer
+still gives identical blocks one palette entry. The validator checks every style for reachable floors and doors, fully replaced
+materials, plants on valid soil, cacti and snow.
 
 **0.2.6** — Organic outline and gentle hills. The city now keeps only the
 blocks inside a lobed shape (the **Outline** setting can switch back to

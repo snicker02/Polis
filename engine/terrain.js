@@ -61,7 +61,7 @@ export function liftBlocks(world, plan, hills, G) {
     for (let z = b.z0; z <= b.z1; z++)
       for (let x = b.x0; x <= b.x1; x++) {
         const edge = x === b.x0 || x === b.x1 || z === b.z0 || z === b.z1;
-        for (let y = 1; y <= b.e; y++) world.set(x, y, z, edge ? MAT.STONEBRICK : MAT.BASE);
+        for (let y = 1; y <= b.e; y++) world.set(x, y, z, edge ? MAT.RETAIN : MAT.BASE);
       }
   }
 }
@@ -137,7 +137,9 @@ export function shiftBuilding(rec, e) {
 // Walk from the streets over standing positions: step up one block (with
 // head room), step down up to three, doors and gates are passable. Returns
 // the set of standing positions reached, keyed "x,y,z".
-export function walkCity(world, plan, G, maxUp = 6) {
+// noHop: stepping up is only allowed onto a stair block (walking up stairs in
+// the game needs no jump; stepping up onto a full block does).
+export function walkCity(world, plan, G, maxUp = 6, noHop = false) {
   const { W, D, use, mask } = plan;
   const passable = (x, y, z) => { const id = world.get(x, y, z); return id === -1 || MATERIALS.isPassable(id); };
   const TALL = new Set(['minecraft:oak_fence', 'minecraft:fence_gate', 'minecraft:iron_bars', 'minecraft:lantern']);
@@ -163,6 +165,7 @@ export function walkCity(world, plan, G, maxUp = 6) {
       for (const ny of [y + 1, y, y - 1, y - 2, y - 3]) {
         if (ny < G + 1 || ny > top) continue;
         if (ny === y + 1 && !passable(x, y + 2, z)) continue;          // head room to step up
+        if (noHop && ny === y + 1 && !/_stairs$/.test((MATERIALS.def(world.get(nx, y, nz)) || {}).block || '')) continue;
         if (ny < y) { let clear = true; for (let yy = ny + 2; yy <= y + 1; yy++) if (!passable(nx, yy, nz)) clear = false; if (!clear) continue; }
         if (!stand(nx, ny, nz)) continue;
         const k = key(nx, ny, nz);

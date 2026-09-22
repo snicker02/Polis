@@ -126,12 +126,12 @@
   }
 </style>
 </head>
-<body class="mode-city" data-version="0.2.6">
+<body class="mode-city" data-version="0.2.8">
 <div id="app">
   <div id="panel">
     <div id="panelScroll">
       <h1>PO<span>L</span>IS</h1>
-      <div class="sub">procedural city → Minecraft Bedrock · v0.2.6</div>
+      <div class="sub">procedural city → Minecraft Bedrock · v0.2.8</div>
 
       <fieldset>
         <legend>Mode</legend>
@@ -151,6 +151,13 @@
       <fieldset class="city-only">
         <legend>City</legend>
         <div class="row"><label>Size</label><input type="range" id="size" min="64" max="256" step="8" value="160"><span class="val" id="size_v"></span></div>
+        <div class="row"><label>City style</label><select id="cityStyle" style="width:150px">
+          <option value="modern" selected>Modern</option>
+          <option value="desert">Desert</option>
+          <option value="snowy">Snowy</option>
+          <option value="cherry">Cherry blossom</option>
+          <option value="medieval">Medieval</option>
+        </select></div>
         <div class="row"><label>Streets</label><select id="transit" style="width:150px">
           <option value="roads" selected>Roads</option>
           <option value="rails">Railways (no roads)</option>
@@ -213,12 +220,13 @@
         <legend>Life</legend>
         <div class="row city-only"><label>Farms</label><input type="range" id="farmChance" min="0" max="0.6" step="0.02" value="0.2"><span class="val" id="farmChance_v"></span></div>
         <div class="row city-only"><label>Park ponds</label><input type="range" id="pondChance" min="0" max="1" step="0.05" value="0.5"><span class="val" id="pondChance_v"></span></div>
+        <div class="row"><label>Golems per 10 villagers</label><input type="range" id="golemsPer10" min="0" max="10" step="1" value="3"><span class="val" id="golemsPer10_v"></span></div>
         <div class="row"><label>Villagers (max)</label><input type="range" id="villagers" min="0" max="200" step="5" value="60"><span class="val" id="villagers_v"></span></div>
         <div class="checks">
           <label class="chk"><input type="checkbox" id="furnish" checked>Furnish interiors</label>
           <label class="chk"><input type="checkbox" id="flowers" checked>Flowers</label>
         </div>
-        <div class="hint">Beds, workstations, bookshelves and planters indoors. Villagers are summoned next to beds; one iron golem per 8 villagers patrols the streets, never indoors.</div>
+        <div class="hint">Beds, workstations, bookshelves and planters indoors. Villagers are summoned next to beds; iron golems patrol the streets, never indoors.</div>
       </fieldset>
 
       <fieldset>
@@ -262,6 +270,6 @@
     <div id="busy">generating…</div>
   </div>
 </div>
-<script type="module" src="./main.js?v=0.2.6"></script>
+<script type="module" src="./main.js?v=0.2.8"></script>
 </body>
 </html>

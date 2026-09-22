@@ -8,14 +8,14 @@ import { Renderer } from './engine/renderer.js';
 import { exportPack, exportStructuresZip, tileList, commandList, cityId, exportSalt, POLIS_VERSION } from './engine/export.js';
 import { THEMES } from './engine/materials.js';
 
-const VERSION = '0.2.6';
+const VERSION = '0.2.8';
 const $ = (id) => document.getElementById(id);
 
 const SLIDERS = {
   size: 0, minBlock: 0, blockIrregularity: 2, avenueWidth: 0, streetWidth: 0,
   downtownRadius: 2, zoneNoise: 2, parkChance: 2, lotDowntown: 0, lotSuburb: 0,
   maxFloors: 0, pitch: 0, setbackEvery: 0, bw: 0, bd: 0, floors: 0, clip: 0,
-  farmChance: 2, pondChance: 2, villagers: 0, wallHeight: 0, foundation: 0, clearAbove: 0, hills: 0,
+  farmChance: 2, pondChance: 2, villagers: 0, wallHeight: 0, foundation: 0, clearAbove: 0, hills: 0, golemsPer10: 0,
 };
 const CHECKS = ['setback', 'roofAccess', 'useStairs', 'lights', 'lamps', 'trees', 'markings', 'landmarks'];
 
@@ -137,6 +137,8 @@ function readCfg() {
   cfg.pitch = num('pitch');
   cfg.setbackEvery = num('setbackEvery');
   cfg.stairStyle = $('stairStyle').value;
+  cfg.cityStyle = $('cityStyle').value;
+  cfg.golemsPer10 = num('golemsPer10');
   cfg.transit = $('transit').value;
   cfg.furnish = $('furnish').checked;
   cfg.flowers = $('flowers').checked;

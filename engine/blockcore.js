@@ -249,16 +249,29 @@ export function writeMcStructure(keys, ids, box, materials, opts = {}) {
   if (n <= 0) throw new Error('empty structure box');
   const palette = [];
   const remap = new Map();
+  // One palette entry per distinct block+states: materials that differ only
+  // by role (a road and a wall of the same concrete) share an entry.
+  const byBlock = new Map();
+  const slot = (id) => {
+    let p = remap.get(id);
+    if (p !== undefined) return p;
+    const d = materials.def(id);
+    const k = d.block + '|' + Object.keys(d.states).sort().map((s) => `${s}=${d.states[s].type}:${d.states[s].value}`).join(',');
+    p = byBlock.get(k);
+    if (p === undefined) { p = palette.length; palette.push(id); byBlock.set(k, p); }
+    remap.set(id, p);
+    return p;
+  };
   // Index -1 is "structure void": loading leaves whatever was already there.
   // With airId set, empty cells become real air instead, so loading the
   // structure clears terrain, trees and water out of the whole volume.
   let fill = -1;
   if (opts.airId !== undefined && opts.airId !== null) {
-    fill = 0; palette.push(opts.airId); remap.set(opts.airId, 0);
+    fill = slot(opts.airId);
   }
   // Entity-only structures still carry one (unused) palette entry, as every
   // structure the game itself saves does. Cells stay structure void.
-  if (opts.placeholderId !== undefined && !palette.length) { palette.push(opts.placeholderId); remap.set(opts.placeholderId, 0); }
+  if (opts.placeholderId !== undefined && !palette.length) slot(opts.placeholderId);
   const layer0 = new Int32Array(n).fill(fill);
   // With an outline mask, air only fills columns inside the city: land
   // outside an organic outline is left exactly as it was.
@@ -279,9 +292,7 @@ export function writeMcStructure(keys, ids, box, materials, opts = {}) {
         for (let z = box.z0; z <= box.z1; z++) {
           const id = opts.fillFn(x, y, z);
           if (id < 0) continue;
-          let pi = remap.get(id);
-          if (pi === undefined) { pi = palette.length; palette.push(id); remap.set(id, pi); }
-          layer0[((x - box.x0) * sy + (y - box.y0)) * sz + (z - box.z0)] = pi;
+          layer0[((x - box.x0) * sy + (y - box.y0)) * sz + (z - box.z0)] = slot(id);
         }
   }
 
@@ -289,10 +300,7 @@ export function writeMcStructure(keys, ids, box, materials, opts = {}) {
     const k = keys[i];
     const x = k % KX; const r = (k - x) / KX;
     const z = r % KZ; const y = (r - z) / KZ - YOFF;
-    const mid = ids[i];
-    let p = remap.get(mid);
-    if (p === undefined) { p = palette.length; palette.push(mid); remap.set(mid, p); }
-    layer0[((x - box.x0) * sy + (y - box.y0)) * sz + (z - box.z0)] = p;
+    layer0[((x - box.x0) * sy + (y - box.y0)) * sz + (z - box.z0)] = slot(ids[i]);
   }
   const layer1 = new Int32Array(n).fill(-1);
 

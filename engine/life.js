@@ -256,7 +256,7 @@ export function furnish(world, rec, rng) {
           if (rec.pitch >= 5 && !world.has(x, y + 1, z)) put(x, y + 1, z, MAT.BOOKSHELF);
           shelves++;
         } else if (item === 'plant') {
-          put(x, y, z, MAT.GRASS);
+          put(x, y, z, MAT.PLANTER);                 // its own soil: stays grass in every city style
           put(x, y + 1, z, rng.chance(0.3) ? (rng.chance(0.5) ? MAT.AZALEA : MAT.AZALEA_FL) : rng.pick(FLOWERS));
           plants++;
         } else if (item === 'station') {

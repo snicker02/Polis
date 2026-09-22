@@ -10,6 +10,8 @@ import { farm, pond, scatterFlowers, furnish, bedSpawns, placeBell, golemSpawns,
 import { layTransit, trimOverRails } from './transit.js';
 import { chooseLandmarks, buildLandmark } from './landmarks.js';
 import { planHills, liftBlocks, cutStairs, shiftBuilding, walkCity } from './terrain.js';
+import { styleOf, remapTable } from './styles.js';
+import { FLOWERS } from './materials.js';
 
 export const DEFAULTS = {
   seed: 12345,
@@ -34,6 +36,7 @@ export const DEFAULTS = {
   roofAccess: true,
   useStairs: true,
   stairStyle: 'mixed',
+  cityStyle: 'modern',       // modern | desert | snowy | cherry | medieval
   outline: 'organic',        // 'organic' (lobed outline along the street grid) | 'square'
   hills: 2,                  // city blocks raised 0..hills blocks on gentle terraces, with steps
   landmarks: true,           // town hall, clock tower, library, market square near downtown
@@ -47,8 +50,8 @@ export const DEFAULTS = {
   furnish: true,
   flowers: true,
   villagers: 60,
-  villagersPerGolem: 8,
-  golemMax: 12,
+  golemsPer10: 3,            // iron golems per 10 villagers
+  golemMax: 60,
   lights: true,
   lamps: true,
   trees: true,
@@ -58,8 +61,12 @@ export const DEFAULTS = {
 
 const GROUND = 1;   // surface layer; players walk at GROUND+1
 
+// the style in force while a city is being generated (trees read it)
+let STYLE = styleOf('modern');
+
 export function generateCity(cfgIn, onProgress) {
   const cfg = { ...DEFAULTS, ...cfgIn };
+  STYLE = styleOf(cfg.cityStyle);
   const rng = makeRng(cfg.seed);
   const plan = generatePlan(cfg, rng);
   const world = new VoxelWorld({ budget: cfg.budget });
@@ -169,7 +176,7 @@ export function generateCity(cfgIn, onProgress) {
     }
 
     const front = frontage(plan, lot);
-    const theme = themeRng.pick(THEMES[lot.style] || THEMES.mid);
+    const theme = themeRng.pick(STYLE.themes[lot.style] || STYLE.themes.mid);
     const rec = makeBuilding(world, {
       x0: fx0, z0: fz0, x1: fx1, z1: fz1,
       floors: lot.floors, pitch: cfg.pitch, groundY: GROUND,
@@ -212,8 +219,8 @@ export function generateCity(cfgIn, onProgress) {
         if (!nearRoad) continue;
         if ((x * 7 + z * 11) % 79 !== 0) continue;
         if (world.has(x, GROUND + 1, z)) continue;
-        world.column(x, z, GROUND + 1, GROUND + 3, MAT.BARS);
-        world.set(x, GROUND + 4, z, MAT.LANTERN);
+        world.column(x, z, GROUND + 1, GROUND + 3, MAT.LAMP_POST);
+        world.set(x, GROUND + 4, z, MAT.STREET_LIGHT);
       }
     }
   }
@@ -255,7 +262,7 @@ export function generateCity(cfgIn, onProgress) {
     const vs = bedSpawns(world, beds);
     lifeRng.shuffle(vs);
     spawns = vs.slice(0, cfg.villagers);
-    const golems = Math.min(cfg.golemMax, Math.ceil(spawns.length / Math.max(1, cfg.villagersPerGolem)));
+    const golems = Math.min(cfg.golemMax, Math.round(spawns.length * Math.max(0, cfg.golemsPer10) / 10));
     spawns = spawns.concat(golemSpawns(world, plan, buildings, golems, lifeRng, GROUND, elevAt));
     if (cfg.cats) spawns = spawns.concat(catSpawns(world, plan, buildings, Math.min(16, Math.ceil(spawns.length / 5)), lifeRng, GROUND, elevAt));
   }
@@ -263,6 +270,9 @@ export function generateCity(cfgIn, onProgress) {
   for (const rch of ranches) for (const a of rch.animals) spawns.push(a);
 
   if (transit) spawns = spawns.concat(transit.carts);
+
+  // ---- city style: restyle the role materials, then snow -----------------------
+  applyStyle(world, plan, STYLE, (x, z) => GROUND + elevAt(x, z));
 
   // ---- can everything be reached from the streets? ---------------------------
   const reached = walkCity(world, plan, GROUND, hills.H + 4);
@@ -272,6 +282,50 @@ export function generateCity(cfgIn, onProgress) {
   const stats = summarise(world, plan, buildings, cfg, { farms, beds, spawns, bell, transit, wall, ranches, landmarks, hills, stairRuns, reach });
   return { world, plan, buildings, cfg, stats, farms, ranches, spawns, bell, transit, wall, landmarks,
     hills, stairRuns, reach, groundAt: (x, z) => GROUND + elevAt(x, z) };
+}
+
+// ---- city style ----------------------------------------------------------------
+// Swap every role material for the style's own (roads, ground, trees, flowers,
+// lamps, wall...), then lay snow on open ground for snowy cities.
+function applyStyle(world, plan, style, groundAt) {
+  const table = remapTable(style, FLOWERS);
+  if (table.size) {
+    const changes = [];
+    world.forEach((x, y, z, id) => { if (table.has(id)) changes.push([x, y, z, table.get(id)]); });
+    for (const [x, y, z, to] of changes) {
+      if (to === null) world.clear(x, y, z);
+      else { const d = world.getData(x, y, z); world.set(x, y, z, to); if (d) world.setData(x, y, z, d); }
+    }
+  }
+  if (style.cactus) {
+    // A cactus breaks if it is not on sand (or cactus), or if anything solid
+    // touches its sides. Trees planted later can reach one; plazas are paved.
+    // Remove any that would break, repeating so nothing is left floating.
+    const SAND = MAT.SAND, CAC = MAT.CACTUS;
+    for (let pass = 0; pass < 6; pass++) {
+      const bad = [];
+      world.forEach((x, y, z, id) => {
+        if (id !== CAC) return;
+        const below = world.get(x, y - 1, z);
+        let broken = below !== SAND && below !== CAC;
+        for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const n = world.get(x + dx, y, z + dz);
+          if (n !== -1 && !MATERIALS.isPassable(n)) broken = true;
+        }
+        if (broken) bad.push([x, y, z]);
+      });
+      if (!bad.length) break;
+      for (const [x, y, z] of bad) world.clear(x, y, z);
+    }
+  }
+  if (style.snow) {
+    const { W, D } = plan;
+    for (let z = 0; z < D; z++)
+      for (let x = 0; x < W; x++) {
+        const g = groundAt(x, z);
+        if (world.get(x, g, z) === MAT.GRASS && !world.has(x, g + 1, z)) world.set(x, g + 1, z, MAT.SNOW_LAYER);
+      }
+  }
 }
 
 // ---- perimeter wall -------------------------------------------------------------
@@ -298,8 +352,8 @@ function perimeterWall(world, plan, cfg) {
     }
   for (const [x, z] of ring) {
     world.set(x, 0, z, MAT.BASE);
-    world.set(x, GROUND, z, MAT.STONEBRICK);
-    for (let y = GROUND + 1; y <= GROUND + h; y++) world.set(x, y, z, y === GROUND + h ? MAT.SMOOTH : MAT.STONEBRICK);
+    world.set(x, GROUND, z, MAT.WALL_BODY);
+    for (let y = GROUND + 1; y <= GROUND + h; y++) world.set(x, y, z, y === GROUND + h ? MAT.WALL_CAP : MAT.WALL_BODY);
     for (let y = GROUND + h + 1; y <= GROUND + h + 3; y++) world.clear(x, y, z);
   }
   if (h < 3) return { height: h, gates: [], ring };      // too low for a doorway: step over it
@@ -383,8 +437,8 @@ export function generateSingle(cfgIn) {
   for (let z = D - 3; z < D; z++) for (let x = 0; x < W; x++) world.set(x, GROUND, z, MAT.SIDEWALK);
 
   const theme = cfg.themeName
-    ? (THEMES[cfg.style] || THEMES.mid).find((t) => t.name === cfg.themeName) || rng.pick(THEMES[cfg.style] || THEMES.mid)
-    : rng.pick(THEMES[cfg.style] || THEMES.mid);
+    ? (styleOf(cfg.cityStyle).themes[cfg.style] || THEMES.mid).find((t) => t.name === cfg.themeName) || rng.pick(styleOf(cfg.cityStyle).themes[cfg.style] || THEMES.mid)
+    : rng.pick(styleOf(cfg.cityStyle).themes[cfg.style] || THEMES.mid);
 
   const rec = makeBuilding(world, {
     x0: pad, z0: pad, x1: pad + w - 1, z1: pad + d - 1,
@@ -497,7 +551,17 @@ function nearDoorway(rec, x, z) {
   return false;
 }
 
+// A cactus: two or three blocks, only where all four sides are open (a cactus
+// touching anything breaks on the next block update).
+function cactus(world, x, z, rng) {
+  const h = rng.int(2, 3);
+  for (let y = GROUND + 1; y <= GROUND + h + 1; y++)
+    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) if (world.has(x + dx, y, z + dz)) return;
+  for (let y = GROUND + 1; y <= GROUND + h; y++) world.set(x, y, z, MAT.CACTUS);
+}
+
 function tree(world, x, z, rng) {
+  if (STYLE.cactus && rng.chance(STYLE.cactus)) return cactus(world, x, z, rng);
   const h = rng.int(4, 6);
   const spruce = rng.chance(0.3);
   const log = spruce ? MAT.SPRUCE_LOG : MAT.LOG;

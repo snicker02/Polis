@@ -7,13 +7,18 @@
 // flush with the floor slab above it.
 //
 //   switchback  1-wide straight flights, alternating direction each storey,
-//               with a landing at both ends. Core: (P+1) x 2.
+//               with a landing at both ends. Core: (P+2) x 2.
 //
-//        u ->   0   1 .. P-1   P          even storeys climb strip A toward +u,
-//        A    [L] [ s  s  s ] [L]          odd storeys climb strip B toward -u;
-//        B    [L] [ s  s  s ] [L]          the landings at u=0 and u=P join them.
+//        u ->   0   1  ..   P   P+1        even storeys climb strip A toward +u,
+//        A    [L] [ s  s  s  S ] [L]       odd storeys climb strip B toward -u;
+//        B    [L] [ S  s  s  s ] [L]       the landings at u=0 and u=P+1 join them.
 //
-//   wide        the same with 2-wide flights. Core: (P+1) x 4. Towers.
+//               A flight has P steps, one per block of height. The top step
+//               (S) sits in the plane of the floor above, so its top is level
+//               with that floor and you walk straight off onto the landing.
+//               (0.2.7 and earlier stopped one step short: a hop at the top.)
+//
+//   wide        the same with 2-wide flights. Core: (P+2) x 4. Towers.
 //
 //   spiral      the original 3x3 ring. Step t sits in RING[t % 8] at base+t.
 //
@@ -57,7 +62,7 @@ function stairPreference(styleSetting, buildingStyle, rng) {
 // Core size in (u = flight direction, v = across) for each kind.
 function coreSize(kind, P) {
   if (kind === 'spiral') return [3, 3];
-  return [P + 1, kind === 'wide' ? 4 : 2];
+  return [P + 2, kind === 'wide' ? 4 : 2];
 }
 
 /**
@@ -164,8 +169,8 @@ export function makeBuilding(world, spec, rng) {
       for (let f = 0; f < flights; f++) {
         const F = gy + f * P;
         const even = (f % 2) === 0;
-        for (let i = 0; i <= P - 2; i++) {
-          const u = even ? 1 + i : P - 1 - i;
+        for (let i = 0; i <= P - 1; i++) {           // P steps: the last one is in the floor above
+          const u = even ? 1 + i : P - i;
           for (const v of across[even ? 0 : 1]) {
             const x = core.x0 + (core.alongX ? u : v);
             const z = core.z0 + (core.alongX ? v : u);

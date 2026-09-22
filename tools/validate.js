@@ -16,14 +16,16 @@ import { generateCity, generateSingle, DEFAULTS } from '../engine/city.js';
 import { USE } from '../engine/plan.js';
 import { verifyAll } from '../engine/verify.js';
 import { MATERIALS, THEMES, DOOR_KINDS, doorId, MAT, BED_VEC, stairId, cropId, CROP_KINDS, bedId, furnaceId, railId, poweredRailId,
-  gateId, chestId, lecternId, smokerId, stonecutterId, pumpkinId, loomId, grindstoneId, bambooId } from '../engine/materials.js';
+  gateId, chestId, lecternId, smokerId, stonecutterId, pumpkinId, loomId, grindstoneId, bambooId, FLOWERS } from '../engine/materials.js';
 import { BLOCK_VERSION } from '../engine/blockcore.js';
 import { VoxelWorld, splitWorld, buildMcPack } from '../engine/blockcore.js';
 import { buildStructures, placementGuide, CHUNK, exportPack, tileList, functionFiles, GROUND_DROP, cityId, exportSalt, POLIS_VERSION, SUMMON_IDS } from '../engine/export.js';
 import { buildMesh, MAX_QUADS, STRIDE } from '../engine/mesher.js';
 import { decodeNbt, readZip, localPayload } from './nbt-read.js';
 import { decodeTyped } from './nbt-typed.js';
+import { walkCity } from '../engine/terrain.js';
 import { CLOCK_FACE } from '../engine/landmarks.js';
+import { STYLES, remapTable } from '../engine/styles.js';
 import { CAT_COATS } from '../engine/entity-templates.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -197,6 +199,73 @@ section('2b. stair layouts and doors');
     Object.keys(used).filter((k) => k.startsWith('mixed:')).join(', '));
   note(`${ok}/${total} single builds reachable · ` +
     Object.entries(used).map(([k, n]) => `${k} ${n}`).join(' · '));
+
+  // No hopping: with stair blocks on, every floor must be reachable from the
+  // door stepping up ONLY onto stair blocks — the way walking up stairs works
+  // in game. (0.2.7 switchbacks stopped one step short of each floor.)
+  const noHop = (w, rec) => {
+    const passable = (x, y, z) => { const id = w.get(x, y, z); return id === -1 || MATERIALS.isPassable(id); };
+    const floorOk = (x, y, z) => { const id = w.get(x, y - 1, z); return id !== -1 && !MATERIALS.isPassable(id); };
+    const stand = (x, y, z) => floorOk(x, y, z) && passable(x, y, z) && passable(x, y + 1, z);
+    const r0 = rec.rects[0];
+    const inB = (x, z) => x >= r0.x0 - 1 && x <= r0.x1 + 1 && z >= r0.z0 - 1 && z <= r0.z1 + 1;
+    const key = (x, y, z) => x + ',' + y + ',' + z;
+    const start = rec.outside;
+    const seen = new Set([key(...start)]), q = [start];
+    for (let h = 0; h < q.length; h++) {
+      const [x, y, z] = q[h];
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = x + dx, nz = z + dz;
+        if (!inB(nx, nz)) continue;
+        for (const ny of [y + 1, y, y - 1, y - 2, y - 3]) {
+          if (ny === y + 1) {
+            if (!passable(x, y + 2, z)) continue;
+            if (!/_stairs$/.test(MATERIALS.def(w.get(nx, y, nz) >= 0 ? w.get(nx, y, nz) : 0).block) || w.get(nx, y, nz) < 0) continue;
+          }
+          if (ny < y) { let clear = true; for (let yy = ny + 2; yy <= y + 1; yy++) if (!passable(nx, yy, nz)) clear = false; if (!clear) continue; }
+          if (!stand(nx, ny, nz)) continue;
+          const k = key(nx, ny, nz);
+          if (!seen.has(k)) { seen.add(k); q.push([nx, ny, nz]); }
+          break;
+        }
+      }
+    }
+    const c = rec.core;
+    let reached = 0;
+    for (let k = 0; k < rec.floors; k++) {
+      const r = rec.rects[k], y = rec.floorYs[k] + 1;
+      let ok = false;
+      for (let z = r.z0 + 1; z <= r.z1 - 1 && !ok; z++) for (let x = r.x0 + 1; x <= r.x1 - 1 && !ok; x++) {
+        if (c && x >= c.x0 && x <= c.x1 && z >= c.z0 && z <= c.z1) continue;
+        if (seen.has(key(x, y, z))) ok = true;
+      }
+      if (ok) reached++;
+    }
+    return { reached, floors: rec.floors };
+  };
+  {
+    let checked = 0, hops = 0, first = '';
+    for (const stairStyle of ['switchback', 'wide', 'spiral']) for (const pitch of [4, 5, 6, 7])
+      for (const [bw, bd] of [[12, 9], [17, 13], [24, 20]]) {
+        const r = generateSingle({ ...DEFAULTS, style: 'tower', floors: 5, pitch, bw, bd, seed: pitch * 7 + bw, stairStyle, roofAccess: true });
+        const b = r.buildings[0]; if (!b || !b.core) continue;
+        checked++;
+        const nh = noHop(r.world, b);
+        if (nh.reached !== nh.floors) { hops++; if (!first) first = `${stairStyle} pitch ${pitch} ${bw}x${bd} (${b.stairKind}): ${nh.reached}/${nh.floors}`; }
+      }
+    check('stairs: every floor reachable without a single hop (all layouts, all pitches)', hops === 0 && checked > 0, `${hops}/${checked}, e.g. ${first}`);
+    let cityHops = 0, cityB = 0;
+    for (const [size, seed] of [[160, 12345], [192, 1]]) {
+      const r = generateCity({ ...DEFAULTS, size, seed });
+      for (const b of r.buildings) { if (!b.core) continue; cityB++; const nh = noHop(r.world, b); if (nh.reached !== nh.floors) cityHops++; }
+      // and from the streets to every door, up the terrace steps, without a hop
+      const walked = walkCity(r.world, r.plan, 1, r.hills.H + 4, true);
+      const miss = r.buildings.filter((b) => !walked.has(b.outside.join(','))).length;
+      check(`city ${size}/${seed}: every door reachable from the streets without a hop`, miss === 0, `${miss} need a jump`);
+    }
+    check('stairs: every building in two cities climbable without a hop', cityHops === 0 && cityB > 0, `${cityHops}/${cityB}`);
+    note(`${checked} single builds and ${cityB} city buildings climbed without jumping`);
+  }
 
   // stair blocks off: straight flights of full blocks must still be climbable
   for (const stairStyle of ['switchback', 'wide']) {
@@ -702,7 +771,7 @@ section('2g. animals and variety');
     w.forEach((x, y, z, id) => {
       if (MATERIALS.def(id).block !== 'minecraft:bamboo') return;
       const below = name(w, x, y - 1, z);
-      if (below !== 'minecraft:bamboo' && below !== 'minecraft:grass_block') badBamboo++;
+      if (!['minecraft:bamboo', 'minecraft:grass_block', 'minecraft:sand'].includes(below)) badBamboo++;
     });
     for (const p of pandas) {
       grovesN++;
@@ -731,7 +800,7 @@ section('2g. animals and variety');
   check('pens: fenced two high all round, one gate facing the street, animals inside', pens > 0 && badPen === 0, `${badPen} problems in ${pens} pens`);
   check('pens: all four kinds of farm animal appear', kinds.size === 4, [...kinds].join(','));
   check('groves: every panda is fenced in on all sides', grovesN > 0 && badGrove === 0, `${badGrove} open sides`);
-  check('groves: every bamboo stalk stands on grass or bamboo', badBamboo === 0, `${badBamboo}`);
+  check('groves: every bamboo stalk stands on grass, sand or bamboo', badBamboo === 0, `${badBamboo}`);
   check('interiors: every villager workstation appears (all 13 professions)', stations.size === 13,
     STATION_BLOCKS.filter((b) => !stations.has(b)).join(','));
   check('farms: all four crops grow, including potatoes', crops.size === 4, [...crops].join(','));
@@ -886,6 +955,67 @@ section('2i. outline and hills');
   check('square outline: every door reachable', sq.reach.unreached.length === 0);
   const flat = generateCity({ ...DEFAULTS, size: 160, seed: 12345, hills: 0 });
   check('hills off: no raised blocks, no staircases', flat.hills.blocks.every((b) => !b.e) && flat.stairRuns.length === 0);
+}
+
+// ===========================================================================
+// 2j. city styles
+// ===========================================================================
+section('2j. city styles');
+{
+  const name = (w, x, y, z) => { const id = w.get(x, y, z); return id < 0 ? null : MATERIALS.def(id).block; };
+  const SOIL = { flower: ['minecraft:grass_block', 'minecraft:dirt'],
+    dead: ['minecraft:sand', 'minecraft:hardened_clay', 'minecraft:grass_block', 'minecraft:dirt'] };
+  const FLOWER_NAMES = new Set(['dandelion', 'cornflower', 'allium', 'azure_bluet', 'blue_orchid', 'poppy', 'oxeye_daisy',
+    'lily_of_the_valley', 'pink_tulip', 'red_tulip', 'pink_petals'].map((n) => 'minecraft:' + n));
+  const summary = [];
+  for (const st of Object.keys(STYLES)) {
+    for (const [size, seed, transit] of [[160, 12345, 'rails'], [128, 3, 'roads']]) {
+      const r = generateCity({ ...DEFAULTS, size, seed, transit, cityStyle: st });
+      const w = r.world;
+      const tag = `${st} ${size}/${seed}`;
+      const v = verifyAll(w, r.buildings);
+      check(`${tag}: every floor reachable`, v.ok === v.total && v.floorsReached === v.floorsChecked, `${v.floorsReached}/${v.floorsChecked}`);
+      check(`${tag}: every door reachable from the streets`, r.reach.unreached.length === 0, `${r.reach.unreached.length} not`);
+      // no role material the style restyles is left behind
+      const table = remapTable(STYLES[st], [...FLOWERS]);
+      let leftover = 0;
+      w.forEach((x, y, z, id) => { if (table.has(id)) leftover++; });
+      check(`${tag}: every restyled material replaced`, leftover === 0, `${leftover} left`);
+      // plants on proper ground, cacti with four open sides, snow on solid ground
+      let badPlant = 0, badCactus = 0, badSnow = 0, snow = 0, cacti = 0, petals = 0, dead = 0;
+      w.forEach((x, y, z, id) => {
+        const b = MATERIALS.def(id).block;
+        const below = name(w, x, y - 1, z);
+        if (FLOWER_NAMES.has(b)) { if (!SOIL.flower.includes(below)) badPlant++; if (b === 'minecraft:pink_petals') petals++; }
+        else if (b === 'minecraft:deadbush') { dead++; if (!SOIL.dead.includes(below)) badPlant++; }
+        else if (b === 'minecraft:cactus') {
+          cacti++;
+          if (below !== 'minecraft:sand' && below !== 'minecraft:cactus') badCactus++;
+          // only something solid beside it breaks a cactus (a flower or dead bush does not)
+          for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+            const n = w.get(x + dx, y, z + dz);
+            if (n !== -1 && !MATERIALS.isPassable(n)) badCactus++;
+          }
+        } else if (b === 'minecraft:snow_layer') {
+          snow++;
+          const bid = w.get(x, y - 1, z);
+          if (bid < 0 || MATERIALS.isPassable(bid)) badSnow++;
+        }
+      });
+      check(`${tag}: flowers and bushes stand on soil they can grow on`, badPlant === 0, `${badPlant}`);
+      check(`${tag}: every cactus on sand with nothing solid beside it`, badCactus === 0, `${badCactus}`);
+      check(`${tag}: snow only on solid ground`, badSnow === 0, `${badSnow}`);
+      if (st === 'snowy') check(`${tag}: snow covers open ground`, snow > 500, String(snow));
+      if (st === 'desert') check(`${tag}: cacti and dead bushes in the desert`, cacti > 0 && dead > 0, `${cacti} cacti, ${dead} bushes`);
+      if (st === 'cherry') check(`${tag}: pink petals among the flowers`, petals > 0, String(petals));
+      if (size === 160) summary.push(`${st}: ${cacti ? cacti + ' cacti · ' : ''}${snow ? snow + ' snow · ' : ''}${petals ? petals + ' petals · ' : ''}${r.buildings.length} buildings`);
+    }
+  }
+  // golems scale with the slider
+  const g0 = generateCity({ ...DEFAULTS, size: 160, seed: 12345, golemsPer10: 0 }).spawns.filter((p) => p.type === 'golem').length;
+  const g5 = generateCity({ ...DEFAULTS, size: 160, seed: 12345, golemsPer10: 5 }).spawns.filter((p) => p.type === 'golem').length;
+  check('golems: none at 0 per 10 villagers, more at 5', g0 === 0 && g5 >= 20, `${g0} / ${g5}`);
+  note(summary.join('\n   '));
 }
 
 // ===========================================================================

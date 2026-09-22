@@ -26,7 +26,10 @@ class Registry {
     this.byName = new Map();
   }
   add(name, block, color, states = {}, flags = {}) {
-    const key = block + '|' + stateKey(states);
+    // A role (road, ground, sidewalk...) keeps a material separate from
+    // another use of the same block, so a city style can restyle the roads
+    // without touching grey-concrete walls. The exported block is the same.
+    const key = block + '|' + stateKey(states) + (flags.role ? '|' + flags.role : '');
     let id = this.byKey.get(key);
     if (id === undefined) {
       id = this.defs.length;
@@ -37,6 +40,7 @@ class Registry {
         flowable: !!flags.flowable,      // water flows into / washes away this block
         version: flags.version || 0,     // palette version tag; 0 = default (1.21.60)
         flat: !!flags.flat,              // preview draws it as a thin plate (rails, carpet)
+        role: flags.role || null,        // what it is for, when a style may restyle it
       });
       this.byKey.set(key, id);
     }
@@ -60,14 +64,14 @@ export const MAT = {
   // ---- ground & street ----
   BASE:        A('BASE', 'minecraft:stone', '#7d7d7d'),
   DIRT:        A('DIRT', 'minecraft:dirt', '#7a5b3c'),
-  GRASS:       A('GRASS', 'minecraft:grass_block', '#6a9c3f'),
-  ASPHALT:     A('ASPHALT', 'minecraft:gray_concrete', '#4b4f52'),
+  GRASS:       A('GRASS', 'minecraft:grass_block', '#6a9c3f', {}, { role: 'ground' }),
+  ASPHALT:     A('ASPHALT', 'minecraft:gray_concrete', '#4b4f52', {}, { role: 'road' }),
   ASPHALT_DK:  A('ASPHALT_DK', 'minecraft:black_concrete', '#1b1d20'),
-  SIDEWALK:    A('SIDEWALK', 'minecraft:light_gray_concrete', '#9aa0a1'),
+  SIDEWALK:    A('SIDEWALK', 'minecraft:light_gray_concrete', '#9aa0a1', {}, { role: 'sidewalk' }),
   CURB:        A('CURB', 'minecraft:smooth_stone', '#b0b0b0'),
-  LINE:        A('LINE', 'minecraft:yellow_concrete', '#d5b31f'),
-  CROSSWALK:   A('CROSSWALK', 'minecraft:white_concrete', '#dfe3e4'),
-  PATH:        A('PATH', 'minecraft:sandstone', '#d9cfa0'),
+  LINE:        A('LINE', 'minecraft:yellow_concrete', '#d5b31f', {}, { role: 'line' }),
+  CROSSWALK:   A('CROSSWALK', 'minecraft:white_concrete', '#dfe3e4', {}, { role: 'crosswalk' }),
+  PATH:        A('PATH', 'minecraft:sandstone', '#d9cfa0', {}, { role: 'path' }),
 
   // ---- generic structure ----
   GLASS:       A('GLASS', 'minecraft:glass', '#b4dbe6', {}, { transparent: true }),
@@ -106,6 +110,69 @@ export const MAT = {
                  { persistent_bit: B(1), update_bit: B(0) }),
   WATER:       A('WATER', 'minecraft:water', '#3a63c0', { liquid_depth: I(0) }, { transparent: true }),
 };
+
+// ---- roles a city style can restyle (0.2.7) ---------------------------------
+Object.assign(MAT, {
+  PLANTER:      A('PLANTER', 'minecraft:grass_block', '#6a9c3f', {}, { role: 'planter' }),
+  LAMP_POST:    A('LAMP_POST', 'minecraft:iron_bars', '#6f7478', {}, { role: 'lamppost' }),
+  STREET_LIGHT: A('STREET_LIGHT', 'minecraft:sea_lantern', '#e6f2ec', {}, { role: 'streetlight' }),
+  WALL_BODY:    A('WALL_BODY', 'minecraft:stone_bricks', '#7b7b75', {}, { role: 'wall' }),
+  WALL_CAP:     A('WALL_CAP', 'minecraft:smooth_stone', '#a8a8a8', {}, { role: 'wallcap' }),
+  RETAIN:       A('RETAIN', 'minecraft:stone_bricks', '#7b7b75', {}, { role: 'retain' }),
+});
+
+// ---- city-style materials (0.2.7): names and states checked against
+// Bedrock 1.21.60 (note: plain terracotta is hardened_clay, dead bush is
+// deadbush, cobblestone stairs are stone_stairs) -----------------------------
+Object.assign(MAT, {
+  SAND:           A('SAND', 'minecraft:sand', '#dbcf8e'),
+  SMOOTH_SAND:    A('SMOOTH_SAND', 'minecraft:smooth_sandstone', '#e0d6a3'),
+  CUT_SAND:       A('CUT_SAND', 'minecraft:cut_sandstone', '#d9cd96'),
+  CHISELED_SAND:  A('CHISELED_SAND', 'minecraft:chiseled_sandstone', '#d6ca92'),
+  RED_SAND:       A('RED_SAND', 'minecraft:red_sandstone', '#b5621f'),
+  SMOOTH_RED_SAND:A('SMOOTH_RED_SAND', 'minecraft:smooth_red_sandstone', '#b8662a'),
+  TERRACOTTA:     A('TERRACOTTA', 'minecraft:hardened_clay', '#985e43'),
+  T_WHITE:        A('T_WHITE', 'minecraft:white_terracotta', '#d2b2a1'),
+  T_ORANGE:       A('T_ORANGE', 'minecraft:orange_terracotta', '#a15325'),
+  T_YELLOW:       A('T_YELLOW', 'minecraft:yellow_terracotta', '#ba8523'),
+  T_PINK:         A('T_PINK', 'minecraft:pink_terracotta', '#a24e4f'),
+  T_LGRAY:        A('T_LGRAY', 'minecraft:light_gray_terracotta', '#876a61'),
+  ACACIA:         A('ACACIA', 'minecraft:acacia_planks', '#a85a32'),
+  ACACIA_LOG:     A('ACACIA_LOG', 'minecraft:acacia_log', '#676157', { pillar_axis: S('y') }),
+  ACACIA_LEAF:    A('ACACIA_LEAF', 'minecraft:acacia_leaves', '#5f8d2a', { persistent_bit: B(1), update_bit: B(0) }),
+  DEADBUSH:       A('DEADBUSH', 'minecraft:deadbush', '#8f6a32', {}, { passable: true, flowable: true, transparent: true }),
+  CACTUS:         A('CACTUS', 'minecraft:cactus', '#58822b', { age: I(0) }),
+  SNOW:           A('SNOW', 'minecraft:snow', '#f4f9fb'),
+  SNOW_LAYER:     A('SNOW_LAYER', 'minecraft:snow_layer', '#f4f9fb', { covered_bit: B(0), height: I(0) },
+                    { passable: true, flowable: true, flat: true }),
+  PACKED_ICE:     A('PACKED_ICE', 'minecraft:packed_ice', '#8db4f0'),
+  COBBLE:         A('COBBLE', 'minecraft:cobblestone', '#7a7a7a'),
+  MOSSY_COBBLE:   A('MOSSY_COBBLE', 'minecraft:mossy_cobblestone', '#6d7a5c'),
+  MOSSY_BRICK:    A('MOSSY_BRICK', 'minecraft:mossy_stone_bricks', '#737a66'),
+  CRACKED_BRICK:  A('CRACKED_BRICK', 'minecraft:cracked_stone_bricks', '#76766f'),
+  DEEP_BRICK:     A('DEEP_BRICK', 'minecraft:deepslate_bricks', '#474749'),
+  SPRUCE_FRAME:   A('SPRUCE_FRAME', 'minecraft:spruce_log', '#3b2b1a', { pillar_axis: S('y') }, { role: 'frame' }),
+  OAK_FRAME:      A('OAK_FRAME', 'minecraft:oak_log', '#6b5433', { pillar_axis: S('y') }, { role: 'frame' }),
+  DARK_FRAME:     A('DARK_FRAME', 'minecraft:dark_oak_log', '#3c2e1a', { pillar_axis: S('y') }, { role: 'frame' }),
+  CHERRY:         A('CHERRY', 'minecraft:cherry_planks', '#e3b1a8'),
+  CHERRY_LOG:     A('CHERRY_LOG', 'minecraft:cherry_log', '#3a2330', { pillar_axis: S('y') }),
+  CHERRY_LEAF:    A('CHERRY_LEAF', 'minecraft:cherry_leaves', '#f0a8c8', { persistent_bit: B(1), update_bit: B(0) }),
+  CHERRY_FRAME:   A('CHERRY_FRAME', 'minecraft:cherry_log', '#3a2330', { pillar_axis: S('y') }, { role: 'frame' }),
+  C_PINK:         A('C_PINK', 'minecraft:pink_concrete', '#d6658f'),
+  CALCITE:        A('CALCITE', 'minecraft:calcite', '#dfe0dc'),
+  BAMBOO_PLANKS:  A('BAMBOO_PLANKS', 'minecraft:bamboo_planks', '#c9b25a'),
+  MUD_BRICK:      A('MUD_BRICK', 'minecraft:mud_bricks', '#89694f'),
+  PACKED_MUD:     A('PACKED_MUD', 'minecraft:packed_mud', '#8e6b50'),
+  JUNGLE:         A('JUNGLE', 'minecraft:jungle_planks', '#a07350'),
+});
+Object.assign(MAT, {
+  SPRUCE_FENCE: A('SPRUCE_FENCE', 'minecraft:spruce_fence', '#5b4430'),
+  DARK_FENCE:   A('DARK_FENCE', 'minecraft:dark_oak_fence', '#3f2d1a'),
+  CHERRY_FENCE: A('CHERRY_FENCE', 'minecraft:cherry_fence', '#e3b1a8'),
+  ACACIA_FENCE: A('ACACIA_FENCE', 'minecraft:acacia_fence', '#a85a32'),
+});
+export const pinkPetalsId = (facing) => MATERIALS.add(null, 'minecraft:pink_petals', '#f0a8c8',
+  { growth: I(3), 'minecraft:cardinal_direction': S(facing) }, { passable: true, flowable: true, transparent: true });
 
 // ---- life: farms, water, plants, furniture, workstations --------------------
 // Every id and state below was checked against Microsoft's Bedrock block list
@@ -262,6 +329,9 @@ const DOOR_BLOCKS = {
   mangrove: ['minecraft:mangrove_door', '#773933'],
   crimson:  ['minecraft:crimson_door',  '#6a344b'],
   warped:   ['minecraft:warped_door',   '#2b6963'],
+  acacia:   ['minecraft:acacia_door',   '#a85a32'],
+  cherry:   ['minecraft:cherry_door',   '#e3b1a8'],
+  jungle:   ['minecraft:jungle_door',   '#a07350'],
 };
 export const DOOR_KINDS = Object.keys(DOOR_BLOCKS);
 export const DIR = { east: 0, south: 1, west: 2, north: 3 };
@@ -296,6 +366,12 @@ const STAIR_BLOCKS = {
   quartz: ['minecraft:quartz_stairs', '#e8e3da'],
   deepslate: ['minecraft:deepslate_tile_stairs', '#35353a'],
   sandstone: ['minecraft:sandstone_stairs', '#dfd5a0'],
+  smoothsand: ['minecraft:smooth_sandstone_stairs', '#e0d6a3'],
+  redsand: ['minecraft:red_sandstone_stairs', '#b5621f'],
+  acacia: ['minecraft:acacia_stairs', '#a85a32'],
+  cherry: ['minecraft:cherry_stairs', '#e3b1a8'],
+  cobble: ['minecraft:stone_stairs', '#7a7a7a'],            // Bedrock's name for cobblestone stairs
+  mossy: ['minecraft:mossy_stone_brick_stairs', '#737a66'],
 };
 export const WEIRDO = { east: 0, west: 1, south: 2, north: 3 };
 
@@ -312,6 +388,8 @@ export const STAIR_SOLID = {
   stonebrick: MAT.STONEBRICK, oak: MAT.OAK, spruce: MAT.SPRUCE,
   dark: MAT.SPRUCE, brick: MAT.BRICK, quartz: MAT.QUARTZ,
   deepslate: MAT.DEEPSLATE, sandstone: MAT.SANDSTONE,
+  smoothsand: MAT.SMOOTH_SAND, redsand: MAT.RED_SAND, acacia: MAT.ACACIA,
+  cherry: MAT.CHERRY, cobble: MAT.COBBLE, mossy: MAT.MOSSY_BRICK,
 };
 
 // ---- building themes -------------------------------------------------------

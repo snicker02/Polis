@@ -18,6 +18,7 @@
 import { makeBuilding, OUTWARD } from './building.js';
 import { MAT, WOOLS, pumpkinId, smokerId } from './materials.js';
 import { USE } from './plan.js';
+import { styleOf } from './styles.js';
 
 export const LANDMARKS = ['townhall', 'clocktower', 'library', 'market'];
 const NEED = {                       // [shorter side, longer side] of the lot
@@ -78,12 +79,13 @@ const inLot = (lot, x, z) => x >= lot.x0 && x <= lot.x1 && z >= lot.z0 && z <= l
 
 // ---- town hall -------------------------------------------------------------
 function townHall(world, lot, face, cfg, rng, G) {
-  pave(world, lot, G, () => MAT.ANDESITE);
+  const LP = styleOf(cfg.cityStyle).landmark;
+  pave(world, lot, G, () => LP.hallPave);
   const r = inset(lot, face, 3, 1);
   const P = cfg.pitch;
   const floors = Math.min(r.x1 - r.x0, r.z1 - r.z0) >= 14 ? 3 : 2;
-  const theme = { name: 'town hall', wall: MAT.SMOOTH_QUARTZ, trim: MAT.QUARTZ_PILLAR, floor: MAT.ANDESITE,
-    glass: MAT.PANE, stair: 'quartz', door: 'dark' };
+  const theme = { name: 'town hall', wall: LP.hallWall, trim: LP.hallColumn, floor: LP.hallFloor,
+    glass: LP.hallGlass, stair: LP.hallStair, door: LP.hallDoor };
   const rec = makeBuilding(world, { ...r, floors, pitch: P, groundY: G, style: 'tower', facing: face, theme,
     roofAccess: false, useStairs: cfg.useStairs, stairStyle: 'wide', lights: cfg.lights, setback: false, setbackEvery: 99 }, rng);
   if (!rec) return null;
@@ -98,10 +100,10 @@ function townHall(world, lot, face, cfg, rng, G) {
     const px = x + Fx, pz = z + Fz;
     if (!inLot(lot, px, pz)) return;
     if (i % 2 === 0 && !nearDoor(x, z)) {
-      for (let y = G + 1; y < colTop; y++) world.set(px, y, pz, MAT.QUARTZ_PILLAR);
-      world.set(px, colTop, pz, MAT.CHISELED_QUARTZ);
+      for (let y = G + 1; y < colTop; y++) world.set(px, y, pz, LP.hallColumn);
+      world.set(px, colTop, pz, LP.hallCapital);
     }
-    world.set(px, colTop + 1, pz, MAT.SMOOTH_QUARTZ);
+    world.set(px, colTop + 1, pz, LP.entablature);
   });
 
   // the village bell, in the forecourt beside the path to the doors
@@ -121,13 +123,13 @@ function townHall(world, lot, face, cfg, rng, G) {
   if (top.x1 - top.x0 >= 8 && top.z1 - top.z0 >= 8) {
     const y0 = rec.roofY;
     for (let dz2 = -2; dz2 <= 2; dz2++) for (let dx2 = -2; dx2 <= 2; dx2++) {
-      world.set(cx + dx2, y0 + 1, cz + dz2, MAT.SMOOTH_QUARTZ);
-      world.set(cx + dx2, y0 + 2, cz + dz2, Math.abs(dx2) === 2 || Math.abs(dz2) === 2 ? MAT.QUARTZ_PILLAR : MAT.SMOOTH_QUARTZ);
-      world.set(cx + dx2, y0 + 3, cz + dz2, MAT.COPPER_ROOF);
-      if (Math.abs(dx2) <= 1 && Math.abs(dz2) <= 1) world.set(cx + dx2, y0 + 4, cz + dz2, MAT.COPPER_ROOF);
+      world.set(cx + dx2, y0 + 1, cz + dz2, LP.domeBase);
+      world.set(cx + dx2, y0 + 2, cz + dz2, Math.abs(dx2) === 2 || Math.abs(dz2) === 2 ? LP.domeRing : LP.domeBase);
+      world.set(cx + dx2, y0 + 3, cz + dz2, LP.dome);
+      if (Math.abs(dx2) <= 1 && Math.abs(dz2) <= 1) world.set(cx + dx2, y0 + 4, cz + dz2, LP.dome);
     }
-    world.set(cx, y0 + 5, cz, MAT.COPPER_ROOF);
-    world.set(cx, y0 + 6, cz, MAT.GOLD);
+    world.set(cx, y0 + 5, cz, LP.dome);
+    world.set(cx, y0 + 6, cz, LP.finial);
     rec.topY = Math.max(rec.topY, y0 + 6);
   }
   rec.rooms = (k) => (k === 0 ? 'hall' : 'office');
@@ -141,12 +143,13 @@ function townHall(world, lot, face, cfg, rng, G) {
 export const CLOCK_FACE = ['QQBQQ', 'QQBQQ', 'BQGBB', 'QQQQQ', 'QQBQQ'];
 
 function clockTower(world, lot, face, cfg, rng, G) {
-  pave(world, lot, G, (x, z) => ((x + z) & 1 ? MAT.ANDESITE : MAT.STONEBRICK));
+  const LP = styleOf(cfg.cityStyle).landmark;
+  pave(world, lot, G, (x, z) => LP.clockPave[(x + z) & 1]);
   const cx = Math.floor((lot.x0 + lot.x1) / 2), cz = Math.floor((lot.z0 + lot.z1) / 2);
   const r = { x0: cx - 3, z0: cz - 3, x1: cx + 3, z1: cz + 3 };
   const floors = Math.max(4, Math.min(8, cfg.maxFloors | 0 || 8));
-  const theme = { name: 'clock tower', wall: MAT.STONEBRICK, trim: MAT.CHISELED_STONE, floor: MAT.SMOOTH,
-    glass: MAT.GLASS, stair: 'stonebrick', door: 'spruce' };
+  const theme = { name: 'clock tower', wall: LP.clockWall, trim: LP.clockTrim, floor: LP.clockFloor,
+    glass: MAT.GLASS, stair: LP.clockStair, door: LP.clockDoor };
   const rec = makeBuilding(world, { ...r, floors, pitch: cfg.pitch, groundY: G, style: 'mid', facing: face, theme,
     roofAccess: false, useStairs: cfg.useStairs, stairStyle: 'spiral', lights: cfg.lights, setback: false, setbackEvery: 99 }, rng);
   if (!rec) return null;
@@ -157,7 +160,7 @@ function clockTower(world, lot, face, cfg, rng, G) {
   for (let y = y0 + 1; y <= y0 + 7; y++)
     for (let z = t.z0; z <= t.z1; z++)
       for (let x = t.x0; x <= t.x1; x++) {
-        if (ring(x, z)) world.set(x, y, z, MAT.STONEBRICK); else world.clear(x, y, z);
+        if (ring(x, z)) world.set(x, y, z, LP.clockWall); else world.clear(x, y, z);
       }
   const faces = [];
   for (const side of ['north', 'south', 'east', 'west']) {
@@ -172,17 +175,17 @@ function clockTower(world, lot, face, cfg, rng, G) {
     faces.push({ side, centre: [sx, y0 + 4, sz] });
   }
   // belfry: solid floor, four corner piers, open arches, bell hanging from the roof
-  for (let z = t.z0; z <= t.z1; z++) for (let x = t.x0; x <= t.x1; x++) world.set(x, y0 + 8, z, MAT.STONEBRICK);
+  for (let z = t.z0; z <= t.z1; z++) for (let x = t.x0; x <= t.x1; x++) world.set(x, y0 + 8, z, LP.clockWall);
   for (const [x, z] of [[t.x0, t.z0], [t.x1, t.z0], [t.x0, t.z1], [t.x1, t.z1]])
-    for (let y = y0 + 9; y <= y0 + 11; y++) world.set(x, y, z, MAT.CHISELED_STONE);
-  for (let z = t.z0; z <= t.z1; z++) for (let x = t.x0; x <= t.x1; x++) world.set(x, y0 + 12, z, MAT.COPPER_ROOF);
+    for (let y = y0 + 9; y <= y0 + 11; y++) world.set(x, y, z, LP.clockTrim);
+  for (let z = t.z0; z <= t.z1; z++) for (let x = t.x0; x <= t.x1; x++) world.set(x, y0 + 12, z, LP.spire);
   world.set(cx, y0 + 11, cz, MAT.BELL_HANG);
   // copper spire with a gold finial
   for (let k = 1; k <= 3; k++) {
     const h = 3 - k;
-    for (let dz = -h; dz <= h; dz++) for (let dx = -h; dx <= h; dx++) world.set(cx + dx, y0 + 12 + k, cz + dz, MAT.COPPER_ROOF);
+    for (let dz = -h; dz <= h; dz++) for (let dx = -h; dx <= h; dx++) world.set(cx + dx, y0 + 12 + k, cz + dz, LP.spire);
   }
-  world.set(cx, y0 + 16, cz, MAT.GOLD);
+  world.set(cx, y0 + 16, cz, LP.finial);
   rec.topY = y0 + 16;
   rec.rooms = (k) => (k === 0 ? 'hall' : (k % 2 ? 'office' : 'library'));
   rec.landmark = 'clocktower';
@@ -191,11 +194,12 @@ function clockTower(world, lot, face, cfg, rng, G) {
 
 // ---- library ---------------------------------------------------------------
 function library(world, lot, face, cfg, rng, G) {
-  pave(world, lot, G, () => MAT.SIDEWALK);
+  const LP = styleOf(cfg.cityStyle).landmark;
+  pave(world, lot, G, () => LP.libPave);
   const r = inset(lot, face, 2, 1);
   const floors = Math.min(r.x1 - r.x0, r.z1 - r.z0) >= 14 ? 3 : 2;
-  const theme = { name: 'library', wall: MAT.BRICK, trim: MAT.STONEBRICK, floor: MAT.DARK_PLANKS,
-    glass: MAT.PANE, stair: 'stonebrick', door: 'spruce' };
+  const theme = { name: 'library', wall: LP.libWall, trim: LP.libTrim, floor: LP.libFloor,
+    glass: MAT.PANE, stair: LP.libStair, door: LP.libDoor };
   const rec = makeBuilding(world, { ...r, floors, pitch: cfg.pitch, groundY: G, style: 'mid', facing: face, theme,
     roofAccess: cfg.roofAccess, useStairs: cfg.useStairs, stairStyle: 'switchback', lights: cfg.lights, setback: false, setbackEvery: 99 }, rng);
   if (!rec) return null;
@@ -214,7 +218,8 @@ function library(world, lot, face, cfg, rng, G) {
 
 // ---- market square ---------------------------------------------------------
 function market(world, lot, face, cfg, rng, G) {
-  pave(world, lot, G, (x, z) => ((x + z) & 1 ? MAT.ANDESITE : MAT.STONEBRICK));
+  const LP = styleOf(cfg.cityStyle).landmark;
+  pave(world, lot, G, (x, z) => LP.market[(x + z) & 1]);
   const I = { x0: lot.x0 + 1, z0: lot.z0 + 1, x1: lot.x1 - 1, z1: lot.z1 - 1 };
   const Lx = I.x1 - I.x0 + 1, Lz = I.z1 - I.z0 + 1;
   const mx = I.x0 + Math.floor(Lx / 2), mz = I.z0 + Math.floor(Lz / 2);
@@ -229,9 +234,9 @@ function market(world, lot, face, cfg, rng, G) {
         const x = cx + dx, z = cz + dz;
         const water = dx >= 0 && dx <= 1 && dz >= 0 && dz <= 1;
         if (water) world.set(x, G, z, MAT.WATER);
-        else world.set(x, G + 1, z, MAT.STONEBRICK);
+        else world.set(x, G + 1, z, LP.wellRim);
         if ((dx === -1 || dx === 2) && (dz === -1 || dz === 2)) { world.set(x, G + 2, z, MAT.FENCE); world.set(x, G + 3, z, MAT.FENCE); }
-        world.set(x, G + 4, z, MAT.DARK_PLANKS);
+        world.set(x, G + 4, z, LP.wellRoof);
       }
     world.set(cx, G + 3, cz, MAT.LAMP_HANG);
     well = [cx, cz];
