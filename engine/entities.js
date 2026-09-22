@@ -11,7 +11,7 @@
 // adult ("unskilled"), with no village, trades or inventory, so it claims a
 // bed and takes a job from whatever workstation it finds.
 
-import { GOLEM, VILLAGER, CAT, PANDA, CAT_COATS, hydrate } from './entity-templates.js';
+import { GOLEM, VILLAGER, CAT, PANDA, CAT_COATS, COW, PIG, CHICKEN, SHEEP, SHEEP_COATS, hydrate } from './entity-templates.js';
 import { N } from './blockcore.js';
 
 let uidSeq = 0;
@@ -25,8 +25,8 @@ function uniqueId(rng) {
 const floatList = (xs) => ({ t: 9, et: 5, keepEt: true, v: xs.map((x) => ({ t: 5, v: x })) });
 
 // kinds carried in mob structures (everything else is summoned)
-export const STRUCTURE_MOBS = new Set(['villager', 'golem', 'cat', 'panda']);
-const TEMPLATE = { villager: VILLAGER, golem: GOLEM, cat: CAT, panda: PANDA };
+export const STRUCTURE_MOBS = new Set(['villager', 'golem', 'cat', 'panda', 'cow', 'pig', 'chicken', 'sheep']);
+const TEMPLATE = { villager: VILLAGER, golem: GOLEM, cat: CAT, panda: PANDA, cow: COW, pig: PIG, chicken: CHICKEN, sheep: SHEEP };
 
 export function makeEntity(kind, x, y, z, rng) {
   const e = hydrate(TEMPLATE[kind]);
@@ -46,6 +46,15 @@ export function makeEntity(kind, x, y, z, rng) {
       v: v.definitions.v.map((d) => (/^\+minecraft:cat_(?!adult|baby|wild)/.test(d.v) ? { t: 8, v: coat.def } : d)),
     };
     v.Variant = { t: 3, v: coat.variant };
+  }
+  if (kind === 'sheep') {
+    // mostly white, some light grey: only coats seen in game, with the Color the game pairs with each
+    const coat = SHEEP_COATS.length > 1 && rng() < 0.25 ? SHEEP_COATS[1 + Math.floor(rng() * (SHEEP_COATS.length - 1))] : SHEEP_COATS[0];
+    v.definitions = {
+      t: 9, et: 8, keepEt: true,
+      v: v.definitions.v.map((d) => (/^\+minecraft:sheep_(?!adult|baby|sheared|dyeable)/.test(d.v) ? { t: 8, v: coat.def } : d)),
+    };
+    v.Color = { t: v.Color.t, v: coat.color };
   }
   if (kind === 'villager') {
     const skin = Math.floor(rng() * 6);

@@ -1,13 +1,14 @@
 // tools/extract-templates.js — lift entity templates out of a structure saved
 // in game, and write them to engine/entity-templates.js.
-//   node tools/extract-templates.js <file.mcstructure>
+//   node tools/extract-templates.js <villagers.mcstructure> <farm_animals.mcstructure>
 // The shipped templates came from a Bedrock 26.x world (InventoryVersion 1.26.45).
 import { readFileSync, writeFileSync } from 'node:fs';
 import { decodeTyped } from './nbt-typed.js';
 
-const file = process.argv[2];
-const root = decodeTyped(new Uint8Array(readFileSync(file)));
-const ents = root.v.structure.v.entities.v;
+// every file given contributes its entities (villager/golem/cat/panda file,
+// farm animal file, ...)
+const files = process.argv.slice(2);
+const ents = files.flatMap((f) => decodeTyped(new Uint8Array(readFileSync(f))).v.structure.v.entities.v);
 const id = (e) => e.v.identifier.v;
 const defs = (e) => (e.v.definitions ? e.v.definitions.v.map((d) => d.v) : []);
 const health = (e) => e.v.Attributes.v.find((a) => a.v.Name.v === 'minecraft:health').v;
@@ -25,7 +26,21 @@ for (const e of ents.filter((x) => id(x) === 'minecraft:cat')) {
   const d = defs(e).find((x) => /^\+minecraft:cat_(?!adult|baby|wild)/.test(x));
   if (d && !coats.some((c) => c.def === d)) coats.push({ def: d, variant: e.v.Variant.v });
 }
+// farm animals: healthy adults, no owner, no leash
+const adultWith = (ident, group) => ents.find((e) => id(e) === ident && defs(e).includes(group) &&
+  health(e).Current.v === health(e).Base.v && e.v.IsBaby.v === 0);
+const cow = adultWith('minecraft:cow', '+minecraft:cow_adult');
+const pig = adultWith('minecraft:pig', '+minecraft:pig_adult');
+const chicken = adultWith('minecraft:chicken', '+minecraft:chicken_adult');
+const sheep = adultWith('minecraft:sheep', '+minecraft:sheep_adult');
+// every sheep coat seen: its component group and the Color byte the game pairs with it
+const sheepCoats = [];
+for (const e of ents.filter((x) => id(x) === 'minecraft:sheep')) {
+  const d = defs(e).find((x) => /^\+minecraft:sheep_(?!adult|baby|sheared|dyeable)/.test(x));
+  if (d && !sheepCoats.some((c) => c.def === d)) sheepCoats.push({ def: d, color: e.v.Color.v });
+}
 if (!golem || !villager || !cat || !panda) throw new Error('templates not found');
+if (files.length > 1 && (!cow || !pig || !chicken || !sheep)) throw new Error('farm animal templates not found');
 
 const ser = (t) => {
   if (t.t === 4) return `{t:4,v:${JSON.stringify(t.v.toString())}}`;
@@ -42,6 +57,11 @@ export const VILLAGER = ${ser(villager)};
 export const CAT = ${ser(cat)};
 export const PANDA = ${ser(panda)};
 export const CAT_COATS = ${JSON.stringify(coats)};
+export const COW = ${cow ? ser(cow) : 'null'};
+export const PIG = ${pig ? ser(pig) : 'null'};
+export const CHICKEN = ${chicken ? ser(chicken) : 'null'};
+export const SHEEP = ${sheep ? ser(sheep) : 'null'};
+export const SHEEP_COATS = ${JSON.stringify(sheepCoats)};
 export function hydrate(t) {
   if (t.t === 4) return { t: 4, v: BigInt(t.v) };
   if (t.t === 10) { const v = {}; for (const k of Object.keys(t.v)) v[k] = hydrate(t.v[k]); return { t: 10, v }; }
@@ -52,3 +72,5 @@ export function hydrate(t) {
 writeFileSync(new URL('../engine/entity-templates.js', import.meta.url), out);
 console.log('golem', Object.keys(golem.v).length, 'keys · villager', Object.keys(villager.v).length,
   '· cat', Object.keys(cat.v).length, defs(cat).join(' '), '· panda', defs(panda).join(' '), '· coats', JSON.stringify(coats));
+console.log('farm:', [cow, pig, chicken, sheep].map((e) => e ? id(e) + ' [' + defs(e).join(' ') + ']' : 'missing').join('\n      '),
+  '\nsheep coats', JSON.stringify(sheepCoats));

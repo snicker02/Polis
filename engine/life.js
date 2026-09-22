@@ -14,6 +14,7 @@
 import { MAT, MATERIALS, FLOWERS, CARPETS, CROP_KINDS, cropId, bedId, furnaceId, BED_VEC,
   gateId, chestId, lecternId, smokerId, stonecutterId, loomId, grindstoneId, bambooId } from './materials.js';
 import { verifyBuilding } from './verify.js';
+import { planRooms, buildRooms } from './rooms.js';
 import { USE } from './plan.js';
 
 export const USE_FARM = 6;
@@ -177,7 +178,12 @@ const ROOMS = {
   office:    ['shelf', 'lectern', 'station', 'plant', 'craft', 'shelf', 'lamp', 'chest', 'plant'],
   library:   ['shelf', 'shelf', 'lectern', 'shelf', 'plant', 'shelf', 'lamp', 'shelf', 'rug'],
   hall:      ['plant', 'shelf', 'lamp', 'plant', 'chest', 'plant', 'shelf'],
+  living:    ['plant', 'shelf', 'lamp', 'rug', 'chest', 'plant', 'shelf', 'lamp'],
+  studio:    ['bed', 'craft', 'furnace', 'plant', 'chest', 'lamp', 'shelf'],
 };
+// in rooms (0.3.0) kitchens cook and bedrooms sleep
+ROOMS.kitchen = ['craft', 'furnace', 'smoker', 'barrel', 'chest', 'plant', 'lamp', 'shelf'];
+ROOMS.bedroom = ['bed', 'chest', 'plant', 'bed', 'lamp', 'rug', 'shelf'];
 // every villager profession's workstation appears somewhere
 const STATIONS = ['cartography', 'fletching', 'blast', 'brewing', 'cauldron', 'barrel',
   'smoker', 'lectern', 'stonecutter', 'loom', 'grindstone', 'smithing'];
@@ -192,7 +198,7 @@ function roomFor(style, k, floors, rng) {
 
 const DIRNAME = (dx, dz) => (dx === 1 ? 'east' : dx === -1 ? 'west' : dz === 1 ? 'south' : 'north');
 
-export function furnish(world, rec, rng) {
+export function furnish(world, rec, rng, opts = {}) {
   const placed = [];
   const beds = [];
   let stations = 0, plants = 0, shelves = 0;
@@ -202,24 +208,28 @@ export function furnish(world, rec, rng) {
   const doorCells = rec.doorCells || [[rec.door.x, rec.door.z]];
   const nearDoor = (x, z, k) => k === 0 && doorCells.some(([a, b]) => Math.abs(x - a) <= 2 && Math.abs(z - b) <= 2);
 
-  for (let k = 0; k < rec.floors; k++) {
-    const r = rec.rects[k];
-    const sy = rec.floorYs[k], y = sy + 1;
-    const ix0 = r.x0 + 1, iz0 = r.z0 + 1, ix1 = r.x1 - 1, iz1 = r.z1 - 1;
-    if (ix1 - ix0 < 2 || iz1 - iz0 < 2) continue;
+  // ---- rooms: inside walls and doors first (landmarks keep their open halls)
+  const plans = [];
+  const useRooms = opts.rooms !== false && !rec.rooms && rec.theme;
+  if (useRooms) {
+    for (let k = 0; k < rec.floors; k++) {
+      const plan = planRooms(rec, k, rng);
+      if (plan) { buildRooms(world, rec, k, plan, rec.theme, put); plans[k] = plan; }
+    }
+  }
 
-    // walk the inside of the walls: [x, z, inwardX, inwardZ, side]
+  // ---- furniture along a ring of cells: [x, z, inwardX, inwardZ, side]
+  const ringOf = (x0, z0, x1, z1) => {
     const ring = [];
-    for (let x = ix0; x <= ix1; x++) ring.push([x, iz0, 0, 1, 0]);
-    for (let z = iz0 + 1; z <= iz1; z++) ring.push([ix1, z, -1, 0, 1]);
-    for (let x = ix1 - 1; x >= ix0; x--) ring.push([x, iz1, 0, -1, 2]);
-    for (let z = iz1 - 1; z >= iz0 + 1; z--) ring.push([ix0, z, 1, 0, 3]);
-
-    const free = (x, z) => !nearCore(x, z) && !nearDoor(x, z, k) &&
-      solidAt(world, x, sy, z) && !world.has(x, y, z) && !world.has(x, y + 1, z);
-
-    const plan = ROOMS[rec.rooms ? rec.rooms(k) : roomFor(rec.style, k, rec.floors, rng)];   // landmarks choose their own
-    let step = rng.int(0, plan.length - 1);
+    for (let x = x0; x <= x1; x++) ring.push([x, z0, 0, 1, 0]);
+    for (let z = z0 + 1; z <= z1; z++) ring.push([x1, z, -1, 0, 1]);
+    for (let x = x1 - 1; x >= x0; x--) ring.push([x, z1, 0, -1, 2]);
+    for (let z = z1 - 1; z >= z0 + 1; z--) ring.push([x0, z, 1, 0, 3]);
+    return ring;
+  };
+  const place = (ring, plan, free, sy, k, onlyOne = false) => {
+    const y = sy + 1;
+    let step = onlyOne ? 0 : rng.int(0, plan.length - 1);
     for (let i = 0; i < ring.length; i++) {
       const [x, z, nx, nz, side] = ring[i];
       if (!free(x, z)) continue;
@@ -227,6 +237,7 @@ export function furnish(world, rec, rng) {
       if (item === 'bed') {
         const nb = ring[i + 1];
         if (!nb || nb[4] !== side || !free(nb[0], nb[1])) {
+          if (onlyOne) continue;            // keep looking for a spot that fits
           // no room for a bed here: put the next piece in this cell instead
           step++;
           if (plan[step % plan.length] !== 'bed') i--;
@@ -240,12 +251,12 @@ export function furnish(world, rec, rng) {
         world.setData(x, y, z, { id: 'Bed', bytes: { color } });
         world.setData(nb[0], y, nb[1], { id: 'Bed', bytes: { color } });
         beds.push({ foot: [x, y, z], head: [nb[0], y, nb[1]], dir, inward: [nx, nz], floor: k });
+        if (onlyOne) return true;
         i += 2;                       // bed + one clear cell
       } else if (item === 'rug') {
         // a carpet one cell in from the wall: walkable, purely decoration
         const rx = x + nx, rz = z + nz;
-        if (!nearCore(rx, rz) && !nearDoor(rx, rz, k) && solidAt(world, rx, sy, rz) && !world.has(rx, y, rz))
-          put(rx, y, rz, rng.pick(CARPETS));
+        if (free(rx, rz, true) && !world.has(rx, y, rz)) put(rx, y, rz, rng.pick(CARPETS));
         i += 1;
       } else {
         if (item === 'craft') put(x, y, z, MAT.CRAFTING);
@@ -275,17 +286,121 @@ export function furnish(world, rec, rng) {
         else if (item === 'lamp') { put(x, y, z, MAT.BARREL); put(x, y + 1, z, MAT.LAMP); }
         i += 1;                       // leave a gap after every piece
       }
+      if (onlyOne) return true;
       step++;
+    }
+    return false;
+  };
+
+  for (let k = 0; k < rec.floors; k++) {
+    const r = rec.rects[k];
+    const sy = rec.floorYs[k], y = sy + 1;
+    const open = (x, z) => solidAt(world, x, sy, z) && !world.has(x, y, z) && !world.has(x, y + 1, z);
+    if (plans[k]) {
+      // each room against its own walls, clear of every doorway (inside or out)
+      const allDoors = plans[k].doors.map((d) => [d.x, d.z]);
+      for (const rm of plans[k].rooms) {
+        const byDoor = (x, z) => allDoors.some(([a, b]) => Math.abs(a - x) <= 1 && Math.abs(b - z) <= 1);
+        const free = (x, z) => x >= rm.x0 && x <= rm.x1 && z >= rm.z0 && z <= rm.z1 &&
+          !byDoor(x, z) && !nearDoor(x, z, k) && !nearCore(x, z) && open(x, z);
+        let ring = ringOf(rm.x0, rm.z0, rm.x1, rm.z1);
+        // A narrow room (two deep) keeps the row by its entrance clear as an
+        // aisle: furniture only along the other row.
+        const thinX = rm.x1 - rm.x0 <= 1, thinZ = rm.z1 - rm.z0 <= 1;
+        if (thinX || thinZ) {
+          const [dx, dz] = rm.doors[0] || [rm.x0, rm.z0];
+          const aisle = thinZ ? Math.max(rm.z0, Math.min(rm.z1, dz)) : Math.max(rm.x0, Math.min(rm.x1, dx));
+          ring = ring.filter((c) => (thinZ ? c[1] : c[0]) !== aisle);
+        }
+        // the piece that makes the room what it is goes in first
+        const must = rm.type === 'bedroom' || rm.type === 'studio' ? 'bed' : rm.type === 'kitchen' ? 'craft' : null;
+        if (must && !place(ring, [must], free, sy, k, true) && must === 'bed') rm.type = 'living';   // too cramped for a bed: a sitting room
+        place(ring, ROOMS[rm.type] || ROOMS.office, free, sy, k);
+      }
+    } else {
+      const ix0 = r.x0 + 1, iz0 = r.z0 + 1, ix1 = r.x1 - 1, iz1 = r.z1 - 1;
+      if (ix1 - ix0 < 2 || iz1 - iz0 < 2) continue;
+      const free = (x, z) => !nearCore(x, z) && !nearDoor(x, z, k) && open(x, z);
+      const plan = ROOMS[rec.rooms ? rec.rooms(k) : roomFor(rec.style, k, rec.floors, rng)];   // landmarks choose their own
+      place(ringOf(ix0, iz0, ix1, iz1), plan, free, sy, k);
+      if (plan === ROOMS.library) {
+        // freestanding shelf rows in the middle: three-long stacks, two-wide aisles
+        const inner = (x, z) => x >= ix0 + 2 && x <= ix1 - 2 && z >= iz0 + 2 && z <= iz1 - 2;
+        // a stack keeps clear of the stairs' ring by a block, and nothing but
+        // other shelves may stand next to it (so the aisles stay open)
+        const nearStairs = (x, z) => core && x >= core.x0 - 2 && x <= core.x1 + 2 && z >= core.z0 - 2 && z <= core.z1 + 2;
+        const clearAround = (x, z) => {
+          if (nearStairs(x, z)) return false;
+          for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
+            if (!dx && !dz) continue;
+            const id = world.get(x + dx, y, z + dz);
+            if (id !== -1 && !/bookshelf/.test(MATERIALS.def(id).block)) return false;
+          }
+          return true;
+        };
+        for (let z = iz0 + 2; z <= iz1 - 2; z += 3)
+          for (let x = ix0 + 2; x <= ix1 - 2; x++) {
+            if ((x - ix0 - 2) % 4 === 3) continue;                   // a gap every three shelves
+            if (!inner(x, z) || !free(x, z) || !clearAround(x, z)) continue;
+            put(x, y, z, MAT.BOOKSHELF); shelves++;
+          }
+      }
     }
   }
 
-  // re-verify: furniture must never cost a floor
+  // re-verify: rooms and furniture must never cost a floor, or a room
   const v = verifyBuilding(world, rec);
-  if (!v.ok) {
-    for (const [x, y, z] of placed) world.clear(x, y, z);
-    return { ok: false, beds: [], placed: 0, stations: 0, plants: 0, shelves: 0 };
+  const roomsOk = !plans.length || roomsReachable(world, rec, plans);
+  if (!v.ok || !roomsOk) {
+    for (const [x, y, z] of placed.reverse()) world.clear(x, y, z);
+    if (useRooms && plans.some(Boolean)) return furnish(world, rec, rng, { ...opts, rooms: false });   // open plan instead
+    return { ok: false, beds: [], placed: 0, stations: 0, plants: 0, shelves: 0, rooms: [] };
   }
-  return { ok: true, beds, placed: placed.length, stations, plants, shelves };
+  const rooms = [];
+  plans.forEach((p, k) => { if (p) for (const rm of p.rooms) rooms.push({ ...rm, floor: k }); });
+  rec.roomPlans = plans;
+  return { ok: true, beds, placed: placed.length, stations, plants, shelves, rooms };
+}
+
+// Walk from the front door (up only onto stairs, down up to three, through
+// doors) and check every room has a floor cell that can be reached.
+function roomsReachable(world, rec, plans) {
+  const passable = (x, y, z) => { const id = world.get(x, y, z); return id === -1 || MATERIALS.isPassable(id); };
+  const stand = (x, y, z) => solidAt(world, x, y - 1, z) && passable(x, y, z) && passable(x, y + 1, z);
+  const r0 = rec.rects[0];
+  const inB = (x, z) => x >= r0.x0 - 1 && x <= r0.x1 + 1 && z >= r0.z0 - 1 && z <= r0.z1 + 1;
+  const key = (x, y, z) => x + ',' + y + ',' + z;
+  const seen = new Set([key(...rec.outside)]), q = [rec.outside];
+  for (let h = 0; h < q.length; h++) {
+    const [x, y, z] = q[h];
+    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const nx = x + dx, nz = z + dz;
+      if (!inB(nx, nz)) continue;
+      for (const ny of [y + 1, y, y - 1, y - 2, y - 3]) {
+        // stepping up only onto a stair: no hopping over furniture
+        if (ny === y + 1) {
+          if (!passable(x, y + 2, z)) continue;
+          const f = world.get(nx, y, nz);
+          if (f < 0 || !/_stairs$/.test(MATERIALS.def(f).block)) continue;
+        }
+        if (ny < y) { let clear = true; for (let yy = ny + 2; yy <= y + 1; yy++) if (!passable(nx, yy, nz)) clear = false; if (!clear) continue; }
+        if (!stand(nx, ny, nz)) continue;
+        const k2 = key(nx, ny, nz);
+        if (!seen.has(k2)) { seen.add(k2); q.push([nx, ny, nz]); }
+        break;
+      }
+    }
+  }
+  for (let k = 0; k < plans.length; k++) {
+    if (!plans[k]) continue;
+    const y = rec.floorYs[k] + 1;
+    for (const rm of plans[k].rooms) {
+      let ok = false;
+      for (let z = rm.z0; z <= rm.z1 && !ok; z++) for (let x = rm.x0; x <= rm.x1 && !ok; x++) if (seen.has(key(x, y, z))) ok = true;
+      if (!ok) return false;
+    }
+  }
+  return true;
 }
 
 // villager spawn next to each bed (the cell in front of its foot)
@@ -386,7 +501,8 @@ export function ranch(world, lot, side, rng, G, plan, kind = null) {
     for (let x = L.x0 + 1; x <= L.x1 - 1; x++)
       if (!world.has(x, G + 1, z) && !world.has(x, G + 2, z)) cells.push([x, z]);
   rng.shuffle(cells);
-  const n = Math.min(cells.length, rng.int(3, 6) + (kind === 'chicken' ? 2 : 0));
+  // four to ten, by the size of the pen (chickens get a couple extra)
+  const n = Math.min(cells.length, Math.max(4, Math.min(10, Math.floor(cells.length / 5))) + (kind === 'chicken' ? 2 : 0));
   const animals = cells.slice(0, n).map(([x, z]) => ({ type: kind, x, y: G + 1, z }));
   if (plan) {
     for (let z = L.z0; z <= L.z1; z++)

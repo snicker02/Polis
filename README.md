@@ -1,4 +1,4 @@
-# Polis v0.2.8
+# Polis v0.3.0
 
 A procedural city generator that exports to **Minecraft Bedrock**. Plans a
 street grid, subdivides it into lots, raises buildings with real interiors —
@@ -118,6 +118,33 @@ Both are built into the structure files at export time; the preview shows the
 city itself. The city id includes these settings, so packs of the same city
 exported differently never collide.
 
+## Rooms
+
+Floors are divided into real rooms. Each floor gets a corridor along its
+length, taking in the stair core and the open floor round it, so every landing
+opens onto the corridor. The strips either side become rooms, 4–6 blocks long,
+each behind a floor-to-ceiling inside wall with a door onto the corridor:
+
+- **Houses** — kitchen and living room downstairs, bedrooms upstairs; a
+  one-storey cottage is split into a kitchen and a bedroom.
+- **Mid-rises** — shops at street level, apartments above: each apartment is
+  a kitchen off the corridor with its bedroom behind it, through a door in the
+  wall between them (or a studio with a bed and a stove).
+- **Towers** — shops at street level, then floors of apartments and offices.
+- **Landmarks** keep their open halls; libraries get freestanding shelf rows.
+
+Each room is furnished along its own walls, clear of every doorway, and the
+piece that makes it what it is goes in first — the bed in a bedroom, the
+crafting table in a kitchen (a room too cramped for a bed becomes a sitting
+room). Narrow rooms keep the row by their door as an aisle. Every room has a
+light. Inside walls take the style's finish: plaster in modern cities,
+sandstone in the desert, spruce in the snow, calcite in cherry towns, oak
+panelling in medieval ones. Switchback stairs now sit against the back wall
+when they can, leaving one deep strip for rooms instead of two shallow ones.
+After furnishing, every room is walked to from the front door (stepping up
+only onto stairs); if any room cannot be reached, the building keeps an open
+plan instead.
+
 ## Life
 
 **Farms** take over some suburban lots (**Farms** slider). Each is hedged in
@@ -145,14 +172,15 @@ Furniture only goes against the outer walls, never within one cell of the
 stairs or two cells of the front door, and every furnished building is
 re-verified: if furniture ever cost a floor its reachability, it is removed.
 
-**Animals.** Some suburban lots become fenced paddocks with a gate on the
-street side, hay and a water trough, holding cows, sheep, pigs or chickens
-(each city deals the four kinds out in turn). About a third of parks get a
+**Animals.** Every city gets at least four fenced paddocks — one each of
+cows, sheep, pigs and chickens, more in big cities — on the lots furthest from
+downtown, with a gate on the street side, hay and a water trough, and four to
+ten animals each depending on the pen's size. About a third of parks get a
 fenced bamboo grove with a panda or two. Cats — five coats, wild and
 unowned — wander the pavements and plazas. Cats and pandas travel in the mob
 structures like the villagers (templates from a structure saved in game);
-farm animals are summoned by `populate` while the ticking areas are up, with
-an `animals` fallback function.
+and so, since 0.3.0, do cows, pigs, chickens and sheep (white or light
+grey), from templates in a second structure saved in game.
 
 **Workstations for every profession.** Interiors now include smokers,
 lecterns, stonecutters, looms, grindstones and smithing tables alongside the
@@ -408,6 +436,25 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.3.0** — Real rooms: corridors, inside walls and doors; apartments
+(kitchen + bedroom), studios, shops, offices, kitchens, living rooms and
+bedrooms, each furnished along its own walls with its key piece first and a
+ceiling light; libraries get freestanding shelf rows. Switchback stairs sit
+against the back wall when they can. Farm animals now travel in mob structures
+from in-game templates (cows, pigs, chickens, white and light-grey sheep), so
+nothing but minecarts is summoned. Park trees keep clear of panda groves. The
+validator adds a rooms section: every room is reachable from the front door
+without a hop, inside walls run floor to ceiling, doors are two high with wall
+above, nothing blocks a doorway, every bedroom has a bed and every kitchen a
+stove or crafting table, and every room is lit.
+
+**0.2.9** — Animal pens are guaranteed: at least four per city (one of each
+farm animal), placed on the outermost lots, with four to ten animals each.
+Pens had been a random roll on suburban house lots after farms, and the
+organic outline (0.2.6) removes many of those, so most cities ended up with
+none or one. The validator checks every style for at least four pens with all
+four animals.
 
 **0.2.8** — No more hop at the top of the stairs. Switchback flights had one
 step too few: the top step stopped a block below the floor above, so the last

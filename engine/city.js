@@ -134,6 +134,19 @@ export function generateCity(cfgIn, onProgress) {
   const themeRng = rng.fork();
   const lifeRng = rng.fork();
   const penOrder = lifeRng.shuffle(RANCH_ANIMALS.slice());
+  // Animal pens are chosen up front, on the lots furthest from downtown:
+  // at least four where the lots exist (one of each kind), more in big cities.
+  {
+    const [fx, fz] = plan.focal;
+    const big = (l) => l.x1 - l.x0 + 1 >= 7 && l.z1 - l.z0 + 1 >= 7;
+    const far = (l) => -Math.hypot((l.x0 + l.x1) / 2 - fx, (l.z0 + l.z1) / 2 - fz);
+    const pool = plan.lots.filter((l) => l.kind === USE.LOT && !l.landmark && big(l));
+    const houses = pool.filter((l) => l.style === 'house').sort((a, b) => far(a) - far(b));
+    const others = pool.filter((l) => l.style !== 'house').sort((a, b) => far(a) - far(b));
+    const want = cfg.ranchChance > 0 ? Math.max(4, Math.round(houses.length * cfg.ranchChance)) : 0;
+    const picks = houses.concat(others).slice(0, want);
+    picks.forEach((l, i) => { l.pen = penOrder[i % penOrder.length]; });
+  }
   for (const lot of plan.lots) {
     if (lot.landmark) {
       const L = buildLandmark(world, lot, frontage(plan, lot).side, cfg, rng, GROUND);
@@ -153,17 +166,16 @@ export function generateCity(cfgIn, onProgress) {
     if (lot.kind === USE.PARK) { park(world, lot, rng, cfg, lifeRng, pandas); continue; }
     if (lot.kind === USE.PLAZA) { plaza(world, lot, rng, cfg); continue; }
 
+    if (lot.pen) {
+      const rch = ranch(world, lot, frontage(plan, lot).side, lifeRng, GROUND, plan, lot.pen);
+      if (rch) { ranches.push(rch); continue; }
+    }
     if (lot.style === 'house' && cfg.farmChance > 0 &&
         lot.x1 - lot.x0 + 1 >= 7 && lot.z1 - lot.z0 + 1 >= 7 && lifeRng.chance(cfg.farmChance)) {
       const f = farm(world, lot, frontage(plan, lot).side, lifeRng, GROUND, plan);
       if (f) { farms.push(f); continue; }
     }
-    if (lot.style === 'house' && cfg.ranchChance > 0 &&
-        lot.x1 - lot.x0 + 1 >= 7 && lot.z1 - lot.z0 + 1 >= 7 && lifeRng.chance(cfg.ranchChance)) {
-      // each city deals the four kinds out in a shuffled order, so pens vary
-      const rch = ranch(world, lot, frontage(plan, lot).side, lifeRng, GROUND, plan, penOrder[ranches.length % penOrder.length]);
-      if (rch) { ranches.push(rch); continue; }
-    }
+
 
     const m = lot.margin;
     const fx0 = lot.x0 + m, fz0 = lot.z0 + m, fx1 = lot.x1 - m, fz1 = lot.z1 - m;
@@ -478,10 +490,12 @@ function park(world, lot, rng, cfg, lifeRng, pandas) {
     if (grove && pandas) for (const p of grove.pandas) pandas.push(p);
   }
   const inGrove = (x, z) => grove && x >= grove.x0 && x <= grove.x1 && z >= grove.z0 && z <= grove.z1;
+  // a canopy spreads two blocks: keep trees that far from the grove too
+  const nearGrove = (x, z) => grove && x >= grove.x0 - 2 && x <= grove.x1 + 2 && z >= grove.z0 - 2 && z <= grove.z1 + 2;
   if (cfg.trees) {
     for (let z = lot.z0 + 1; z <= lot.z1 - 1; z++) {
       for (let x = lot.x0 + 1; x <= lot.x1 - 1; x++) {
-        if (x === cx || z === cz || inGrove(x, z)) continue;
+        if (x === cx || z === cz || nearGrove(x, z)) continue;
         if (world.get(x, GROUND, z) !== MAT.GRASS || world.has(x, GROUND + 1, z)) continue;
         if (fbm2(x, z, cfg.seed ^ 0x77e2, 4) > 0.72 && rng.chance(0.45)) tree(world, x, z, rng);
       }

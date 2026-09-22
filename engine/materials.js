@@ -119,6 +119,7 @@ Object.assign(MAT, {
   WALL_BODY:    A('WALL_BODY', 'minecraft:stone_bricks', '#7b7b75', {}, { role: 'wall' }),
   WALL_CAP:     A('WALL_CAP', 'minecraft:smooth_stone', '#a8a8a8', {}, { role: 'wallcap' }),
   RETAIN:       A('RETAIN', 'minecraft:stone_bricks', '#7b7b75', {}, { role: 'retain' }),
+  INTERIOR_WALL:A('INTERIOR_WALL', 'minecraft:white_concrete', '#e4e6e6', {}, { role: 'interior' }),
 });
 
 // ---- city-style materials (0.2.7): names and states checked against

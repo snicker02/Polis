@@ -26,7 +26,7 @@ import { decodeTyped } from './nbt-typed.js';
 import { walkCity } from '../engine/terrain.js';
 import { CLOCK_FACE } from '../engine/landmarks.js';
 import { STYLES, remapTable } from '../engine/styles.js';
-import { CAT_COATS } from '../engine/entity-templates.js';
+import { CAT_COATS, SHEEP_COATS } from '../engine/entity-templates.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const deflateRaw = (b) => new Uint8Array(zlib.deflateRawSync(Buffer.from(b)));
@@ -1011,11 +1011,109 @@ section('2j. city styles');
       if (size === 160) summary.push(`${st}: ${cacti ? cacti + ' cacti · ' : ''}${snow ? snow + ' snow · ' : ''}${petals ? petals + ' petals · ' : ''}${r.buildings.length} buildings`);
     }
   }
+  // every style, default settings: at least four pens, one of each farm animal, well stocked
+  {
+    let short = [];
+    for (const st of Object.keys(STYLES)) for (const [size, seed] of [[160, 12345], [128, 3], [224, 4]]) {
+      const r = generateCity({ ...DEFAULTS, size, seed, cityStyle: st });
+      const kinds = new Set(r.ranches.map((x) => x.kind));
+      if (r.ranches.length < 4 || kinds.size < 4 || r.ranches.some((x) => x.animals.length < 4)) short.push(`${st} ${size}/${seed}: ${r.ranches.length} pens`);
+    }
+    check('pens: every city, every style, has at least four pens with all four farm animals', short.length === 0, short.join('; '));
+  }
   // golems scale with the slider
   const g0 = generateCity({ ...DEFAULTS, size: 160, seed: 12345, golemsPer10: 0 }).spawns.filter((p) => p.type === 'golem').length;
   const g5 = generateCity({ ...DEFAULTS, size: 160, seed: 12345, golemsPer10: 5 }).spawns.filter((p) => p.type === 'golem').length;
   check('golems: none at 0 per 10 villagers, more at 5', g0 === 0 && g5 >= 20, `${g0} / ${g5}`);
   note(summary.join('\n   '));
+}
+
+// ===========================================================================
+// 2k. real rooms
+// ===========================================================================
+section('2k. rooms');
+{
+  const name = (w, x, y, z) => { const id = w.get(x, y, z); return id < 0 ? null : MATERIALS.def(id).block; };
+  let buildings = 0, withRooms = 0, rooms = 0, unreached = 0, gaps = 0, badDoor = 0, blocked = 0, nearCore = 0;
+  let noBed = 0, noKitchen = 0, lit = 0, landmarkRooms = 0;
+  const types = {};
+  for (const [size, seed, st] of [[160, 12345, 'modern'], [192, 1, 'medieval'], [224, 3, 'desert'], [128, 2, 'snowy']]) {
+    const r = generateCity({ ...DEFAULTS, size, seed, cityStyle: st });
+    const w = r.world;
+    for (const b of r.buildings) {
+      if (b.landmark) { if (b.roomPlans && b.roomPlans.some(Boolean)) landmarkRooms++; continue; }
+      buildings++;
+      if (!b.roomPlans || !b.roomPlans.some(Boolean)) continue;
+      withRooms++;
+      // walk from the front door, stepping up only onto stairs (no hops)
+      const passable = (x, y, z) => { const id = w.get(x, y, z); return id === -1 || MATERIALS.isPassable(id); };
+      const solid = (x, y, z) => { const id = w.get(x, y, z); return id !== -1 && !MATERIALS.isPassable(id); };
+      const stand = (x, y, z) => solid(x, y - 1, z) && passable(x, y, z) && passable(x, y + 1, z);
+      const r0 = b.rects[0];
+      const inB = (x, z) => x >= r0.x0 - 1 && x <= r0.x1 + 1 && z >= r0.z0 - 1 && z <= r0.z1 + 1;
+      const key = (x, y, z) => x + ',' + y + ',' + z;
+      const seen = new Set([key(...b.outside)]), q = [b.outside];
+      for (let h = 0; h < q.length; h++) {
+        const [x, y, z] = q[h];
+        for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const nx = x + dx, nz = z + dz;
+          if (!inB(nx, nz)) continue;
+          for (const ny of [y + 1, y, y - 1, y - 2, y - 3]) {
+            if (ny === y + 1 && (!passable(x, y + 2, z) || !/_stairs$/.test(name(w, nx, y, nz) || ''))) continue;
+            if (ny < y) { let ok = true; for (let yy = ny + 2; yy <= y + 1; yy++) if (!passable(nx, yy, nz)) ok = false; if (!ok) continue; }
+            if (!stand(nx, ny, nz)) continue;
+            if (!seen.has(key(nx, ny, nz))) { seen.add(key(nx, ny, nz)); q.push([nx, ny, nz]); }
+            break;
+          }
+        }
+      }
+      b.roomPlans.forEach((plan, k) => {
+        if (!plan) return;
+        const sy = b.floorYs[k], top = sy + b.pitch - 1, y = sy + 1;
+        const doorSet = new Set(plan.doors.map((d) => d.x + ',' + d.z));
+        // inside walls run floor to ceiling; every door is two high with wall above it
+        for (const [x, z] of plan.walls) {
+          if (doorSet.has(x + ',' + z)) continue;
+          for (let yy = sy + 1; yy <= top; yy++) if (!solid(x, yy, z)) gaps++;
+          if (b.core && x >= b.core.x0 - 1 && x <= b.core.x1 + 1 && z >= b.core.z0 - 1 && z <= b.core.z1 + 1) nearCore++;
+        }
+        for (const d of plan.doors) {
+          if (!/_door$/.test(name(w, d.x, sy + 1, d.z) || '') || !/_door$/.test(name(w, d.x, sy + 2, d.z) || '')) badDoor++;
+          for (let yy = sy + 3; yy <= top; yy++) if (!solid(d.x, yy, d.z)) badDoor++;
+          // both sides of a door are walkable
+          const onWallAlongX = plan.walls.some(([a, c2]) => c2 === d.z && Math.abs(a - d.x) === 1);
+          const sides = onWallAlongX ? [[d.x, d.z - 1], [d.x, d.z + 1]] : [[d.x - 1, d.z], [d.x + 1, d.z]];
+          for (const [sx, sz] of sides) if (!stand(sx, y, sz)) blocked++;
+        }
+        for (const rm of plan.rooms) {
+          rooms++; types[rm.type] = (types[rm.type] || 0) + 1;
+          let reached = false, bed = false, kit = false, light = false;
+          for (let z = rm.z0; z <= rm.z1; z++) for (let x = rm.x0; x <= rm.x1; x++) {
+            if (seen.has(key(x, y, z))) reached = true;
+            const n = name(w, x, y, z) || '';
+            if (n === 'minecraft:bed') bed = true;
+            if (/crafting_table|furnace|smoker/.test(n)) kit = true;
+            if (name(w, x, top, z) === 'minecraft:sea_lantern' || name(w, x, top, z) === 'minecraft:lantern') light = true;
+          }
+          if (!reached) unreached++;
+          if ((rm.type === 'bedroom' || rm.type === 'studio') && !bed) noBed++;
+          if (rm.type === 'kitchen' && !kit) noKitchen++;
+          if (light) lit++;
+        }
+      });
+    }
+  }
+  check('rooms: most houses, shops, flats and offices are divided into rooms', withRooms >= buildings * 0.6, `${withRooms}/${buildings}`);
+  check('rooms: every room can be walked to from the front door, no hops', rooms > 0 && unreached === 0, `${unreached}/${rooms} unreachable`);
+  check('rooms: inside walls run floor to ceiling', gaps === 0, `${gaps} gaps`);
+  check('rooms: every door is two high with wall above it', badDoor === 0, `${badDoor} bad`);
+  check('rooms: nothing blocks either side of a door', blocked === 0, `${blocked} blocked`);
+  check('rooms: no inside wall in the ring round the stairs', nearCore === 0, `${nearCore}`);
+  check('rooms: every bedroom and studio has a bed', noBed === 0, `${noBed} without`);
+  check('rooms: every kitchen has a crafting table, furnace or smoker', noKitchen === 0, `${noKitchen} without`);
+  check('rooms: every room has a ceiling light', lit === rooms, `${lit}/${rooms}`);
+  check('rooms: landmarks keep their open halls', landmarkRooms === 0);
+  note(`${withRooms}/${buildings} buildings divided · ${rooms} rooms: ` + Object.entries(types).map(([t, n]) => `${n} ${t}`).join(', '));
 }
 
 // ===========================================================================
@@ -1408,8 +1506,8 @@ refreshWalkThrough();
   const wantG = r.spawns.filter((p) => p.type === 'golem').length;
   const wantC = r.spawns.filter((p) => p.type === 'minecart').length;
   check('population: this city has villagers, golems and carts to place', wantV > 0 && wantG > 0 && wantC > 0);
-  check('functions: nobody summons villagers, golems, cats or pandas (they travel in structures)',
-    !/summon minecraft:(villager|iron_golem|cat|panda)/.test(build + popul));
+  check('functions: nothing but minecarts is summoned (every mob travels in structures)',
+    !/summon minecraft:(villager|iron_golem|cat|panda|cow|sheep|pig|chicken)/.test(build + popul));
   check('functions: build summons nothing and loads no mob structures',
     !build.includes('summon') && !lines(build).some((l) => / \S+:m_x/.test(l)));
   const mobLoads = lines(popul).filter((l) => /^structure load \S+:m_x-?\d+_z-?\d+ /.test(l));
@@ -1417,9 +1515,8 @@ refreshWalkThrough();
     `${mobLoads.length} vs ${out.mobStructures.length}`);
   check('populate: one summon per minecart', lines(popul).filter((l) => l.startsWith('summon minecraft:minecart ')).length === wantC);
   const wantA = r.spawns.filter((p) => ['cow', 'sheep', 'pig', 'chicken'].includes(p.type)).length;
-  check('populate: one summon per farm animal', wantA > 0 &&
-    lines(popul).filter((l) => /^summon minecraft:(cow|sheep|pig|chicken) /.test(l)).length === wantA);
-  check('functions: animals fallback present', !!text(`functions/${ns}/animals_centered.mcfunction`));
+  check('populate: farm animals are no longer summoned (they travel in structures)', wantA > 0 &&
+    !lines(popul).some((l) => /^summon minecraft:(cow|sheep|pig|chicken) /.test(l)));
   const adds = lines(build).filter((l) => l.startsWith('tickingarea add '));
   const removes = lines(popul).filter((l) => l.startsWith('tickingarea remove '));
   check('ticking areas: build adds them, populate removes the same ones', adds.length > 0 && adds.length <= 10 &&
@@ -1444,7 +1541,8 @@ refreshWalkThrough();
   // off-centre player position the way the game would, and check each mob
   const typed = {};
   for (const st of out.structures.concat(out.mobStructures)) typed[st.name] = decodeTyped(raw(`structures/${ns}/${st.name}.mcstructure`));
-  let entCount = 0, badEnt = 0, uids = new Set(), dupUid = 0, vCount = 0, gCount = 0, cCount = 0, pCount = 0, blocksInMob = 0;
+  let entCount = 0, badEnt = 0, uids = new Set(), dupUid = 0, vCount = 0, gCount = 0, cCount = 0, pCount = 0, aCount = 0, blocksInMob = 0;
+  const sheepCoats = new Set();
   for (const st of out.mobStructures) {
     const t = typed[st.name].v;
     const l0 = t.structure.v.block_indices.v[0].v;
@@ -1463,6 +1561,15 @@ refreshWalkThrough();
         const coat = CAT_COATS.find((c) => d.includes(c.def));
         if (!coat || coat.variant !== v.Variant.v || v.IsTamed.v !== 0 || v.OwnerNew.v !== -1n || !d.includes('+minecraft:cat_wild')) badEnt++;
       } else if (id === 'minecraft:panda') pCount++;
+      else if (/^minecraft:(cow|pig|chicken|sheep)$/.test(id)) {
+        aCount++;
+        if (v.IsBaby.v !== 0 || v.LeasherID.v !== -1n || !d.some((x) => /_adult$/.test(x))) badEnt++;
+        if (id === 'minecraft:sheep') {
+          const coat = SHEEP_COATS.find((c) => d.includes(c.def));
+          if (!coat || coat.color !== v.Color.v) badEnt++;
+          sheepCoats.add(coat && coat.def);
+        }
+      }
       else badEnt++;
       if (v.Pos.et !== 5 || v.Pos.v.length !== 3 || v.UniqueID.t !== 4) badEnt++;
       const k = v.UniqueID.v.toString(); if (uids.has(k)) dupUid++; uids.add(k);
@@ -1472,8 +1579,9 @@ refreshWalkThrough();
   const wantCat = r.spawns.filter((p) => p.type === 'cat').length, wantPanda = r.spawns.filter((p) => p.type === 'panda').length;
   check('mob structures: exactly the planned cats and pandas', cCount === wantCat && pCount === wantPanda && wantCat > 0,
     `${cCount}/${wantCat} cats, ${pCount}/${wantPanda} pandas`);
-  check('mob structures: villagers fresh unskilled adults; cats wild with a real coat; nobody tied to a village',
+  check('mob structures: villagers fresh unskilled adults; cats wild with a real coat; farm animals adult and unleashed; sheep coats match their colour; nobody tied to a village',
     badEnt === 0, `${badEnt} bad`);
+  check('mob structures: exactly the planned farm animals', aCount === wantA, `${aCount}/${wantA}`);
   check('mob structures: every entity has a unique id', dupUid === 0);
   check('mob structures: contain no blocks at all (never overwrite the city)', blocksInMob === 0, `${blocksInMob} blocks`);
   check('mob structures: palette holds one unused entry, like game-saved structures',
@@ -1511,8 +1619,8 @@ refreshWalkThrough();
         if (!ok) { bad++; if (!first) first = `${e.v.identifier.v} at ${bx},${by},${bz}`; }
       }
     }
-    check(`simulated load from ${player.join(',')}: every villager, golem, cat and panda lands on a floor with room to stand`,
-      bad === 0 && total === wantV + wantG + wantCat + wantPanda, `${bad}/${total} bad, e.g. ${first}`);
+    check(`simulated load from ${player.join(',')}: every mob (villagers, golems, cats, pandas, farm animals) lands on a floor with room to stand`,
+      bad === 0 && total === wantV + wantG + wantCat + wantPanda + wantA, `${bad}/${total} bad, e.g. ${first}`);
   }
 
   // bed colours still land in block_position_data at the right index
@@ -1557,7 +1665,7 @@ section('6e. versions');
 
   // every command in every function is one of the three forms we emit
   const FORMS = [/^structure load [a-z0-9_]+:[a-z0-9_]+ ~-?\d* ~-?\d* ~-?\d*$/,
-    /^summon minecraft:(minecart|cow|sheep|pig|chicken) ~-?\d* ~-?\d* ~-?\d*$/, /^say [^\n]+$/,
+    /^summon minecraft:minecart ~-?\d* ~-?\d* ~-?\d*$/, /^say [^\n]+$/,
     /^tickingarea add ~-?\d* ~-?\d* ~-?\d* ~-?\d* ~-?\d* ~-?\d* [a-z0-9_]+$/, /^tickingarea remove [a-z0-9_]+$/];
   let badCmd = null;
   for (const f of out.functions) for (const l of f.text.split('\n')) {

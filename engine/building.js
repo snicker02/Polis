@@ -111,18 +111,22 @@ export function makeBuilding(world, spec, rng) {
       const [U, V] = coreSize(kind, P);
       for (const alongX of [w >= d, w < d]) {
         const cw = alongX ? U : V, cd = alongX ? V : U;
-        // 1) open floor on every side
+        // Straight flights only need their two ends open, so they sit flush
+        // against the back wall when they can (0.3.0): that leaves one deep
+        // strip at the front for rooms instead of two shallow ones either
+        // side. Spirals need open floor all round, so they go in the middle.
         const fx = fit(top.x0, top.x1, cw, 2), fz = fit(top.z0, top.z1, cd, 2);
-        if (fx && fz) {
-          const cx = centre(fx, top.x0, top.x1, cw), cz = centre(fz, top.z0, top.z1, cd);
-          core = { x0: cx, z0: cz, x1: cx + cw - 1, z1: cz + cd - 1, kind, alongX };
-          break outer;
+        const endFit = kind === 'spiral' ? null : (alongX ? fit(top.x0, top.x1, cw, 2) : fit(top.z0, top.z1, cd, 2));
+        const sideFit = kind === 'spiral' ? null : (alongX ? fit(top.z0, top.z1, cd, 1) : fit(top.x0, top.x1, cw, 1));
+        if (!(endFit && sideFit)) {
+          if (fx && fz) {
+            const cx = centre(fx, top.x0, top.x1, cw), cz = centre(fz, top.z0, top.z1, cd);
+            core = { x0: cx, z0: cz, x1: cx + cw - 1, z1: cz + cd - 1, kind, alongX };
+            break outer;
+          }
+          continue;
         }
-        if (kind === 'spiral') continue;
-        // 2) straight flights only need the two ends open: sit flush on a long side
-        const endFit = alongX ? fit(top.x0, top.x1, cw, 2) : fit(top.z0, top.z1, cd, 2);
-        const sideFit = alongX ? fit(top.z0, top.z1, cd, 1) : fit(top.x0, top.x1, cw, 1);
-        if (endFit && sideFit) {
+        {
           // back wall = away from the street, so the front door never opens onto a flight
           const back = alongX ? (face === 'north' ? sideFit[1] : sideFit[0])
                               : (face === 'west' ? sideFit[1] : sideFit[0]);
@@ -324,7 +328,7 @@ export function makeBuilding(world, spec, rng) {
 
   return {
     x0, z0, x1, z1, w, d, floors, pitch: P, groundY: gy, style,
-    themeName: theme.name, facing: face,
+    themeName: theme.name, theme, facing: face,
     rects: Array.from({ length: floors }, (_, k) => rect(k)),
     floorYs, roofY, topY: hut ? roofY + 4 : roofY + (style === 'house' ? Math.ceil(Math.min(w, d) / 2) + 1 : 2),
     core: core ? { x0: core.x0, z0: core.z0, x1: core.x1, z1: core.z1 } : null,
