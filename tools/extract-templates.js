@@ -39,6 +39,19 @@ for (const e of ents.filter((x) => id(x) === 'minecraft:sheep')) {
   const d = defs(e).find((x) => /^\+minecraft:sheep_(?!adult|baby|sheared|dyeable)/.test(x));
   if (d && !sheepCoats.some((c) => c.def === d)) sheepCoats.push({ def: d, color: e.v.Color.v });
 }
+// professional villagers: one adult per profession, with the whole trade table
+// (every profession's Offers already hold the trades for all five levels)
+const profs = {};
+for (const e of ents.filter((x) => id(x) === 'minecraft:villager_v2' && x.v.Offers && defs(x).includes('+adult'))) {
+  const path = e.v.TradeTablePath && e.v.TradeTablePath.v;
+  if (!path) continue;
+  const name = path.split('/').pop().replace('_trades.json', '');
+  if (!profs[name] || (profs[name].v.TradeTier.v > 0 && e.v.TradeTier.v === 0)) profs[name] = e;
+}
+const tierExp = (() => {
+  const any = Object.values(profs)[0];
+  return any ? any.v.Offers.v.TierExpRequirements.v.map((c) => Object.values(c.v)[0].v) : [0, 10, 70, 150, 250];
+})();
 if (!golem || !villager || !cat || !panda) throw new Error('templates not found');
 if (files.length > 1 && (!cow || !pig || !chicken || !sheep)) throw new Error('farm animal templates not found');
 
@@ -62,6 +75,8 @@ export const PIG = ${pig ? ser(pig) : 'null'};
 export const CHICKEN = ${chicken ? ser(chicken) : 'null'};
 export const SHEEP = ${sheep ? ser(sheep) : 'null'};
 export const SHEEP_COATS = ${JSON.stringify(sheepCoats)};
+export const PROFESSIONS = {${Object.entries(profs).map(([k, e]) => `${JSON.stringify(k)}:${ser(e)}`).join(',')}};
+export const TIER_EXP = ${JSON.stringify(tierExp)};
 export function hydrate(t) {
   if (t.t === 4) return { t: 4, v: BigInt(t.v) };
   if (t.t === 10) { const v = {}; for (const k of Object.keys(t.v)) v[k] = hydrate(t.v[k]); return { t: 10, v }; }
@@ -72,5 +87,6 @@ export function hydrate(t) {
 writeFileSync(new URL('../engine/entity-templates.js', import.meta.url), out);
 console.log('golem', Object.keys(golem.v).length, 'keys · villager', Object.keys(villager.v).length,
   '· cat', Object.keys(cat.v).length, defs(cat).join(' '), '· panda', defs(panda).join(' '), '· coats', JSON.stringify(coats));
+console.log('professions:', Object.keys(profs).join(' '), '· tier experience', JSON.stringify(tierExp));
 console.log('farm:', [cow, pig, chicken, sheep].map((e) => e ? id(e) + ' [' + defs(e).join(' ') + ']' : 'missing').join('\n      '),
   '\nsheep coats', JSON.stringify(sheepCoats));

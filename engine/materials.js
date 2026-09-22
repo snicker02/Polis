@@ -191,6 +191,10 @@ Object.assign(MAT, {
   DOCK:       A('DOCK', 'minecraft:spruce_planks', '#7a5c37', {}, { role: 'dock' }),
 });
 export const STAINED = [MAT.SG_RED, MAT.SG_BLUE, MAT.SG_YELLOW, MAT.SG_PURPLE, MAT.SG_GREEN];
+Object.assign(MAT, {
+  DESK:     A('DESK', 'minecraft:oak_slab', '#a9803f', { 'minecraft:vertical_half': S('top') }),   // a desktop at knee-to-waist height
+  C_BLACK2: A('C_BLACK2', 'minecraft:black_concrete', '#141519'),
+});
 
 export const pinkPetalsId = (facing) => MATERIALS.add(null, 'minecraft:pink_petals', '#f0a8c8',
   { growth: I(3), 'minecraft:cardinal_direction': S(facing) }, { passable: true, flowable: true, transparent: true });

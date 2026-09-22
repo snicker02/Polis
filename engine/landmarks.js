@@ -16,14 +16,14 @@
 // the ornament is new, and none of it sits on a floor a player walks.
 
 import { makeBuilding, OUTWARD } from './building.js';
-import { MAT, WOOLS, pumpkinId, smokerId, stairId, WEIRDO, STAINED } from './materials.js';
-import { USE } from './plan.js';
+import { MAT, WOOLS, pumpkinId, smokerId, stairId, WEIRDO, STAINED, gateId } from './materials.js';
+import { USE, frontage } from './plan.js';
 import { styleOf } from './styles.js';
 
 export const LANDMARKS = ['townhall', 'clocktower', 'library', 'market', 'church', 'school', 'lighthouse', 'castle'];
 const NEED = {                       // [shorter side, longer side] of the lot
   townhall: [13, 15], clocktower: [9, 9], library: [11, 12], market: [12, 12],
-  church: [13, 15], school: [13, 14], lighthouse: [9, 9], castle: [13, 13],
+  church: [13, 15], school: [16, 22], lighthouse: [9, 9], castle: [13, 13],
 };
 
 // Mark the lots, each kind at most once:
@@ -46,7 +46,16 @@ export function chooseLandmarks(plan, cfg, hills = null, canal = null) {
   const downtown = all.filter((c) => c.l.style !== 'house' && c.d <= reach).sort((p, q) => p.d - q.d);
   for (const kind of ['townhall', 'clocktower', 'library', 'market', 'church']) take(kind, downtown);
   const maxD = Math.max(1, ...all.map((c) => c.d));
-  take('school', all.slice().sort((p, q) => Math.abs(p.d - maxD * 0.5) - Math.abs(q.d - maxD * 0.5)));
+  // the school wants a big lot (building, porch, yard and a sports field);
+  // if the city has none, it makes do with a smaller one
+  // prefer a lot that runs deep back from its street: room for a sports field behind
+  const depthOf = (c) => { const side = frontage(plan, c.l).side; return side === 'north' || side === 'south' ? c.l.z1 - c.l.z0 + 1 : c.l.x1 - c.l.x0 + 1; };
+  const halfway = all.slice().sort((p, q) => {
+    const fp = depthOf(p) >= SCHOOL_FIELD_DEPTH ? 0 : 1, fq = depthOf(q) >= SCHOOL_FIELD_DEPTH ? 0 : 1;
+    return fp - fq || Math.abs(p.d - maxD * 0.5) - Math.abs(q.d - maxD * 0.5);
+  });
+  take('school', halfway);
+  if (!out.some((l) => l.landmark === 'school')) { const keep = NEED.school; NEED.school = [13, 14]; take('school', halfway); NEED.school = keep; }
   if (canal) {
     const canalCells = [];
     for (let u = canal.u0; u <= canal.u1; u += 2) canalCells.push(canal.cell(u, canal.ch0));
@@ -359,37 +368,151 @@ function church(world, lot, face, cfg, rng, G) {
 }
 
 // ---- school ------------------------------------------------------------------
-// Classrooms with a lectern at the front, a yard with a flagpole.
+// Set back behind a front yard: a covered porch over the entrance, SCHOOL
+// spelled out on a sign board along the front of the roof, a bell cupola, a
+// flagpole, and (on a big enough lot) a fenced sports field behind. Inside,
+// classrooms with rows of desks facing the lectern (life.js).
+const LETTERS = {
+  S: ['###', '#..', '###', '..#', '###'],
+  C: ['###', '#..', '#..', '#..', '###'],
+  H: ['#.#', '#.#', '###', '#.#', '#.#'],
+  O: ['###', '#.#', '#.#', '#.#', '###'],
+  L: ['#..', '#..', '#..', '#..', '###'],
+};
+export function signLayout(width) {
+  // one line if it fits (3-wide letters, 1 apart: 23 blocks), else two
+  return width >= 23 ? [['SCHOOL']] : [['SCH'], ['OOL']];
+}
+// lot depth (back from the street) that fits yard, building, path and field
+export const SCHOOL_FIELD_DEPTH = 5 + 9 + 1 + 8;
+
 function school(world, lot, face, cfg, rng, G) {
   const LP = styleOf(cfg.cityStyle).landmark;
   pave(world, lot, G, () => LP.libPave);
-  const r = inset(lot, face, 3, 1);
-  const floors = Math.min(r.x1 - r.x0, r.z1 - r.z0) >= 13 ? 3 : 2;
+  const alongFace = face === 'north' || face === 'south';
+  const lotDepth = alongFace ? lot.z1 - lot.z0 + 1 : lot.x1 - lot.x0 + 1;
+  const lotWidth = alongFace ? lot.x1 - lot.x0 + 1 : lot.z1 - lot.z0 + 1;
+  // (d, a): d inward from the street edge, a across, left to right as seen from the street
+  const at = (d, a) => {
+    if (face === 'south') return [lot.x0 + a, lot.z1 - d];
+    if (face === 'north') return [lot.x1 - a, lot.z0 + d];
+    if (face === 'east') return [lot.x1 - d, lot.z1 - a];
+    return [lot.x0 + d, lot.z0 + a];
+  };
+  const rectOf = (d0, d1, a0, a1) => {
+    const [x0, z0] = at(d0, a0), [x1, z1] = at(d1, a1);
+    return { x0: Math.min(x0, x1), x1: Math.max(x0, x1), z0: Math.min(z0, z1), z1: Math.max(z0, z1) };
+  };
+  const front = 5;                                   // yard, flagpole and porch in front
+  const avail = lotDepth - front;
+  // a field (at least 8 deep) behind a building at least 9 deep, with a path between
+  let bDepth, fieldDepth = 0;
+  if (avail >= 9 + 1 + 8) {
+    bDepth = Math.max(9, Math.min(12, avail - 1 - 8));
+    fieldDepth = Math.min(14, avail - bDepth - 1);
+  } else bDepth = Math.min(avail - 1, 14);
+  if (bDepth < 7 || lotWidth < 9) return null;
+  const r = rectOf(front, front + bDepth - 1, 1, lotWidth - 2);
+  const wide = lotWidth - 2;
+  const floors = 3;                                  // a big, easy-to-find building that carries its sign in proportion
   const theme = { name: 'school', wall: LP.schoolWall || MAT.BRICK, trim: LP.schoolTrim || MAT.C_WHITE, floor: LP.libFloor,
     glass: MAT.GLASS, stair: LP.libStair, door: 'oak' };
   const rec = makeBuilding(world, { ...r, floors, pitch: cfg.pitch, groundY: G, style: 'mid', facing: face, theme,
     roofAccess: false, useStairs: cfg.useStairs, stairStyle: 'switchback', lights: cfg.lights, setback: false, setbackEvery: 99 }, rng);
   if (!rec) return null;
-  // flagpole in the yard: five fence posts and a wool flag
-  const [Fx, Fz] = OUTWARD[face], [Rx, Rz] = right(face);
   const [dx, dz] = rec.doorCells[0];
+  // the door's a (across) position
+  let doorA = 0;
+  for (let a = 0; a < lotWidth; a++) { const [x, z] = at(front, a); if (x === dx && z === dz) doorA = a; }
+
+  // covered porch: two columns at the front corners, a roof, a lantern under it
+  const porch = [];
+  for (let d = front - 3; d <= front - 1; d++)
+    for (let a = doorA - 2; a <= doorA + 2; a++) { const [x, z] = at(d, a); world.set(x, G + 4, z, theme.trim); porch.push([x, z]); }
+  for (const a of [doorA - 2, doorA + 2]) {
+    const [x, z] = at(front - 3, a);
+    for (let y = G + 1; y <= G + 3; y++) world.set(x, y, z, LP.hallColumn || MAT.QUARTZ_PILLAR);
+  }
+  { const [x, z] = at(front - 2, doorA); world.set(x, G + 3, z, MAT.LAMP_HANG); }
+
+  // sign board on the front edge of the roof, reading SCHOOL from the street
+  const y0 = rec.roofY;
+  const lines = signLayout(wide);
+  const textW = Math.max(...lines.map(([t]) => t.length * 4 - 1));
+  const side = wide - textW >= 2 ? 1 : 0;            // a border at the sides if there is room
+  const boardW = textW + 2 * side, boardH = lines.length * 6 + 1;
+  const a0 = 1 + Math.floor((wide - boardW) / 2);
+  const sign = { cells: [], letters: lines.map(([t]) => t).join('/'), a0, y0: y0 + 1, w: boardW, h: boardH, d: front };
+  for (let row = 0; row < boardH; row++)
+    for (let col = 0; col < boardW; col++) {
+      const [x, z] = at(front, a0 + col);
+      const y = y0 + boardH - row;                     // row 0 at the top
+      let on = false;
+      const li = Math.floor((row - 1) / 6), lr = (row - 1) % 6;
+      if (row >= 1 && li < lines.length && lr < 5 && col >= side) {
+        const t = lines[li][0], tx = col - side - Math.floor((textW - (t.length * 4 - 1)) / 2);
+        const ci = Math.floor(tx / 4), cx2 = tx % 4;
+        if (tx >= 0 && ci < t.length && cx2 < 3) on = LETTERS[t[ci]][lr][cx2] === '#';
+      }
+      world.set(x, y, z, on ? MAT.C_BLACK2 : MAT.C_WHITE);
+      sign.cells.push([x, y, z, on]);
+    }
+
+  // bell cupola towards the back of the roof
+  const cd = front + bDepth - 3, ca = 1 + Math.floor(wide / 2);
+  for (const [od, oa] of [[-1, -1], [-1, 1], [1, -1], [1, 1]]) {
+    const [x, z] = at(cd + od, ca + oa);
+    for (let y = y0 + 1; y <= y0 + 3; y++) world.set(x, y, z, theme.trim);
+  }
+  for (let od = -1; od <= 1; od++) for (let oa = -1; oa <= 1; oa++) { const [x, z] = at(cd + od, ca + oa); world.set(x, y0 + 4, z, LP.dome); }
+  const [bx, bz] = at(cd, ca);
+  world.set(bx, y0 + 3, bz, MAT.BELL_HANG);
+  world.set(bx, y0 + 5, bz, LP.finial);
+  const cupolaBell = [bx, y0 + 3, bz];
+
+  // flagpole in the front yard, clear of the porch
   let flag = null;
-  for (const k of [-4, 4, -5, 5]) {
-    const px = dx + 2 * Fx + k * Rx, pz = dz + 2 * Fz + k * Rz;
-    if (!inLot(lot, px, pz) || world.has(px, G + 1, pz)) continue;
-    for (let yy = G + 1; yy <= G + 6; yy++) world.set(px, yy, pz, MAT.FENCE);
+  for (const k of [-5, 5, -6, 6]) {
+    const a = doorA + k;
+    if (a < 1 || a > lotWidth - 2) continue;
+    const [px, pz] = at(1, a);
+    if (world.has(px, G + 1, pz)) continue;
+    for (let y = G + 1; y <= G + 6; y++) world.set(px, y, pz, MAT.FENCE);
     const wool = rng.pick(WOOLS);
-    for (let i = 1; i <= 2; i++) for (let yy = G + 5; yy <= G + 6; yy++) {
-      const fx2 = px + i * Rx * Math.sign(k), fz2 = pz + i * Rz * Math.sign(k);
-      if (!world.has(fx2, yy, fz2)) world.set(fx2, yy, fz2, wool);
+    for (let i = 1; i <= 2; i++) for (let y = G + 5; y <= G + 6; y++) {
+      const [fx2, fz2] = at(1, a + i * Math.sign(k));
+      if (!world.has(fx2, y, fz2)) world.set(fx2, y, fz2, wool);
     }
     flag = [px, pz];
     break;
   }
+
+  // sports field behind: fenced, a gate facing the school, white lines, two goals
+  let field = null;
+  if (fieldDepth) {
+    const d0 = front + bDepth + 1, d1 = d0 + fieldDepth - 1, fa0 = 1, fa1 = lotWidth - 2;
+    const midA = Math.floor((fa0 + fa1) / 2), midD = Math.floor((d0 + d1) / 2);
+    for (let d = d0; d <= d1; d++)
+      for (let a = fa0; a <= fa1; a++) {
+        const [x, z] = at(d, a);
+        const edge = d === d0 || d === d1 || a === fa0 || a === fa1;
+        const line = !edge && (d === d0 + 1 || d === d1 - 1 || a === fa0 + 1 || a === fa1 - 1 || a === midA);
+        world.set(x, G, z, line ? MAT.CALCITE : MAT.GRASS);
+        if (edge) world.set(x, G + 1, z, d === d0 && a === midA ? gateId(OPPOSITE_FACE[face]) : MAT.FENCE);
+      }
+    for (const a of [fa0 + 2, fa1 - 2]) {                 // goals: two posts and a crossbar
+      for (const od of [-1, 1]) { const [x, z] = at(midD + od, a); world.set(x, G + 1, z, MAT.FENCE); world.set(x, G + 2, z, MAT.FENCE); }
+      const [x, z] = at(midD, a); world.set(x, G + 2, z, MAT.FENCE);
+    }
+    const [gx, gz] = at(d0, midA);
+    field = { rect: rectOf(d0, d1, fa0, fa1), gate: [gx, gz], goals: [fa0 + 2, fa1 - 2].map((a) => at(midD, a)) };
+  }
+  rec.topY = Math.max(rec.topY, y0 + boardH, y0 + 5);   // the sign and cupola stand above the roof
   rec.useOverride = () => 'classrooms';
   rec.landmark = 'school';
-  return { kind: 'school', rec, lot, flag };
+  return { kind: 'school', rec, lot, flag, porch, sign, cupolaBell, field };
 }
+const OPPOSITE_FACE = { north: 'south', south: 'north', east: 'west', west: 'east' };
 
 // ---- lighthouse ----------------------------------------------------------------
 // A slender tower banded red and white, with a glass lantern room on top.

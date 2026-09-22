@@ -17,7 +17,7 @@ import { makeRng } from './rng.js';
 // Must match main.js VERSION, package.json and index.html data-version;
 // tools/validate.js fails if they drift. The app refuses to export when the
 // browser has mixed cached copies of old and new files.
-export const POLIS_VERSION = '0.3.2';
+export const POLIS_VERSION = '0.3.3';
 
 export const CHUNK = 64;          // Bedrock structure limit per horizontal axis
 export const GROUND_DROP = 2;     // base layer y=0 sits 2 below feet; surface y=1 replaces the block you stand on
@@ -165,7 +165,7 @@ export function mobTiles(spawns, opts = {}) {
 export function buildMobStructures(spawns, opts = {}) {
   const rng = makeRng(((opts.seed | 0) ^ 0x6d0b5) >>> 0);
   return mobTiles(spawns, opts).map((t) => {
-    const entities = t.mobs.map((p) => makeEntity(p.type, p.x, p.y, p.z, rng));
+    const entities = t.mobs.map((p) => makeEntity(p.type, p.x, p.y, p.z, rng, { profession: p.profession, tier: p.tier }));
     const res = writeMcStructure([], [], t.box, MATERIALS, { entities, placeholderId: MAT.AIR });
     return {
       name: t.name, data: res.data, box: t.box, size: res.size, offset: t.offset,

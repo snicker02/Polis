@@ -11,7 +11,7 @@
 // building is furnished it is re-verified with the player flood fill; if any
 // floor became unreachable, the furniture comes back out.
 
-import { MAT, MATERIALS, FLOWERS, CARPETS, CROP_KINDS, cropId, bedId, furnaceId, BED_VEC,
+import { MAT, MATERIALS, FLOWERS, CARPETS, CROP_KINDS, cropId, bedId, furnaceId, BED_VEC, stairId, WEIRDO,
   gateId, chestId, lecternId, smokerId, stonecutterId, loomId, grindstoneId, bambooId } from './materials.js';
 import { verifyBuilding } from './verify.js';
 import { planRooms, buildRooms } from './rooms.js';
@@ -294,6 +294,39 @@ export function furnish(world, rec, rng, opts = {}) {
     return false;
   };
 
+  // Rows of desks and chairs facing the lectern: from the lectern's wall a
+  // front aisle, then desk / chair / aisle, repeating; the end cells of every
+  // row stay clear as side aisles. Chairs are stairs with their backs away
+  // from the lectern; desks are top slabs.
+  const desks = [];
+  const classroomDesks = (rm, sy, free, allDoors) => {
+    const y = sy + 1;
+    let lec = null;
+    for (let z = rm.z0; z <= rm.z1 && !lec; z++) for (let x = rm.x0; x <= rm.x1 && !lec; x++) {
+      const id = world.get(x, y, z);
+      if (id >= 0 && MATERIALS.def(id).block === 'minecraft:lectern') lec = [x, z];
+    }
+    if (!lec) return;
+    // the lectern's wall: which side of the room it stands against
+    const n = lec[1] === rm.z0 ? [0, 1] : lec[1] === rm.z1 ? [0, -1] : lec[0] === rm.x0 ? [1, 0] : [-1, 0];
+    const alongX = n[0] === 0;                          // rows run along x when the lectern is on a north/south wall
+    const depth = alongX ? rm.z1 - rm.z0 + 1 : rm.x1 - rm.x0 + 1;
+    const span = alongX ? [rm.x0 + 1, rm.x1 - 1] : [rm.z0 + 1, rm.z1 - 1];
+    const back = alongX ? (n[1] > 0 ? WEIRDO.south : WEIRDO.north) : (n[0] > 0 ? WEIRDO.east : WEIRDO.west);
+    const wallC = alongX ? (n[1] > 0 ? rm.z0 : rm.z1) : (n[0] > 0 ? rm.x0 : rm.x1);
+    const cellAt = (dist, u) => (alongX ? [u, wallC + n[1] * dist] : [wallC + n[0] * dist, u]);
+    // a front aisle when the room is deep enough; the chair row never on the back wall
+    for (let dist = depth >= 6 ? 2 : 1; dist + 1 <= depth - 2; dist += 3) {
+      for (let u = span[0] + 1; u <= span[1] - 1; u++) {
+        const [dx, dz] = cellAt(dist, u), [cx, cz] = cellAt(dist + 1, u);
+        if (!free(dx, dz) || !free(cx, cz)) continue;
+        if (allDoors.some(([a, b]) => Math.abs(a - dx) + Math.abs(b - dz) <= 2 || Math.abs(a - cx) + Math.abs(b - cz) <= 2)) continue;
+        world.set(dx, y, dz, MAT.DESK); placed.push([dx, y, dz]); desks.push([dx, y, dz]);
+        world.set(cx, y, cz, stairId('oak', back)); placed.push([cx, y, cz]); desks.push([cx, y, cz]);
+      }
+    }
+  };
+
   for (let k = 0; k < rec.floors; k++) {
     const r = rec.rects[k];
     const sy = rec.floorYs[k], y = sy + 1;
@@ -318,6 +351,7 @@ export function furnish(world, rec, rng, opts = {}) {
         const must = rm.type === 'bedroom' || rm.type === 'studio' ? 'bed' : rm.type === 'kitchen' ? 'craft'
           : rm.type === 'classroom' ? 'lectern' : null;
         if (must && !place(ring, [must], free, sy, k, true) && must === 'bed') rm.type = 'living';   // too cramped for a bed: a sitting room
+        if (rm.type === 'classroom') classroomDesks(rm, sy, free, allDoors);
         place(ring, ROOMS[rm.type] || ROOMS.office, free, sy, k);
       }
     } else {
@@ -352,8 +386,17 @@ export function furnish(world, rec, rng, opts = {}) {
   }
 
   // re-verify: rooms and furniture must never cost a floor, or a room
-  const v = verifyBuilding(world, rec);
-  const roomsOk = !plans.length || roomsReachable(world, rec, plans);
+  let v = verifyBuilding(world, rec);
+  let roomsOk = !plans.length || roomsReachable(world, rec, plans);
+  if ((!v.ok || !roomsOk) && desks.length) {
+    // desks first: take them out and look again before giving up on the rooms
+    for (const [x, y, z] of desks) world.clear(x, y, z);
+    const gone = new Set(desks.map((c) => c.join()));
+    for (let i = placed.length - 1; i >= 0; i--) if (gone.has(placed[i].join())) placed.splice(i, 1);
+    desks.length = 0;
+    v = verifyBuilding(world, rec);
+    roomsOk = !plans.length || roomsReachable(world, rec, plans);
+  }
   if (!v.ok || !roomsOk) {
     for (const [x, y, z] of placed.reverse()) world.clear(x, y, z);
     if (useRooms && plans.some(Boolean)) return furnish(world, rec, rng, { ...opts, rooms: false });   // open plan instead
@@ -362,7 +405,7 @@ export function furnish(world, rec, rng, opts = {}) {
   const rooms = [];
   plans.forEach((p, k) => { if (p) for (const rm of p.rooms) rooms.push({ ...rm, floor: k }); });
   rec.roomPlans = plans;
-  return { ok: true, beds, placed: placed.length, stations, plants, shelves, rooms };
+  return { ok: true, beds, placed: placed.length, stations, plants, shelves, rooms, desks: desks.length / 2 };
 }
 
 // Walk from the front door (up only onto stairs, down up to three, through

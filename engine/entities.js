@@ -11,7 +11,7 @@
 // adult ("unskilled"), with no village, trades or inventory, so it claims a
 // bed and takes a job from whatever workstation it finds.
 
-import { GOLEM, VILLAGER, CAT, PANDA, CAT_COATS, COW, PIG, CHICKEN, SHEEP, SHEEP_COATS, hydrate } from './entity-templates.js';
+import { GOLEM, VILLAGER, CAT, PANDA, CAT_COATS, COW, PIG, CHICKEN, SHEEP, SHEEP_COATS, PROFESSIONS, TIER_EXP, hydrate } from './entity-templates.js';
 import { N } from './blockcore.js';
 
 let uidSeq = 0;
@@ -28,8 +28,13 @@ const floatList = (xs) => ({ t: 9, et: 5, keepEt: true, v: xs.map((x) => ({ t: 5
 export const STRUCTURE_MOBS = new Set(['villager', 'golem', 'cat', 'panda', 'cow', 'pig', 'chicken', 'sheep']);
 const TEMPLATE = { villager: VILLAGER, golem: GOLEM, cat: CAT, panda: PANDA, cow: COW, pig: PIG, chicken: CHICKEN, sheep: SHEEP };
 
-export function makeEntity(kind, x, y, z, rng) {
-  const e = hydrate(TEMPLATE[kind]);
+// The professions a villager can start with, and the level names for 0..4.
+export const PROFESSION_NAMES = Object.keys(PROFESSIONS);
+export const LEVELS = ['novice', 'apprentice', 'journeyman', 'expert', 'master'];
+
+export function makeEntity(kind, x, y, z, rng, opts = {}) {
+  const pro = kind === 'villager' && opts.profession && PROFESSIONS[opts.profession];
+  const e = hydrate(pro || TEMPLATE[kind]);
   const v = e.v;
   delete v.DwellingUniqueID;                        // never tied to the village it was copied from
   v.Pos = floatList([x + 0.5, y, z + 0.5]);
@@ -56,7 +61,24 @@ export function makeEntity(kind, x, y, z, rng) {
     };
     v.Color = { t: v.Color.t, v: coat.color };
   }
-  if (kind === 'villager') {
+  if (kind === 'villager' && pro) {
+    // A real profession at a real level. The trade table already holds every
+    // level's trades; the level just unlocks them. Experience sits inside the
+    // level's band (novices get a little, so they keep their job for good).
+    const tier = Math.max(0, Math.min(4, opts.tier | 0));
+    const lo = TIER_EXP[tier], hi = tier < 4 ? TIER_EXP[tier + 1] - 1 : TIER_EXP[4] + 60;
+    const exp = Math.max(tier === 0 ? 1 : lo, lo + Math.floor(rng() * (hi - lo + 1)));
+    v.TradeTier = { t: v.TradeTier.t, v: tier };
+    v.TradeExperience = { t: v.TradeExperience.t, v: exp };
+    const skin = Math.floor(rng() * 6);
+    v.definitions = {
+      t: 9, et: 8, keepEt: true,
+      v: v.definitions.v.filter((d) => d.v !== '+unskilled' && !/_villager$/.test(d.v))
+        .map((d) => (/^\+villager_skin_\d$/.test(d.v) ? { t: 8, v: `+villager_skin_${skin}` } : d)),
+    };
+    v.SkinID = { t: 3, v: skin };
+    v.RewardPlayersOnFirstFounding = { t: 1, v: 0 };
+  } else if (kind === 'villager') {
     const skin = Math.floor(rng() * 6);
     v.definitions = {
       t: 9, et: 8, keepEt: true,

@@ -1,4 +1,4 @@
-# Polis v0.3.2
+# Polis v0.3.3
 
 A procedural city generator that exports to **Minecraft Bedrock**. Plans a
 street grid, subdivides it into lots, raises buildings with real interiors —
@@ -194,6 +194,14 @@ earlier ones, plus chests and table lanterns, so all thirteen professions have
 somewhere to work. Farms get potatoes as a fourth crop and hay bales; parks
 get lantern posts at the path crossing.
 
+**Villagers at every level.** About 70% of villagers start with a trade —
+armorer, butcher, cartographer, cleric, farmer, fletcher, leatherworker, mason
+or toolsmith — at a level from novice to master (roughly 30/25/20/15/10%);
+the rest are unemployed and take jobs from the workstations. The templates come
+from villagers saved in game: every profession's trade table already holds all
+five levels' trades, and `TradeTier` / `TradeExperience` unlock them (novices
+get a few points so they keep their job even away from a workstation).
+
 **Villagers and golems.** The populate function places villagers next to beds
 (**Villagers** slider caps the number) and iron golems — **Golems per 10
 villagers** sets how many (default 3, up to 10 for a well-guarded city).
@@ -271,8 +279,13 @@ water and the castle on the highest hill (the **Landmarks** checkbox turns them 
   floor, lantern posts flanking the entrance.
 - **Church** — a tall nave with stained-glass windows, pews facing the
   altar, and a bell tower rising over the entrance to a spire with a gold top.
-- **School** — classrooms (each with a lectern at the front) and a flagpole in
-  the yard.
+- **School** — three storeys, set back behind a front yard: a covered porch
+  over the entrance, SCHOOL spelled out in black letters on a white board along
+  the front of the roof (one line on a wide building, SCH / OOL on a narrow
+  one), a bell cupola, a flagpole, and — on a lot deep enough — a fenced sports
+  field behind with a gate, white lines and two goals. Inside, classrooms with
+  a lectern and rows of desks and chairs facing it, aisles left clear. It
+  prefers a big lot that runs deep from its street.
 - **Lighthouse** — a slender tower banded red and white with a glass lantern
   room and a light at the top, beside the canal (or out at the edge).
 - **Castle** — a stone keep on the highest hill: crenellated roof and four
@@ -466,6 +479,16 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.3.3** — Villagers at every level: most start with a trade, from novice
+to master, using the trade tables of villagers saved in game. The school is a
+proper landmark: three storeys on a bigger lot, covered porch, SCHOOL sign on
+the roof, bell cupola, flagpole, fenced sports field with goals where the lot
+allows, and classrooms with rows of desks and chairs facing the lectern (desks
+are removed before a room would ever be given up). Landmark heights now include
+what stands on their roofs. The validator adds the school's porch, sign (read
+back letter by letter), cupola, field and desk rows, and villager levels and
+experience.
 
 **0.3.2** — Canal with bridges, embankments, railings, a dock and boats;
 four new landmarks (church, school, lighthouse, castle on the highest hill);

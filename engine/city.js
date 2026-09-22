@@ -12,6 +12,7 @@ import { planCanal, buildCanal, USE_CANAL } from './water.js';
 import { chooseLandmarks, buildLandmark } from './landmarks.js';
 import { planHills, liftBlocks, cutStairs, shiftBuilding, walkCity } from './terrain.js';
 import { styleOf, remapTable } from './styles.js';
+import { PROFESSION_NAMES } from './entities.js';
 import { FLOWERS } from './materials.js';
 
 export const DEFAULTS = {
@@ -52,6 +53,7 @@ export const DEFAULTS = {
   furnish: true,
   flowers: true,
   villagers: 60,
+  professionals: 0.7,        // share of villagers that start with a trade (at mixed levels)
   golemsPer10: 3,            // iron golems per 10 villagers
   golemMax: 60,
   lights: true,
@@ -257,7 +259,8 @@ export function generateCity(cfgIn, onProgress) {
       if (L.bell) L.bell[1] += elevAt(L.bell[0], L.bell[2]);
       if (L.belfryBell) L.belfryBell[1] += elevAt(L.belfryBell[0], L.belfryBell[2]);
       if (L.faces) for (const f of L.faces) f.centre[1] += elevAt(f.centre[0], f.centre[2]);
-      for (const key of ['spireTop', 'lantern']) if (L[key]) L[key][1] += elevAt(L[key][0], L[key][2]);
+      for (const key of ['spireTop', 'lantern', 'cupolaBell']) if (L[key]) L[key][1] += elevAt(L[key][0], L[key][2]);
+      if (L.sign) { const e = elevAt(L.sign.cells[0][0], L.sign.cells[0][2]); for (const c of L.sign.cells) c[1] += e; L.sign.y0 += e; }
     }
     if (transit) for (const l of transit.lines) {
       const e = elevAt(l.cells[0][0], l.cells[0][2]);       // alley lines ride up with their block
@@ -282,6 +285,16 @@ export function generateCity(cfgIn, onProgress) {
     const vs = bedSpawns(world, beds);
     lifeRng.shuffle(vs);
     spawns = vs.slice(0, cfg.villagers);
+    // most villagers already have a trade, at every level from novice to
+    // master; the rest are unemployed and take jobs from the workstations
+    const LEVEL_WEIGHTS = [0.3, 0.25, 0.2, 0.15, 0.1];
+    for (const p of spawns) {
+      if (!lifeRng.chance(cfg.professionals)) continue;
+      p.profession = lifeRng.pick(PROFESSION_NAMES);
+      let r = lifeRng(), t = 0;
+      while (t < 4 && r > LEVEL_WEIGHTS[t]) { r -= LEVEL_WEIGHTS[t]; t++; }
+      p.tier = t;
+    }
     const golems = Math.min(cfg.golemMax, Math.round(spawns.length * Math.max(0, cfg.golemsPer10) / 10));
     spawns = spawns.concat(golemSpawns(world, plan, buildings, golems, lifeRng, GROUND, elevAt));
     if (cfg.cats) spawns = spawns.concat(catSpawns(world, plan, buildings, Math.min(16, Math.ceil(spawns.length / 5)), lifeRng, GROUND, elevAt));
@@ -623,6 +636,7 @@ function summarise(world, plan, buildings, cfg, life = {}) {
     farms: (life.farms || []).length,
     beds: (life.beds || []).length,
     villagers: (life.spawns || []).filter((p) => p.type === 'villager').length,
+    levels: [0, 1, 2, 3, 4].map((t) => (life.spawns || []).filter((p) => p.type === 'villager' && p.tier === t).length),
     golems: (life.spawns || []).filter((p) => p.type === 'golem').length,
     stations: buildings.reduce((a, b) => a + ((b.furniture && b.furniture.stations) || 0), 0),
     plants: buildings.reduce((a, b) => a + ((b.furniture && b.furniture.plants) || 0), 0),

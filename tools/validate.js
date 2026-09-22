@@ -24,7 +24,7 @@ import { buildMesh, MAX_QUADS, STRIDE } from '../engine/mesher.js';
 import { decodeNbt, readZip, localPayload } from './nbt-read.js';
 import { decodeTyped } from './nbt-typed.js';
 import { walkCity } from '../engine/terrain.js';
-import { CLOCK_FACE } from '../engine/landmarks.js';
+import { CLOCK_FACE, signLayout } from '../engine/landmarks.js';
 import { STYLES, remapTable } from '../engine/styles.js';
 import { CAT_COATS, SHEEP_COATS } from '../engine/entity-templates.js';
 
@@ -1148,6 +1148,10 @@ section('2l. canal, art, new landmarks');
   let canals = 0, badOpen = 0, badBridge = 0, nearWall = 0, bridges = 0, rails = 0, docks = 0, dockUnreached = 0, badDock = 0;
   let panels = 0, badPanel = 0, complete = 0, cities = 0;
   let pews = 0, spires = 0, bells = 0, classrooms = 0, lecterns = 0, bands = 0, lanterns = 0, lhFar = 0, castles = 0, notHighest = 0, merlons = 0, turrets = 0;
+  let schools = 0, porchBad = 0, signs = 0, signBad = 0, cupolas = 0, fields = 0, fieldBad = 0, desksN = 0, chairBad = 0;
+  const LET = { S: ['###', '#..', '###', '..#', '###'], C: ['###', '#..', '#..', '#..', '###'], H: ['#.#', '#.#', '###', '#.#', '#.#'],
+    O: ['###', '#.#', '#.#', '#.#', '###'], L: ['#..', '#..', '#..', '#..', '###'] };
+  const WDIR = [[1, 0], [-1, 0], [0, 1], [0, -1]];          // weirdo_direction 0..3: east, west, south, north
   for (const [size, seed, st, transit] of [[160, 12345, 'modern', 'roads'], [192, 1, 'medieval', 'rails'], [224, 3, 'desert', 'trams'], [256, 5, 'cherry', 'roads'], [128, 2, 'snowy', 'rails']]) {
     const r = generateCity({ ...DEFAULTS, size, seed, cityStyle: st, transit });
     const w = r.world, { W, D, use } = r.plan, G = 1;
@@ -1207,6 +1211,56 @@ section('2l. canal, art, new landmarks');
         if (name(w, ...L.spireTop) === 'minecraft:gold_block') spires++;
         if (name(w, ...L.belfryBell) === 'minecraft:bell') bells++;
       } else if (L.kind === 'school') {
+        schools++;
+        const g = r.groundAt(L.porch[0][0], L.porch[0][1]);
+        for (const [x, z] of L.porch) if (!w.has(x, g + 4, z)) porchBad++;
+        // the sign: read it back cell by cell against the letter shapes
+        const sg = L.sign;
+        const lines = sg.letters.split('/');
+        const textW = Math.max(...lines.map((t) => t.length * 4 - 1));
+        const side = (sg.w - textW) / 2;
+        let bad = 0;
+        for (const [x, y, z, on] of sg.cells) {
+          const n = name(w, x, y, z);
+          if (n !== (on ? 'minecraft:black_concrete' : 'minecraft:white_concrete')) bad++;
+        }
+        // and that the "on" cells really form the letters
+        const onSet = new Set(sg.cells.filter((c) => c[3]).map((c) => c[0] + ',' + c[1] + ',' + c[2]));
+        let expectOn = 0;
+        lines.forEach((t) => { for (const ch of t) for (const row of LET[ch]) for (const c of row) if (c === '#') expectOn++; });
+        if (onSet.size !== expectOn) bad++;
+        if (sg.letters.replace('/', '') !== 'SCHOOL') bad++;
+        signBad += bad; signs++;
+        if (name(w, ...L.cupolaBell) === 'minecraft:bell' && w.has(L.cupolaBell[0], L.cupolaBell[1] + 1, L.cupolaBell[2])) cupolas++;
+        if (L.field) {
+          fields++;
+          const f = L.field.rect, gy = r.groundAt(f.x0, f.z0);
+          let gates = 0;
+          for (let z = f.z0; z <= f.z1; z++) for (let x = f.x0; x <= f.x1; x++) {
+            if (!(x === f.x0 || x === f.x1 || z === f.z0 || z === f.z1)) continue;
+            const n = name(w, x, gy + 1, z);
+            if (n === 'minecraft:fence_gate') gates++; else if (n !== 'minecraft:oak_fence') fieldBad++;
+          }
+          if (gates !== 1) fieldBad++;
+          for (const [x, z] of L.field.goals) if (name(w, x, gy + 2, z) !== 'minecraft:oak_fence') fieldBad++;
+          const walked = walkCity(w, r.plan, 1, r.hills.H + 4, true);
+          const [gx, gz] = L.field.gate;
+          if (![[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dz]) => walked.has(`${gx + dx},${gy + 1},${gz + dz}`) &&
+              !(gx + dx >= f.x0 && gx + dx <= f.x1 && gz + dz >= f.z0 && gz + dz <= f.z1))) fieldBad++;
+        }
+        // chairs: every oak stair in a classroom has a desk in front of it, on the lectern's side
+        L.rec.roomPlans.forEach((plan, k) => {
+          if (!plan) return;
+          const y = L.rec.floorYs[k] + 1;
+          for (const rm of plan.rooms) if (rm.type === 'classroom')
+            for (let z = rm.z0; z <= rm.z1; z++) for (let x = rm.x0; x <= rm.x1; x++) {
+              const id = w.get(x, y, z);
+              if (id < 0 || MATERIALS.def(id).block !== 'minecraft:oak_stairs') continue;
+              desksN++;
+              const [bx, bz] = WDIR[MATERIALS.def(id).states.weirdo_direction.value];   // the chair back points this way
+              if (name(w, x - bx, y, z - bz) !== 'minecraft:oak_slab') chairBad++;          // the desk is in front
+            }
+        });
         for (const plan of L.rec.roomPlans || []) if (plan) for (const rm of plan.rooms) if (rm.type === 'classroom') {
           classrooms++;
           const y = L.rec.floorYs[L.rec.roomPlans.indexOf(plan)] + 1;
@@ -1248,6 +1302,11 @@ section('2l. canal, art, new landmarks');
   check('landmarks: all eight in every test city', complete === cities, `${complete}/${cities}`);
   check('church: pews, a gold-topped spire and a bell in the tower', pews > 0 && spires === cities && bells === cities, `${pews} pews, ${spires} spires, ${bells} bells`);
   check('school: classrooms, each with a lectern', classrooms > 0 && lecterns === classrooms, `${lecterns}/${classrooms}`);
+  check('school: a covered porch (two columns and a roof) over the entrance', porchBad === 0 && schools === cities, `${porchBad} problems`);
+  check('school: the sign on the roof spells SCHOOL, black letters on a white board', signBad === 0 && signs === cities, `${signBad} wrong cells, ${signs} signs`);
+  check('school: a bell hung in a cupola on the roof', cupolas === cities, `${cupolas}/${cities}`);
+  check('school: where there is room, a fenced sports field with a gate and two goals, reached from the street', fields > 0 && fieldBad === 0, `${fields} fields, ${fieldBad} problems`);
+  check('school: desks and chairs in rows, every chair behind a desk and facing the lectern', desksN > 0 && chairBad === 0, `${desksN} chairs, ${chairBad} facing wrong`);
   check('lighthouse: red bands, a glass lantern room with a light, beside the canal', bands === cities && lanterns === cities && lhFar === 0, `${bands} banded, ${lanterns} lit, ${lhFar} far from the water`);
   check('castle: on the highest hill, crenellated, four turrets', castles === cities && notHighest === 0 && merlons > 0 && turrets === castles * 4, `${notHighest} not on the highest hill`);
   note(`${canals} canals · ${bridges} bridges · ${docks} docks · ${panels} art panels · ${pews} pews · ${classrooms} classrooms`);
@@ -1680,6 +1739,7 @@ refreshWalkThrough();
   for (const st of out.structures.concat(out.mobStructures)) typed[st.name] = decodeTyped(raw(`structures/${ns}/${st.name}.mcstructure`));
   let entCount = 0, badEnt = 0, uids = new Set(), dupUid = 0, vCount = 0, gCount = 0, cCount = 0, pCount = 0, aCount = 0, blocksInMob = 0;
   const sheepCoats = new Set();
+  const tiersSeen = new Set(); let unskilledN = 0, tierBad = 0;
   for (const st of out.mobStructures) {
     const t = typed[st.name].v;
     const l0 = t.structure.v.block_indices.v[0].v;
@@ -1691,7 +1751,14 @@ refreshWalkThrough();
       if ('DwellingUniqueID' in v) badEnt++;                     // never tied to the village it was copied from
       if (id === 'minecraft:villager_v2') {
         vCount++;
-        if (!d.includes('+unskilled') || !d.includes('+adult') || d.includes('+nitwit') || 'Offers' in v) badEnt++;
+        if (!d.includes('+adult') || d.includes('+nitwit')) badEnt++;
+        if (d.includes('+unskilled')) { unskilledN++; if ('Offers' in v) badEnt++; }
+        else {
+          const tier = v.TradeTier.v, exp = v.TradeExperience.v, TE = [0, 10, 70, 150, 250];
+          tiersSeen.add(tier);
+          if (tier < 0 || tier > 4 || exp < TE[tier] || (tier < 4 && exp >= TE[tier + 1]) || (tier === 0 && exp < 1)) tierBad++;
+          if (!v.Offers || v.Offers.v.Recipes.v.length < 5) tierBad++;
+        }
       } else if (id === 'minecraft:iron_golem') gCount++;
       else if (id === 'minecraft:cat') {
         cCount++;
@@ -1716,9 +1783,12 @@ refreshWalkThrough();
   const wantCat = r.spawns.filter((p) => p.type === 'cat').length, wantPanda = r.spawns.filter((p) => p.type === 'panda').length;
   check('mob structures: exactly the planned cats and pandas', cCount === wantCat && pCount === wantPanda && wantCat > 0,
     `${cCount}/${wantCat} cats, ${pCount}/${wantPanda} pandas`);
-  check('mob structures: villagers fresh unskilled adults; cats wild with a real coat; farm animals adult and unleashed; sheep coats match their colour; nobody tied to a village',
+  check('mob structures: villagers adults (unemployed or with a trade); cats wild with a real coat; farm animals adult and unleashed; sheep coats match their colour; nobody tied to a village',
     badEnt === 0, `${badEnt} bad`);
   check('mob structures: exactly the planned farm animals', aCount === wantA, `${aCount}/${wantA}`);
+  check('villagers: every level from novice to master among them, and some still unemployed', tiersSeen.size === 5 && unskilledN > 0,
+    `levels ${[...tiersSeen].sort().join(',')}, ${unskilledN} unemployed`);
+  check('villagers: each one\'s experience sits inside its level, with its whole trade table', tierBad === 0, `${tierBad} wrong`);
   check('mob structures: every entity has a unique id', dupUid === 0);
   check('mob structures: contain no blocks at all (never overwrite the city)', blocksInMob === 0, `${blocksInMob} blocks`);
   check('mob structures: palette holds one unused entry, like game-saved structures',
