@@ -8,7 +8,7 @@ import { Renderer } from './engine/renderer.js';
 import { exportPack, exportStructuresZip, tileList, commandList, cityId, exportSalt, POLIS_VERSION } from './engine/export.js';
 import { THEMES } from './engine/materials.js';
 
-const VERSION = '0.4.0';
+const VERSION = '0.5.0';
 const $ = (id) => document.getElementById(id);
 
 const SLIDERS = {
@@ -17,7 +17,7 @@ const SLIDERS = {
   maxFloors: 0, pitch: 0, setbackEvery: 0, bw: 0, bd: 0, floors: 0, clip: 0,
   farmChance: 2, pondChance: 2, villagers: 0, wallHeight: 0, foundation: 0, clearAbove: 0, hills: 0, golemsPer10: 0,
 };
-const CHECKS = ['setback', 'roofAccess', 'useStairs', 'lights', 'lamps', 'trees', 'markings', 'landmarks', 'canal', 'detail', 'streetSigns'];
+const CHECKS = ['setback', 'roofAccess', 'useStairs', 'lights', 'lamps', 'trees', 'markings', 'landmarks', 'canal', 'harbour', 'detail', 'streetSigns'];
 
 let renderer = null;
 let result = null;       // { world, plan, buildings, cfg, stats }
@@ -222,6 +222,7 @@ const MAP_COL = {
   6: '#8a7a2a',              // farm
   7: '#6d8a3a',              // animal pen
   8: '#2f6fb3',              // canal
+  9: '#6b6259',              // goods yard
 };
 
 function drawMap() {
@@ -311,8 +312,9 @@ function showStats(mesh, times) {
         school: 'school', lighthouse: 'lighthouse', castle: 'castle' }[k])).join(' · '));
     if (s.streets) line('streets named', s.streets);
     if (s.shops) line('shopfronts', String(s.shops));
-    if (s.centre) line('centre marker', s.centre);
+    if (s.centre) line('centre monument', s.centre);
     if (s.canal) line('canal', s.canal + (s.dock ? ' · dock' : ''));
+    if (s.harbour) line('harbour', s.harbour);
     if (s.art) line('art panels', String(s.art));
     if (s.ranches !== undefined) line('pens / farm animals', `${s.ranches} / ${s.animals}`);
     if (s.cats !== undefined) line('cats / pandas', `${s.cats} / ${s.pandas}`);

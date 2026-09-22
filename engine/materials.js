@@ -208,6 +208,15 @@ export const WALL_SIGN_FACING = { north: 2, south: 3, west: 4, east: 5 };
 export const wallSignId = (facing) => MATERIALS.add(null, 'minecraft:wall_sign', '#a2824e',
   { facing_direction: I(WALL_SIGN_FACING[facing]) }, { passable: true, transparent: true });
 
+Object.assign(MAT, {
+  DIAMOND: A('DIAMOND', 'minecraft:diamond_block', '#4fe0d8'),
+  BEACON:  A('BEACON', 'minecraft:beacon', '#8ff0e8', {}, { transparent: true }),
+});
+
+Object.assign(MAT, {
+  CHAIN: A('CHAIN', 'minecraft:chain', '#4a4a50', { pillar_axis: S('y') }, { passable: true, transparent: true }),
+});
+
 export const pinkPetalsId = (facing) => MATERIALS.add(null, 'minecraft:pink_petals', '#f0a8c8',
   { growth: I(3), 'minecraft:cardinal_direction': S(facing) }, { passable: true, flowable: true, transparent: true });
 

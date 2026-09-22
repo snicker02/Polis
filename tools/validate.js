@@ -14,7 +14,7 @@ import zlib from 'node:zlib';
 
 import { generateCity, generateSingle, DEFAULTS } from '../engine/city.js';
 import { USE } from '../engine/plan.js';
-import { verifyAll } from '../engine/verify.js';
+import { verifyAll, verifyBuilding } from '../engine/verify.js';
 import { MATERIALS, THEMES, DOOR_KINDS, doorId, MAT, BED_VEC, stairId, cropId, CROP_KINDS, bedId, furnaceId, railId, poweredRailId,
   gateId, chestId, lecternId, smokerId, stonecutterId, pumpkinId, loomId, grindstoneId, bambooId, FLOWERS } from '../engine/materials.js';
 import { BLOCK_VERSION } from '../engine/blockcore.js';
@@ -514,7 +514,8 @@ section('2d. railways');
       if (below === -1 || MATERIALS.def(below).flowable || MATERIALS.isPassable(below)) noSupport++;
       if (d.block === 'minecraft:golden_rail' && (below === -1 || MATERIALS.def(below).block !== 'minecraft:redstone_block')) unpowered++;
       if (blocking(w, x, y + 1, z) || blocking(w, x, y + 2, z)) lowRoof++;
-      if (r.plan.use[z * r.plan.W + x] !== USE.ROAD) offRoad++;
+      const u2 = r.plan.use[z * r.plan.W + x];
+      if (u2 !== USE.ROAD && u2 !== 9 /* the harbour's goods yard */) offRoad++;
       const links = [];
       for (const [dx, dz, h] of ENDS[dir = dirOf(w, x, y, z)]) {
         const endY = y + h;
@@ -578,7 +579,7 @@ section('2d. railways');
     check(`${tag}: every rail sits on a solid block`, noSupport === 0, `${noSupport}`);
     check(`${tag}: every powered rail sits on a redstone block`, unpowered === 0, `${unpowered}`);
     check(`${tag}: 2 clear blocks above every rail (cart + rider)`, lowRoof === 0, `${lowRoof}`);
-    check(`${tag}: rails only on former road cells`, offRoad === 0, `${offRoad}`);
+    check(`${tag}: rails only on road cells or the goods yard`, offRoad === 0, `${offRoad}`);
     check(`${tag}: every rail joins its neighbours end to end`, badLink === 0, `${badLink}`);
     check(`${tag}: no rail touches another from the side`, sideTouch === 0, `${sideTouch}`);
     check(`${tag}: every open end of track has a buffer block`, noBuffer === 0, `${noBuffer}`);
@@ -1346,42 +1347,60 @@ section('2m. signs in the export');
 // ===========================================================================
 // 2n. the centre marker
 // ===========================================================================
-section('2n. centre marker');
+section('2n. centre monument');
 {
   const name = (w, x, y, z) => { const id = w.get(x, y, z); return id < 0 ? null : MATERIALS.def(id).block; };
-  let cities = 0, marked = 0, bad = 0, landedWrong = 0, maxDrift = 0;
+  let cities = 0, marked = 0, bad = 0, landedWrong = 0, maxDrift = 0, beams = 0;
   for (const [size, seed, transit] of [[160, 12345, 'roads'], [192, 1, 'rails'], [224, 3, 'trams'], [128, 2, 'rails'], [96, 4, 'roads']]) {
     const r = generateCity({ ...DEFAULTS, size, seed, transit });
     const w = r.world;
     cities++;
     if (!r.centre) continue;
     marked++;
-    const [mx, my, mz] = r.centre.block;
-    maxDrift = Math.max(maxDrift, r.centre.drift);
-    if (name(w, mx, my, mz) !== 'minecraft:gold_block') bad++;
-    for (let k = 1; k <= 3; k++) if (w.has(mx, my + k, mz)) bad++;               // room to stand
-    const [sx, sy, sz] = r.centre.sign;
-    const sd = w.getData(sx, sy, sz);
-    if (name(w, sx, sy, sz) !== 'minecraft:standing_sign' || !sd || !/city centre/.test(sd.tags.FrontText.v.Text.v)) bad++;
-    if (Math.abs(sx - mx) + Math.abs(sz - mz) !== 1) bad++;                      // right beside it
-    // the sign faces the marker, so it reads from the gold block
-    const FACE = { 0: [0, 1], 4: [-1, 0], 8: [0, -1], 12: [1, 0] };              // sign direction -> way it faces
-    const f = FACE[MATERIALS.def(w.get(sx, sy, sz)).states.ground_sign_direction.value];
-    if (sx + f[0] !== mx || sz + f[1] !== mz) bad++;
-    // build_centered must drop the marker right under the player's feet
+    const c = r.centre;
+    maxDrift = Math.max(maxDrift, c.drift);
+    // you can stand in the alcove, on solid ground
+    const [sx, sy, sz] = c.stand;
+    if (w.has(sx, sy, sz) || w.has(sx, sy + 1, sz) || !w.has(sx, sy - 1, sz)) bad++;
+    // three beacons, each with its block entity, and open sky above them
+    if (c.beacons.length !== 3) bad++;
+    for (const [bx, by, bz] of c.beacons) {
+      if (name(w, bx, by, bz) !== 'minecraft:beacon') bad++;
+      const d = w.getData(bx, by, bz);
+      if (!d || d.id !== 'Beacon') bad++;
+      let clear = true;
+      for (let y = by + 1; y <= by + 10; y++) if (w.has(bx, y, bz)) clear = false;
+      if (clear) beams++;
+    }
+    // the sign above the entrance, facing out of it, with the right words
+    const [gx, gy, gz] = c.sign;
+    const sd = w.getData(gx, gy, gz);
+    const FACE = { 2: [0, -1], 3: [0, 1], 4: [-1, 0], 5: [1, 0] };
+    if (name(w, gx, gy, gz) !== 'minecraft:wall_sign' || !sd || !/city centre/.test(sd.tags.FrontText.v.Text.v)) bad++;
+    else {
+      const f = FACE[MATERIALS.def(w.get(gx, gy, gz)).states.facing_direction.value];
+      // the sign is above the alcove mouth and faces away from the monument
+      if (!f || w.has(gx + f[0], gy, gz + f[1])) bad++;
+    }
+    // a wall of diamond round the alcove
+    let diamond = 0;
+    for (let x = sx - 2; x <= sx + 2; x++) for (let y = sy - 1; y <= sy + 3; y++) for (let z = sz - 2; z <= sz + 2; z++)
+      if (name(w, x, y, z) === 'minecraft:diamond_block') diamond++;
+    if (diamond < 20) bad++;
+    // build_centered must put the player in the alcove
     const tiles = tileList(w, { prefix: 'c', fillAir: true });
     const cx = w.centre[0], cz = w.centre[1];
-    const rel = tiles.map((t) => [t.box.x0 - cx, t.box.y0 - GROUND_DROP, t.box.z0 - cz]);
-    const host = tiles.findIndex((t) => mx >= t.box.x0 && mx <= t.box.x1 && mz >= t.box.z0 && mz <= t.box.z1);
-    const [rx, ry, rz] = rel[host];
-    const landed = [rx + (mx - tiles[host].box.x0), ry + (my - tiles[host].box.y0), rz + (mz - tiles[host].box.z0)];
+    const host = tiles.findIndex((t) => sx >= t.box.x0 && sx <= t.box.x1 && sz >= t.box.z0 && sz <= t.box.z1);
+    const t = tiles[host];
+    const landed = [t.box.x0 - cx + (sx - t.box.x0), t.box.y0 - GROUND_DROP + (sy - 1 - t.box.y0), t.box.z0 - cz + (sz - t.box.z0)];
     if (landed.join() !== '0,-1,0') landedWrong++;
   }
-  check('centre marker: in every city, a gold block with room to stand', marked === cities && bad === 0, `${marked}/${cities}, ${bad} problems`);
-  check('centre marker: build_centered puts it directly under the player', landedWrong === 0, `${landedWrong} wrong`);
+  check('centre monument: in every city, with a clear alcove to stand in and three beacons', marked === cities && bad === 0, `${marked}/${cities}, ${bad} problems`);
+  check('centre monument: open sky above every beacon, so the beams show', beams === marked * 3, `${beams}/${marked * 3}`);
+  check('centre monument: build_centered puts the player in the alcove', landedWrong === 0, `${landedWrong} wrong`);
   const off = generateCity({ ...DEFAULTS, size: 160, seed: 12345, centreMark: false });
-  check('centre marker: none when switched off, and the export falls back to the middle', !off.centre && !off.world.centre);
-  note(`${marked} markers, at most ${maxDrift} blocks from the exact middle (it must stand outdoors, level and off the railway)`);
+  check('centre monument: none when switched off, and the export falls back to the middle', !off.centre && !off.world.centre);
+  note(`${marked} monuments, at most ${maxDrift} blocks from the exact middle (it needs open, level ground under open sky)`);
 }
 
 // ===========================================================================
@@ -1406,6 +1425,7 @@ section('2o. detail, shops, street names, mansion');
         for (let z = rr.z0 - 1; z <= rr.z1 + 1; z++) {
           if (x > rr.x0 - 1 && x < rr.x1 + 1 && z > rr.z0 - 1 && z < rr.z1 + 1) continue;   // the ring only
           if (x < 0 || z < 0 || x >= W || z >= D || use[z * W + x] !== USE.SIDEWALK) continue;
+          if (r.harbourPlan && r.harbourPlan.cells.has(x + ',' + z)) continue;   // the wharf has crates on it by design
           const g = r.groundAt(x, z);
           for (const y of [g + 1, g + 2]) {
             const id = w.get(x, y, z);
@@ -1466,9 +1486,95 @@ section('2o. detail, shops, street names, mansion');
     `${eaves} eave blocks, ${balconies} balcony rails, ${roofClutter} roof blocks`);
   check('shopfronts: each has a wall sign with its name', shops > 0 && shopBad === 0, `${shops} shops, ${shopBad} bad`);
   check('street names: signs at junctions, two street names each, on the pavement', junctions > 0 && signBad === 0, `${junctions} signs, ${signBad} bad`);
+  // narrowest streets still get named and signed (they did not before 0.4.2), and names never repeat
+  {
+    let worst = Infinity, dups = 0, alleysNamed = 0;
+    for (const [aw, sw] of [[5, 3], [7, 5], [11, 9], [5, 5]]) for (const [size, seed] of [[160, 12345], [256, 7]]) {
+      const r = generateCity({ ...DEFAULTS, size, seed, avenueWidth: aw, streetWidth: sw });
+      worst = Math.min(worst, r.streets.signs.length);
+      dups += r.streets.names.length - new Set(r.streets.names).size;
+      alleysNamed += r.plan.corridors.filter((c) => c.kind === 'alley' && r.streets.names.includes(c.name)).length;
+    }
+    check('street names: signs at every street width, all names different, alleys unnamed',
+      worst >= 8 && dups === 0 && alleysNamed === 0, `fewest ${worst} signs, ${dups} repeated names`);
+  }
   check('mansion: in every test city, with its portico, an open gate and sound wings', mansions === cities && mansionBad === 0,
     `${mansions}/${cities}, ${mansionBad} problems`);
   note(`${shops} shopfronts (${[...shopNames].slice(0, 6).join(', ')}...) · ${junctions} street signs · ${mansions} mansions (${gardens} with formal gardens)`);
+}
+
+// ===========================================================================
+// 2p. the harbour
+// ===========================================================================
+section('2p. harbour');
+{
+  const name = (w, x, y, z) => { const id = w.get(x, y, z); return id < 0 ? null : MATERIALS.def(id).block; };
+  let cities = 0, built = 0, basinBad = 0, quayBad = 0, sheds = 0, shedsBad = 0, cranes = 0, sidings = 0, sidingBad = 0;
+  let boats = 0, boatBad = 0, streets = 0, signs = 0, crates = 0;
+  for (const [size, seed, transit] of [[160, 12345, 'rails'], [192, 1, 'rails'], [224, 3, 'trams'], [256, 7, 'rails'], [128, 2, 'roads']]) {
+    const r = generateCity({ ...DEFAULTS, size, seed, transit });
+    const w = r.world, { W, use } = r.plan, G = 1;
+    cities++;
+    const h = r.harbourPlan, out = r.harbour;
+    if (!h) continue;
+    built++;
+    // the basin is water two deep, walled, open to the sky
+    for (let u = h.u0; u <= h.u1; u++) for (let k = 1; k <= h.basin; k++) {
+      const [x, z] = h.cell(u, h.aAt(k));
+      if (name(w, x, -3, z) !== 'minecraft:water' || name(w, x, -2, z) !== 'minecraft:water') basinBad++;
+      for (let y = -1; y <= G + 2; y++) if (w.has(x, y, z)) basinBad++;
+    }
+    // the quay: solid walkway you can stand on all along the water's edge
+    for (let u = h.u0 + 1; u <= h.u1 - 1; u++) {
+      const [x, z] = h.cell(u, h.aAt(h.basin + h.quay));
+      const feet = w.get(x, G + 1, z), head = w.get(x, G + 2, z);
+      const walkable = (id) => id === -1 || MATERIALS.isPassable(id);       // the name sign stands here too
+      if (!w.has(x, G, z) || !walkable(feet) || !walkable(head)) quayBad++;
+    }
+    // no street was paved over: every cell of the district was never road
+    for (const key of h.cells) {
+      const [x, z] = key.split(',').map(Number);
+      const u2 = use[z * W + x];
+      if (u2 === USE.ROAD) streets++;      // the yard is 9, not ROAD
+    }
+    // warehouses stand, are enterable and hold their crates
+    for (const rec of out.warehouses) {
+      sheds++;
+      const v = verifyBuilding(w, rec);
+      if (!v.ok) shedsBad++;
+      if (r.reach.unreached.includes(rec)) shedsBad++;
+    }
+    cranes += out.cranes.length;
+    for (const [cx, cy, cz] of out.cranes) if (name(w, cx, cy, cz) !== 'minecraft:iron_block') shedsBad++;
+    // sidings: rails on the yard, buffered at both ends, with a cart each
+    for (const line of r.transit ? r.transit.lines.filter((l) => l.siding) : []) {
+      sidings++;
+      for (const [x, y, z] of line.cells) if (!/rail$/.test(name(w, x, y, z) || '')) sidingBad++;
+      const step = [line.cells[1][0] - line.cells[0][0], line.cells[1][2] - line.cells[0][2]];
+      const last = line.cells[line.cells.length - 1];
+      for (const [[x, y, z], [dx, dz]] of [[line.cells[0], [-step[0], -step[1]]], [last, step]]) {
+        const n = name(w, x + dx, y, z + dz);
+        if (!n || MATERIALS.isPassable(w.get(x + dx, y, z + dz))) sidingBad++;      // a buffer at the end
+      }
+      if (!r.transit.carts.some((c) => line.cells.some(([x, y, z]) => c.x === x && c.y === y && c.z === z))) sidingBad++;
+    }
+    for (const b of out.boats) {
+      boats++;
+      if (name(w, b.x, b.y, b.z) !== 'minecraft:water' || w.has(b.x, b.y + 1, b.z)) boatBad++;
+    }
+    crates += out.crates;
+    if (out.sign && /Harbour/.test((w.getData(...out.sign) || { tags: { FrontText: { v: { Text: { v: '' } } } } }).tags.FrontText.v.Text.v)) signs++;
+  }
+  check('harbour: built in every test city', built === cities, `${built}/${cities}`);
+  check('harbour: the basin is water two deep, walled and open to the sky', basinBad === 0, `${basinBad}`);
+  check('harbour: the quay is a clear walkway the length of the water', quayBad === 0, `${quayBad}`);
+  check('harbour: no street or railway was paved over by the district', streets === 0, `${streets} cells`);
+  check('harbour: warehouses stand, verify and can be walked into', sheds > 0 && shedsBad === 0, `${sheds} warehouses, ${shedsBad} problems`);
+  check('harbour: cranes on the quay', cranes > 0, `${cranes}`);
+  check('harbour: sidings are rails on the yard, buffered both ends, one cart each', sidings > 0 && sidingBad === 0, `${sidings} sidings, ${sidingBad} problems`);
+  check('harbour: boats float in the basin with room above', boats > 0 && boatBad === 0, `${boats} boats, ${boatBad} bad`);
+  check('harbour: the quay has its name sign', signs === built, `${signs}/${built}`);
+  note(`${built} harbours · ${sheds} warehouses · ${cranes} cranes · ${sidings} sidings · ${boats} boats · ${crates} crates stacked`);
 }
 
 // ===========================================================================
@@ -1764,7 +1870,9 @@ refreshWalkThrough();
     check(`${label}: every empty cell is air`, airCount === vol - w.size, `${airCount} vs ${vol - w.size}`);
   };
   verifyPlacement(simulate(build, player), player[0], player[2], 'build');
-  const cx = Math.floor((wb.x0 + wb.x1 + 1) / 2), cz = Math.floor((wb.z0 + wb.z1 + 1) / 2);
+  // the centred functions centre on the monument's alcove when there is one
+  const mid = w.centre || [Math.floor((wb.x0 + wb.x1 + 1) / 2), Math.floor((wb.z0 + wb.z1 + 1) / 2)];
+  const cx = mid[0], cz = mid[1];
   verifyPlacement(simulate(cent, player), player[0] - (cx - wb.x0), player[2] - (cz - wb.z0), 'build_centered');
   check('build: surface layer replaces the block under your feet', GROUND_DROP === 2);
 
@@ -2000,6 +2108,7 @@ refreshWalkThrough();
       const be = v.v.block_entity_data.v;
       const block = pal[l0[Number(idx)].v].v.name.v;
       if (be.id.v === 'Sign') { if (!/(standing|wall)_sign$/.test(block)) badBE++; continue; }   // name, street and shop signs: checked in 2m
+      if (be.id.v === 'Beacon') { if (block !== 'minecraft:beacon') badBE++; continue; }          // the centre monument's beacons
       entities++;
       if (be.id.v !== 'Bed' || be.color.t !== 1 || block !== 'minecraft:bed') badBE++;
     }

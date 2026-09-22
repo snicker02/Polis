@@ -61,8 +61,11 @@ export function liftBlocks(world, plan, hills, G) {
     if (!b.e) continue;
     for (let z = b.z0; z <= b.z1; z++)
       for (let x = b.x0; x <= b.x1; x++) {
+        // cells held at street level (the waterfront) are not filled
+        const e = elev[z * plan.W + x];
+        if (!e) continue;
         const edge = x === b.x0 || x === b.x1 || z === b.z0 || z === b.z1;
-        for (let y = 1; y <= b.e; y++) world.set(x, y, z, edge ? MAT.RETAIN : MAT.BASE);
+        for (let y = 1; y <= e; y++) world.set(x, y, z, edge ? MAT.RETAIN : MAT.BASE);
       }
   }
 }

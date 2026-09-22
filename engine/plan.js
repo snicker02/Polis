@@ -21,7 +21,9 @@ export function generatePlan(cfg, rng) {
   const cityBlocks = [];
   const at = (x, z) => z * W + x;
 
-  const paveRoad = (x0, z0, x1, z1, axis, width) => {
+  // kind: 'street' for the streets and avenues of the grid, 'alley' for the
+  // narrow ways carved inside a block (those are never given names)
+  const paveRoad = (x0, z0, x1, z1, axis, width, kind = 'street') => {
     const bit = axis === 'x' ? 1 : 2;
     for (let z = Math.max(0, z0); z <= Math.min(D - 1, z1); z++)
       for (let x = Math.max(0, x0); x <= Math.min(W - 1, x1); x++) {
@@ -29,7 +31,7 @@ export function generatePlan(cfg, rng) {
         roadAxis[at(x, z)] |= bit;
         if (width > roadWidthAt[at(x, z)]) roadWidthAt[at(x, z)] = width;
       }
-    corridors.push({ axis, x0, z0, x1, z1, w: width });
+    corridors.push({ axis, x0, z0, x1, z1, w: width, kind });
   };
 
   // ---- 1. street grid ------------------------------------------------------
@@ -114,11 +116,11 @@ export function generatePlan(cfg, rng) {
       if (hi > lo) {
         const cut = clamp(Math.round((lo + hi) / 2 + (rng() - 0.5) * (hi - lo) * 0.5), lo, hi);
         if (horiz) {
-          paveRoad(x0, cut, x1, cut + aw - 1, 'x', aw);
+          paveRoad(x0, cut, x1, cut + aw - 1, 'x', aw, 'alley');
           carve(x0, z0, x1, cut - 1, target, depth + 1);
           carve(x0, cut + aw, x1, z1, target, depth + 1);
         } else {
-          paveRoad(cut, z0, cut + aw - 1, z1, 'z', aw);
+          paveRoad(cut, z0, cut + aw - 1, z1, 'z', aw, 'alley');
           carve(x0, z0, cut - 1, z1, target, depth + 1);
           carve(cut + aw, z0, x1, z1, target, depth + 1);
         }

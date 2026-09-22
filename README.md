@@ -1,4 +1,4 @@
-# Polis v0.4.0
+# Polis v0.5.0
 
 A procedural city generator that exports to **Minecraft Bedrock**. Plans a
 street grid, subdivides it into lots, raises buildings with real interiors —
@@ -135,10 +135,13 @@ turns it off.
 an awning over the pavement, a counter just inside, and a **wall sign** with
 its name (Bakery, Cobbler, Tea House, Fishmonger...).
 
-**Street names.** Every avenue and street is named — First Ave, Oak St, Maple
-St — and each junction gets a standing sign on a pavement corner with both
-names on it, facing the crossing. The **Street name signs** checkbox turns
-them off.
+**Street names.** Every street and avenue is named, however narrow (alleys
+inside the blocks are not): numbered avenues one way across the city, tree
+names the other, so a junction reads "Oak St / First Ave". Past the end of the
+lists the names carry on with a compass prefix (N Oak St), so no two streets
+share a name. Each junction gets a standing sign on a pavement corner with both
+names on it, facing the crossing. The **Street name signs** checkbox turns them
+off.
 
 ## Rooms
 
@@ -284,16 +287,39 @@ sidewalk (and the yard behind it for a 3-high terrace), so they never stick
 out into the street. Where a straight flight will not fit, the steps run along
 the kerb instead.
 
-## The centre marker
+## The centre monument
 
-The block you build from is marked, so it is easy to find in game: a **gold
-block** with the space above it left clear, a **sign** beside it (never in the
-way) reading "Polis / city centre / you built from here", and a lantern on a
-post opposite. It stands as near the middle of the city as it can while staying
-outdoors, on level ground, clear of buildings and off the railway — and
-`build_centered` then centres the city on that exact block, so it lands
-directly under your feet. The **centreMark** setting turns it off, in which
-case the centred functions fall back to the middle of the footprint.
+The spot you build from is marked by a monument, built from a structure saved
+in game: a block of diamond with a person-sized alcove through it, a wall sign
+above the entrance reading "Polis / city centre / you built from here", and
+three beacons on the roof, so the beam is visible from anywhere in the world.
+`build_centered` centres the city on the alcove, so you end up standing inside
+it, under the sign, when the city appears. It goes as near the middle as it
+can while staying outdoors, on level ground, clear of buildings, off the
+railway and under open sky, with its entrance turned to face the street — a
+plaza or pavement is preferred to the roadway, but being near the middle counts
+for more. The **centreMark** setting turns it off.
+
+## The harbour
+
+A stretch of the canal, clear of the bridges, is widened into a **basin** and
+the block beside it becomes a working waterfront — a second centre away from
+downtown:
+
+- **Quay** — a paved wharf along the water with mooring bollards, stacked
+  crates and barrels, and a clear walking lane behind them.
+- **Cranes** — gantries on the quay, their arms reaching out over the water
+  with chains hanging from them.
+- **Warehouses** — long sheds facing the quay, entered from it.
+- **Goods yard** — gravel behind the sheds with rail sidings (buffered at both
+  ends, each with a parked minecart) and a loading platform.
+- **Boats** moored along the quay, and a sign naming the place.
+
+The district is reserved while the city is still being planned, so no ordinary
+lots are laid on it, the hills leave it level with the quay, and it always fits
+inside the block beside the canal — it never swallows a street or a railway.
+The basin follows the same rule as all Polis water: solid stone or water on all
+four sides and underneath. The **Harbour district** checkbox turns it off.
 
 ## Landmarks
 
@@ -521,6 +547,30 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.5.0** — A harbour district on the canal: basin, quay with bollards, crates
+and cranes, warehouses, a goods yard with buffered rail sidings and parked
+carts, moored boats and a name sign. It is reserved at planning time, stays
+inside the block beside the canal and keeps its ground level. Fixes found while
+building it: the terrace fill ignored per-cell levelling and buried the
+waterfront; street lamps could be planted in a doorway (anywhere in the city,
+not just here); the goods yard needed its own land use so the railway would not
+route a main line through it. The validator adds a harbour section.
+
+**0.4.2** — Street signs appear at every street width. Streets were named by
+width (5 or wider), so at the narrowest settings nothing was named and no signs
+appeared at all; naming now follows what a corridor *is* — a street or an alley
+— which also raises the count at the usual widths (about 40 per city instead of
+8). Numbered avenues one way, tree names the other, with compass prefixes past
+the end of the lists so names never repeat. The validator checks every street
+width.
+
+**0.4.1** — The centre marker is now a monument from a structure saved in
+game: diamond, with an alcove you stand in, the name sign above its entrance
+and beacons whose beams shoot into the sky. build_centered still centres the
+city on the alcove, and the monument turns to face the nearest street. The
+validator checks the alcove, the beacons (block entities and open sky above),
+the sign, and that the centred build lands you inside.
 
 **0.4.0** — Detail on the outside of every building (quoins, pilasters, eaves,
 framed doorways, balconies, bay windows, chimneys, water tanks, vents);

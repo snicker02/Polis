@@ -9,11 +9,13 @@ import { doorId, DIR, MATERIALS } from './materials.js';
 import { farm, pond, scatterFlowers, furnish, bedSpawns, placeBell, golemSpawns, ranch, pandaGrove, catSpawns, RANCH_ANIMALS } from './life.js';
 import { layTransit, trimOverRails, edgeDistance } from './transit.js';
 import { planCanal, buildCanal, USE_CANAL } from './water.js';
+import { planHarbour, buildHarbour, harbourSidings } from './harbour.js';
 import { chooseLandmarks, buildLandmark } from './landmarks.js';
 import { planHills, liftBlocks, cutStairs, shiftBuilding, walkCity } from './terrain.js';
 import { styleOf, remapTable } from './styles.js';
 import { signTags } from './landmarks.js';
 import { signId, SIGN_FACING } from './materials.js';
+import { buildCentre, centreCells, footprint } from './centre.js';
 import { PROFESSION_NAMES } from './entities.js';
 import { FLOWERS } from './materials.js';
 
@@ -46,7 +48,8 @@ export const DEFAULTS = {
   detail: true,              // relief on the outside of buildings (quoins, eaves, balconies, bays)
   streetSigns: true,         // street names on signs at the junctions
   centreMark: true,          // a gold block and sign marking where build_centered puts you
-  canal: true,               // a canal through the city, with bridges and a dock
+  canal: true,
+  harbour: true,             // a working waterfront on the canal: basin, quay, cranes, warehouses, goods yard               // a canal through the city, with bridges and a dock
   landmarks: true,           // town hall, clock tower, library, market square near downtown
   transit: 'roads',
   wallHeight: 3,             // perimeter wall, blocks above ground (0 = none)          // 'roads' | 'rails' (railway instead of roads) | 'trams' (rails down the roads)
@@ -84,6 +87,7 @@ export function generateCity(cfgIn, onProgress) {
   if (cfg.outline === 'organic') world.cityMask = { W, D, data: plan.mask };
   // the canal takes over one long street before anything is laid on it
   const canal = planCanal(plan, cfg, edgeDistance(plan));
+  const harbourPlan = planHarbour(plan, canal, cfg);
   const at = (x, z) => z * W + x;
 
   // ---- base + surface ------------------------------------------------------
@@ -134,14 +138,30 @@ export function generateCity(cfgIn, onProgress) {
   // ---- canal -----------------------------------------------------------------
   if (canal) buildCanal(world, plan, canal, GROUND);
 
+  const buildings = [];
+
+  // ---- harbour ---------------------------------------------------------------
+  const harbour = harbourPlan ? buildHarbour(world, plan, harbourPlan, cfg, rng.fork(), GROUND, buildings) : null;
+
   // ---- railways ------------------------------------------------------------
   const transit = layTransit(world, plan, cfg.transit, GROUND);
+  if (harbour && transit) harbourSidings(world, harbourPlan, harbour, transit, GROUND);
   const hills = planHills(plan, cfg);                  // needed early: the castle goes on the highest hill
+  if (harbourPlan) {
+    // the waterfront and the block it sits in stay level with the quay
+    for (const b of hills.blocks) {
+      let touches = false;
+      for (let z = b.z0; z <= b.z1 && !touches; z++) for (let x = b.x0; x <= b.x1 && !touches; x++) if (harbourPlan.cells.has(x + ',' + z)) touches = true;
+      if (!touches) continue;
+      b.e = 0;
+      for (let z = b.z0; z <= b.z1; z++) for (let x = b.x0; x <= b.x1; x++) hills.elev[z * W + x] = 0;
+    }
+    for (const k of harbourPlan.cells) { const [hx, hz] = k.split(',').map(Number); hills.elev[hz * W + hx] = 0; }
+  }
   chooseLandmarks(plan, cfg, hills, canal);
   const landmarks = [];
 
   // ---- lots ----------------------------------------------------------------
-  const buildings = [];
   const farms = [];
   const ranches = [];
   const pandas = [];
@@ -257,6 +277,7 @@ export function generateCity(cfgIn, onProgress) {
         if (!nearRoad) continue;
         if ((x * 7 + z * 11) % 79 !== 0) continue;
         if (world.has(x, GROUND + 1, z)) continue;
+        if (buildings.some((rec) => nearDoorway(rec, x, z))) continue;   // never in front of a door
         world.column(x, z, GROUND + 1, GROUND + 3, MAT.LAMP_POST);
         world.set(x, GROUND + 4, z, MAT.STREET_LIGHT);
       }
@@ -343,6 +364,7 @@ export function generateCity(cfgIn, onProgress) {
 
   if (transit) spawns = spawns.concat(transit.carts);
   if (canal && canal.dock) spawns = spawns.concat(canal.dock.boats);
+  if (harbour) spawns = spawns.concat(harbour.boats);
 
   // ---- city style: restyle the role materials, then snow -----------------------
   applyStyle(world, plan, STYLE, (x, z) => GROUND + elevAt(x, z));
@@ -356,8 +378,8 @@ export function generateCity(cfgIn, onProgress) {
   const unreached = buildings.filter((b) => !reached.has(`${b.outside[0]},${b.outside[1]},${b.outside[2]}`));
   const reach = { total: buildings.length, reached: buildings.length - unreached.length, unreached };
 
-  const stats = summarise(world, plan, buildings, cfg, { farms, beds, spawns, bell, transit, wall, ranches, landmarks, hills, stairRuns, reach, canal, centre, streets });
-  return { world, plan, buildings, cfg, stats, farms, ranches, spawns, bell, transit, wall, landmarks, canal, centre, streets,
+  const stats = summarise(world, plan, buildings, cfg, { farms, beds, spawns, bell, transit, wall, ranches, landmarks, hills, stairRuns, reach, canal, centre, streets, harbour });
+  return { world, plan, buildings, cfg, stats, farms, ranches, spawns, bell, transit, wall, landmarks, canal, centre, streets, harbour, harbourPlan,
     hills, stairRuns, reach, groundAt: (x, z) => GROUND + elevAt(x, z) };
 }
 
@@ -365,17 +387,27 @@ export function generateCity(cfgIn, onProgress) {
 // Every avenue and street gets a name; each junction of two named streets gets
 // a sign on a corner of the pavement, facing the crossing, with both names on
 // it. Alleys inside the blocks are left unnamed.
-const AVENUE_NAMES = ['First', 'Second', 'Third', 'Fourth', 'Fifth', 'Sixth', 'Seventh', 'Eighth', 'Ninth', 'Tenth', 'Park', 'Grand'];
+// Named like a real grid: numbered avenues one way, tree-named streets the
+// other, so a junction reads "Oak St / First Ave".
+const AVENUE_NAMES = ['First', 'Second', 'Third', 'Fourth', 'Fifth', 'Sixth', 'Seventh', 'Eighth', 'Ninth', 'Tenth',
+  'Eleventh', 'Twelfth', 'Thirteenth', 'Fourteenth', 'Fifteenth', 'Sixteenth', 'Seventeenth', 'Eighteenth', 'Nineteenth', 'Twentieth',
+  'Park', 'Grand', 'Market', 'Union'];
 const STREET_NAMES = ['Oak', 'Elm', 'Maple', 'Cedar', 'Birch', 'Willow', 'Aspen', 'Poplar', 'Alder', 'Hazel', 'Linden', 'Rowan',
-  'Chestnut', 'Walnut', 'Laurel', 'Juniper', 'Mulberry', 'Sycamore'];
+  'Chestnut', 'Walnut', 'Laurel', 'Juniper', 'Mulberry', 'Sycamore', 'Hawthorn', 'Magnolia', 'Cypress', 'Spruce', 'Beech', 'Holly'];
+
+// names stay unique past the end of the list: Oak St, then N Oak St, S Oak St...
+const WRAP = ['', 'N ', 'S ', 'E ', 'W '];
+const pick = (pool, i, suffix) => `${WRAP[Math.floor(i / pool.length) % WRAP.length]}${pool[i % pool.length]} ${suffix}`;
 
 function streetNameSigns(world, plan, cfg, G, elevAt, rng) {
   const { W, D, use, mask } = plan;
-  const wide = Math.max(5, cfg.avenueWidth - 1);
   let av = 0, st = 0;
+  // every street and avenue is named, however narrow; alleys are not.
+  // Avenues run one way across the city, streets the other.
   const named = plan.corridors
-    .filter((c) => c.w >= 5)
-    .map((c) => ({ ...c, name: c.w >= wide ? `${AVENUE_NAMES[av++ % AVENUE_NAMES.length]} Ave` : `${STREET_NAMES[st++ % STREET_NAMES.length]} St` }));
+    .filter((c) => c.kind !== 'alley')
+    .sort((p, q) => (p.axis === 'x' ? p.z0 : p.x0) - (q.axis === 'x' ? q.z0 : q.x0))
+    .map((c) => ({ ...c, name: c.axis === 'x' ? pick(AVENUE_NAMES, av++, 'Ave') : pick(STREET_NAMES, st++, 'St') }));
   const xs = named.filter((c) => c.axis === 'x'), zs = named.filter((c) => c.axis === 'z');
   // a pavement corner, at whatever height its block sits on
   const free = (x, z) => {
@@ -413,57 +445,64 @@ function streetNameSigns(world, plan, cfg, G, elevAt, rng) {
   return { names: named.map((c) => c.name), signs };
 }
 
-// ---- the centre marker -----------------------------------------------------
-// Where /function <city>/build_centered puts you. The block you stand on is
-// gold, the space above it is left clear, and a sign beside it (never in the
-// way) says so, with a lantern on a post opposite. It goes as near the middle
-// of the city as it can while staying outdoors, on level ground, off the
-// railway and clear of buildings.
+// ---- the centre monument ----------------------------------------------------
+// Where /function <city>/build_centered puts you: a block of diamond with an
+// alcove you stand in, a sign above the entrance and beacons on top whose
+// beams reach the sky (from a structure saved in game). It goes as near the
+// middle of the city as it can while staying outdoors, on level ground, clear
+// of buildings, off the railway and under open sky, entrance to the street.
 function markCentre(world, plan, buildings, G, elevAt, spawns = []) {
   const { W, D, use, mask } = plan;
   const wb = world.box;
   const cx0 = Math.floor((wb.x0 + wb.x1 + 1) / 2), cz0 = Math.floor((wb.z0 + wb.z1 + 1) / 2);
   const inBuilding = (x, z) => buildings.some((b) => x >= b.x0 - 1 && x <= b.x1 + 1 && z >= b.z0 - 1 && z <= b.z1 + 1);
+  // a plaza or park is the nicest spot, a pavement next, the roadway last —
+  // but being near the middle matters more, so both are weighed together
+  const PENALTY = { [USE.PLAZA]: 0, [USE.PARK]: 0, [USE.SIDEWALK]: 5, [USE.ROAD]: 11 };
   const OUTDOOR = new Set([USE.ROAD, USE.SIDEWALK, USE.PLAZA, USE.PARK]);
-  const taken = new Set(spawns.map((p) => p.x + ',' + p.z));     // never on top of a villager, golem or cat
-  const free = (x, z) => {
+  const taken = new Set(spawns.map((p) => p.x + ',' + p.z));
+  const clearCell = (x, z, height) => {
     if (x < 1 || z < 1 || x >= W - 1 || z >= D - 1) return false;
-    if (taken.has(x + ',' + z)) return false;
     if (mask && !mask[z * W + x]) return false;
-    if (!OUTDOOR.has(use[z * W + x]) || elevAt(x, z) !== 0) return false;     // outdoors, at street level
-    if (inBuilding(x, z)) return false;
+    if (!OUTDOOR.has(use[z * W + x]) || elevAt(x, z) !== 0) return false;
+    if (inBuilding(x, z) || taken.has(x + ',' + z)) return false;
     if (!world.has(x, G, z) || world.get(x, G, z) === MAT.WATER) return false;
-    for (let y = G + 1; y <= G + 3; y++) if (world.has(x, y, z)) return false;  // nothing here (no rails, no lamps)
+    for (let y = G + 1; y <= G + height + 12; y++) if (world.has(x, y, z)) return false;   // room, and open sky for the beams
     return true;
   };
-  let spot = null;
-  for (let r = 0; r <= 32 && !spot; r++)
-    for (let dz = -r; dz <= r && !spot; dz++)
-      for (let dx = -r; dx <= r && !spot; dx++) {
-        if (Math.max(Math.abs(dx), Math.abs(dz)) !== r) continue;
-        const x = cx0 + dx, z = cz0 + dz;
-        if (!free(x, z)) continue;
-        // a neighbour for the sign, and ideally one opposite for the lantern
-        const sides = [['north', 0, -1], ['south', 0, 1], ['west', -1, 0], ['east', 1, 0]]
-          .filter(([, ox, oz]) => free(x + ox, z + oz));
-        if (!sides.length) continue;
-        spot = { x, z, sides };
+  const { height } = centreCells(0);
+  // the cell just outside the entrance, for a corner and a rotation
+  const probeOf = (r, ox, oz, fw, fd) => (r === 0 ? [ox + 1, oz - 1] : r === 1 ? [ox + fw, oz + 1]
+    : r === 2 ? [ox + 1, oz + fd] : [ox - 1, oz + 1]);
+  const best = search();
+  if (!best) return null;
+  const out = buildCentre(world, best.ox, best.oz, G + 1, best.r);
+  return { block: [out.stand[0], G, out.stand[2]], stand: out.stand, sign: out.sign, beacons: out.beacons,
+    facing: out.facing, rotation: out.rotation, drift: Math.abs(out.stand[0] - cx0) + Math.abs(out.stand[2] - cz0) };
+
+  function search() {
+  let best = null, bestScore = Infinity;
+  for (let rad = 0; rad <= 40; rad++) {
+    if (best && rad > bestScore) break;                       // nothing further out can score better
+    for (let dz = -rad; dz <= rad; dz++)
+      for (let dx = -rad; dx <= rad; dx++) {
+        if (Math.max(Math.abs(dx), Math.abs(dz)) !== rad) continue;
+        const ox = cx0 + dx, oz = cz0 + dz;
+        for (const r of [0, 1, 2, 3]) {
+          const [fw, fd] = footprint(r);
+          let ok = true;
+          for (let x = ox; x < ox + fw && ok; x++) for (let z = oz; z < oz + fd && ok; z++) if (!clearCell(x, z, height)) ok = false;
+          if (!ok) continue;
+          const [px, pz] = probeOf(r, ox, oz, fw, fd);           // the entrance must open onto the street
+          if (!clearCell(px, pz, 2)) continue;
+          const score = rad + (PENALTY[use[oz * W + ox]] || 11);
+          if (score < bestScore) { bestScore = score; best = { r, ox, oz }; }
+          break;
+        }
       }
-  if (!spot) return null;
-  const { x, z, sides } = spot;
-  world.set(x, G, z, MAT.GOLD);
-  for (let y = G + 1; y <= G + 3; y++) world.clear(x, y, z);
-  // the sign faces the marker, so you read it standing on the gold block
-  const [sideName, ox, oz] = sides[0];
-  const facing = { north: 'south', south: 'north', west: 'east', east: 'west' }[sideName];
-  world.set(x + ox, G + 1, z + oz, signId(SIGN_FACING[facing]));
-  world.setData(x + ox, G + 1, z + oz, { id: 'Sign', tags: signTags('Polis\ncity centre\nyou built\nfrom here') });
-  const opp = sides.find(([n]) => n === { north: 'south', south: 'north', west: 'east', east: 'west' }[sideName]);
-  if (opp) {
-    world.set(x + opp[1], G + 1, z + opp[2], MAT.FENCE);
-    world.set(x + opp[1], G + 2, z + opp[2], MAT.LAMP);
   }
-  return { block: [x, G, z], sign: [x + ox, G + 1, z + oz], drift: Math.abs(x - cx0) + Math.abs(z - cz0) };
+  return best;
+  }
 }
 
 // ---- city style ----------------------------------------------------------------
@@ -798,6 +837,7 @@ function summarise(world, plan, buildings, cfg, life = {}) {
     centre: life.centre ? life.centre.block.join(', ') : '',
     streets: life.streets ? `${life.streets.names.length} named · ${life.streets.signs.length} signs` : '',
     shops: buildings.reduce((a, b) => a + ((b.furniture && b.furniture.shops) || []).length, 0),
+    harbour: life.harbour ? `${life.harbour.warehouses.length} warehouses · ${life.harbour.cranes.length} cranes · ${life.harbour.sidings.length} sidings · ${life.harbour.boats.length} boats` : '',
     canal: life.canal ? `${life.canal.u1 - life.canal.u0 + 1} long · ${life.canal.bridges} bridges` : '',
     dock: !!(life.canal && life.canal.dock),
     art: buildings.reduce((a, b) => a + (b.roomPlans || []).reduce((c, p) => c + ((p && p.art) || 0), 0), 0),
