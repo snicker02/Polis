@@ -1649,7 +1649,7 @@ section('2r. fitted to real ground');
   const sites = findSites(chunks, 160, { step: 64 });
   check('sites: candidate sites found in the terrain', sites.length > 0, `${sites.length}`);
   let built = 0, unreachable = 0, floorsBad = 0, followed = 0, blocks = 0, worst = 1;
-  let tallSteps = 0, lots = 0, flatLots = 0, canals = 0, levelCanals = 0;
+  let tallSteps = 0, lots = 0, flatLots = 0, canals = 0, levelCanals = 0, shellCells = 0, shellLeaks = 0;
   for (const s of sites.slice(0, 4)) {
     const site = siteGround(chunks, s.x, s.z, 160);
     const r = generateCity({ ...DEFAULTS, size: 160, seed: 7, terrain: site, transit: 'rails' });
@@ -1689,6 +1689,11 @@ section('2r. fitted to real ground');
       canals++;
       if (levels.size === 1) levelCanals++;
     }
+    // the land shown in the preview is never written into the city itself
+    if (r.shell) {
+      shellCells += r.shell.length;
+      for (const [x, y, z] of r.shell) if (r.world.has(x, y, z)) shellLeaks++;
+    }
     // real water is left alone (a pond inside a block is filled in, by design)
     let deep = 0, deepUsed = 0;
     for (let i = 0; i < site.water.length; i++) {
@@ -1705,6 +1710,8 @@ section('2r. fitted to real ground');
   check('fitted cities: no step taller than one block anywhere in the city', tallSteps === 0, `${tallSteps} steps`);
   check('fitted cities: every lot is dead level under its building', lots > 0 && flatLots === lots, `${flatLots}/${lots}`);
   check('fitted cities: the canal holds one level (water cannot slope)', canals === 0 || levelCanals === canals, `${levelCanals}/${canals}`);
+  check('fitted cities: the preview carries the surrounding land, and the export does not',
+    shellCells > 0 && shellLeaks === 0, `${shellCells} land blocks for the preview, ${shellLeaks} in the world`);
   check('fitted cities: the outline keeps off deep water', worst > 0.85, `${(worst * 100).toFixed(0)}% of deep water left alone`);
   note(`${built} cities generated on real terrain from a saved world`);
 }

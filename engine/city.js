@@ -417,9 +417,34 @@ export function generateCity(cfgIn, onProgress) {
   const reach = { total: buildings.length, reached: buildings.length - unreached.length, unreached };
 
   if (cfg.terrain) stats_terrain = { baseY: cfg.terrain.baseY, maxTerrace: Math.max(0, ...hills.blocks.map((b) => b.e)) };
+  const shell = cfg.terrain ? terrainShell(plan, cfg.terrain, GROUND, cfg.cityStyle) : null;
   const stats = summarise(world, plan, buildings, cfg, { farms, beds, spawns, bell, transit, wall, ranches, landmarks, hills, stairRuns, reach, canal, centre, streets, harbour, skirt });
-  return { world, plan, buildings, cfg, stats, farms, ranches, spawns, bell, transit, wall, landmarks, canal, centre, streets, harbour, harbourPlan,
+  return { world, plan, buildings, cfg, stats, shell, farms, ranches, spawns, bell, transit, wall, landmarks, canal, centre, streets, harbour, harbourPlan,
     hills, stairRuns, reach, groundAt: (x, z) => GROUND + elevAt(x, z) };
+}
+
+// ---- the land around the city, for the preview ---------------------------------
+// The city is generated in its own little world, so the preview shows it on a
+// bare slab and the first sight of it sitting in real ground is in the game.
+// This builds the surrounding land as blocks — surface and a little depth —
+// for everything the city does not cover. It is only ever used for the
+// preview: the export writes the city itself, never this.
+export function terrainShell(plan, terrain, G, style) {
+  const { W, D, mask } = plan;
+  const out = [];
+  const DEPTH = 3;
+  for (let z = 0; z < D; z++)
+    for (let x = 0; x < W; x++) {
+      const i = z * W + x;
+      if (mask[i]) continue;
+      const g = terrain.ground[i];
+      if (g < -900) continue;                                 // never visited: nothing to show
+      const top = G + (g - terrain.baseY);
+      const water = g <= 62;
+      out.push([x, top, z, water ? MAT.WATER : MAT.GRASS]);
+      for (let d = 1; d <= DEPTH; d++) out.push([x, top - d, z, d < 2 ? MAT.DIRT : MAT.STONE]);
+    }
+  return out;
 }
 
 // ---- blending the edge into the land -------------------------------------------

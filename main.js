@@ -4,13 +4,14 @@ import { generateCity, generateSingle, DEFAULTS } from './engine/city.js';
 import { USE } from './engine/plan.js';
 import { verifyAll } from './engine/verify.js';
 import { buildMesh } from './engine/mesher.js';
+import { VoxelWorld } from './engine/blockcore.js';
 import { Renderer } from './engine/renderer.js';
 import { exportPack, exportStructuresZip, tileList, commandList, cityId, exportSalt, POLIS_VERSION } from './engine/export.js';
 import { readWorld, readLevelDat, siteGround, findSites, SEA_LEVEL } from './engine/worldfile.js';
 import { decodeNbt } from './tools/nbt-read.js';
 import { THEMES } from './engine/materials.js';
 
-const VERSION = '0.7.1';
+const VERSION = '0.7.2';
 const $ = (id) => document.getElementById(id);
 const numVal = (id) => Number($(id).value);      // readCfg has its own local num()
 
@@ -204,7 +205,7 @@ function generate() {
       verification = verifyAll(result.world, result.buildings);
       cityNs = nsNow();
       const t2 = performance.now();
-      const mesh = buildMesh(result.world);
+      const mesh = buildMesh(previewWorld(result));
       renderer.setMesh(mesh);
       renderer.frameAll();
       applyClip();
@@ -460,6 +461,17 @@ function showSite(g) {
   $('useSite').style.display = ok ? 'block' : 'none';
   $('copyTp').style.display = ok ? 'block' : 'none';
   $('copyTp').textContent = ok ? `Copy /tp ${g.x0} ${g.baseY + 1} ${g.z0}` : '';
+}
+
+// The preview shows the city standing in the real land when one is loaded:
+// the land is added to a copy of the world, so the export is untouched by it.
+function previewWorld(res) {
+  if (!res.shell || !res.shell.length) return res.world;
+  const copy = new VoxelWorld({ budget: res.cfg.budget + res.shell.length + 1000 });
+  res.world.forEach((x, y, z, id) => copy.set(x, y, z, id));
+  for (const [x, y, z, id] of res.shell) if (!copy.has(x, y, z)) copy.set(x, y, z, id);
+  copy.cityMask = res.world.cityMask;
+  return copy;
 }
 
 function exportOpts() {

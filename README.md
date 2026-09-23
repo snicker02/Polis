@@ -1,4 +1,4 @@
-# Polis v0.7.1
+# Polis v0.7.2
 
 A procedural city generator that exports to **Minecraft Bedrock**. Plans a
 street grid, subdivides it into lots, raises buildings with real interiors —
@@ -300,6 +300,12 @@ or too far above or below to build on. Then:
   its own roof or the ground that was there, and founded down to that ground
   and no further. Everything outside stays structure void, so the landscape
   around the city is left standing instead of a box being cut out of it.
+
+**The preview shows the land.** When a world is loaded, the surrounding ground
+is drawn around the city in the viewer — surface and a little depth, water
+included — so a city cut into a hillside or standing proud of a slope can be
+seen before anything is exported. The land is added to a copy of the world for
+the preview only; the export writes the city and nothing else.
 
 Once a site is chosen there is a button that copies a `/tp` straight to the
 spot you build from, so you can paste it in game and land exactly there.
@@ -603,6 +609,10 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.7.2** — The preview draws the real terrain around a fitted city, so how it
+sits in the land can be judged in the browser instead of in the game. The land
+is preview-only: the validator checks it never reaches the export.
 
 **0.7.1** — The railway on rolling ground. Its records were left at the flat
 height when the city rode up with the land, so carts and stations were placed
