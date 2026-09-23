@@ -14,7 +14,7 @@ import { chooseLandmarks, buildLandmark } from './landmarks.js';
 import { planHills, liftBlocks, cutStairs, shiftBuilding, walkCity } from './terrain.js';
 import { styleOf, remapTable } from './styles.js';
 import { signTags } from './landmarks.js';
-import { signId, SIGN_FACING } from './materials.js';
+import { signId, SIGN_FACING, railId, RAIL } from './materials.js';
 import { buildCentre, centreCells, footprint } from './centre.js';
 import { PROFESSION_NAMES } from './entities.js';
 import { FLOWERS } from './materials.js';
@@ -90,7 +90,7 @@ export function generateCity(cfgIn, onProgress) {
   const world = new VoxelWorld({ budget: cfg.budget });
   const W = plan.W, D = plan.D;
   // organic cities carry their outline, so the export leaves the land outside it alone
-  if (cfg.outline === 'organic') world.cityMask = { W, D, data: plan.mask };
+  if (cfg.outline === 'organic' || cfg.terrain) world.cityMask = { W, D, data: plan.mask };
   // the canal takes over one long street before anything is laid on it
   const canal = planCanal(plan, cfg, edgeDistance(plan));
   const harbourPlan = planHarbour(plan, canal, cfg);
@@ -330,6 +330,10 @@ export function generateCity(cfgIn, onProgress) {
   let stairRuns = [];
   if (hills.H) {
     liftBlocks(world, plan, hills, GROUND);
+    // The railway was laid on the flat and rode up with the ground, so its
+    // records have to ride up too, or carts and stations land at the old
+    // height. Then the track is made to climb the steps properly.
+    if (transit && hills.rolling) shiftTransit(world, transit, elevAt, GROUND);
     for (const rec of buildings) {
       const e = elevAt(rec.door.x, rec.door.z);
       shiftBuilding(rec, e);
@@ -344,11 +348,16 @@ export function generateCity(cfgIn, onProgress) {
       if (L.faces) for (const f of L.faces) f.centre[1] += elevAt(f.centre[0], f.centre[2]);
       for (const key of ['spireTop', 'lantern', 'cupolaBell', 'nameSign']) if (L[key]) L[key][1] += elevAt(L[key][0], L[key][2]);
     }
-    if (transit) for (const l of transit.lines) {
-      const e = elevAt(l.cells[0][0], l.cells[0][2]);       // alley lines ride up with their block
-      if (e) { for (const c of l.cells) c[1] += e; for (const st of l.stations) st[1] += e; l.lifted = e; }
+    // On invented hills a line sits wholly inside one block, so it rides up as
+    // a unit; on real ground every cell has its own height and shiftTransit
+    // above has already moved them one by one.
+    if (transit && !hills.rolling) {
+      for (const l of transit.lines) {
+        const e = elevAt(l.cells[0][0], l.cells[0][2]);     // alley lines ride up with their block
+        if (e) { for (const c of l.cells) c[1] += e; for (const st of l.stations) st[1] += e; l.lifted = e; }
+      }
+      for (const c of transit.carts) c.y += elevAt(c.x, c.z);
     }
-    if (transit) for (const c of transit.carts) c.y += elevAt(c.x, c.z);
     const avoid = buildings.map((b) => [b.outside[0], b.outside[2]])
       .concat(ranches.map((r) => r.gate), farms.map((f) => [(f.x0 + f.x1) >> 1, (f.z0 + f.z1) >> 1]));
     stairRuns = cutStairs(world, plan, hills, GROUND, avoid);
@@ -395,6 +404,9 @@ export function generateCity(cfgIn, onProgress) {
   // ---- city style: restyle the role materials, then snow -----------------------
   applyStyle(world, plan, STYLE, (x, z) => GROUND + elevAt(x, z));
 
+  // ---- blending the edge into the land ---------------------------------------
+  const skirt = cfg.terrain && hills.rolling ? buildSkirt(world, plan, hills, cfg.terrain, GROUND) : 0;
+
   // ---- the centre marker -----------------------------------------------------
   const centre = cfg.centreMark ? markCentre(world, plan, buildings, GROUND, elevAt, spawns) : null;
   if (centre) world.centre = [centre.block[0], centre.block[2]];   // the export centres on it
@@ -405,9 +417,158 @@ export function generateCity(cfgIn, onProgress) {
   const reach = { total: buildings.length, reached: buildings.length - unreached.length, unreached };
 
   if (cfg.terrain) stats_terrain = { baseY: cfg.terrain.baseY, maxTerrace: Math.max(0, ...hills.blocks.map((b) => b.e)) };
-  const stats = summarise(world, plan, buildings, cfg, { farms, beds, spawns, bell, transit, wall, ranches, landmarks, hills, stairRuns, reach, canal, centre, streets, harbour });
+  const stats = summarise(world, plan, buildings, cfg, { farms, beds, spawns, bell, transit, wall, ranches, landmarks, hills, stairRuns, reach, canal, centre, streets, harbour, skirt });
   return { world, plan, buildings, cfg, stats, farms, ranches, spawns, bell, transit, wall, landmarks, canal, centre, streets, harbour, harbourPlan,
     hills, stairRuns, reach, groundAt: (x, z) => GROUND + elevAt(x, z) };
+}
+
+// ---- blending the edge into the land -------------------------------------------
+// The city surface may only step a block at a time, so where it meets a
+// falling hillside its edge can stand several blocks proud of the ground — a
+// wall around the town. This walks that difference down outside the city, a
+// block per cell, until it meets the real ground, and hands those cells to
+// the export so they are built along with the city.
+function buildSkirt(world, plan, hills, terrain, G) {
+  const { W, D, mask } = plan;
+  const { elev } = hills;
+  const level = new Int16Array(W * D).fill(-999);
+  let queue = [];
+  for (let z = 0; z < D; z++)
+    for (let x = 0; x < W; x++) {
+      const i = z * W + x;
+      if (!mask[i]) continue;
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = x + dx, nz = z + dz;
+        if (nx < 0 || nz < 0 || nx >= W || nz >= D) continue;
+        const j = nz * W + nx;
+        if (mask[j] || level[j] >= -900) continue;
+        level[j] = elev[i] - 1;
+        queue.push(j);
+      }
+    }
+  let built = 0;
+  for (let step = 0; step < 12 && queue.length; step++) {
+    const next = [];
+    for (const i of queue) {
+      const x = i % W, z = (i - x) / W;
+      const ground = terrain.ground[i];
+      const rel = ground < -900 ? 0 : ground - terrain.baseY;    // the real ground, in city heights
+      const lv = level[i];
+      if (lv <= 0 || lv <= rel) continue;                        // already down to the land
+      if (ground > -900 && ground <= 62) continue;               // never out over water
+      world.set(x, G + lv, z, MAT.GRASS);
+      elev[i] = lv;                                              // the skirt's own height, on the record
+      for (let y = Math.max(1, rel + 1); y < G + lv; y++) world.set(x, y, z, MAT.BASE);
+      for (let y = G + lv + 1; y <= G + lv + 3; y++) world.clear(x, y, z);
+      mask[i] = 1;                                               // the export builds it with the city
+      built++;
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = x + dx, nz = z + dz;
+        if (nx < 0 || nz < 0 || nx >= W || nz >= D) continue;
+        const j = nz * W + nx;
+        if (mask[j] || level[j] >= -900) continue;
+        level[j] = lv - 1;
+        next.push(j);
+      }
+    }
+    queue = next;
+  }
+  // a skirt cell that ended beside a taller one steps up to within a block of
+  // it, so the walk down is even all the way
+  for (let pass = 0; pass < 12; pass++) {
+    let fixed = 0;
+    for (let z = 1; z < D - 1; z++)
+      for (let x = 1; x < W - 1; x++) {
+        const i = z * W + x;
+        if (!mask[i] || level[i] < -900 || elev[i] < 0) continue;
+        if (level[i] < -900) continue;
+        for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const j = (z + dz) * W + (x + dx);
+          if (!mask[j]) continue;
+          if (elev[j] - elev[i] > 1 && level[i] >= -900) {
+            const lv2 = elev[j] - 1;
+            const ground = terrain.ground[i];
+            const rel = ground < -900 ? 0 : ground - terrain.baseY;
+            if (lv2 <= rel) continue;
+            for (let y = G + elev[i] + 1; y <= G + lv2; y++) world.set(x, y, z, MAT.BASE);
+            world.set(x, G + lv2, z, MAT.GRASS);
+            for (let y = G + lv2 + 1; y <= G + lv2 + 3; y++) world.clear(x, y, z);
+            elev[i] = lv2;
+            fixed++;
+          }
+        }
+      }
+    if (!fixed) break;
+  }
+  return built;
+}
+
+// ---- the railway on rolling ground ---------------------------------------------
+// After the lift, every rail sits at the height of the street it runs along.
+// Three things then need doing: move the records (cells, stations, carts) up
+// with it, turn the rails where the street steps into climbing rails so a cart
+// can ride them, and clear the space above so nothing is in the way.
+function shiftTransit(world, transit, elevAt, G) {
+  const up = ([x, y, z]) => [x, y + elevAt(x, z), z];
+  for (const line of transit.lines) {
+    line.cells = line.cells.map((c) => (c.length === 3 ? up(c) : c));
+    line.stations = line.stations.map(up);
+  }
+  transit.carts = transit.lines.map((l) => ({ type: 'minecart', x: l.stations[0][0], y: l.stations[0][1], z: l.stations[0][2] }));
+
+  // where the line steps up or down, the lower rail becomes a climbing rail
+  for (const line of transit.lines) {
+    const cells = line.cells;
+    for (let i = 0; i < cells.length; i++) {
+      const [x, y, z] = cells[i];
+      const id = world.get(x, y, z);
+      if (id < 0 || !/rail/.test(MATERIALS.def(id).block)) continue;
+      const powered = MATERIALS.def(id).block === 'minecraft:golden_rail';
+      const prev = cells[i - 1], next = cells[i + 1];
+      let climb = null;
+      for (const n of [next, prev]) {
+        if (!n || climb) continue;
+        const dy = n[1] - y;
+        if (dy !== 1) continue;
+        const dx = Math.sign(n[0] - x), dz = Math.sign(n[2] - z);
+        climb = dx === 1 ? RAIL.UP_E : dx === -1 ? RAIL.UP_W : dz === 1 ? RAIL.UP_S : RAIL.UP_N;
+      }
+      if (climb === null) continue;
+      // a climbing rail must be plain: a powered one needs a block of
+      // redstone under it, which would stick out of the side of the step
+      world.set(x, y, z, railId(climb));
+      if (powered && !world.has(x, y - 1, z)) world.set(x, y - 1, z, MAT.GRAVEL);
+    }
+  }
+  // A block of redstone under a powered rail is meant to be buried in the
+  // street. Where the street steps down beside it, it ends up showing, so
+  // that booster becomes a plain rail on ordinary ground.
+  for (let pass = 0; pass < 2; pass++) for (const line of transit.lines)
+    for (const [x, y, z] of line.cells) {
+      const below = world.get(x, y - 1, z);
+      if (below < 0 || MATERIALS.def(below).block !== 'minecraft:redstone_block') continue;
+      let showing = false;
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const n = world.get(x + dx, y - 1, z + dz);
+        if (n < 0 || MATERIALS.isPassable(n)) showing = true;
+      }
+      if (!showing) continue;
+      world.set(x, y - 1, z, MAT.GRAVEL);
+      const id = world.get(x, y, z);
+      if (id >= 0 && MATERIALS.def(id).block === 'minecraft:golden_rail') {
+        const dir = MATERIALS.def(id).states.rail_direction.value;
+        world.set(x, y, z, railId(dir));
+      }
+    }
+
+  // headroom: a cart and its rider need two clear blocks, and a step in the
+  // street can leave the next column poking into them
+  for (const line of transit.lines)
+    for (const [x, y, z] of line.cells)
+      for (let h = 1; h <= 3; h++) {
+        const id = world.get(x, y + h, z);
+        if (id >= 0 && !MATERIALS.isPassable(id)) world.clear(x, y + h, z);
+      }
 }
 
 // ---- street names ------------------------------------------------------------
@@ -869,6 +1030,7 @@ function summarise(world, plan, buildings, cfg, life = {}) {
     dock: !!(life.canal && life.canal.dock),
     art: buildings.reduce((a, b) => a + (b.roomPlans || []).reduce((c, p) => c + ((p && p.art) || 0), 0), 0),
     paintings: (life.spawns || []).filter((p) => p.type === 'painting').length,
+    skirt: life.skirt ? `${life.skirt} cells stepping down to the land` : '',
     terrain: stats_terrain ? `fitted to the land · base y ${stats_terrain.baseY} · terraces to ${stats_terrain.maxTerrace}` : '',
     hillBlocks: life.hills ? life.hills.blocks.filter((b) => b.e > 0).length : 0,
     hillMax: life.hills ? Math.max(0, ...life.hills.blocks.map((b) => b.e)) : 0,

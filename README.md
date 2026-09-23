@@ -1,4 +1,4 @@
-# Polis v0.7.0
+# Polis v0.7.1
 
 A procedural city generator that exports to **Minecraft Bedrock**. Plans a
 street grid, subdivides it into lots, raises buildings with real interiors —
@@ -603,6 +603,17 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.7.1** — The railway on rolling ground. Its records were left at the flat
+height when the city rode up with the land, so carts and stations were placed
+in the wrong place; every cell, station and cart now moves with its own
+column. Where the street steps, the rail becomes a climbing rail so a cart can
+ride it, two blocks of headroom are cleared over every rail (no more breaking
+blocks to get through), and a booster whose block of redstone would show at
+the side of a step becomes a plain rail on ordinary ground. The city edge also
+grows a skirt: where the surface stands proud of a falling hillside, the
+ground steps down a block per cell until it meets the land, and those cells
+are built with the city.
 
 **0.7.0** — A fitted city now follows the ground properly. The whole surface
 rolls cell by cell rather than sitting flat on one plane: no step taller than
