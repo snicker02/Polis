@@ -117,7 +117,9 @@ export async function runUiCheck(worldFile) {
     return l[event](arg);
   };
 
-  const cleanup = () => { delete globalThis.document; delete globalThis.window; delete globalThis.requestAnimationFrame; delete globalThis.cancelAnimationFrame; };
+  // The app defers work with timers, which can fire after we are done, so the
+  // stub browser stays in place rather than being torn down under them.
+  const cleanup = () => {};
   // with no world given, just exercise the rest of the front end
   if (!worldFile) {
     fire('worldMap', 'click', { clientX: 96, clientY: 96 });           // must be harmless with nothing loaded
@@ -137,13 +139,19 @@ export async function runUiCheck(worldFile) {
   await new Promise((r) => setTimeout(r, 50));
   const status = elements.get('worldStatus').textContent;
 
+  // type coordinates, as if pasted from the game's F3 screen
+  const spawn = [-32, 69, -32];
+  elements.get('siteCoords').value = `${spawn[0]}.11 ${spawn[1]}.00 ${spawn[2]}.98`;
+  fire('goCoords', 'click');
+  const typed = elements.get('siteInfo').innerHTML;
+
   // click the middle of the map, then take the site
   fire('worldMap', 'click', { clientX: 96, clientY: 96 });
   const info = elements.get('siteInfo').innerHTML;
   const offered = elements.get('useSite').style.display === 'block';
   if (offered) fire('useSite', 'click');
 
-  const result = { problems, status, info, offered, ids: ids.length, wired: listeners.size,
+  const result = { problems, status, info, typed, offered, ids: ids.length, wired: listeners.size,
     stats: (elements.get('stats') || {}).innerHTML || '' };
   cleanup();
   return result;
@@ -153,7 +161,8 @@ if (process.argv[1] && process.argv[1].endsWith('ui-check.mjs')) {
   const r = await runUiCheck(process.argv[2]);
   console.log('ids in the page:', r.ids, '· elements wired up:', r.wired);
   console.log('after loading the world:', r.status);
-  console.log('after clicking the map:', r.info || '(nothing)');
+  console.log('after typing coordinates:', (r.typed || '(nothing)').replace(/<[^>]+>/g, ''));
+  console.log('after clicking the map:', (r.info || '(nothing)').replace(/<[^>]+>/g, ''));
   console.log('site offered:', r.offered);
   console.log('problems:', r.problems.length ? r.problems : 'none');
   if (r.stats) console.log('stats panel:', r.stats.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').slice(0, 300));

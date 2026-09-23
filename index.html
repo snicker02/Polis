@@ -126,12 +126,12 @@
   }
 </style>
 </head>
-<body class="mode-city" data-version="0.6.1">
+<body class="mode-city" data-version="0.6.2">
 <div id="app">
   <div id="panel">
     <div id="panelScroll">
       <h1>PO<span>L</span>IS</h1>
-      <div class="sub">procedural city → Minecraft Bedrock · v0.6.1</div>
+      <div class="sub">procedural city → Minecraft Bedrock · v0.6.2</div>
 
       <fieldset>
         <legend>Mode</legend>
@@ -145,6 +145,11 @@
           <label style="display:block;margin-bottom:4px">Fit to your world</label>
           <input type="file" id="worldFile" accept=".mcworld,.zip" style="width:100%;font-size:11px">
           <div class="hint" id="worldStatus">Export a world from Minecraft (Worlds → pencil → Export World) and load it here to build a city that fits the real ground.</div>
+          <div class="row" id="coordRow" style="display:none;margin-top:6px">
+            <label for="siteCoords" style="font-size:11px">Go to</label>
+            <input type="text" id="siteCoords" placeholder="-6926 69 -10080" style="width:130px;font-size:11px">
+            <button id="goCoords" style="width:auto;padding:3px 9px">→</button>
+          </div>
           <canvas id="worldMap" width="256" height="256" style="width:100%;image-rendering:pixelated;border:1px solid #333;display:none;margin-top:6px;cursor:crosshair"></canvas>
           <div class="hint" id="siteInfo" style="display:none"></div>
           <button id="useSite" style="display:none;width:100%;margin-top:4px">Use this site</button>
@@ -283,6 +288,6 @@
     <div id="busy">generating…</div>
   </div>
 </div>
-<script type="module" src="./main.js?v=0.6.1"></script>
+<script type="module" src="./main.js?v=0.6.2"></script>
 </body>
 </html>

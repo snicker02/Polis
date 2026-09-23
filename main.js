@@ -10,7 +10,7 @@ import { readWorld, readLevelDat, siteGround, findSites, SEA_LEVEL } from './eng
 import { decodeNbt } from './tools/nbt-read.js';
 import { THEMES } from './engine/materials.js';
 
-const VERSION = '0.6.1';
+const VERSION = '0.6.2';
 const $ = (id) => document.getElementById(id);
 const numVal = (id) => Number($(id).value);      // readCfg has its own local num()
 
@@ -83,6 +83,8 @@ function boot() {
   $('mcstruct').addEventListener('click', () => doExport('zip'));
   $('copycmd').addEventListener('click', copyCommands);
   $('worldFile').addEventListener('change', (e) => { if (e.target.files[0]) loadWorld(e.target.files[0]).catch((err) => wstatus('could not read that world: ' + err.message)); });
+  $('goCoords').addEventListener('click', goToCoords);
+  $('siteCoords').addEventListener('keydown', (e) => { if (e.key === 'Enter') goToCoords(); });
   $('worldMap').addEventListener('click', (e) => { try { pickSite(e); } catch (err) { wstatus('could not read that site: ' + err.message); } });
   $('useSite').addEventListener('click', () => {
     if (!world || !world.site) return;
@@ -370,18 +372,21 @@ async function loadWorld(file) {
   try { info = readLevelDat(bytes, decodeNbt); } catch {}
   wstatus('unpacking chunks… this can take a minute');
   await new Promise((r) => setTimeout(r, 30));
-  const near = info ? [Math.floor(info.spawn[0] / 16), Math.floor(info.spawn[2] / 16)] : [0, 0];
+  const spawn = info ? [Math.floor(info.spawn[0] / 16), Math.floor(info.spawn[2] / 16)] : [0, 0];
   const t0 = Date.now();
-  const { chunks } = readWorld(bytes, { near, radiusChunks: 96 });
+  const { chunks } = readWorld(bytes);                  // the whole world: panning and coordinates are then instant
   if (!chunks.size) { wstatus('no chunks found in that file'); return; }
-  world = { chunks, info, near, site: null };
-  wstatus(`${info ? info.name + ': ' : ''}${chunks.size.toLocaleString()} chunks around spawn, read in ${((Date.now() - t0) / 1000).toFixed(0)}s. Click the map to place the city.`);
+  world = { chunks, info, near: spawn, view: spawn, site: null };
+  $('coordRow').style.display = 'flex';
+  wstatus(`${info ? info.name + ': ' : ''}${chunks.size.toLocaleString()} chunks read in ${((Date.now() - t0) / 1000).toFixed(0)}s. `
+    + 'Click the map to place the city, or type coordinates to go there.');
   drawWorldMap();
 }
 
 function drawWorldMap() {
   const c = $('worldMap'), ctx = c.getContext('2d');
-  const { chunks, near } = world;
+  const { chunks } = world;
+  const near = world.view || world.near;
   const R = 96;                                   // chunks either way
   c.width = c.height = R * 2;
   const img = ctx.createImageData(R * 2, R * 2);
@@ -408,22 +413,47 @@ function drawWorldMap() {
   }
 }
 
+// "-6926.11 69.00 -10080.98", "-6926, -10080" and the like: the first and
+// last numbers are X and Z, so pasting an F3 position works.
+export function parseCoords(text) {
+  const n = (text.match(/-?\d+(?:\.\d+)?/g) || []).map(Number);
+  if (n.length < 2) return null;
+  return [Math.round(n[0]), Math.round(n[n.length - 1])];
+}
+
+function goToCoords() {
+  if (!world) return;
+  const c = parseCoords($('siteCoords').value);
+  if (!c) { wstatus('type coordinates like  -6926 69 -10080'); return; }
+  world.view = [Math.floor(c[0] / 16), Math.floor(c[1] / 16)];
+  drawWorldMap();
+  // take the site centred on the point asked for
+  const size = numVal('size');
+  showSite(siteGround(world.chunks, c[0] - (size >> 1), c[1] - (size >> 1), size));
+}
+
 function pickSite(ev) {
   if (!world) return;
   const c = $('worldMap'), rect = c.getBoundingClientRect(), R = 96;
-  const cx = Math.floor((ev.clientX - rect.left) / rect.width * c.width) + world.near[0] - R;
-  const cz = Math.floor((ev.clientY - rect.top) / rect.height * c.height) + world.near[1] - R;
+  const view = world.view || world.near;
+  const cx = Math.floor((ev.clientX - rect.left) / rect.width * c.width) + view[0] - R;
+  const cz = Math.floor((ev.clientY - rect.top) / rect.height * c.height) + view[1] - R;
   const size = numVal('size');
-  const g = siteGround(world.chunks, cx * 16, cz * 16, size);
+  showSite(siteGround(world.chunks, cx * 16, cz * 16, size));
+}
+
+function showSite(g) {
   world.site = g;
   drawWorldMap();
   const el = $('siteInfo');
   el.style.display = 'block';
-  el.innerHTML = g.coverage < 0.995
-    ? `That area is only ${(g.coverage * 100).toFixed(0)}% explored — pick somewhere you have been.`
-    : `Site at <b>${g.x0}, ${g.z0}</b> · ground y ${g.p05}–${g.p95} · base y <b>${g.baseY}</b> · `
-      + `water ${(g.waterShare * 100).toFixed(0)}% · buildable ${(g.buildableShare * 100).toFixed(0)}%`;
-  $('useSite').style.display = g.coverage >= 0.995 ? 'block' : 'none';
+  // Unexplored ground is simply left alone, like water or a cliff, so a site
+  // only has to be explored enough for a city to fit on what is there.
+  const ok = g.coverage >= 0.6 && g.buildableShare >= 0.35;
+  el.innerHTML = `Site at <b>${g.x0}, ${g.z0}</b> · ground y ${g.p05}–${g.p95} · base y <b>${g.baseY}</b><br>`
+    + `explored ${(g.coverage * 100).toFixed(0)}% · water ${(g.waterShare * 100).toFixed(0)}% · buildable ${(g.buildableShare * 100).toFixed(0)}%`
+    + (ok ? '' : `<br><b>${g.coverage < 0.6 ? 'Too little of this is explored' : 'Too little of this is buildable'}</b> — fly over it in game, or try nearby.`);
+  $('useSite').style.display = ok ? 'block' : 'none';
 }
 
 function exportOpts() {

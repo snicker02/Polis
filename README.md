@@ -1,4 +1,4 @@
-# Polis v0.6.1
+# Polis v0.6.2
 
 A procedural city generator that exports to **Minecraft Bedrock**. Plans a
 street grid, subdivides it into lots, raises buildings with real interiors —
@@ -292,8 +292,14 @@ or too far above or below to build on. Then:
 - the **foundation** deepens automatically to meet the lowest ground, and the
   clearance rises to cut away the hills above.
 
-Click the map to choose a site; the panel shows the ground range, the base
-level, and how much of it is water or buildable. The stats panel then tells you
+Click the map to choose a site, or type coordinates (an F3 position pasted
+straight in works: `-6926.11 69.00 -10080.98`) to jump anywhere in the world.
+The whole world is read once, so moving about is instant. The panel shows the
+ground range, the base level, and how much of the site is explored, water or
+buildable. A site does not have to be fully explored — unexplored ground is
+left alone exactly like water or a cliff, and the city grows on what is
+there — so anywhere with about 60% explored and a third of it buildable can
+take a city. The stats panel then tells you
 exactly where to stand — the corner of the site, one block above base level —
 and the placement guide in the pack repeats it.
 
@@ -585,6 +591,13 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.6.2** — Pick a site anywhere: type coordinates (F3 positions paste
+straight in) as well as clicking the map, and the whole world is read at once
+instead of only the chunks around spawn. A site no longer has to be fully
+explored: unexplored ground is left alone like water or a cliff, and the city
+fits itself to what is known, so a 60%-explored area can still take a city (it
+just builds a smaller one).
 
 **0.6.1** — Clicking the world map did nothing: the click handler called a
 helper that only existed inside another function, so it threw on every click.
