@@ -240,7 +240,7 @@ export function siteGround(chunks, x, z, size, opts = {}) {
     const rise = y - baseY;
     if (rise >= -(opts.cut ?? 6) && rise <= (opts.fill ?? 10)) buildable++;
   }
-  return { ground, water, baseY, size, x0: x, z0: z,
+  return { ground, raw: field.raw || ground, water, baseY, size, x0: x, z0: z,
     coverage: field.coverage, waterShare: field.waterShare,
     buildableShare: buildable / (size * size),
     p05: dry.length ? dry[Math.floor(dry.length * 0.05)] : baseY,

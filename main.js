@@ -11,7 +11,7 @@ import { readWorld, readLevelDat, siteGround, findSites, SEA_LEVEL } from './eng
 import { decodeNbt } from './tools/nbt-read.js';
 import { THEMES } from './engine/materials.js';
 
-const VERSION = '0.7.2';
+const VERSION = '0.7.3';
 const $ = (id) => document.getElementById(id);
 const numVal = (id) => Number($(id).value);      // readCfg has its own local num()
 

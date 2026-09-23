@@ -17,7 +17,7 @@ import { makeRng } from './rng.js';
 // Must match main.js VERSION, package.json and index.html data-version;
 // tools/validate.js fails if they drift. The app refuses to export when the
 // browser has mixed cached copies of old and new files.
-export const POLIS_VERSION = '0.7.2';
+export const POLIS_VERSION = '0.7.3';
 
 export const CHUNK = 64;          // Bedrock structure limit per horizontal axis
 export const GROUND_DROP = 2;     // base layer y=0 sits 2 below feet; surface y=1 replaces the block you stand on
@@ -130,6 +130,13 @@ function columnLimits(world, opts) {
   const t = opts.terrain;
   if (!t) return {};
   const { ground, baseY, size } = t;
+  // The ground array has had the treetops filtered off it, which is right for
+  // deciding heights and wrong for deciding what to clear: a tree left
+  // standing over a street becomes a floating tree once its trunk is cut.
+  // Clearing goes by the raw heightmap — the top of anything — and always at
+  // least as high above the city as the clearance setting asks.
+  const raw = t.raw || ground;
+  const headroom = Math.max(4, Math.min(200, opts.clearAbove | 0));
   const tops = new Int32Array(size * size).fill(-9999);
   world.forEach((x, y, z) => {
     if (x < 0 || z < 0 || x >= size || z >= size) return;
@@ -140,13 +147,22 @@ function columnLimits(world, opts) {
     const g = ground[z * size + x];
     return g < -900 ? null : g - baseY + 1;             // the terrain, in city heights
   };
+  const rawY = (x, z) => {
+    const g = raw[z * size + x];
+    return g < -900 ? null : g - baseY + 1;             // the top of whatever stands there
+  };
   return {
     clearTo: (x, z) => {
       if (x < 0 || z < 0 || x >= size || z >= size) return -9999;
-      const gy = groundY(x, z);
+      const gy = groundY(x, z), ry = rawY(x, z);
       const roof = tops[z * size + x];
-      const need = Math.max(roof >= -9000 ? roof + 1 : -9999, gy === null ? -9999 : gy + 2);
-      return need;
+      // above the city's own roofs by the clearance asked for, and above
+      // anything that was standing there (trees included)
+      return Math.max(
+        roof >= -9000 ? roof + headroom : -9999,
+        gy === null ? -9999 : gy + 3,
+        ry === null ? -9999 : ry + 3,
+      );
     },
     fillFrom: (x, z) => {
       if (x < 0 || z < 0 || x >= size || z >= size) return 9999;

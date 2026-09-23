@@ -1,4 +1,4 @@
-# Polis v0.7.2
+# Polis v0.7.3
 
 A procedural city generator that exports to **Minecraft Bedrock**. Plans a
 street grid, subdivides it into lots, raises buildings with real interiors —
@@ -296,8 +296,10 @@ or too far above or below to build on. Then:
   envelopes — one shaving the peaks, one filling the hollows — and takes the
   middle of the two, which keeps most of the city within two blocks of the
   real ground;
-- each column is **carved and founded only as far as it needs**: cleared up to
-  its own roof or the ground that was there, and founded down to that ground
+- each column is **carved and founded only as far as it needs**: cleared to
+  the height the clearance setting asks for above the city's own roofs, and
+  above anything that stood there (by the raw heightmap, so a tree is taken
+  with its trunk rather than left floating), then founded down to the ground
   and no further. Everything outside stays structure void, so the landscape
   around the city is left standing instead of a box being cut out of it.
 
@@ -609,6 +611,13 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.7.3** — Clear above ground is respected on fitted sites again. Carving per
+column (0.7.0) cleared only a block above each column's own roof and ignored
+the setting, so hillsides overhung the streets and trees were left floating
+where their trunks had been cut. Clearing now goes by the setting, and by the
+raw heightmap rather than the tree-filtered one. The validator checks that
+raising the setting clears more.
 
 **0.7.2** — The preview draws the real terrain around a fitted city, so how it
 sits in the land can be judged in the browser instead of in the game. The land

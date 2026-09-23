@@ -1710,6 +1710,26 @@ section('2r. fitted to real ground');
   check('fitted cities: no step taller than one block anywhere in the city', tallSteps === 0, `${tallSteps} steps`);
   check('fitted cities: every lot is dead level under its building', lots > 0 && flatLots === lots, `${flatLots}/${lots}`);
   check('fitted cities: the canal holds one level (water cannot slope)', canals === 0 || levelCanals === canals, `${levelCanals}/${canals}`);
+  // the clearance setting has to reach above the city, and trees standing on
+  // the site have to go with it (a trunk cut below leaves a floating tree)
+  {
+    const site = siteGround(chunks, sites[0].x, sites[0].z, 160);
+    const r2 = generateCity({ ...DEFAULTS, size: 160, seed: 7, terrain: site, transit: 'rails' });
+    const terrain = { ground: site.ground, raw: site.raw, baseY: site.baseY, size: 160 };
+    const volume = (clearAbove) => {
+      const st = buildStructures(r2.world, { prefix: 'c', fillAir: true, foundation: 12, clearAbove, terrain });
+      let air = 0;
+      for (const s2 of st) {
+        const t2 = decodeTyped(s2.data);
+        const pal = t2.v.structure.v.palette.v.default.v.block_palette.v;
+        for (const c of t2.v.structure.v.block_indices.v[0].v) if (c.v >= 0 && pal[c.v].v.name.v === 'minecraft:air') air++;
+      }
+      return air;
+    };
+    const low = volume(4), high = volume(48);
+    check('fitted cities: the clearance setting decides how much is cleared above', high > low * 1.5,
+      `${low.toLocaleString()} cleared at 4, ${high.toLocaleString()} at 48`);
+  }
   check('fitted cities: the preview carries the surrounding land, and the export does not',
     shellCells > 0 && shellLeaks === 0, `${shellCells} land blocks for the preview, ${shellLeaks} in the world`);
   check('fitted cities: the outline keeps off deep water', worst > 0.85, `${(worst * 100).toFixed(0)}% of deep water left alone`);
