@@ -1,4 +1,4 @@
-# Polis v0.5.0
+# Polis v0.5.2
 
 A procedural city generator that exports to **Minecraft Bedrock**. Plans a
 street grid, subdivides it into lots, raises buildings with real interiors —
@@ -170,11 +170,14 @@ After furnishing, every room is walked to from the front door (stepping up
 only onto stairs); if any room cannot be reached, the building keeps an open
 plan instead.
 
-**Art.** The inside walls carry 2x2 panels of glazed terracotta at eye level —
-four tiles of one colour, each turned a quarter from the last, so they form a
-motif. Walls are one block thick, so both rooms see each panel. Real paintings
-are entities in Bedrock rather than blocks; a structure saved in game with a
-few paintings hung in it would let Polis add them the way it adds animals.
+**Art.** Rooms carry real **paintings** — from a structure saved in game, so
+the motifs are genuine Bedrock paintings in their proper sizes (1x1, 2x1, 1x2
+and 2x2). They are entities, so they travel with the villagers in the mob
+structures. Each is hung at eye level on a clear patch of wall with solid wall
+behind every block of it, after the furniture is in, one or two to a room and
+no more than eight to a building. The inside walls also carry 2x2 panels of
+glazed terracotta — four tiles of one colour, each turned a quarter from the
+last — and since a wall is one block thick, both rooms see each panel.
 
 ## Life
 
@@ -380,9 +383,10 @@ underneath. It follows the rule that keeps all water in Polis in place: every
 water block has solid stone or water on all four sides and underneath (the
 city's stone base is extended down to hold it, and the channel stops well
 inside the wall). A dock has three stairs down from the walkway to a wooden
-landing at the water's edge; `/function <city id>/boats_centered` (or `boats`)
-puts two boats there — boats get their own function, never in `populate`, so
-if Bedrock ever rejected the name only that small file would be affected.
+landing at the water's edge; `populate` puts the boats in the
+water along with everything else, while its ticking areas still hold the city
+loaded; `/function <city id>/boats_centered` (or `boats`) re-summons them if
+any are missing.
 
 ## Railways
 
@@ -547,6 +551,18 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.5.2** — Real paintings on the walls, from a structure saved in game:
+eleven motifs in four sizes, hung at eye level on clear wall after the
+furniture is placed, one or two per room and at most eight per building. They
+travel in the mob structures like the villagers. The validator checks every
+painting has solid wall behind it, clear space in front, faces into its room
+and is centred to match its motif's size.
+
+**0.5.1** — Boats are summoned by `populate`, with the rest of the population.
+They had their own function, which runs after `populate` releases the ticking
+areas, so only boats near the player appeared and the harbour's were silently
+lost. The standalone `boats` function stays as a fallback for any that miss.
 
 **0.5.0** — A harbour district on the canal: basin, quay with bollards, crates
 and cranes, warehouses, a goods yard with buffered rail sidings and parked

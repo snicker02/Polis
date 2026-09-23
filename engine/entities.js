@@ -11,7 +11,7 @@
 // adult ("unskilled"), with no village, trades or inventory, so it claims a
 // bed and takes a job from whatever workstation it finds.
 
-import { GOLEM, VILLAGER, CAT, PANDA, CAT_COATS, COW, PIG, CHICKEN, SHEEP, SHEEP_COATS, PROFESSIONS, TIER_EXP, hydrate } from './entity-templates.js';
+import { GOLEM, VILLAGER, CAT, PANDA, CAT_COATS, COW, PIG, CHICKEN, SHEEP, SHEEP_COATS, PROFESSIONS, TIER_EXP, PAINTING, PAINTING_MOTIFS, hydrate } from './entity-templates.js';
 import { N } from './blockcore.js';
 
 let uidSeq = 0;
@@ -25,8 +25,9 @@ function uniqueId(rng) {
 const floatList = (xs) => ({ t: 9, et: 5, keepEt: true, v: xs.map((x) => ({ t: 5, v: x })) });
 
 // kinds carried in mob structures (everything else is summoned)
-export const STRUCTURE_MOBS = new Set(['villager', 'golem', 'cat', 'panda', 'cow', 'pig', 'chicken', 'sheep']);
-const TEMPLATE = { villager: VILLAGER, golem: GOLEM, cat: CAT, panda: PANDA, cow: COW, pig: PIG, chicken: CHICKEN, sheep: SHEEP };
+export const STRUCTURE_MOBS = new Set(['villager', 'golem', 'cat', 'panda', 'cow', 'pig', 'chicken', 'sheep', 'painting']);
+const TEMPLATE = { villager: VILLAGER, golem: GOLEM, cat: CAT, panda: PANDA, cow: COW, pig: PIG, chicken: CHICKEN, sheep: SHEEP, painting: PAINTING };
+export const PAINTINGS = PAINTING_MOTIFS;
 
 // The professions a villager can start with, and the level names for 0..4.
 export const PROFESSION_NAMES = Object.keys(PROFESSIONS);
@@ -51,6 +52,14 @@ export function makeEntity(kind, x, y, z, rng, opts = {}) {
       v: v.definitions.v.map((d) => (/^\+minecraft:cat_(?!adult|baby|wild)/.test(d.v) ? { t: 8, v: coat.def } : d)),
     };
     v.Variant = { t: 3, v: coat.variant };
+  }
+  if (kind === 'painting') {
+    // hung on a wall: the motif, the way it faces, and its exact centre
+    v.Motif = { t: 8, v: opts.motif };
+    v.Direction = { t: 1, v: opts.direction };
+    v.Dir = { t: 1, v: opts.direction };
+    v.Pos = floatList(opts.pos);
+    return e;
   }
   if (kind === 'sheep') {
     // mostly white, some light grey: only coats seen in game, with the Color the game pairs with each

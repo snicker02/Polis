@@ -8,7 +8,7 @@ import { Renderer } from './engine/renderer.js';
 import { exportPack, exportStructuresZip, tileList, commandList, cityId, exportSalt, POLIS_VERSION } from './engine/export.js';
 import { THEMES } from './engine/materials.js';
 
-const VERSION = '0.5.0';
+const VERSION = '0.5.2';
 const $ = (id) => document.getElementById(id);
 
 const SLIDERS = {
@@ -316,6 +316,7 @@ function showStats(mesh, times) {
     if (s.canal) line('canal', s.canal + (s.dock ? ' · dock' : ''));
     if (s.harbour) line('harbour', s.harbour);
     if (s.art) line('art panels', String(s.art));
+    if (s.paintings) line('paintings', String(s.paintings));
     if (s.ranches !== undefined) line('pens / farm animals', `${s.ranches} / ${s.animals}`);
     if (s.cats !== undefined) line('cats / pandas', `${s.cats} / ${s.pandas}`);
     if (s.railLines) line('rail lines / bridges / carts', `${s.railLines} / ${s.railBridges} / ${s.carts}` + (s.railLoop ? ' · loop' : ''));

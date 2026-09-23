@@ -17,7 +17,7 @@ import { makeRng } from './rng.js';
 // Must match main.js VERSION, package.json and index.html data-version;
 // tools/validate.js fails if they drift. The app refuses to export when the
 // browser has mixed cached copies of old and new files.
-export const POLIS_VERSION = '0.5.0';
+export const POLIS_VERSION = '0.5.2';
 
 export const CHUNK = 64;          // Bedrock structure limit per horizontal axis
 export const GROUND_DROP = 2;     // base layer y=0 sits 2 below feet; surface y=1 replaces the block you stand on
@@ -152,7 +152,8 @@ export function mobTiles(spawns, opts = {}) {
     for (const p of g.mobs) {
       box.x0 = Math.min(box.x0, p.x); box.x1 = Math.max(box.x1, p.x);
       box.z0 = Math.min(box.z0, p.z); box.z1 = Math.max(box.z1, p.z);
-      box.y0 = Math.min(box.y0, p.y); box.y1 = Math.max(box.y1, p.y + (p.type === 'golem' ? 2 : 1));   // cats, pandas fit in 2
+      const tall = p.type === 'golem' ? 2 : p.type === 'painting' ? (p.h || 1) : 1;
+      box.y0 = Math.min(box.y0, p.y); box.y1 = Math.max(box.y1, p.y + tall);   // cats, pandas fit in 2; a painting is as tall as it is
     }
     return {
       name: `m_x${g.cx}_z${g.cz}`, box, mobs: g.mobs,
@@ -165,7 +166,8 @@ export function mobTiles(spawns, opts = {}) {
 export function buildMobStructures(spawns, opts = {}) {
   const rng = makeRng(((opts.seed | 0) ^ 0x6d0b5) >>> 0);
   return mobTiles(spawns, opts).map((t) => {
-    const entities = t.mobs.map((p) => makeEntity(p.type, p.x, p.y, p.z, rng, { profession: p.profession, tier: p.tier }));
+    const entities = t.mobs.map((p) => makeEntity(p.type, p.x, p.y, p.z, rng,
+      { profession: p.profession, tier: p.tier, motif: p.motif, direction: p.direction, pos: p.pos }));
     const res = writeMcStructure([], [], t.box, MATERIALS, { entities, placeholderId: MAT.AIR });
     return {
       name: t.name, data: res.data, box: t.box, size: res.size, offset: t.offset,
@@ -173,6 +175,7 @@ export function buildMobStructures(spawns, opts = {}) {
       villagers: t.mobs.filter((p) => p.type === 'villager').length,
       golems: t.mobs.filter((p) => p.type === 'golem').length,
       cats: t.mobs.filter((p) => p.type === 'cat').length,
+      paintings: t.mobs.filter((p) => p.type === 'painting').length,
       pandas: t.mobs.filter((p) => p.type === 'panda').length,
     };
   });
@@ -218,11 +221,12 @@ export function functionFiles(tiles, world, opts = {}) {
   const cats = spawns.filter((p) => p.type === 'cat').length;
   const pandas = spawns.filter((p) => p.type === 'panda').length;
   const carts = spawns.filter((p) => p.type === 'minecart');
-  // Boats get a function of their own and are never in populate: if Bedrock
-  // ever rejected the entity name, only that one small file would be dropped.
+  // Boats ride along in populate, while its ticking areas still hold the city
+  // loaded — summoned from their own function afterwards, the distant ones
+  // (the harbour) silently failed. The separate function stays as a fallback.
   const boats = spawns.filter((p) => p.type === 'boat');
   const animals = spawns.filter((p) => FARM_ANIMALS.includes(p.type));
-  const summoned = carts;
+  const summoned = carts.concat(boats);
   const sumLine = (p, dx, dz) => `summon ${SUMMON_IDS[p.type]} ${rel(p.x - dx)} ${rel(p.y - GROUND_DROP)} ${rel(p.z - dz)}`;
   const areas = tickingAreas(world, ns);
   const top = wb.y1 - wb.y0 + 2;
@@ -241,15 +245,15 @@ export function functionFiles(tiles, world, opts = {}) {
     `# ${title}`,
     `# ${villagers} villagers, ${golems} iron golems, ${cats} cats, ${pandas} pandas and ${animals.length} farm animals ` +
       `arrive inside ${mobs.length} mob structure${mobs.length === 1 ? '' : 's'}` +
-      (carts.length ? `; ${carts.length} minecarts are summoned.` : '.'),
+      (summoned.length ? `; ${carts.length} minecarts and ${boats.length} boats are summoned.` : '.'),
     '# Run ONCE, from the same spot you ran build from, after the city has appeared.',
     `say Polis: bringing in ${villagers} villagers, ${golems} golems, ${cats} cats, ${pandas} pandas, ` +
-      `${animals.length} farm animals` + (carts.length ? ` and ${carts.length} minecarts...` : '...'),
+      `${animals.length} farm animals` + (summoned.length ? `, ${carts.length} minecarts and ${boats.length} boats...` : '...'),
     ...mobs.map((t) => load(t, dx, dz)),
     ...summoned.map((p) => sumLine(p, dx, dz)),
     ...areas.map((a) => `tickingarea remove ${a.name}`),
     'say Polis: done. Villagers take jobs from the workstations and claim beds over the next few minutes.',
-    ...(boats.length ? [`say Polis: for boats at the dock, run /function ${ns}/${dx === wb.x0 ? 'boats' : 'boats_centered'}`] : []),
+    ...(boats.length ? [`say Polis: any boat that did not appear, run /function ${ns}/${dx === wb.x0 ? 'boats' : 'boats_centered'} from beside the water.`] : []),
   ].join('\n') + '\n';
   const files = [
     { name: `functions/${ns}/build.mcfunction`, fn: `${ns}/build`,
@@ -262,7 +266,7 @@ export function functionFiles(tiles, world, opts = {}) {
       text: populate(cx, cz, 'Polis: villagers, golems and minecarts (pairs with build_centered)') },
   ];
   // fallbacks for the summoned kinds: run near any that are missing
-  for (const [group, list, noun] of [['minecarts', carts, 'minecarts'], ['boats', boats, 'boats at the dock']]) {
+  for (const [group, list, noun] of [['minecarts', carts, 'minecarts'], ['boats', boats, 'boats at the dock and harbour']]) {
     if (!list.length) continue;
     const only = (dx, dz, title) => [
       `# ${title}`,

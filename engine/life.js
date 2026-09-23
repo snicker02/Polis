@@ -17,6 +17,7 @@ import { verifyBuilding } from './verify.js';
 import { OUTWARD } from './building.js';
 import { planRooms, buildRooms } from './rooms.js';
 import { signTags } from './landmarks.js';
+import { PAINTINGS } from './entities.js';
 import { USE } from './plan.js';
 
 export const USE_FARM = 6;
@@ -329,6 +330,67 @@ export function furnish(world, rec, rng, opts = {}) {
     }
   };
 
+  // Paintings on the walls of a room: the biggest that fits a clear patch of
+  // wall at eye level, with solid wall behind every block of it. A painting is
+  // an entity, so it travels with the villagers in the mob structures; its
+  // position is its centre, a whisker off the wall face.
+  const paintings = [];
+  const DIRS = [['south', 0, 0, 1], ['west', 1, -1, 0], ['north', 2, 0, -1], ['east', 3, 1, 0]];
+  const PAINTINGS_PER_BUILDING = 8;
+  const hangPaintings = (rm, sy, rng2) => {
+    // a painting is an entity, so a city's worth of them adds up: one to a
+    // room, two now and then, and only so many to a building
+    if (paintings.length >= PAINTINGS_PER_BUILDING || rng2() > 0.6) return;
+    const wanted = rng2() < 0.25 ? 2 : 1;
+    let hung = 0;
+    const y0 = sy + 2;                                     // eye level and up
+    const top = sy + rec.pitch - 1;
+    const solid = (x, y, z) => { const id = world.get(x, y, z); return id !== -1 && !MATERIALS.isPassable(id); };
+    const empty = (x, y, z) => world.get(x, y, z) === -1;
+    const sizes = PAINTINGS.slice().sort((a, b) => (b.w * b.h) - (a.w * a.h));
+    for (const [side, dir, nx, nz] of rng2.shuffle ? rng2.shuffle(DIRS.slice()) : DIRS) {
+      if (hung >= wanted) break;
+      // the wall on this side of the room, and the cells inside it
+      const alongX = nx === 0;
+      const wallC = nx ? (nx > 0 ? rm.x1 + 1 : rm.x0 - 1) : (nz > 0 ? rm.z1 + 1 : rm.z0 - 1);
+      const lo = alongX ? rm.x0 : rm.z0, hi = alongX ? rm.x1 : rm.z1;
+      for (const { motif, w, h } of sizes) {
+        if (rng2() > 0.45) continue;
+        if (y0 + h - 1 > top - 1 || w > hi - lo + 1) continue;
+        const start = lo + Math.floor(rng2() * (hi - lo + 2 - w));
+        let ok = true;
+        for (let i = 0; i < w && ok; i++)
+          for (let j = 0; j < h && ok; j++) {
+            const u = start + i, y = y0 + j;
+            const [ix, iz] = alongX ? [u, wallC - nz] : [wallC - nx, u];      // the cell inside the room
+            const [wx, wz] = alongX ? [u, wallC] : [wallC, u];                // the wall behind it
+            if (!empty(ix, y, iz) || !solid(wx, y, wz)) ok = false;
+            if (paintings.some((p) => p.cells.has(ix + ',' + y + ',' + iz))) ok = false;
+          }
+        if (!ok) continue;
+        // the centre of the painting, 1/32 off the face of the wall
+        const cells = new Set();
+        for (let i = 0; i < w; i++) for (let j = 0; j < h; j++) {
+          const u = start + i, y = y0 + j;
+          const [ix, iz] = alongX ? [u, wallC - nz] : [wallC - nx, u];
+          cells.add(ix + ',' + y + ',' + iz);
+        }
+        // the wall's face on the room side, and the way the painting looks:
+        // back into the room, the opposite of the way the wall lies
+        const face = nx ? (nx > 0 ? wallC : wallC + 1) : (nz > 0 ? wallC : wallC + 1);
+        const facing = (dir + 2) % 4;
+        const fx = -nx, fz = -nz;
+        const cu = start + w / 2, cy = y0 + h / 2;
+        const pos = alongX ? [cu, cy, face + fz * 0.03125] : [face + fx * 0.03125, cy, cu];
+        const anchor = alongX ? [start, y0, wallC - nz] : [wallC - nx, y0, start];
+        paintings.push({ type: 'painting', motif, direction: facing, pos, h, face,
+          x: anchor[0], y: anchor[1], z: anchor[2], cells });
+        hung++;
+        break;                                              // one painting per wall
+      }
+    }
+  };
+
   // A shop at street level: a glass front between the piers, an awning over
   // the pavement, a counter inside, and a sign on the pier with its name.
   const SHOPS = ['Bakery', 'Butcher', 'Grocer', 'Florist', 'Tailor', 'Bookshop', 'Apothecary', 'Cobbler',
@@ -404,6 +466,7 @@ export function furnish(world, rec, rng, opts = {}) {
         if (rm.type === 'classroom') classroomDesks(rm, sy, free, allDoors);
         if (rm.type === 'shop' && k === 0) shopFront(rm, sy, rng);
         place(ring, ROOMS[rm.type] || ROOMS.office, free, sy, k);
+        hangPaintings(rm, sy, rng);                         // last, so nothing is hung where a shelf goes
       }
     } else {
       const ix0 = r.x0 + 1, iz0 = r.z0 + 1, ix1 = r.x1 - 1, iz1 = r.z1 - 1;
@@ -449,6 +512,7 @@ export function furnish(world, rec, rng, opts = {}) {
     roomsOk = !plans.length || roomsReachable(world, rec, plans);
   }
   if (!v.ok || !roomsOk) {
+    paintings.length = 0;                                   // nothing hangs in a building that gets its rooms taken out
     for (const [x, y, z] of placed.reverse()) world.clear(x, y, z);
     if (useRooms && plans.some(Boolean)) return furnish(world, rec, rng, { ...opts, rooms: false });   // open plan instead
     return { ok: false, beds: [], placed: 0, stations: 0, plants: 0, shelves: 0, rooms: [] };
@@ -456,7 +520,8 @@ export function furnish(world, rec, rng, opts = {}) {
   const rooms = [];
   plans.forEach((p, k) => { if (p) for (const rm of p.rooms) rooms.push({ ...rm, floor: k }); });
   rec.roomPlans = plans;
-  return { ok: true, beds, placed: placed.length, stations, plants, shelves, rooms, desks: desks.length / 2, shops: shopFronts };
+  return { ok: true, beds, placed: placed.length, stations, plants, shelves, rooms, desks: desks.length / 2, shops: shopFronts,
+    paintings: paintings.map(({ cells, ...p }) => p) };
 }
 
 // Walk from the front door (up only onto stairs, down up to three, through

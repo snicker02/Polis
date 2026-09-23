@@ -39,6 +39,27 @@ for (const e of ents.filter((x) => id(x) === 'minecraft:sheep')) {
   const d = defs(e).find((x) => /^\+minecraft:sheep_(?!adult|baby|sheared|dyeable)/.test(x));
   if (d && !sheepCoats.some((c) => c.def === d)) sheepCoats.push({ def: d, color: e.v.Color.v });
 }
+// Paintings: one entity as the template, plus the motifs seen and their sizes.
+// A painting's Pos is its centre, so an even width or height puts that centre
+// on a block boundary — which cross-checks the size table below.
+const PAINTING_SIZE = {
+  Kebab: [1, 1], Aztec: [1, 1], Alban: [1, 1], Aztec2: [1, 1], Bomb: [1, 1], Plant: [1, 1], Wasteland: [1, 1],
+  Pool: [2, 1], Courbet: [2, 1], Sea: [2, 1], Sunset: [2, 1], Creebet: [2, 1],
+  Wanderer: [1, 2], Graham: [1, 2], prairie_ride: [1, 2],
+  Match: [2, 2], Bust: [2, 2], Stage: [2, 2], Void: [2, 2], SkullAndRoses: [2, 2], Wither: [2, 2],
+  Fighters: [4, 2], Pointer: [4, 4], Pigscene: [4, 4], BurningSkull: [4, 4], Skeleton: [4, 3], DonkeyKong: [4, 3],
+};
+const paintings = ents.filter((e) => id(e) === 'minecraft:painting');
+const motifs = [];
+for (const e of paintings) {
+  const motif = e.v.Motif.v, size = PAINTING_SIZE[motif];
+  if (!size) { console.log('  (skipping unknown motif ' + motif + ')'); continue; }
+  const [px, py] = [e.v.Pos.v[0].v, e.v.Pos.v[1].v];
+  const evenW = Math.abs(px % 1) < 1e-6, evenH = Math.abs(py % 1) < 1e-6;
+  if (evenW !== (size[0] % 2 === 0) || evenH !== (size[1] % 2 === 0)) throw new Error('painting size mismatch for ' + motif);
+  if (!motifs.some((m) => m.motif === motif)) motifs.push({ motif, w: size[0], h: size[1] });
+}
+
 // professional villagers: one adult per profession, with the whole trade table
 // (every profession's Offers already hold the trades for all five levels)
 const profs = {};
@@ -75,6 +96,8 @@ export const PIG = ${pig ? ser(pig) : 'null'};
 export const CHICKEN = ${chicken ? ser(chicken) : 'null'};
 export const SHEEP = ${sheep ? ser(sheep) : 'null'};
 export const SHEEP_COATS = ${JSON.stringify(sheepCoats)};
+export const PAINTING = ${paintings.length ? ser(paintings[0]) : 'null'};
+export const PAINTING_MOTIFS = ${JSON.stringify(motifs)};
 export const PROFESSIONS = {${Object.entries(profs).map(([k, e]) => `${JSON.stringify(k)}:${ser(e)}`).join(',')}};
 export const TIER_EXP = ${JSON.stringify(tierExp)};
 export function hydrate(t) {
@@ -87,6 +110,7 @@ export function hydrate(t) {
 writeFileSync(new URL('../engine/entity-templates.js', import.meta.url), out);
 console.log('golem', Object.keys(golem.v).length, 'keys · villager', Object.keys(villager.v).length,
   '· cat', Object.keys(cat.v).length, defs(cat).join(' '), '· panda', defs(panda).join(' '), '· coats', JSON.stringify(coats));
+console.log('paintings:', motifs.map((m) => `${m.motif} ${m.w}x${m.h}`).join(', ') || 'none');
 console.log('professions:', Object.keys(profs).join(' '), '· tier experience', JSON.stringify(tierExp));
 console.log('farm:', [cow, pig, chicken, sheep].map((e) => e ? id(e) + ' [' + defs(e).join(' ') + ']' : 'missing').join('\n      '),
   '\nsheep coats', JSON.stringify(sheepCoats));

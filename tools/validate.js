@@ -26,7 +26,7 @@ import { decodeTyped } from './nbt-typed.js';
 import { walkCity } from '../engine/terrain.js';
 import { CLOCK_FACE, LANDMARK_NAMES } from '../engine/landmarks.js';
 import { STYLES, remapTable } from '../engine/styles.js';
-import { CAT_COATS, SHEEP_COATS } from '../engine/entity-templates.js';
+import { CAT_COATS, SHEEP_COATS, PAINTING_MOTIFS } from '../engine/entity-templates.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const deflateRaw = (b) => new Uint8Array(zlib.deflateRawSync(Buffer.from(b)));
@@ -408,6 +408,7 @@ section('2c. life');
     const solid = (x, y, z) => { const id = w.get(x, y, z); return id !== -1 && !MATERIALS.isPassable(id); };
     for (const p of r.spawns) {
       if (p.type === 'minecart') continue;                       // checked with the railways
+      if (p.type === 'painting') continue;                        // hung on a wall: checked in 2q
       if (p.type === 'boat') {                                    // on the water, open air above
         const n = w.get(p.x, p.y, p.z), a1 = w.get(p.x, p.y + 1, p.z);
         if (n < 0 || MATERIALS.def(n).block !== 'minecraft:water' || a1 !== -1) badSpawn++;
@@ -1578,6 +1579,48 @@ section('2p. harbour');
 }
 
 // ===========================================================================
+// 2q. paintings
+// ===========================================================================
+section('2q. paintings');
+{
+  let cities = 0, hung = 0, badWall = 0, badSpace = 0, badPos = 0, badDir = 0, sizes = new Set();
+  const NORMAL = { 0: [0, 1], 1: [-1, 0], 2: [0, -1], 3: [1, 0] };     // Direction: south, west, north, east
+  for (const [size, seed, st] of [[160, 12345, 'modern'], [192, 1, 'medieval'], [224, 3, 'desert'], [256, 7, 'cherry']]) {
+    const r = generateCity({ ...DEFAULTS, size, seed, cityStyle: st });
+    const w = r.world;
+    cities++;
+    for (const p of r.spawns.filter((q) => q.type === 'painting')) {
+      hung++;
+      const m = PAINTING_MOTIFS.find((q) => q.motif === p.motif);
+      if (!m) { badPos++; continue; }
+      sizes.add(`${m.w}x${m.h}`);
+      const [nx, nz] = NORMAL[p.direction];
+      for (let i = 0; i < m.w; i++)
+        for (let j = 0; j < m.h; j++) {
+          const x = p.x + (nx ? 0 : i), y = p.y + j, z = p.z + (nx ? i : 0);
+          if (w.has(x, y, z)) badSpace++;                              // the painting needs the space clear
+          const bx = x - nx, bz = z - nz;
+          const id = w.get(bx, y, bz);
+          if (id < 0 || MATERIALS.isPassable(id)) badWall++;           // and solid wall behind every block of it
+        }
+      // its centre sits a whisker off the face of that wall, on the room side
+      const along = nx ? p.pos[0] : p.pos[2];
+      if (Math.abs(along - (p.face + (nx || nz) * 0.03125)) > 1e-6) badPos++;
+      // and its centre matches its size: even sides land on a block boundary
+      const evenW = Math.abs((nx ? p.pos[2] : p.pos[0]) % 1) < 1e-6;
+      const evenH = Math.abs(p.pos[1] % 1) < 1e-6;
+      if (evenW !== (m.w % 2 === 0) || evenH !== (m.h % 2 === 0)) badDir++;
+    }
+  }
+  check('paintings: hung in every test city', hung > 0 && cities === 4, `${hung} paintings`);
+  check('paintings: solid wall behind every block of each one', badWall === 0, `${badWall}`);
+  check('paintings: the space they hang in is clear', badSpace === 0, `${badSpace}`);
+  check('paintings: centred a whisker off the wall face', badPos === 0, `${badPos}`);
+  check('paintings: centre matches the motif size', badDir === 0, `${badDir}`);
+  note(`${hung} paintings across ${cities} cities · sizes ${[...sizes].sort().join(', ')}`);
+}
+
+// ===========================================================================
 // 3. chunk split coverage
 // ===========================================================================
 section('3. chunk split');
@@ -1969,7 +2012,7 @@ refreshWalkThrough();
   const wantG = r.spawns.filter((p) => p.type === 'golem').length;
   const wantC = r.spawns.filter((p) => p.type === 'minecart').length;
   check('population: this city has villagers, golems and carts to place', wantV > 0 && wantG > 0 && wantC > 0);
-  check('functions: nothing but minecarts is summoned (every mob travels in structures)',
+  check('functions: only minecarts and boats are summoned (every mob travels in structures)',
     !/summon minecraft:(villager|iron_golem|cat|panda|cow|sheep|pig|chicken)/.test(build + popul));
   check('functions: build summons nothing and loads no mob structures',
     !build.includes('summon') && !lines(build).some((l) => / \S+:m_x/.test(l)));
@@ -1977,6 +2020,12 @@ refreshWalkThrough();
   check('populate: one structure load per mob structure', mobLoads.length === out.mobStructures.length && mobLoads.length > 0,
     `${mobLoads.length} vs ${out.mobStructures.length}`);
   check('populate: one summon per minecart', lines(popul).filter((l) => l.startsWith('summon minecraft:minecart ')).length === wantC);
+  // boats are summoned in populate too, while its ticking areas still hold the
+  // city loaded: from their own function afterwards, distant ones failed
+  const wantB = r.spawns.filter((p) => p.type === 'boat').length;
+  check('populate: one summon per boat, while the city is still held loaded', wantB > 0 &&
+    lines(popul).filter((l) => l.startsWith('summon minecraft:boat ')).length === wantB, `${wantB} boats`);
+  check('functions: the boats fallback is still there for any that miss', !!text(`functions/${ns}/boats_centered.mcfunction`));
   const wantA = r.spawns.filter((p) => ['cow', 'sheep', 'pig', 'chicken'].includes(p.type)).length;
   check('populate: farm animals are no longer summoned (they travel in structures)', wantA > 0 &&
     !lines(popul).some((l) => /^summon minecraft:(cow|sheep|pig|chicken) /.test(l)));
@@ -2006,7 +2055,7 @@ refreshWalkThrough();
   for (const st of out.structures.concat(out.mobStructures)) typed[st.name] = decodeTyped(raw(`structures/${ns}/${st.name}.mcstructure`));
   let entCount = 0, badEnt = 0, uids = new Set(), dupUid = 0, vCount = 0, gCount = 0, cCount = 0, pCount = 0, aCount = 0, blocksInMob = 0;
   const sheepCoats = new Set();
-  const tiersSeen = new Set(); let unskilledN = 0, tierBad = 0;
+  const tiersSeen = new Set(); let unskilledN = 0, tierBad = 0, ptCount = 0;
   for (const st of out.mobStructures) {
     const t = typed[st.name].v;
     const l0 = t.structure.v.block_indices.v[0].v;
@@ -2032,6 +2081,7 @@ refreshWalkThrough();
         const coat = CAT_COATS.find((c) => d.includes(c.def));
         if (!coat || coat.variant !== v.Variant.v || v.IsTamed.v !== 0 || v.OwnerNew.v !== -1n || !d.includes('+minecraft:cat_wild')) badEnt++;
       } else if (id === 'minecraft:panda') pCount++;
+      else if (id === 'minecraft:painting') { ptCount++; if (!PAINTING_MOTIFS.some((m) => m.motif === v.Motif.v)) badEnt++; }
       else if (/^minecraft:(cow|pig|chicken|sheep)$/.test(id)) {
         aCount++;
         if (v.IsBaby.v !== 0 || v.LeasherID.v !== -1n || !d.some((x) => /_adult$/.test(x))) badEnt++;
@@ -2053,6 +2103,8 @@ refreshWalkThrough();
   check('mob structures: villagers adults (unemployed or with a trade); cats wild with a real coat; farm animals adult and unleashed; sheep coats match their colour; nobody tied to a village',
     badEnt === 0, `${badEnt} bad`);
   check('mob structures: exactly the planned farm animals', aCount === wantA, `${aCount}/${wantA}`);
+  const wantPt = r.spawns.filter((p) => p.type === 'painting').length;
+  check('mob structures: the paintings travel too, each with a real motif', ptCount === wantPt && wantPt > 0, `${ptCount}/${wantPt}`);
   check('villagers: every level from novice to master among them, and some still unemployed', tiersSeen.size === 5 && unskilledN > 0,
     `levels ${[...tiersSeen].sort().join(',')}, ${unskilledN} unemployed`);
   check('villagers: each one\'s experience sits inside its level, with its whole trade table', tierBad === 0, `${tierBad} wrong`);
@@ -2087,6 +2139,7 @@ refreshWalkThrough();
         total++;
         const [px, py, pz] = e.v.Pos.v.map((q) => q.v);
         const bx = Math.floor(L.at[0] + (px - origin[0])), by = Math.floor(L.at[1] + (py - origin[1])), bz = Math.floor(L.at[2] + (pz - origin[2]));
+        if (e.v.identifier.v === 'minecraft:painting') continue;            // hangs on a wall, stands on nothing
         const tall = e.v.identifier.v === 'minecraft:iron_golem' ? 3 : 2;   // villagers, cats, pandas: 2
         let ok = blocking(`${bx},${by - 1},${bz}`);
         for (let h = 0; h < tall; h++) if (blocking(`${bx},${by + h},${bz}`)) ok = false;
@@ -2094,7 +2147,7 @@ refreshWalkThrough();
       }
     }
     check(`simulated load from ${player.join(',')}: every mob (villagers, golems, cats, pandas, farm animals) lands on a floor with room to stand`,
-      bad === 0 && total === wantV + wantG + wantCat + wantPanda + wantA, `${bad}/${total} bad, e.g. ${first}`);
+      bad === 0 && total === wantV + wantG + wantCat + wantPanda + wantA + wantPt, `${bad}/${total} bad, e.g. ${first}`);
   }
 
   // bed colours still land in block_position_data at the right index

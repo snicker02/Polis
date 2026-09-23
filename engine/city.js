@@ -310,6 +310,7 @@ export function generateCity(cfgIn, onProgress) {
       const e = elevAt(rec.door.x, rec.door.z);
       shiftBuilding(rec, e);
       for (const sf of (rec.furniture && rec.furniture.shops) || []) sf.at[1] += e;   // shop signs ride up too
+      for (const pt of (rec.furniture && rec.furniture.paintings) || []) { pt.y += e; pt.pos[1] += e; }
     }
     for (const rch of ranches) for (const a of rch.animals) a.y += elevAt(a.x, a.z);
     for (const p of pandas) p.y += elevAt(p.x, p.z);
@@ -365,6 +366,7 @@ export function generateCity(cfgIn, onProgress) {
   if (transit) spawns = spawns.concat(transit.carts);
   if (canal && canal.dock) spawns = spawns.concat(canal.dock.boats);
   if (harbour) spawns = spawns.concat(harbour.boats);
+  for (const rec of buildings) for (const p of (rec.furniture && rec.furniture.paintings) || []) spawns.push(p);
 
   // ---- city style: restyle the role materials, then snow -----------------------
   applyStyle(world, plan, STYLE, (x, z) => GROUND + elevAt(x, z));
@@ -841,6 +843,7 @@ function summarise(world, plan, buildings, cfg, life = {}) {
     canal: life.canal ? `${life.canal.u1 - life.canal.u0 + 1} long · ${life.canal.bridges} bridges` : '',
     dock: !!(life.canal && life.canal.dock),
     art: buildings.reduce((a, b) => a + (b.roomPlans || []).reduce((c, p) => c + ((p && p.art) || 0), 0), 0),
+    paintings: (life.spawns || []).filter((p) => p.type === 'painting').length,
     hillBlocks: life.hills ? life.hills.blocks.filter((b) => b.e > 0).length : 0,
     hillMax: life.hills ? Math.max(0, ...life.hills.blocks.map((b) => b.e)) : 0,
     staircases: (life.stairRuns || []).length,
