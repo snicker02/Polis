@@ -44,7 +44,10 @@ export const DEFAULTS = {
   stairStyle: 'mixed',
   cityStyle: 'modern',       // modern | desert | snowy | cherry | medieval
   outline: 'organic',        // 'organic' (lobed outline along the street grid) | 'square'
-  hills: 2,                  // city blocks raised 0..hills blocks on gentle terraces, with steps
+  hills: 2,
+  terrain: null,             // ground to fit the city to: { ground, water, baseY } in city coordinates
+  terrainCut: 6,             // how far below base level the city will still build
+  terrainFill: 10,           // and how far above                  // city blocks raised 0..hills blocks on gentle terraces, with steps
   detail: true,              // relief on the outside of buildings (quoins, eaves, balconies, bays)
   streetSigns: true,         // street names on signs at the junctions
   centreMark: true,          // a gold block and sign marking where build_centered puts you
@@ -76,7 +79,10 @@ const GROUND = 1;   // surface layer; players walk at GROUND+1
 // the style in force while a city is being generated (trees read it)
 let STYLE = styleOf('modern');
 
+let stats_terrain = null;
+
 export function generateCity(cfgIn, onProgress) {
+  stats_terrain = null;
   const cfg = { ...DEFAULTS, ...cfgIn };
   STYLE = styleOf(cfg.cityStyle);
   const rng = makeRng(cfg.seed);
@@ -380,6 +386,7 @@ export function generateCity(cfgIn, onProgress) {
   const unreached = buildings.filter((b) => !reached.has(`${b.outside[0]},${b.outside[1]},${b.outside[2]}`));
   const reach = { total: buildings.length, reached: buildings.length - unreached.length, unreached };
 
+  if (cfg.terrain) stats_terrain = { baseY: cfg.terrain.baseY, maxTerrace: Math.max(0, ...hills.blocks.map((b) => b.e)) };
   const stats = summarise(world, plan, buildings, cfg, { farms, beds, spawns, bell, transit, wall, ranches, landmarks, hills, stairRuns, reach, canal, centre, streets, harbour });
   return { world, plan, buildings, cfg, stats, farms, ranches, spawns, bell, transit, wall, landmarks, canal, centre, streets, harbour, harbourPlan,
     hills, stairRuns, reach, groundAt: (x, z) => GROUND + elevAt(x, z) };
@@ -844,6 +851,7 @@ function summarise(world, plan, buildings, cfg, life = {}) {
     dock: !!(life.canal && life.canal.dock),
     art: buildings.reduce((a, b) => a + (b.roomPlans || []).reduce((c, p) => c + ((p && p.art) || 0), 0), 0),
     paintings: (life.spawns || []).filter((p) => p.type === 'painting').length,
+    terrain: stats_terrain ? `fitted to the land · base y ${stats_terrain.baseY} · terraces to ${stats_terrain.maxTerrace}` : '',
     hillBlocks: life.hills ? life.hills.blocks.filter((b) => b.e > 0).length : 0,
     hillMax: life.hills ? Math.max(0, ...life.hills.blocks.map((b) => b.e)) : 0,
     staircases: (life.stairRuns || []).length,

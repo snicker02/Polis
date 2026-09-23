@@ -26,6 +26,26 @@ import { USE } from './plan.js';
 export function planHills(plan, cfg) {
   const { W, D } = plan;
   const elev = new Int8Array(W * D);
+  // On real ground the terraces follow the land: each block sits at the
+  // median height of the ground under it, measured from the city's base
+  // level, so the city steps up and down with the terrain.
+  if (cfg.terrain) {
+    const t = cfg.terrain;
+    const H = Math.max(3, Math.min(12, cfg.terrainFill | 0 || 10));
+    const blocks = [];
+    for (const b of plan.cityBlocks) {
+      const ys = [];
+      for (let z = b.z0; z <= b.z1; z++)
+        for (let x = b.x0; x <= b.x1; x++) { const g = t.ground[z * W + x]; if (g > -900) ys.push(g); }
+      ys.sort((p, q) => p - q);
+      const median = ys.length ? ys[Math.floor(ys.length / 2)] : t.baseY;
+      const e = Math.max(0, Math.min(H, Math.round(median - t.baseY)));
+      blocks.push({ ...b, e });
+      if (!e) continue;
+      for (let z = b.z0; z <= b.z1; z++) for (let x = b.x0; x <= b.x1; x++) elev[z * W + x] = e;
+    }
+    return { elev, blocks, H };
+  }
   const H = Math.max(0, Math.min(3, cfg.hills | 0));
   const blocks = [];
   if (!H) return { elev, blocks, H };
@@ -126,6 +146,12 @@ export function cutStairs(world, plan, hills, G, avoid) {
         const steps = [], landing = [x0 + inward[0] * e, z0 + inward[1] * e];
         for (let i = 0; i < e; i++) steps.push([x0 + inward[0] * i, z0 + inward[1] * i]);
         if (!steps.every(([x, z]) => cellOk(x, z)) || !cellOk(...landing)) return false;
+        // Every step stays on the pavement that rings the block; the landing
+        // may be the pavement or the open edge of a lot. A flight that cuts
+        // deeper ends in somebody's back yard, walled in by the houses.
+        const onPavement = ([x, z]) => use[z * W + x] === USE.SIDEWALK;
+        if (!steps.every(onPavement)) return false;
+        if (!onPavement(landing) && use[landing[1] * W + landing[0]] !== USE.LOT) return false;
         // the landing must be terrace you can stand on
         if (!blocked(landing[0], G + e, landing[1])) return false;
         cut(steps, inward, 'straight', sd.out);

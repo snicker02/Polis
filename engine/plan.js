@@ -188,11 +188,48 @@ export function generatePlan(cfg, rng) {
 
   // ---- 5. organic outline ----------------------------------------------------
   let keptBlocks = cityBlocks, keptLots = lots;
-  if (cfg.outline === 'organic') ({ keptBlocks, keptLots } = organicOutline(W, D, use, roadWidthAt, cityBlocks, lots, cfg, [fx, fz]));
+  if (cfg.terrain) ({ keptBlocks, keptLots } = terrainOutline(W, D, use, roadWidthAt, cityBlocks, lots, cfg, [fx, fz]));
+  else if (cfg.outline === 'organic') ({ keptBlocks, keptLots } = organicOutline(W, D, use, roadWidthAt, cityBlocks, lots, cfg, [fx, fz]));
   const mask = new Uint8Array(W * D);
   for (let i = 0; i < W * D; i++) mask[i] = use[i] !== USE.EMPTY ? 1 : 0;
 
   return { W, D, use, roadAxis, roadWidthAt, corridors, cityBlocks: keptBlocks, lots: keptLots, zoneAt, focal: [fx, fz], mask };
+}
+
+// On real ground the outline is decided by the land: a block is kept if
+// enough of it is dry and gentle enough to build on. Water, cliffs and
+// anything too far above or below the city's base level are left alone, and
+// the same tidy-up runs as for a lobed outline, so the city stays one piece.
+function terrainOutline(W, D, use, roadWidthAt, blocks, lots, cfg, focal) {
+  const t = cfg.terrain;
+  const buildable = new Uint8Array(W * D);
+  for (let z = 0; z < D; z++)
+    for (let x = 0; x < W; x++) {
+      const i = z * W + x;
+      const g = t.ground[i];
+      if (g < -900 || t.water[i]) continue;                       // unexplored or wet
+      const rise = g - t.baseY;
+      if (rise < -(cfg.terrainCut | 0 || 6) || rise > (cfg.terrainFill | 0 || 10)) continue;   // too deep or too high
+      // too steep: the ground around it climbs more than a block per block
+      let steep = 0;
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = x + dx, nz = z + dz;
+        if (nx < 0 || nz < 0 || nx >= W || nz >= D) continue;
+        const n = t.ground[nz * W + nx];
+        if (n > -900 && Math.abs(n - g) > 2) steep++;
+      }
+      if (steep >= 3) continue;
+      buildable[i] = 1;
+    }
+  const keep = blocks.map((b) => {
+    let ok = 0, all = 0, wet = 0;
+    for (let z = b.z0; z <= b.z1; z++)
+      for (let x = b.x0; x <= b.x1; x++) { all++; if (buildable[z * W + x]) ok++; if (t.water[z * W + x]) wet++; }
+    // enough of it buildable, and not much standing water: a block with a
+    // real pond in it is left to the water rather than filled in
+    return all > 0 && ok / all >= (cfg.terrainCover || 0.75) && wet / all <= (cfg.terrainWater ?? 0.1);
+  });
+  return finishOutline(W, D, use, roadWidthAt, blocks, lots, keep, focal);
 }
 
 // The city keeps only the blocks inside a lobed shape and the streets that
@@ -211,9 +248,16 @@ function organicOutline(W, D, use, roadWidthAt, blocks, lots, cfg, focal) {
     const dx = (x - cx) / (W / 2), dz = (z - cz) / (D / 2);
     return Math.hypot(dx, dz) < radius(Math.atan2(dz, dx));
   };
+  let keep = blocks.map((b) => inside((b.x0 + b.x1) / 2, (b.z0 + b.z1) / 2));
+  return finishOutline(W, D, use, roadWidthAt, blocks, lots, keep, focal);
+}
+
+// Shared tidy-up for any outline: keep the focal block, fill holes, drop
+// islands, then clear everything that is not city and trim the streets back.
+function finishOutline(W, D, use, roadWidthAt, blocks, lots, keep, focal) {
+  const at = (x, z) => z * W + x;
   const blockOf = new Int32Array(W * D).fill(-1);
   blocks.forEach((b, i) => { for (let z = b.z0; z <= b.z1; z++) for (let x = b.x0; x <= b.x1; x++) blockOf[at(x, z)] = i; });
-  let keep = blocks.map((b) => inside((b.x0 + b.x1) / 2, (b.z0 + b.z1) / 2));
   const fb = blockOf[at(Math.max(0, Math.min(W - 1, Math.round(focal[0]))), Math.max(0, Math.min(D - 1, Math.round(focal[1]))))];
   if (fb >= 0) keep[fb] = true;
 

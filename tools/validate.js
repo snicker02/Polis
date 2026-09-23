@@ -1621,6 +1621,73 @@ section('2q. paintings');
 }
 
 // ===========================================================================
+// 2r. fitting a city to real ground
+// ===========================================================================
+section('2r. fitted to real ground');
+{
+  // a patch of real Bedrock terrain (heights read from a saved world), so
+  // this is tested against ground that actually exists, not a noise field
+  const raw = JSON.parse(readFileSync(new URL('./test-terrain.json', import.meta.url), 'utf8'));
+  const chunks = new Map(Object.entries(raw).map(([k, v]) => [k, Int16Array.from(v)]));
+  const { siteGround, heightField, groundField, findSites } = await import('../engine/worldfile.js');
+
+  // the median filter must take the trees off: raw heights are the top of
+  // anything, ground heights should be smoother
+  const f = heightField(chunks, -160, -160, 160);
+  const g = groundField(f);
+  let jitterRaw = 0, jitterGround = 0, n = 0;
+  for (let z = 1; z < 159; z++) for (let x = 1; x < 159; x++) {
+    const i = z * 160 + x;
+    if (f.h[i] < -900 || f.h[i - 1] < -900) continue;
+    jitterRaw += Math.abs(f.h[i] - f.h[i - 1]);
+    jitterGround += Math.abs(g.h[i] - g.h[i - 1]);
+    n++;
+  }
+  check('ground: the median filter takes the treetops off the heightmap', n > 0 && jitterGround < jitterRaw * 0.75,
+    `${(jitterRaw / n).toFixed(2)} raw vs ${(jitterGround / n).toFixed(2)} after`);
+
+  const sites = findSites(chunks, 160, { step: 64 });
+  check('sites: candidate sites found in the terrain', sites.length > 0, `${sites.length}`);
+  let built = 0, unreachable = 0, floorsBad = 0, followed = 0, blocks = 0, worst = 1;
+  for (const s of sites.slice(0, 4)) {
+    const site = siteGround(chunks, s.x, s.z, 160);
+    const r = generateCity({ ...DEFAULTS, size: 160, seed: 7, terrain: site, transit: 'rails' });
+    built++;
+    const v = verifyAll(r.world, r.buildings);
+    if (v.ok !== v.total || v.floorsReached !== v.floorsChecked) floorsBad++;
+    unreachable += r.reach.unreached.length;
+    // the terraces follow the ground: each block sits at the median height
+    // of the ground under it, the same measure the generator uses
+    for (const b of r.hills.blocks) {
+      const ys = [];
+      for (let z = b.z0; z <= b.z1; z++) for (let x = b.x0; x <= b.x1; x++) {
+        const y = site.ground[z * 160 + x];
+        if (y > -900) ys.push(y);
+      }
+      if (!ys.length) continue;
+      ys.sort((p2, q2) => p2 - q2);
+      const median = ys[Math.floor(ys.length / 2)];
+      blocks++;
+      if (Math.abs(Math.max(0, Math.min(10, median - site.baseY)) - b.e) <= 1) followed++;
+    }
+    // real water is left alone (a pond inside a block is filled in, by design)
+    let deep = 0, deepUsed = 0;
+    for (let i = 0; i < site.water.length; i++) {
+      if (site.ground[i] < -900 || site.ground[i] > 59) continue;      // three or more below sea level
+      deep++;
+      if (r.plan.mask[i]) deepUsed++;
+    }
+    if (deep > 20) worst = Math.min(worst, 1 - deepUsed / deep);
+  }
+  check('fitted cities: every floor and door reachable on real ground', built > 0 && floorsBad === 0 && unreachable === 0,
+    `${built} cities, ${floorsBad} with unreachable floors, ${unreachable} doors`);
+  check('fitted cities: the terraces follow the ground under them', blocks > 0 && followed / blocks > 0.95,
+    `${followed}/${blocks} blocks within one of their ground`);
+  check('fitted cities: the outline keeps off deep water', worst > 0.85, `${(worst * 100).toFixed(0)}% of deep water left alone`);
+  note(`${built} cities generated on real terrain from a saved world`);
+}
+
+// ===========================================================================
 // 3. chunk split coverage
 // ===========================================================================
 section('3. chunk split');

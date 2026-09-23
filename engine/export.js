@@ -17,7 +17,7 @@ import { makeRng } from './rng.js';
 // Must match main.js VERSION, package.json and index.html data-version;
 // tools/validate.js fails if they drift. The app refuses to export when the
 // browser has mixed cached copies of old and new files.
-export const POLIS_VERSION = '0.5.2';
+export const POLIS_VERSION = '0.6.0';
 
 export const CHUNK = 64;          // Bedrock structure limit per horizontal axis
 export const GROUND_DROP = 2;     // base layer y=0 sits 2 below feet; surface y=1 replaces the block you stand on
@@ -297,6 +297,14 @@ export function placementGuide(tiles, opts = {}) {
   L.push('');
   L.push(`    /function ${ns}/populate_centered`);
   L.push('');
+  if (opts.site) {
+    L.push('');
+    L.push(`This city was fitted to your world. Stand at X ${opts.site.x}, Y ${opts.site.y + 1}, Z ${opts.site.z}`);
+    L.push(`(the north-west corner of the site, one block above the city's base level of y ${opts.site.y}) and run:`);
+    L.push('');
+    L.push(`    /function ${ns}/build`);
+    L.push('');
+  }
   if (opts.centre) L.push('The city centre is a diamond monument with beacons on top: build_centered puts you in its alcove, under the sign.');
   L.push(`Functions in this pack: ${ns}/build, build_centered, populate, populate_centered`);
   L.push('(plus minecarts / minecarts_centered on railway cities, to re-summon carts near you).');

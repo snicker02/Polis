@@ -6,9 +6,11 @@ import { verifyAll } from './engine/verify.js';
 import { buildMesh } from './engine/mesher.js';
 import { Renderer } from './engine/renderer.js';
 import { exportPack, exportStructuresZip, tileList, commandList, cityId, exportSalt, POLIS_VERSION } from './engine/export.js';
+import { readWorld, readLevelDat, siteGround, findSites, SEA_LEVEL } from './engine/worldfile.js';
+import { decodeNbt } from './tools/nbt-read.js';
 import { THEMES } from './engine/materials.js';
 
-const VERSION = '0.5.2';
+const VERSION = '0.6.0';
 const $ = (id) => document.getElementById(id);
 
 const SLIDERS = {
@@ -79,6 +81,14 @@ function boot() {
   $('mcpack').addEventListener('click', () => doExport('mcpack'));
   $('mcstruct').addEventListener('click', () => doExport('zip'));
   $('copycmd').addEventListener('click', copyCommands);
+  $('worldFile').addEventListener('change', (e) => { if (e.target.files[0]) loadWorld(e.target.files[0]).catch((err) => wstatus('could not read that world: ' + err.message)); });
+  $('worldMap').addEventListener('click', pickSite);
+  $('useSite').addEventListener('click', () => {
+    if (!world || !world.site) return;
+    $('clearSite').style.display = 'block';
+    generate();
+  });
+  $('clearSite').addEventListener('click', () => { if (world) world.site = null; $('clearSite').style.display = 'none'; drawWorldMap(); generate(); });
   for (const b of ['baseX', 'baseY', 'baseZ', 'fillAir', 'foundation', 'clearAbove'])
     $(b).addEventListener(b === 'foundation' || b === 'clearAbove' ? 'input' : 'change', () => { if (result) { cityNs = nsNow(); refreshCommands(); } });
 
@@ -160,6 +170,11 @@ function readCfg() {
     cfg.maxFloors = num('maxFloors');
     cfg.wallHeight = num('wallHeight');
     cfg.outline = $('outline').value;
+    if (world && world.site) {
+      const g = world.site;
+      cfg.terrain = { ground: g.ground, water: g.water, baseY: g.baseY };
+      cfg.size = g.size;
+    }
     cfg.hills = num('hills');
     cfg.focal = focal.slice();
   } else {
@@ -312,6 +327,8 @@ function showStats(mesh, times) {
         school: 'school', lighthouse: 'lighthouse', castle: 'castle' }[k])).join(' · '));
     if (s.streets) line('streets named', s.streets);
     if (s.shops) line('shopfronts', String(s.shops));
+    if (s.terrain) line('fitted to your world', s.terrain);
+    if (world && world.site) line('stand here to build', `${world.site.x0}, ${world.site.baseY + 1}, ${world.site.z0} — then /function …/build`);
     if (s.centre) line('centre monument', s.centre);
     if (s.canal) line('canal', s.canal + (s.dock ? ' · dock' : ''));
     if (s.harbour) line('harbour', s.harbour);
@@ -341,9 +358,84 @@ function base() {
 let exactCommands = [];
 
 // export settings that shape the structure files (and so the city id)
+// ---- fitting a city to a real world -----------------------------------------
+let world = null;                 // { chunks, info, sites, site }
+function wstatus(t) { $('worldStatus').textContent = t; }
+
+async function loadWorld(file) {
+  wstatus(`reading ${(file.size / 1048576).toFixed(0)} MB…`);
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  let info = null;
+  try { info = readLevelDat(bytes, decodeNbt); } catch {}
+  wstatus('unpacking chunks… this can take a minute');
+  await new Promise((r) => setTimeout(r, 30));
+  const near = info ? [Math.floor(info.spawn[0] / 16), Math.floor(info.spawn[2] / 16)] : [0, 0];
+  const t0 = Date.now();
+  const { chunks } = readWorld(bytes, { near, radiusChunks: 96 });
+  if (!chunks.size) { wstatus('no chunks found in that file'); return; }
+  world = { chunks, info, near, site: null };
+  wstatus(`${info ? info.name + ': ' : ''}${chunks.size.toLocaleString()} chunks around spawn, read in ${((Date.now() - t0) / 1000).toFixed(0)}s. Click the map to place the city.`);
+  drawWorldMap();
+}
+
+function drawWorldMap() {
+  const c = $('worldMap'), ctx = c.getContext('2d');
+  const { chunks, near } = world;
+  const R = 96;                                   // chunks either way
+  c.width = c.height = R * 2;
+  const img = ctx.createImageData(R * 2, R * 2);
+  let lo = 999, hi = -999;
+  for (const h of chunks.values()) for (const y of h) { if (y < -900 || y <= SEA_LEVEL) continue; lo = Math.min(lo, y); hi = Math.max(hi, y); }
+  for (let cz = 0; cz < R * 2; cz++)
+    for (let cx = 0; cx < R * 2; cx++) {
+      const h = chunks.get((near[0] - R + cx) + ',' + (near[1] - R + cz));
+      const o = (cz * R * 2 + cx) * 4;
+      if (!h) { img.data[o] = img.data[o + 1] = img.data[o + 2] = 24; img.data[o + 3] = 255; continue; }
+      let sum = 0, n = 0, water = 0;
+      for (const y of h) { if (y < -900) continue; sum += y; n++; if (y <= SEA_LEVEL) water++; }
+      const mean = n ? sum / n : 0, t = Math.max(0, Math.min(1, (mean - lo) / Math.max(1, hi - lo)));
+      if (water / Math.max(1, n) > 0.5) { img.data[o] = 32; img.data[o + 1] = 70 + 60 * t; img.data[o + 2] = 150; }
+      else { img.data[o] = 60 + 150 * t; img.data[o + 1] = 110 + 90 * t; img.data[o + 2] = 60 + 50 * t; }
+      img.data[o + 3] = 255;
+    }
+  ctx.putImageData(img, 0, 0);
+  c.style.display = 'block';
+  if (world.site) {                                // outline the chosen site
+    const size = num('size');
+    ctx.strokeStyle = '#ffd700'; ctx.lineWidth = 1;
+    ctx.strokeRect((world.site.x / 16) - (near[0] - R), (world.site.z / 16) - (near[1] - R), size / 16, size / 16);
+  }
+}
+
+function pickSite(ev) {
+  const c = $('worldMap'), rect = c.getBoundingClientRect(), R = 96;
+  const cx = Math.floor((ev.clientX - rect.left) / rect.width * c.width) + world.near[0] - R;
+  const cz = Math.floor((ev.clientY - rect.top) / rect.height * c.height) + world.near[1] - R;
+  const size = num('size');
+  const g = siteGround(world.chunks, cx * 16, cz * 16, size);
+  world.site = g;
+  drawWorldMap();
+  const el = $('siteInfo');
+  el.style.display = 'block';
+  el.innerHTML = g.coverage < 0.995
+    ? `That area is only ${(g.coverage * 100).toFixed(0)}% explored — pick somewhere you have been.`
+    : `Site at <b>${g.x0}, ${g.z0}</b> · ground y ${g.p05}–${g.p95} · base y <b>${g.baseY}</b> · `
+      + `water ${(g.waterShare * 100).toFixed(0)}% · buildable ${(g.buildableShare * 100).toFixed(0)}%`;
+  $('useSite').style.display = g.coverage >= 0.995 ? 'block' : 'none';
+}
+
 function exportOpts() {
-  return { fillAir: $('fillAir').checked, foundation: Number($('foundation').value) | 0, clearAbove: Number($('clearAbove').value) | 0,
+  const o = { fillAir: $('fillAir').checked, foundation: Number($('foundation').value) | 0, clearAbove: Number($('clearAbove').value) | 0,
     centre: result && result.centre ? [result.centre.block[0], result.centre.block[2]] : undefined };
+  // on real ground the foundation has to reach the lowest ground under the
+  // city, and the clearance has to cut away the hills above it
+  if (world && world.site && result && result.cfg.terrain) {
+    const g = world.site;
+    o.foundation = Math.max(o.foundation, Math.min(48, g.baseY - g.p05 + 6));
+    o.clearAbove = Math.max(o.clearAbove, Math.min(160, g.p95 - g.baseY + 16));
+    o.site = { x: g.x0, y: g.baseY, z: g.z0 };
+  }
+  return o;
 }
 function nsNow() {
   return result ? cityId(result.world, result.cfg.seed, POLIS_VERSION, exportSalt(exportOpts())) : 'polis';

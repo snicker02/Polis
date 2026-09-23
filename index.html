@@ -126,12 +126,12 @@
   }
 </style>
 </head>
-<body class="mode-city" data-version="0.5.2">
+<body class="mode-city" data-version="0.6.0">
 <div id="app">
   <div id="panel">
     <div id="panelScroll">
       <h1>PO<span>L</span>IS</h1>
-      <div class="sub">procedural city → Minecraft Bedrock · v0.5.2</div>
+      <div class="sub">procedural city → Minecraft Bedrock · v0.6.0</div>
 
       <fieldset>
         <legend>Mode</legend>
@@ -140,6 +140,15 @@
             <option value="city">City block plan</option>
             <option value="single">Single building</option>
           </select>
+        </div>
+        <div class="row" style="display:block">
+          <label style="display:block;margin-bottom:4px">Fit to your world</label>
+          <input type="file" id="worldFile" accept=".mcworld,.zip" style="width:100%;font-size:11px">
+          <div class="hint" id="worldStatus">Export a world from Minecraft (Worlds → pencil → Export World) and load it here to build a city that fits the real ground.</div>
+          <canvas id="worldMap" width="256" height="256" style="width:100%;image-rendering:pixelated;border:1px solid #333;display:none;margin-top:6px;cursor:crosshair"></canvas>
+          <div class="hint" id="siteInfo" style="display:none"></div>
+          <button id="useSite" style="display:none;width:100%;margin-top:4px">Use this site</button>
+          <button id="clearSite" style="display:none;width:100%;margin-top:4px">Back to an invented site</button>
         </div>
         <div class="row">
           <label for="seed">Seed</label>
@@ -274,6 +283,6 @@
     <div id="busy">generating…</div>
   </div>
 </div>
-<script type="module" src="./main.js?v=0.5.2"></script>
+<script type="module" src="./main.js?v=0.6.0"></script>
 </body>
 </html>

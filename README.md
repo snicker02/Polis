@@ -1,4 +1,4 @@
-# Polis v0.5.2
+# Polis v0.6.0
 
 A procedural city generator that exports to **Minecraft Bedrock**. Plans a
 street grid, subdivides it into lots, raises buildings with real interiors —
@@ -265,6 +265,40 @@ against Bedrock's own state list (plain terracotta is `hardened_clay`, the dead
 bush is `deadbush`, cobblestone stairs are `stone_stairs`), and the validator
 checks that plants stand on soil they can grow on, cacti stand on sand with
 nothing solid beside them, and snow lies only on solid ground.
+
+## Fitting a city to your own world
+
+Load a world exported from Minecraft (**Worlds → pencil → Export World**) into
+the **Fit to your world** panel and Polis will build a city that suits the real
+ground.
+
+It reads the world itself: a `.mcworld` is a zip, and inside it `db/*.ldb` are
+LevelDB tables holding a record per chunk. Polis unzips, walks the tables and
+takes the 1.18-and-later "Data3D" record, which starts with the chunk's
+heightmap and carries its biomes. All of it is done here, in plain JavaScript —
+the zip, the LevelDB block format and the DEFLATE decompression (`inflate.js`),
+since the browser's own decompressor cannot be used synchronously.
+
+The heightmap counts the top of anything, so a forest reads as rough ground; a
+median filter over a small window takes the treetops off and leaves the land.
+From that, Polis works out the **base level** (the median of the dry ground,
+which the streets sit on), which cells are **water**, and which are too steep
+or too far above or below to build on. Then:
+
+- the **outline** keeps the blocks that are mostly buildable, leaving water,
+  cliffs and anything beyond cut-and-fill range alone;
+- the **terraces** follow the land, each block sitting at the median height of
+  the ground beneath it, with steps cut down to the streets as usual;
+- the **foundation** deepens automatically to meet the lowest ground, and the
+  clearance rises to cut away the hills above.
+
+Click the map to choose a site; the panel shows the ground range, the base
+level, and how much of it is water or buildable. The stats panel then tells you
+exactly where to stand — the corner of the site, one block above base level —
+and the placement guide in the pack repeats it.
+
+On rough ground the city shrinks rather than pretending: a mountain site may
+keep only a sixth of its area, a gentle one nearly all of it.
 
 ## Outline and hills
 
@@ -551,6 +585,14 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.6.0** — Polis can read your world. A `.mcworld` is unzipped and its
+LevelDB tables read in the browser (zip, LevelDB and DEFLATE all written from
+scratch), giving the terrain height and biome of every chunk you have visited.
+Pick a site on the map and the city is fitted to the real ground: the outline
+keeps off water and cliffs, the terraces follow the land, and the foundation
+and clearance adjust to the site. The validator adds a section that generates
+cities on real terrain from a saved world.
 
 **0.5.2** — Real paintings on the walls, from a structure saved in game:
 eleven motifs in four sizes, hung at eye level on clear wall after the
