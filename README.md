@@ -1,4 +1,4 @@
-# Polis v0.6.0
+# Polis v0.6.1
 
 A procedural city generator that exports to **Minecraft Bedrock**. Plans a
 street grid, subdivides it into lots, raises buildings with real interiors —
@@ -585,6 +585,16 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.6.1** — Clicking the world map did nothing: the click handler called a
+helper that only existed inside another function, so it threw on every click.
+Fixed, and any failure in that panel now says so instead of failing silently.
+Added `tools/ui-check.mjs`, which boots the real front end against a stub
+browser (elements for every id, a canvas, a mock WebGL context), presses the
+buttons and loads a world through the app's own code — run it with a
+`.mcworld` path to exercise the whole flow. The validator runs it on every
+pass, so a broken button or an out-of-scope helper is caught like any other
+bug.
 
 **0.6.0** — Polis can read your world. A `.mcworld` is unzipped and its
 LevelDB tables read in the browser (zip, LevelDB and DEFLATE all written from

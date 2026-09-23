@@ -1688,6 +1688,24 @@ section('2r. fitted to real ground');
 }
 
 // ===========================================================================
+// 2s. the front end
+// ===========================================================================
+section('2s. front end');
+{
+  // main.js only ever runs in a page, so its mistakes never show up in the
+  // engine tests: a helper out of scope, an id that does not exist, a button
+  // wired to nothing. This boots the real app against a stub browser.
+  const { runUiCheck } = await import('./ui-check.mjs');
+  const r = await runUiCheck(null);
+  check('front end: the app boots against a stub browser with no errors', r.problems.length === 0, r.problems.join('; '));
+  check('front end: every button and control in the page is wired up', r.wired > 30, `${r.wired} of ${r.ids} ids`);
+  const text = r.stats.replace(/<[^>]+>/g, ' ');
+  check('front end: pressing Generate fills the stats panel', /blocks/.test(text) && /buildings/.test(text), text.slice(0, 80));
+  check('front end: clicking the map with no world loaded does nothing', !r.info);
+  note(`front end booted, generated a city and reported: ${text.replace(/\s+/g, ' ').trim().slice(0, 90)}…`);
+}
+
+// ===========================================================================
 // 3. chunk split coverage
 // ===========================================================================
 section('3. chunk split');

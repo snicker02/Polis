@@ -10,8 +10,9 @@ import { readWorld, readLevelDat, siteGround, findSites, SEA_LEVEL } from './eng
 import { decodeNbt } from './tools/nbt-read.js';
 import { THEMES } from './engine/materials.js';
 
-const VERSION = '0.6.0';
+const VERSION = '0.6.1';
 const $ = (id) => document.getElementById(id);
+const numVal = (id) => Number($(id).value);      // readCfg has its own local num()
 
 const SLIDERS = {
   size: 0, minBlock: 0, blockIrregularity: 2, avenueWidth: 0, streetWidth: 0,
@@ -82,7 +83,7 @@ function boot() {
   $('mcstruct').addEventListener('click', () => doExport('zip'));
   $('copycmd').addEventListener('click', copyCommands);
   $('worldFile').addEventListener('change', (e) => { if (e.target.files[0]) loadWorld(e.target.files[0]).catch((err) => wstatus('could not read that world: ' + err.message)); });
-  $('worldMap').addEventListener('click', pickSite);
+  $('worldMap').addEventListener('click', (e) => { try { pickSite(e); } catch (err) { wstatus('could not read that site: ' + err.message); } });
   $('useSite').addEventListener('click', () => {
     if (!world || !world.site) return;
     $('clearSite').style.display = 'block';
@@ -401,17 +402,18 @@ function drawWorldMap() {
   ctx.putImageData(img, 0, 0);
   c.style.display = 'block';
   if (world.site) {                                // outline the chosen site
-    const size = num('size');
+    const size = numVal('size');
     ctx.strokeStyle = '#ffd700'; ctx.lineWidth = 1;
     ctx.strokeRect((world.site.x / 16) - (near[0] - R), (world.site.z / 16) - (near[1] - R), size / 16, size / 16);
   }
 }
 
 function pickSite(ev) {
+  if (!world) return;
   const c = $('worldMap'), rect = c.getBoundingClientRect(), R = 96;
   const cx = Math.floor((ev.clientX - rect.left) / rect.width * c.width) + world.near[0] - R;
   const cz = Math.floor((ev.clientY - rect.top) / rect.height * c.height) + world.near[1] - R;
-  const size = num('size');
+  const size = numVal('size');
   const g = siteGround(world.chunks, cx * 16, cz * 16, size);
   world.site = g;
   drawWorldMap();
