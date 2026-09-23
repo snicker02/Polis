@@ -17,7 +17,7 @@ import { makeRng } from './rng.js';
 // Must match main.js VERSION, package.json and index.html data-version;
 // tools/validate.js fails if they drift. The app refuses to export when the
 // browser has mixed cached copies of old and new files.
-export const POLIS_VERSION = '0.6.2';
+export const POLIS_VERSION = '0.6.4';
 
 export const CHUNK = 64;          // Bedrock structure limit per horizontal axis
 export const GROUND_DROP = 2;     // base layer y=0 sits 2 below feet; surface y=1 replaces the block you stand on
@@ -299,10 +299,14 @@ export function placementGuide(tiles, opts = {}) {
   L.push('');
   if (opts.site) {
     L.push('');
-    L.push(`This city was fitted to your world. Stand at X ${opts.site.x}, Y ${opts.site.y + 1}, Z ${opts.site.z}`);
-    L.push(`(the north-west corner of the site, one block above the city's base level of y ${opts.site.y}) and run:`);
+    L.push('This city was fitted to your world, so it must be placed exactly where it was fitted.');
+    L.push(`Stand at X ${opts.site.x}, Y ${opts.site.y + 1}, Z ${opts.site.z} — the north-west corner of the site,`);
+    L.push(`one block above the city's base level of y ${opts.site.y} — and run:`);
     L.push('');
     L.push(`    /function ${ns}/build`);
+    L.push('');
+    L.push('Use build, not build_centered: the centred version would put the city half a');
+    L.push('city away from the ground it was shaped to fit.');
     L.push('');
   }
   if (opts.centre) L.push('The city centre is a diamond monument with beacons on top: build_centered puts you in its alcove, under the sign.');

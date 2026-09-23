@@ -1,4 +1,4 @@
-# Polis v0.6.2
+# Polis v0.6.4
 
 A procedural city generator that exports to **Minecraft Bedrock**. Plans a
 street grid, subdivides it into lots, raises buildings with real interiors —
@@ -291,6 +291,9 @@ or too far above or below to build on. Then:
   the ground beneath it, with steps cut down to the streets as usual;
 - the **foundation** deepens automatically to meet the lowest ground, and the
   clearance rises to cut away the hills above.
+
+Once a site is chosen there is a button that copies a `/tp` straight to the
+spot you build from, so you can paste it in game and land exactly there.
 
 Click the map to choose a site, or type coordinates (an F3 position pasted
 straight in works: `-6926.11 69.00 -10080.98`) to jump anywhere in the world.
@@ -591,6 +594,17 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.6.4** — A button that copies `/tp <x> <y> <z>` for the exact block to
+build from, so the spot can be reached by pasting rather than walking. The
+button shows the command on its face and the toast repeats it.
+
+**0.6.3** — The site panel said "Site at X, Z" without saying that those were
+the north-west corner, which read like the centre. It now gives the centre,
+and says plainly where to stand (the corner, one block above base level) and
+that a fitted city is placed with `build`, never `build_centered` — the
+centred version would drop it half a city away from the ground it was shaped
+to fit. The placement guide in the pack says the same.
 
 **0.6.2** — Pick a site anywhere: type coordinates (F3 positions paste
 straight in) as well as clicking the map, and the whole world is read at once

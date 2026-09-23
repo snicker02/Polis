@@ -25,7 +25,7 @@ function makeElement(id, tag = 'div') {
     dataset: {}, children: [], width: 300, height: 300,
     appendChild(c) { this.children.push(c); return c; },
     removeChild() {}, remove() {}, insertBefore(c) { this.children.push(c); return c; },
-    setAttribute() {}, getAttribute: () => null, focus() {}, click() {},
+    setAttribute() {}, getAttribute: () => null, focus() {}, click() {}, select() {}, setSelectionRange() {}, blur() {},
     addEventListener(ev, fn) { if (!listeners.has(id)) listeners.set(id, {}); listeners.get(id)[ev] = fn; },
     removeEventListener() {},
     getBoundingClientRect: () => ({ left: 0, top: 0, width: el.width, height: el.height, right: el.width, bottom: el.height }),
@@ -91,13 +91,18 @@ export async function runUiCheck(worldFile) {
     createElement: (tag) => makeElement('created-' + tag, tag),
     querySelector: () => null, querySelectorAll: () => [],
     addEventListener() {}, body: makeElement('body'), documentElement: makeElement('html'),
+    execCommand: () => true,
     createElementNS: (ns, tag) => makeElement('created-' + tag, tag),
   };
   const problems = [];
   globalThis.document = doc;
   globalThis.window = { addEventListener() {}, devicePixelRatio: 1, requestAnimationFrame: () => 0, location: { href: '', search: '' },
     matchMedia: () => ({ matches: false, addEventListener() {} }), URL: { createObjectURL: () => 'blob:', revokeObjectURL() {} } };
-  try { Object.defineProperty(globalThis, 'navigator', { value: { userAgent: 'node' }, configurable: true }); } catch {}
+  const copied = [];
+  try {
+    Object.defineProperty(globalThis, 'navigator', {
+      value: { userAgent: 'node', clipboard: { writeText: async (t) => { copied.push(t); } } }, configurable: true });
+  } catch {}
   globalThis.requestAnimationFrame = () => 0;
   globalThis.cancelAnimationFrame = () => {};
   globalThis.Blob = globalThis.Blob || class { constructor(parts = []) { this.parts = parts; this.size = 0; } };
@@ -125,8 +130,11 @@ export async function runUiCheck(worldFile) {
     fire('worldMap', 'click', { clientX: 96, clientY: 96 });           // must be harmless with nothing loaded
     for (const id of ['gen', 'reroll']) if (listeners.has(id)) fire(id, 'click');
     await new Promise((r) => setTimeout(r, 400));          // generation may be deferred a frame
+    // with nothing chosen, the teleport button must be hidden and harmless
+    fire('copyTp', 'click');
     const out = { problems, status: elements.get('worldStatus').textContent, info: elements.get('siteInfo').innerHTML,
-      offered: false, ids: ids.length, wired: listeners.size, stats: (elements.get('stats') || {}).innerHTML || '' };
+      offered: false, tpHidden: elements.get('copyTp').style.display !== 'block', copied,
+      ids: ids.length, wired: listeners.size, stats: (elements.get('stats') || {}).innerHTML || '' };
     cleanup();
     return out;
   }
@@ -149,9 +157,10 @@ export async function runUiCheck(worldFile) {
   fire('worldMap', 'click', { clientX: 96, clientY: 96 });
   const info = elements.get('siteInfo').innerHTML;
   const offered = elements.get('useSite').style.display === 'block';
-  if (offered) fire('useSite', 'click');
+  const tpLabel = elements.get('copyTp').textContent;
+  if (offered) { fire('copyTp', 'click'); fire('useSite', 'click'); }
 
-  const result = { problems, status, info, typed, offered, ids: ids.length, wired: listeners.size,
+  const result = { problems, status, info, typed, offered, tpLabel, copied, ids: ids.length, wired: listeners.size,
     stats: (elements.get('stats') || {}).innerHTML || '' };
   cleanup();
   return result;
@@ -163,7 +172,8 @@ if (process.argv[1] && process.argv[1].endsWith('ui-check.mjs')) {
   console.log('after loading the world:', r.status);
   console.log('after typing coordinates:', (r.typed || '(nothing)').replace(/<[^>]+>/g, ''));
   console.log('after clicking the map:', (r.info || '(nothing)').replace(/<[^>]+>/g, ''));
-  console.log('site offered:', r.offered);
+  console.log('site offered:', r.offered, '| teleport button:', r.tpLabel || '(none)');
+  console.log('copied to clipboard:', r.copied && r.copied.length ? r.copied : '(nothing)');
   console.log('problems:', r.problems.length ? r.problems : 'none');
   if (r.stats) console.log('stats panel:', r.stats.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').slice(0, 300));
 }

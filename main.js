@@ -10,7 +10,7 @@ import { readWorld, readLevelDat, siteGround, findSites, SEA_LEVEL } from './eng
 import { decodeNbt } from './tools/nbt-read.js';
 import { THEMES } from './engine/materials.js';
 
-const VERSION = '0.6.2';
+const VERSION = '0.6.4';
 const $ = (id) => document.getElementById(id);
 const numVal = (id) => Number($(id).value);      // readCfg has its own local num()
 
@@ -86,6 +86,7 @@ function boot() {
   $('goCoords').addEventListener('click', goToCoords);
   $('siteCoords').addEventListener('keydown', (e) => { if (e.key === 'Enter') goToCoords(); });
   $('worldMap').addEventListener('click', (e) => { try { pickSite(e); } catch (err) { wstatus('could not read that site: ' + err.message); } });
+  $('copyTp').addEventListener('click', copyTeleport);
   $('useSite').addEventListener('click', () => {
     if (!world || !world.site) return;
     $('clearSite').style.display = 'block';
@@ -331,7 +332,7 @@ function showStats(mesh, times) {
     if (s.streets) line('streets named', s.streets);
     if (s.shops) line('shopfronts', String(s.shops));
     if (s.terrain) line('fitted to your world', s.terrain);
-    if (world && world.site) line('stand here to build', `${world.site.x0}, ${world.site.baseY + 1}, ${world.site.z0} — then /function …/build`);
+    if (world && world.site) line('stand here, run build', `${world.site.x0}, ${world.site.baseY + 1}, ${world.site.z0} (north-west corner)`);
     if (s.centre) line('centre monument', s.centre);
     if (s.canal) line('canal', s.canal + (s.dock ? ' · dock' : ''));
     if (s.harbour) line('harbour', s.harbour);
@@ -450,10 +451,15 @@ function showSite(g) {
   // Unexplored ground is simply left alone, like water or a cliff, so a site
   // only has to be explored enough for a city to fit on what is there.
   const ok = g.coverage >= 0.6 && g.buildableShare >= 0.35;
-  el.innerHTML = `Site at <b>${g.x0}, ${g.z0}</b> · ground y ${g.p05}–${g.p95} · base y <b>${g.baseY}</b><br>`
+  const half = g.size >> 1;
+  el.innerHTML = `Site ${g.size}×${g.size} · centre <b>${g.x0 + half}, ${g.z0 + half}</b> · ground y ${g.p05}–${g.p95}<br>`
     + `explored ${(g.coverage * 100).toFixed(0)}% · water ${(g.waterShare * 100).toFixed(0)}% · buildable ${(g.buildableShare * 100).toFixed(0)}%`
-    + (ok ? '' : `<br><b>${g.coverage < 0.6 ? 'Too little of this is explored' : 'Too little of this is buildable'}</b> — fly over it in game, or try nearby.`);
+    + (ok
+      ? `<br><b>Stand at ${g.x0}, ${g.baseY + 1}, ${g.z0}</b> (the north-west corner) and run <b>build</b> — not build_centered.`
+      : `<br><b>${g.coverage < 0.6 ? 'Too little of this is explored' : 'Too little of this is buildable'}</b> — fly over it in game, or try nearby.`);
   $('useSite').style.display = ok ? 'block' : 'none';
+  $('copyTp').style.display = ok ? 'block' : 'none';
+  $('copyTp').textContent = ok ? `Copy /tp ${g.x0} ${g.baseY + 1} ${g.z0}` : '';
 }
 
 function exportOpts() {
@@ -492,6 +498,17 @@ function refreshCommands() {
     exactCommands = [];
     $('cmds').value = 'error: ' + e.message;
   }
+}
+
+// the exact spot to stand on to build this city, as a command to paste in game
+function copyTeleport() {
+  if (!world || !world.site) { toast('Choose a site first.', true); return; }
+  const g = world.site;
+  const text = `/tp ${g.x0} ${g.baseY + 1} ${g.z0}`;
+  const done = () => toast(`${text} copied — run it, then /function …/build`);
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(done).catch(() => { fallbackCopy(text); done(); });
+  } else { fallbackCopy(text); done(); }
 }
 
 function copyCommands() {

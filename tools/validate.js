@@ -1702,6 +1702,8 @@ section('2s. front end');
   const text = r.stats.replace(/<[^>]+>/g, ' ');
   check('front end: pressing Generate fills the stats panel', /blocks/.test(text) && /buildings/.test(text), text.slice(0, 80));
   check('front end: clicking the map with no world loaded does nothing', !r.info);
+  check('front end: the teleport button stays hidden until a site is chosen, and copies nothing',
+    r.tpHidden && (!r.copied || r.copied.length === 0));
   note(`front end booted, generated a city and reported: ${text.replace(/\s+/g, ' ').trim().slice(0, 90)}…`);
 }
 
