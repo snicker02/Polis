@@ -1,4 +1,4 @@
-# Polis v0.6.4
+# Polis v0.7.0
 
 A procedural city generator that exports to **Minecraft Bedrock**. Plans a
 street grid, subdivides it into lots, raises buildings with real interiors —
@@ -287,10 +287,19 @@ or too far above or below to build on. Then:
 
 - the **outline** keeps the blocks that are mostly buildable, leaving water,
   cliffs and anything beyond cut-and-fill range alone;
-- the **terraces** follow the land, each block sitting at the median height of
-  the ground beneath it, with steps cut down to the streets as usual;
-- the **foundation** deepens automatically to meet the lowest ground, and the
-  clearance rises to cut away the hills above.
+- the **whole city surface follows the land, cell by cell** — the streets roll
+  with the ground instead of standing on one flat plane. Two rules keep it
+  walkable: no two neighbouring cells differ by more than a block, and every
+  lot is dead level so its building has flat ground. Anything that cannot
+  slope (a lot, the canal, the harbour basin) is levelled as a unit, and the
+  streets ramp to meet it. The surface is fitted with two slope-limited
+  envelopes — one shaving the peaks, one filling the hollows — and takes the
+  middle of the two, which keeps most of the city within two blocks of the
+  real ground;
+- each column is **carved and founded only as far as it needs**: cleared up to
+  its own roof or the ground that was there, and founded down to that ground
+  and no further. Everything outside stays structure void, so the landscape
+  around the city is left standing instead of a box being cut out of it.
 
 Once a site is chosen there is a button that copies a `/tp` straight to the
 spot you build from, so you can paste it in game and land exactly there.
@@ -594,6 +603,15 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.7.0** — A fitted city now follows the ground properly. The whole surface
+rolls cell by cell rather than sitting flat on one plane: no step taller than
+a block anywhere, every lot flat under its building, and the canal and harbour
+levelled as units so water cannot slope. Most of the city lands within two
+blocks of the real terrain. The export no longer carves a box out of the
+world — each column is cleared only to its own roof or the ground that was
+there, and founded only down to that ground, which cut the terrain removed
+from 1.5 million cells to 400 thousand on a test site.
 
 **0.6.4** — A button that copies `/tp <x> <y> <z>` for the exact block to
 build from, so the spot can be reached by pasting rather than walking. The

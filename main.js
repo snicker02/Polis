@@ -10,7 +10,7 @@ import { readWorld, readLevelDat, siteGround, findSites, SEA_LEVEL } from './eng
 import { decodeNbt } from './tools/nbt-read.js';
 import { THEMES } from './engine/materials.js';
 
-const VERSION = '0.6.4';
+const VERSION = '0.7.0';
 const $ = (id) => document.getElementById(id);
 const numVal = (id) => Number($(id).value);      // readCfg has its own local num()
 
@@ -472,6 +472,7 @@ function exportOpts() {
     o.foundation = Math.max(o.foundation, Math.min(48, g.baseY - g.p05 + 6));
     o.clearAbove = Math.max(o.clearAbove, Math.min(160, g.p95 - g.baseY + 16));
     o.site = { x: g.x0, y: g.baseY, z: g.z0 };
+    o.terrain = { ground: g.ground, baseY: g.baseY, size: g.size };   // carve and found per column
   }
   return o;
 }

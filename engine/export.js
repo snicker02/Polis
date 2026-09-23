@@ -17,7 +17,7 @@ import { makeRng } from './rng.js';
 // Must match main.js VERSION, package.json and index.html data-version;
 // tools/validate.js fails if they drift. The app refuses to export when the
 // browser has mixed cached copies of old and new files.
-export const POLIS_VERSION = '0.6.4';
+export const POLIS_VERSION = '0.7.0';
 
 export const CHUNK = 64;          // Bedrock structure limit per horizontal axis
 export const GROUND_DROP = 2;     // base layer y=0 sits 2 below feet; surface y=1 replaces the block you stand on
@@ -75,6 +75,9 @@ export function tileList(world, opts = {}) {
   const wb = world.box;
   const F = Math.max(0, Math.min(48, opts.foundation | 0));
   const topY = opts.fillAir ? Math.max(wb.y1, wb.y0 + 1 + Math.max(0, Math.min(200, opts.clearAbove | 0))) : wb.y1;
+  // fitted to real ground: the tile still spans the terrain, but each column
+  // only carves and founds as far as it has to (see clearTo / fillFrom)
+
   return chunks.map((c) => {
     let box = { x0: c.x0, y0: c.y0, z0: c.z0, x1: c.x1, y1: c.y1, z1: c.z1 };
     if (opts.fillAir || F) {
@@ -119,13 +122,48 @@ export function cityInside(world) {
   return (x, z) => x >= 0 && z >= 0 && x < m.W && z < m.D && m.data[z * m.W + x] === 1;
 }
 
+// Fitted to real ground: how high each column has to be carved, and how deep
+// it has to be founded. Outside the city the world is not touched at all;
+// inside, a column is cleared only up to whichever is higher — the city's own
+// roofs or the ground that was there — and founded only down to that ground.
+function columnLimits(world, opts) {
+  const t = opts.terrain;
+  if (!t) return {};
+  const { ground, baseY, size } = t;
+  const tops = new Int32Array(size * size).fill(-9999);
+  world.forEach((x, y, z) => {
+    if (x < 0 || z < 0 || x >= size || z >= size) return;
+    const i = z * size + x;
+    if (y > tops[i]) tops[i] = y;
+  });
+  const groundY = (x, z) => {
+    const g = ground[z * size + x];
+    return g < -900 ? null : g - baseY + 1;             // the terrain, in city heights
+  };
+  return {
+    clearTo: (x, z) => {
+      if (x < 0 || z < 0 || x >= size || z >= size) return -9999;
+      const gy = groundY(x, z);
+      const roof = tops[z * size + x];
+      const need = Math.max(roof >= -9000 ? roof + 1 : -9999, gy === null ? -9999 : gy + 2);
+      return need;
+    },
+    fillFrom: (x, z) => {
+      if (x < 0 || z < 0 || x >= size || z >= size) return 9999;
+      const gy = groundY(x, z);
+      return gy === null ? 9999 : gy - 2;               // no deeper than the ground it stands on
+    },
+  };
+}
+
 export function buildStructures(world, opts = {}) {
   const airId = opts.fillAir ? MAT.AIR : undefined;
   const F = Math.max(0, Math.min(48, opts.foundation | 0));
   const fill = F ? { fillFn: foundationFill(world), fillBelowY: world.box.y0 } : {};
+  const limits = columnLimits(world, opts);
   return tileList(world, opts).map((t) => {
     const res = writeMcStructure(t.chunk.keys, t.chunk.ids, t.box, MATERIALS,
-      { airId, blockData: world.data, inside: cityInside(world), ...fill });
+      { airId, blockData: world.data, inside: cityInside(world), ...fill, ...limits });
     return {
       name: t.name, data: res.data, box: t.box,
       size: res.size, cells: res.cells, paletteSize: res.paletteSize, entities: res.entities,

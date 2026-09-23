@@ -1649,6 +1649,7 @@ section('2r. fitted to real ground');
   const sites = findSites(chunks, 160, { step: 64 });
   check('sites: candidate sites found in the terrain', sites.length > 0, `${sites.length}`);
   let built = 0, unreachable = 0, floorsBad = 0, followed = 0, blocks = 0, worst = 1;
+  let tallSteps = 0, lots = 0, flatLots = 0, canals = 0, levelCanals = 0;
   for (const s of sites.slice(0, 4)) {
     const site = siteGround(chunks, s.x, s.z, 160);
     const r = generateCity({ ...DEFAULTS, size: 160, seed: 7, terrain: site, transit: 'rails' });
@@ -1656,19 +1657,37 @@ section('2r. fitted to real ground');
     const v = verifyAll(r.world, r.buildings);
     if (v.ok !== v.total || v.floorsReached !== v.floorsChecked) floorsBad++;
     unreachable += r.reach.unreached.length;
-    // the terraces follow the ground: each block sits at the median height
-    // of the ground under it, the same measure the generator uses
-    for (const b of r.hills.blocks) {
-      const ys = [];
-      for (let z = b.z0; z <= b.z1; z++) for (let x = b.x0; x <= b.x1; x++) {
-        const y = site.ground[z * 160 + x];
-        if (y > -900) ys.push(y);
-      }
-      if (!ys.length) continue;
-      ys.sort((p2, q2) => p2 - q2);
-      const median = ys[Math.floor(ys.length / 2)];
+    // the city surface follows the ground cell by cell
+    const elev = r.hills.elev;
+    for (let i = 0; i < elev.length; i++) {
+      const g = site.ground[i];
+      if (!r.plan.mask[i] || g < -900) continue;
       blocks++;
-      if (Math.abs(Math.max(0, Math.min(10, median - site.baseY)) - b.e) <= 1) followed++;
+      if (Math.abs(elev[i] - Math.max(0, Math.min(10, g - site.baseY))) <= 2) followed++;
+    }
+    // nowhere in the city is there a step taller than one block, and every
+    // lot is dead level so its building has flat ground
+    for (let z = 1; z < 159; z++) for (let x = 1; x < 159; x++) {
+      const i = z * 160 + x;
+      if (!r.plan.mask[i]) continue;
+      for (const j of [i + 1, i + 160]) if (r.plan.mask[j] && Math.abs(elev[i] - elev[j]) > 1) tallSteps++;
+    }
+    for (const lot of r.plan.lots) {
+      let lo = 99, hi = -99;
+      for (let z = lot.z0; z <= lot.z1; z++) for (let x = lot.x0; x <= lot.x1; x++) { lo = Math.min(lo, elev[z * 160 + x]); hi = Math.max(hi, elev[z * 160 + x]); }
+      lots++;
+      if (hi === lo) flatLots++;
+    }
+    // the canal holds one level: water cannot slope
+    if (r.canal) {
+      const levels = new Set();
+      for (let u = r.canal.u0; u <= r.canal.u1; u++)
+        for (let a = r.canal.ch0; a <= r.canal.ch1; a++) {
+          const [cx, cz] = r.canal.cell(u, a);
+          if (cx >= 0 && cz >= 0 && cx < 160 && cz < 160) levels.add(elev[cz * 160 + cx]);
+        }
+      canals++;
+      if (levels.size === 1) levelCanals++;
     }
     // real water is left alone (a pond inside a block is filled in, by design)
     let deep = 0, deepUsed = 0;
@@ -1681,8 +1700,11 @@ section('2r. fitted to real ground');
   }
   check('fitted cities: every floor and door reachable on real ground', built > 0 && floorsBad === 0 && unreachable === 0,
     `${built} cities, ${floorsBad} with unreachable floors, ${unreachable} doors`);
-  check('fitted cities: the terraces follow the ground under them', blocks > 0 && followed / blocks > 0.95,
-    `${followed}/${blocks} blocks within one of their ground`);
+  check('fitted cities: the city surface follows the ground cell by cell', blocks > 0 && followed / blocks > 0.8,
+    `${((followed / blocks) * 100).toFixed(0)}% of cells within two blocks of their ground`);
+  check('fitted cities: no step taller than one block anywhere in the city', tallSteps === 0, `${tallSteps} steps`);
+  check('fitted cities: every lot is dead level under its building', lots > 0 && flatLots === lots, `${flatLots}/${lots}`);
+  check('fitted cities: the canal holds one level (water cannot slope)', canals === 0 || levelCanals === canals, `${levelCanals}/${canals}`);
   check('fitted cities: the outline keeps off deep water', worst > 0.85, `${(worst * 100).toFixed(0)}% of deep water left alone`);
   note(`${built} cities generated on real terrain from a saved world`);
 }

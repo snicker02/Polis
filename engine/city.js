@@ -152,8 +152,26 @@ export function generateCity(cfgIn, onProgress) {
   // ---- railways ------------------------------------------------------------
   const transit = layTransit(world, plan, cfg.transit, GROUND);
   if (harbour && transit) harbourSidings(world, harbourPlan, harbour, transit, GROUND);
+  // Things that must stay dead level tell the ground planner so: on real
+  // terrain they are levelled as a unit instead of being pinned to the base.
+  if (cfg.terrain) {
+    plan.flatGroups = [];
+    if (canal) {
+      const cells = [];
+      for (let u = canal.u0; u <= canal.u1; u++)
+        for (let a = canal.a0; a <= canal.a1; a++) {
+          const [x, z] = canal.cell(u, a);
+          if (x >= 0 && z >= 0 && x < W && z < D) cells.push(z * W + x);
+        }
+      plan.flatGroups.push(cells);
+    }
+    if (harbourPlan) plan.flatGroups.push([...harbourPlan.cells].map((k) => {
+      const [x, z] = k.split(',').map(Number);
+      return z * W + x;
+    }));
+  }
   const hills = planHills(plan, cfg);                  // needed early: the castle goes on the highest hill
-  if (harbourPlan) {
+  if (harbourPlan && !hills.rolling) {
     // the waterfront and the block it sits in stay level with the quay
     for (const b of hills.blocks) {
       let touches = false;

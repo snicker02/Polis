@@ -277,10 +277,14 @@ export function writeMcStructure(keys, ids, box, materials, opts = {}) {
   // outside an organic outline is left exactly as it was.
   if (fill !== -1 && opts.inside) {
     layer0.fill(-1);
+    // opts.clearTo(x, z) limits the carve to what that column needs: above it
+    // the cells stay structure void, so hillsides and treetops beyond the
+    // city are left standing instead of a box being cut out of the world.
     for (let x = box.x0; x <= box.x1; x++)
       for (let z = box.z0; z <= box.z1; z++) {
         if (!opts.inside(x, z)) continue;
-        for (let y = box.y0; y <= box.y1; y++) layer0[((x - box.x0) * sy + (y - box.y0)) * sz + (z - box.z0)] = fill;
+        const top = opts.clearTo ? Math.min(box.y1, opts.clearTo(x, z)) : box.y1;
+        for (let y = box.y0; y <= top; y++) layer0[((x - box.x0) * sy + (y - box.y0)) * sz + (z - box.z0)] = fill;
       }
   }
   // Generated fill (foundations): opts.fillFn(x, y, z) returns a material id
@@ -290,6 +294,9 @@ export function writeMcStructure(keys, ids, box, materials, opts = {}) {
     for (let x = box.x0; x <= box.x1; x++)
       for (let y = box.y0; y <= yTop; y++)
         for (let z = box.z0; z <= box.z1; z++) {
+          // with a per-column floor, nothing is founded below the ground that
+          // is already there
+          if (opts.fillFrom && y < opts.fillFrom(x, z)) continue;
           const id = opts.fillFn(x, y, z);
           if (id < 0) continue;
           layer0[((x - box.x0) * sy + (y - box.y0)) * sz + (z - box.z0)] = slot(id);
