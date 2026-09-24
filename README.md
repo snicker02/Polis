@@ -1,4 +1,4 @@
-# Polis v0.10.3
+# Polis v0.11.0
 
 *Created with help from Claude AI.*
 
@@ -291,8 +291,16 @@ heightmap and carries its biomes. All of it is done here, in plain JavaScript �
 the zip, the LevelDB block format and the DEFLATE decompression (`inflate.js`),
 since the browser's own decompressor cannot be used synchronously.
 
-The heightmap counts the top of anything, so a forest reads as rough ground; a
-median filter over a small window takes the treetops off and leaves the land.
+The heightmap counts the top of anything, so a forest reads as rough ground. A
+median filter over a small window takes the treetops off and leaves the land —
+but it smooths away real detail along with them. So for the square a city will
+actually stand on, a Bedrock world is read properly: the blocks themselves
+come out of the subchunk records (palette, packed indices, ordered x then z
+then y), and the ground is the first real block down each column, with trees,
+leaf litter and grass passed over and water noted where it lies. That is about
+a second's work for a site, so the map still uses the heightmaps and the
+blocks are read when a site is chosen. Java worlds keep their heightmap, which
+is already exact.
 From that, Polis works out the **base level** (the median of the dry ground,
 which the streets sit on), which cells are **water**, and which are too steep
 or too far above or below to build on. Then:
@@ -680,6 +688,15 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.11.0** — Bedrock sites are read from the blocks rather than the heightmap.
+The heightmap counts treetops, and the filter that removes them was flattening
+real ground with them; now the subchunk records are decoded for the chosen
+site and the ground is the first real block down each column — trees and
+ground cover passed over, water known rather than guessed from its height. It
+takes about a second per site, so the map still uses heightmaps for speed. On
+a wooded site it moved the base level two blocks and recovered detail the
+filter had smoothed away.
 
 **0.10.3** — The village style is rustier. Cottages stand on a course of
 cobble, their corners are solid log posts rather than alternating quoins, and

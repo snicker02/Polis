@@ -140,10 +140,21 @@ export function readWorld(bytes, opts = {}) {
   const near = opts.near, radius = opts.radiusChunks || Infinity;
   const chunks = new Map();
   let biomeOf = new Map();
+  // which table each chunk's records live in, so the blocks of a chosen site
+  // can be read later without going through the whole world again
+  const index = new Map();
   for (const e of tables) {
+    const entryIndex = zip.entries.indexOf(e);
     let data;
     try { data = zip.read(e); } catch { continue; }
     for (const [key, value] of tableEntries(data)) {
+      if (key.length === 9 || key.length === 10) {
+        const kv = new DataView(key.buffer, key.byteOffset, key.byteLength);
+        const k = kv.getInt32(0, true) + ',' + kv.getInt32(4, true);
+        let list = index.get(k);
+        if (!list) { list = new Set(); index.set(k, list); }
+        list.add(entryIndex);
+      }
       if (key.length !== CHUNK_KEY || key[8] !== DATA3D || value.length < 512) continue;
       const dv = new DataView(key.buffer, key.byteOffset, key.byteLength);
       const cx = dv.getInt32(0, true), cz = dv.getInt32(4, true);
@@ -159,7 +170,7 @@ export function readWorld(bytes, opts = {}) {
       }
     }
   }
-  return { chunks, biomes: biomeOf, zip };
+  return { chunks, biomes: biomeOf, zip, index };
 }
 
 // The world's name, spawn and seed, from level.dat (an 8-byte header, then
@@ -221,13 +232,19 @@ export function groundField(field, window = 2) {
 // streets take, with the blocks terracing up from it.
 export function siteGround(chunks, x, z, size, opts = {}) {
   const field = groundField(heightField(chunks, x, z, size));
-  const ground = field.h;
+  // With the real blocks to hand (Bedrock worlds, read on demand), the ground
+  // is what is actually there rather than a heightmap with the trees filtered
+  // off it — which keeps the small rises and hollows the filter smooths away.
+  const exact = opts.exact && opts.exact.size === size ? opts.exact : null;
+  const ground = exact ? Int16Array.from(exact.ground) : field.h;
   const water = new Uint8Array(size * size);
+  if (exact) for (let i = 0; i < water.length; i++) if (exact.water[i]) water[i] = 1;
   const dry = [];
   for (let i = 0; i < ground.length; i++) {
     const y = ground[i];
     if (y < -900) continue;
-    if (y <= SEA_LEVEL) { water[i] = 1; continue; }
+    // without the blocks, water is judged by height; with them, it is known
+    if (exact ? water[i] : y <= SEA_LEVEL) { water[i] = 1; continue; }
     dry.push(y);
   }
   dry.sort((a, b) => a - b);
@@ -240,7 +257,8 @@ export function siteGround(chunks, x, z, size, opts = {}) {
     const rise = y - baseY;
     if (rise >= -(opts.cut ?? 6) && rise <= (opts.fill ?? 10)) buildable++;
   }
-  return { ground, raw: field.raw || ground, water, baseY, size, x0: x, z0: z,
+  return { ground, raw: field.raw || field.h, water, baseY, size, x0: x, z0: z, exact: !!exact,
+    surface: exact ? exact.surface : null,
     coverage: field.coverage, waterShare: field.waterShare,
     buildableShare: buildable / (size * size),
     p05: dry.length ? dry[Math.floor(dry.length * 0.05)] : baseY,

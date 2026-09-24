@@ -10,11 +10,12 @@ import { exportPack, exportStructuresZip, tileList, commandList, cityId, exportS
 import { readWorld, readLevelDat, siteGround, findSites, SEA_LEVEL } from './engine/worldfile.js';
 import { javaTiles, javaPackFiles } from './engine/export-java.js';
 import { readJavaWorld, readJavaLevelDat, worldKind } from './engine/javaworld.js';
+import { exactGround } from './engine/bedrockblocks.js';
 import { makeZip } from './engine/blockcore.js';
 import { decodeNbt } from './tools/nbt-read.js';
 import { THEMES } from './engine/materials.js';
 
-const VERSION = '0.10.3';
+const VERSION = '0.11.0';
 const $ = (id) => document.getElementById(id);
 const numVal = (id) => Number($(id).value);      // readCfg has its own local num()
 
@@ -394,9 +395,12 @@ async function loadWorld(file) {
   await new Promise((r) => setTimeout(r, 30));
   const spawn = info ? [Math.floor(info.spawn[0] / 16), Math.floor(info.spawn[2] / 16)] : [0, 0];
   const t0 = Date.now();
-  const { chunks } = kind === 'java' ? readJavaWorld(bytes) : readWorld(bytes);
+  const read = kind === 'java' ? readJavaWorld(bytes) : readWorld(bytes);
+  const { chunks } = read;
   if (!chunks.size) { wstatus('no chunks found in that file'); return; }
-  world = { chunks, info, near: spawn, view: spawn, site: null, kind };
+  // a Bedrock world keeps its blocks; hold on to what is needed to read the
+  // ones under a chosen site
+  world = { chunks, info, near: spawn, view: spawn, site: null, kind, zip: read.zip || null, index: read.index || null };
   $('coordRow').style.display = 'flex';
   wstatus(`${info ? info.name + ' (' + kind + '): ' : ''}${chunks.size.toLocaleString()} chunks read in ${((Date.now() - t0) / 1000).toFixed(0)}s. `
     + 'Click the map to place the city, or type coordinates to go there.');
@@ -449,7 +453,7 @@ function goToCoords() {
   drawWorldMap();
   // take the site centred on the point asked for
   const size = numVal('size');
-  showSite(siteGround(world.chunks, c[0] - (size >> 1), c[1] - (size >> 1), size));
+  showSite(groundAtSite(c[0] - (size >> 1), c[1] - (size >> 1), size));
 }
 
 function pickSite(ev) {
@@ -459,7 +463,16 @@ function pickSite(ev) {
   const cx = Math.floor((ev.clientX - rect.left) / rect.width * c.width) + view[0] - R;
   const cz = Math.floor((ev.clientY - rect.top) / rect.height * c.height) + view[1] - R;
   const size = numVal('size');
-  showSite(siteGround(world.chunks, cx * 16, cz * 16, size));
+  showSite(groundAtSite(cx * 16, cz * 16, size));
+}
+
+// the ground under a site: from the blocks themselves where they can be read
+function groundAtSite(x0, z0, size) {
+  let exact = null;
+  if (world.kind === 'bedrock' && world.zip && world.index) {
+    try { exact = exactGround(world.zip, world.index, x0, z0, size); } catch { exact = null; }
+  }
+  return siteGround(world.chunks, x0, z0, size, { exact });
 }
 
 function showSite(g) {
