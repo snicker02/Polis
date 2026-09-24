@@ -409,6 +409,9 @@ export function generateCity(cfgIn, onProgress) {
   // ---- blending the edge into the land ---------------------------------------
   const skirt = cfg.terrain && hills.rolling ? buildSkirt(world, plan, hills, cfg.terrain, GROUND) : 0;
 
+  // ---- facing the cuts into the hillside -------------------------------------
+  const cutFaces = cfg.terrain && hills.rolling ? faceCuts(world, plan, hills, cfg.terrain, GROUND) : 0;
+
   // ---- the centre marker -----------------------------------------------------
   const centre = cfg.centreMark ? markCentre(world, plan, buildings, GROUND, elevAt, spawns) : null;
   if (centre) world.centre = [centre.block[0], centre.block[2]];   // the export centres on it
@@ -456,7 +459,7 @@ export function generateCity(cfgIn, onProgress) {
   }
 
   const shell = cfg.terrain ? terrainShell(plan, cfg.terrain, GROUND, cfg.cityStyle) : null;
-  const stats = summarise(world, plan, buildings, cfg, { farms, beds, spawns, bell, transit, wall, ranches, landmarks, hills, stairRuns, reach, canal, centre, streets, harbour, skirt, unsupported: stats_unsupported });
+  const stats = summarise(world, plan, buildings, cfg, { farms, beds, spawns, bell, transit, wall, ranches, landmarks, hills, stairRuns, reach, canal, centre, streets, harbour, skirt, cutFaces, unsupported: stats_unsupported });
   return { world, plan, buildings, cfg, stats, shell, farms, ranches, spawns, bell, transit, wall, landmarks, canal, centre, streets, harbour, harbourPlan,
     hills, stairRuns, reach, groundAt: (x, z) => GROUND + elevAt(x, z) };
 }
@@ -483,6 +486,40 @@ export function terrainShell(plan, terrain, G, style) {
       for (let d = 1; d <= DEPTH; d++) out.push([x, top - d, z, d < 2 ? MAT.DIRT : MAT.BASE]);
     }
   return out;
+}
+
+// ---- facing the cuts into the hillside -----------------------------------------
+// Where the city is cut into rising ground, the hill is left as a raw face of
+// dirt and stone at the city's edge. This builds a retaining wall against it,
+// one cell out from the city, from the street up to the height of the land —
+// the same thing the terraces inside the city already do. The wall's cells go
+// to the export, which is told to clear only just above them, so the hillside
+// behind is left standing instead of being carved back.
+function faceCuts(world, plan, hills, terrain, G) {
+  const { W, D, mask } = plan;
+  const { elev } = hills;
+  const faced = new Set();
+  const MAX = 16;
+  for (let z = 1; z < D - 1; z++)
+    for (let x = 1; x < W - 1; x++) {
+      const i = z * W + x;
+      if (!mask[i]) continue;
+      const surface = G + elev[i];
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = x + dx, nz = z + dz, j = nz * W + nx;
+        if (mask[j]) continue;                             // still inside the city
+        const ground = terrain.ground[j];
+        if (ground < -900) continue;                       // never visited
+        const land = G + (ground - terrain.baseY);
+        if (land < surface + 2) continue;                  // not a cut worth facing
+        const top = Math.min(land, surface + MAX);
+        for (let y = surface; y <= top; y++) world.set(nx, y, nz, MAT.RETAIN);
+        mask[j] = 1;                                       // the export builds the wall
+        faced.add(nx + ',' + nz);
+      }
+    }
+  world.cutFaces = faced;                                  // the export clears only just above these
+  return faced.size;
 }
 
 // ---- blending the edge into the land -------------------------------------------
@@ -1162,6 +1199,7 @@ function summarise(world, plan, buildings, cfg, life = {}) {
     art: buildings.reduce((a, b) => a + (b.roomPlans || []).reduce((c, p) => c + ((p && p.art) || 0), 0), 0),
     paintings: (life.spawns || []).filter((p) => p.type === 'painting').length,
     propped: life.unsupported ? `${life.unsupported} blocks made safe (they would have fallen)` : '',
+    cutFaces: life.cutFaces ? `${life.cutFaces} cells of retaining wall against the hillside` : '',
     skirt: life.skirt ? `${life.skirt} cells stepping down to the land` : '',
     terrain: stats_terrain ? `fitted to the land · base y ${stats_terrain.baseY} · terraces to ${stats_terrain.maxTerrace}` : '',
     hillBlocks: life.hills ? life.hills.blocks.filter((b) => b.e > 0).length : 0,

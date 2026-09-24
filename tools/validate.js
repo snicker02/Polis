@@ -1668,10 +1668,17 @@ section('2r. fitted to real ground');
     }
     // nowhere in the city is there a step taller than one block, and every
     // lot is dead level so its building has flat ground
+    // the retaining walls that face a cut are part of the mask but are walls,
+    // not ground, so they are not steps in the city surface
+    const faces = r.world.cutFaces || new Set();
     for (let z = 1; z < 159; z++) for (let x = 1; x < 159; x++) {
       const i = z * 160 + x;
-      if (!r.plan.mask[i]) continue;
-      for (const j of [i + 1, i + 160]) if (r.plan.mask[j] && Math.abs(elev[i] - elev[j]) > 1) tallSteps++;
+      if (!r.plan.mask[i] || faces.has(x + ',' + z)) continue;
+      for (const [dx, dz] of [[1, 0], [0, 1]]) {
+        const j = (z + dz) * 160 + (x + dx);
+        if (!r.plan.mask[j] || faces.has((x + dx) + ',' + (z + dz))) continue;
+        if (Math.abs(elev[i] - elev[j]) > 1) tallSteps++;
+      }
     }
     for (const lot of r.plan.lots) {
       let lo = 99, hi = -99;
@@ -1788,6 +1795,45 @@ section('2r. fitted to real ground');
     check('fitted cities: the railway turns flat and climbs straight, with no gaps',
       corners === 0 && unclimbed === 0 && gaps === 0 && unsupported === 0 && turns > 0,
       `${turns} turns · ${corners} bad corners · ${unclimbed} unclimbed steps · ${gaps} gaps · ${unsupported} unsupported`);
+  }
+  // where the city cuts into rising ground, the raw face is walled
+  {
+    const site = siteGround(chunks, sites[0].x, sites[0].z, 160);
+    const rr = generateCity({ ...DEFAULTS, size: 160, seed: 7, terrain: site, transit: 'rails' });
+    const faces = rr.world.cutFaces || new Set();
+    let facedWall = 0, stillRaw = 0;
+    for (const key of faces) {
+      const [x, z] = key.split(',').map(Number);
+      let top = -999;
+      for (let y = 60; y > -8; y--) if (rr.world.has(x, y, z)) { top = y; break; }
+      if (top === -999) { stillRaw++; continue; }
+      const id = rr.world.get(x, top, z);
+      if (/stone|brick|andesite|deepslate|sandstone|terracotta|concrete/.test(MATERIALS.def(id).block)) facedWall++;
+      else stillRaw++;
+    }
+    check('fitted cities: cuts into the hillside are faced with a wall', faces.size > 0 && stillRaw === 0,
+      `${facedWall} faced, ${stillRaw} left raw`);
+    // and the land behind a wall is not carved away
+    const terrain2 = { ground: site.ground, raw: site.raw, baseY: site.baseY, size: 160 };
+    const st2 = buildStructures(rr.world, { prefix: 'c', fillAir: true, foundation: 12, clearAbove: 32, terrain: terrain2 });
+    let carved = 0;
+    for (const piece of st2) {
+      const t2 = decodeTyped(piece.data);
+      const pal = t2.v.structure.v.palette.v.default.v.block_palette.v;
+      const [sx, sy, sz] = t2.v.size.v.map((v) => v.v);
+      const [ox, oy, oz] = t2.v.structure_world_origin.v.map((v) => v.v);
+      const l0 = t2.v.structure.v.block_indices.v[0].v;
+      for (let i = 0; i < l0.length; i++) {
+        const v = l0[i].v;
+        if (v < 0 || pal[v].v.name.v !== 'minecraft:air') continue;
+        const z2 = i % sz, r2 = (i - z2) / sz, y2 = r2 % sy, x2 = (r2 - y2) / sy;
+        const key = (ox + x2) + ',' + (oz + z2);
+        if (!faces.has(key)) continue;
+        const ground = site.ground[(oz + z2) * 160 + (ox + x2)];
+        if (ground > -900 && (oy + y2) > ground - site.baseY + 4) carved++;    // cut well above the land
+      }
+    }
+    check('fitted cities: the hillside behind a retaining wall is left standing', carved === 0, `${carved} cells carved`);
   }
   check('fitted cities: the preview carries the surrounding land, and the export does not',
     shellCells > 0 && shellLeaks === 0, `${shellCells} land blocks for the preview, ${shellLeaks} in the world`);

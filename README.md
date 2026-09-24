@@ -1,9 +1,12 @@
-# Polis v0.9.2
+# Polis v0.9.4
 
-A procedural city generator that exports to **Minecraft Bedrock**. Plans a
-street grid, subdivides it into lots, raises buildings with real interiors —
-stairs, floors, windows, doors — and writes the result out as `.mcstructure`
-chunks wrapped in a `.mcpack` behaviour pack.
+*Created with help from Claude AI.*
+
+A procedural city generator that exports to **Minecraft Bedrock** and **Java
+Edition**. Plans a street grid, subdivides it into lots, raises buildings with
+real interiors — stairs, floors, windows, doors — and writes the result out as
+`.mcstructure` chunks in a `.mcpack` behaviour pack, or Java structures in a
+datapack.
 
 No dependencies. WebGL1 preview. ES modules, served from any static host.
 
@@ -305,6 +308,10 @@ or too far above or below to build on. Then:
   envelopes — one shaving the peaks, one filling the hollows — and takes the
   middle of the two, which keeps most of the city within two blocks of the
   real ground;
+- where the city is **cut into rising ground**, the raw face of dirt and stone
+  is faced with a retaining wall, one cell out from the city, running from the
+  street up to the height of the land — and the export is told to clear only
+  just above those walls, so the hillside behind stays standing;
 - each column is **carved and founded only as far as it needs**: cleared to
   the height the clearance setting asks for above the city's own roofs, and
   above anything that stood there (by the raw heightmap, so a tree is taken
@@ -660,6 +667,17 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.9.4** — A line at the foot of the panel and at the top of this file:
+created with help from Claude AI.
+
+**0.9.3** — Cuts into a hillside are faced with a retaining wall instead of
+showing raw dirt and stone, and the export leaves the land behind those walls
+alone (75 to 190 cells of wall on a hilly site). A compactness rule was tried
+and dropped: measuring showed fitted outlines are already solid blobs, and
+what looks like sprawl is unexplored ground, so the rule earned nothing — and
+while it was in, it had been applied to the wrong outline and was quietly
+reshaping every ordinary city.
 
 **0.9.2** — Both teleport buttons copied the centre. The corner button handed
 its function straight to the click listener, so the click event arrived where
