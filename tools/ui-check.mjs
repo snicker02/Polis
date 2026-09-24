@@ -150,6 +150,7 @@ export async function runUiCheck(worldFile) {
     fire('copyTp', 'click');
     const out = { problems, status: elements.get('worldStatus').textContent, info: elements.get('siteInfo').innerHTML,
       offered: false, tpHidden: elements.get('copyTp').style.display !== 'block', copied, downloads: downloads.length,
+      cornerCopy: null, centreCopy: null,
       ids: ids.length, wired: listeners.size, stats: (elements.get('stats') || {}).innerHTML || '' };
     cleanup();
     return out;
@@ -173,10 +174,16 @@ export async function runUiCheck(worldFile) {
   fire('worldMap', 'click', { clientX: 96, clientY: 96 });
   const info = elements.get('siteInfo').innerHTML;
   const offered = elements.get('useSite').style.display === 'block';
+  if (offered) fire('useSite', 'click');                   // generate, so both spots exist
+  await new Promise((r) => setTimeout(r, 300));
   const tpLabel = elements.get('copyTp').textContent;
-  if (offered) { fire('copyTp', 'click'); fire('useSite', 'click'); }
+  const tpCentreLabel = elements.get('copyTpCentre').textContent;
+  copied.length = 0;
+  fire('copyTp', 'click');
+  fire('copyTpCentre', 'click');
+  const [cornerCopy, centreCopy] = copied;
 
-  const result = { problems, status, info, typed, offered, tpLabel, copied, ids: ids.length, wired: listeners.size,
+  const result = { problems, status, info, typed, offered, tpLabel, tpCentreLabel, cornerCopy, centreCopy, copied, ids: ids.length, wired: listeners.size,
     stats: (elements.get('stats') || {}).innerHTML || '' };
   cleanup();
   return result;
@@ -189,7 +196,8 @@ if (process.argv[1] && process.argv[1].endsWith('ui-check.mjs')) {
   console.log('after typing coordinates:', (r.typed || '(nothing)').replace(/<[^>]+>/g, ''));
   console.log('after clicking the map:', (r.info || '(nothing)').replace(/<[^>]+>/g, ''));
   console.log('site offered:', r.offered, '| teleport button:', r.tpLabel || '(none)');
-  console.log('copied to clipboard:', r.copied && r.copied.length ? r.copied : '(nothing)');
+  console.log('corner button:', r.tpLabel || '(none)', '=> copied', r.cornerCopy || '(nothing)');
+  console.log('centre button:', r.tpCentreLabel || '(none)', '=> copied', r.centreCopy || '(nothing)');
   console.log('exports produced:', r.downloads === undefined ? 'n/a' : r.downloads);
   console.log('problems:', r.problems.length ? r.problems : 'none');
   if (r.stats) console.log('stats panel:', r.stats.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').slice(0, 300));

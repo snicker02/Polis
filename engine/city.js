@@ -433,7 +433,9 @@ export function generateCity(cfgIn, onProgress) {
         for (const [x, y, z] of line.cells) {
           const id = world.get(x, y, z);
           if (id < 0 || !/rail/.test(MATERIALS.def(id).block)) continue;
-          if (!loose(world.get(x, y - 1, z))) continue;
+          const below = world.get(x, y - 1, z);
+          if (!loose(below)) continue;
+          if (below >= 0 && /rail/.test(MATERIALS.def(below).block)) continue;   // never pave over track
           world.set(x, y - 1, z, MAT.BASE);
           propped++;
         }
@@ -577,6 +579,72 @@ function shiftTransit(world, transit, elevAt, G) {
   }
   transit.carts = transit.lines.map((l) => ({ type: 'minecart', x: l.stations[0][0], y: l.stations[0][1], z: l.stations[0][2] }));
 
+  // A corner has to be a curve, and a rail that climbs has to be straight, so
+  // the two cannot be the same block. Where a line turns on a step, the track
+  // is levelled through the turn — the corner and the cells either side share
+  // a height — and the climb happens on the straight beyond it.
+  const railAt = (x, y, z) => { const id = world.get(x, y, z); return id >= 0 && /rail/.test(MATERIALS.def(id).block); };
+  const moveRail = (cell, toY) => {
+    const [x, y, z] = cell;
+    const id = world.get(x, y, z);
+    if (id < 0) return;
+    // never drop track onto another line: the upper rail would have nothing
+    // to sit on, and a support there would block the cart below
+    if (railAt(x, toY - 1, z) || railAt(x, toY, z)) return;
+    world.clear(x, y, z);
+    world.set(x, toY, z, id);
+    // a support may never replace track: rails count as passable, so a lower
+    // line running under this one would be paved over
+    const under = world.get(x, toY - 1, z);
+    const isRail = under >= 0 && /rail/.test(MATERIALS.def(under).block);
+    if (!isRail && (under === -1 || MATERIALS.isPassable(under))) world.set(x, toY - 1, z, MAT.BASE);
+    for (let h = 1; h <= 3; h++) {
+      const above = world.get(x, toY + h, z);
+      if (above >= 0 && !MATERIALS.isPassable(above)) world.clear(x, toY + h, z);
+    }
+    cell[1] = toY;
+  };
+  // Two rules have to hold along a line before the climbing rails go in: a
+  // corner is flat with both its neighbours, and no step is taller than one
+  // block (a rail can climb one). Levelling a corner can make a two-block
+  // step and vice versa, so they are settled together, always downward, so
+  // two corners near each other cannot pull one another about for ever.
+  const limitSteps = () => {
+    let fixed = 0;
+    for (const line of transit.lines) {
+      const cells = line.cells;
+      const at = (i) => (line.loop ? cells[(i + cells.length) % cells.length] : cells[i]);
+      for (let i = 0; i < cells.length; i++) {
+        const here = cells[i], next = at(i + 1);
+        if (!next) continue;
+        const drop = here[1] - next[1];
+        if (Math.abs(drop) <= 1) continue;
+        const high = drop > 0 ? here : next, low = drop > 0 ? next : here;
+        moveRail(high, low[1] + 1);
+        fixed++;
+      }
+    }
+    return fixed;
+  };
+  for (let pass = 0; pass < 16; pass++) {
+    let levelled = 0;
+    for (const line of transit.lines) {
+      const cells = line.cells;
+      // a loop has no ends: its first and last cells are neighbours
+      const at = (i) => (line.loop ? cells[(i + cells.length) % cells.length] : cells[i]);
+      for (let i = 0; i < cells.length; i++) {
+        const prev = at(i - 1), next = at(i + 1), here = cells[i];
+        if (!prev || !next) continue;
+        const turns = prev[0] !== next[0] && prev[2] !== next[2];      // the line changes axis here
+        if (!turns) continue;
+        const y = Math.min(here[1], prev[1], next[1]);
+        for (const n of [here, prev, next]) if (n[1] !== y) { moveRail(n, y); levelled++; }
+      }
+    }
+    levelled += limitSteps();
+    if (!levelled) break;
+  }
+
   // where the line steps up or down, the lower rail becomes a climbing rail
   for (const line of transit.lines) {
     const cells = line.cells;
@@ -585,7 +653,9 @@ function shiftTransit(world, transit, elevAt, G) {
       const id = world.get(x, y, z);
       if (id < 0 || !/rail/.test(MATERIALS.def(id).block)) continue;
       const powered = MATERIALS.def(id).block === 'minecraft:golden_rail';
-      const prev = cells[i - 1], next = cells[i + 1];
+      const near = (k) => (line.loop ? cells[(k + cells.length) % cells.length] : cells[k]);
+      const prev = near(i - 1), next = near(i + 1);
+      if (prev && next && prev[0] !== next[0] && prev[2] !== next[2]) continue;   // a corner stays a curve
       let climb = null;
       for (const n of [next, prev]) {
         if (!n || climb) continue;

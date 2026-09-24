@@ -7,7 +7,8 @@
 // the lint checks the things that actually break: stage interface mismatches,
 // undeclared identifiers, unbalanced blocks, uniform lookup coverage).
 
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, unlinkSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import zlib from 'node:zlib';
@@ -1751,6 +1752,43 @@ section('2r. fitted to real ground');
     check('fitted cities: placed on the very ground they were fitted to',
       cell0.join() === [site.x0, site.baseY, site.z0].join(), `${cell0.join(',')} vs ${[site.x0, site.baseY, site.z0].join(',')}`);
   }
+  // On rolling ground a line both turns and climbs. A corner has to be a
+  // curve and a climbing rail has to be straight, so a turn on a step leaves
+  // the track disconnected.
+  {
+    let corners = 0, unclimbed = 0, gaps = 0, unsupported = 0, turns = 0;
+    const site = siteGround(chunks, sites[0].x, sites[0].z, 160);
+    for (const seed of [7, 21]) {
+      const rr = generateCity({ ...DEFAULTS, size: 160, seed, terrain: site, transit: 'rails' });
+      const w2 = rr.world;
+      for (const line of rr.transit ? rr.transit.lines : []) {
+        const c = line.cells;
+        const at = (i) => (line.loop ? c[(i + c.length) % c.length] : c[i]);
+        for (let i = 0; i < c.length; i++) {
+          const [x, y, z] = c[i];
+          const id = w2.get(x, y, z);
+          if (id < 0 || !/rail/.test(MATERIALS.def(id).block)) { gaps++; continue; }
+          const dir = MATERIALS.def(id).states.rail_direction.value;
+          const p = at(i - 1), n = at(i + 1);
+          const turning = p && n && p[0] !== n[0] && p[2] !== n[2];
+          if (turning) {
+            turns++;
+            if (p[1] !== y || n[1] !== y) corners++;                       // a corner on a step
+            if (dir >= 2 && dir <= 5) corners++;                           // or turned into a climb
+          } else if (p && p[1] !== y) {
+            const pid = w2.get(p[0], p[1], p[2]);
+            const pdir = pid >= 0 ? MATERIALS.def(pid).states.rail_direction.value : -1;
+            if (!((dir >= 2 && dir <= 5) || (pdir >= 2 && pdir <= 5))) unclimbed++;
+          }
+          const below = w2.get(x, y - 1, z);
+          if (below === -1 || MATERIALS.isPassable(below)) unsupported++;
+        }
+      }
+    }
+    check('fitted cities: the railway turns flat and climbs straight, with no gaps',
+      corners === 0 && unclimbed === 0 && gaps === 0 && unsupported === 0 && turns > 0,
+      `${turns} turns · ${corners} bad corners · ${unclimbed} unclimbed steps · ${gaps} gaps · ${unsupported} unsupported`);
+  }
   check('fitted cities: the preview carries the surrounding land, and the export does not',
     shellCells > 0 && shellLeaks === 0, `${shellCells} land blocks for the preview, ${shellLeaks} in the world`);
   check('fitted cities: the outline keeps off deep water', worst > 0.85, `${(worst * 100).toFixed(0)}% of deep water left alone`);
@@ -1773,6 +1811,32 @@ section('2s. front end');
   check('front end: pressing Generate fills the stats panel', /blocks/.test(text) && /buildings/.test(text), text.slice(0, 80));
   check('front end: clicking the map with no world loaded does nothing', !r.info);
   check('front end: both editions export a file when the button is pressed', r.downloads >= 2, `${r.downloads} files`);
+  // each teleport button must copy its own spot: passing the handler straight
+  // to addEventListener makes the click event the argument, and both copied
+  // the centre
+  {
+    const { runUiCheck } = await import('./ui-check.mjs');
+    // a real world to load: a Java one, written here in Anvil format
+    const { makeRegion, makeLevelDat } = await import('./make-java-world.mjs');
+    const { makeZip: zipUp } = await import('../engine/blockcore.js');
+    const ground = (x, z) => 64 + Math.round(4 * Math.sin(x / 50) + 3 * Math.cos(z / 45));
+    const worldZip = await zipUp([
+      { name: 'level.dat', data: new Uint8Array(makeLevelDat('Check World', [128, 70, 128])) },
+      { name: 'region/r.0.0.mca', data: new Uint8Array(makeRegion(0, 0, ground)) },
+    ], { deflateRaw });
+    const worldPath = join(tmpdir(), `polis-check-world-${process.pid}.zip`);
+    writeFileSync(worldPath, Buffer.from(worldZip));
+    let both = null;
+    try { both = await runUiCheck(worldPath); } catch { both = null; }
+    try { unlinkSync(worldPath); } catch { /* it was only a scratch file */ }
+    if (both && both.cornerCopy && both.centreCopy) {
+      check('front end: the corner and centre buttons copy different commands',
+        both.cornerCopy !== both.centreCopy && /^\/tp /.test(both.cornerCopy) && /^\/tp /.test(both.centreCopy),
+        `${both.cornerCopy} vs ${both.centreCopy}`);
+    } else {
+      note('front end: the two teleport buttons need a world to test against (tools/test-world.mcworld); skipped');
+    }
+  }
   check('front end: the teleport button stays hidden until a site is chosen, and copies nothing',
     r.tpHidden && (!r.copied || r.copied.length === 0));
   note(`front end booted, generated a city and reported: ${text.replace(/\s+/g, ' ').trim().slice(0, 90)}…`);

@@ -1,4 +1,4 @@
-# Polis v0.9.0
+# Polis v0.9.2
 
 A procedural city generator that exports to **Minecraft Bedrock**. Plans a
 street grid, subdivides it into lots, raises buildings with real interiors —
@@ -660,6 +660,31 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.9.2** — Both teleport buttons copied the centre. The corner button handed
+its function straight to the click listener, so the click event arrived where
+the "centred" flag was expected — and an event object is truthy, so every
+click took the centred branch. The headless front-end check now presses both
+buttons against a generated world and fails if they copy the same command.
+
+**0.9.1** — The railway's corners came apart on fitted ground. A corner has to
+be a curved rail and a climbing rail has to be straight, so where a line
+turned on a step the corner became a climb and the track stopped connecting.
+The line is now settled before the climbing rails go in: corners are levelled
+flat with both neighbours, no step is left taller than one block, and the two
+rules settle together (always downward, so neighbouring corners cannot pull
+one another about); loops wrap, so their ends count as neighbours. Two smaller
+faults fell out of it: a support block could be laid over a rail (rails count
+as passable) and track could be dropped on top of another line.
+
+**0.9.1** — The railway's corners came apart on fitted ground. A corner has to
+be a curved rail and a climbing rail has to be straight, so where a line
+turned on a step the corner was turned into a climb and the track stopped
+connecting — visible as broken corners on the loop. The track is now settled
+before the climbing rails go in: a corner is levelled flat with both its
+neighbours, no step is left taller than one block, and the two rules are
+settled together (always downward, so neighbouring corners cannot pull one
+another about). Loops wrap, so their first and last cells count as neighbours.
 
 **0.9.0** — Terrain fitting for Java worlds. Zip a world folder from `saves`
 and load it like a `.mcworld`: Polis works out which edition it is and reads

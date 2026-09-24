@@ -14,7 +14,7 @@ import { makeZip } from './engine/blockcore.js';
 import { decodeNbt } from './tools/nbt-read.js';
 import { THEMES } from './engine/materials.js';
 
-const VERSION = '0.9.0';
+const VERSION = '0.9.2';
 const $ = (id) => document.getElementById(id);
 const numVal = (id) => Number($(id).value);      // readCfg has its own local num()
 
@@ -92,7 +92,9 @@ function boot() {
   $('goCoords').addEventListener('click', goToCoords);
   $('siteCoords').addEventListener('keydown', (e) => { if (e.key === 'Enter') goToCoords(); });
   $('worldMap').addEventListener('click', (e) => { try { pickSite(e); } catch (err) { wstatus('could not read that site: ' + err.message); } });
-  $('copyTp').addEventListener('click', copyTeleport);
+  // an arrow function, or the click event arrives as the "centred" argument
+  // and every click copies the centre
+  $('copyTp').addEventListener('click', () => copyTeleport(false));
   $('copyTpCentre').addEventListener('click', () => copyTeleport(true));
   $('useSite').addEventListener('click', () => {
     if (!world || !world.site) return;
