@@ -88,6 +88,15 @@ export function generateCity(cfgIn, onProgress) {
   stats_unsupported = 0;
   const cfg = { ...DEFAULTS, ...cfgIn };
   STYLE = styleOf(cfg.cityStyle);
+  // a village is low by nature, so the style says so and the plan obeys; it
+  // also works more ground than a town does
+  if (STYLE.lowRise) {
+    if (cfgIn.lowRise === undefined) cfg.lowRise = true;
+    // more ground is worked than in a town — but only if the slider is still
+    // where it started, so a deliberate setting is left alone
+    if (cfg.farmChance === DEFAULTS.farmChance) cfg.farmChance = 0.45;
+    if (cfg.ranchChance === DEFAULTS.ranchChance) cfg.ranchChance = 0.18;
+  }
   const rng = makeRng(cfg.seed);
   const plan = generatePlan(cfg, rng);
   const world = new VoxelWorld({ budget: cfg.budget });

@@ -176,6 +176,46 @@ export const STYLES = {
       libPave: MAT.COBBLE, libWall: MAT.COBBLE, libTrim: MAT.OAK_FRAME, libFloor: MAT.SPRUCE,
       market: [MAT.COBBLE, MAT.STONEBRICK], wellRim: MAT.COBBLE, wellRoof: MAT.SPRUCE },
   },
+
+  // The look of the villages the game builds by itself: oak and spruce, white
+  // plaster between the timbers, cobble footings, dirt paths and hay roofs.
+  // Buildings are kept low, so a village reads as a village rather than a town
+  // in village colours.
+  village: {
+    label: 'Village',
+    lowRise: true,                 // see city.js: floors are capped for this style
+    themes: {
+      house: [
+        T('plaster', MAT.C_WHITE, MAT.OAK_FRAME, MAT.OAK, MAT.GLASS, 'oak', 'oak', MAT.OAK),
+        T('cottage', MAT.C_WHITE, MAT.SPRUCE_FRAME, MAT.SPRUCE, MAT.GLASS, 'spruce', 'spruce', MAT.SPRUCE),
+        T('cobblefoot', MAT.COBBLE, MAT.OAK_FRAME, MAT.OAK, MAT.GLASS, 'cobble', 'oak', MAT.OAK),
+        T('thatch', MAT.C_WHITE, MAT.OAK_FRAME, MAT.OAK, MAT.GLASS, 'oak', 'oak', MAT.HAY),
+        T('brickcot', MAT.BRICK, MAT.OAK_FRAME, MAT.OAK, MAT.GLASS, 'brick', 'oak', MAT.SPRUCE),
+      ],
+      mid: [
+        T('inn', MAT.C_WHITE, MAT.OAK_FRAME, MAT.OAK, MAT.GLASS, 'oak', 'oak'),
+        T('barn', MAT.SPRUCE, MAT.SPRUCE_FRAME, MAT.SPRUCE, MAT.GLASS, 'spruce', 'spruce'),
+        T('smithy', MAT.COBBLE, MAT.STONEBRICK, MAT.SPRUCE, MAT.GLASS, 'cobble', 'spruce'),
+        T('brickhall', MAT.BRICK, MAT.OAK_FRAME, MAT.OAK, MAT.GLASS, 'brick', 'oak'),
+      ],
+      tower: [
+        T('granary', MAT.C_WHITE, MAT.OAK_FRAME, MAT.OAK, MAT.GLASS, 'oak', 'oak'),
+        T('stonehouse', MAT.COBBLE, MAT.OAK_FRAME, MAT.SPRUCE, MAT.GLASS, 'cobble', 'oak'),
+      ],
+    },
+    remap: {
+      ASPHALT: 'GRASS_PATH', SIDEWALK: 'COBBLE', LINE: 'GRASS_PATH', CROSSWALK: 'COBBLE', PATH: 'GRASS_PATH',
+      LAMP_POST: 'FENCE', STREET_LIGHT: 'LANTERN', RETAIN: 'COBBLE', INTERIOR_WALL: 'OAK',
+    },
+    landmark: { ...MODERN_LANDMARK,
+      hallPave: MAT.COBBLE, hallWall: MAT.C_WHITE, hallColumn: MAT.OAK_FRAME, hallCapital: MAT.OAK,
+      hallFloor: MAT.OAK, hallGlass: MAT.GLASS, hallStair: 'oak', hallDoor: 'oak', entablature: MAT.OAK_FRAME,
+      domeBase: MAT.COBBLE, domeRing: MAT.OAK_FRAME, dome: MAT.HAY, finial: MAT.OAK_FRAME,
+      clockPave: [MAT.COBBLE, MAT.GRASS_PATH], clockWall: MAT.C_WHITE, clockTrim: MAT.OAK_FRAME, clockFloor: MAT.OAK,
+      clockStair: 'oak', clockDoor: 'oak', spire: MAT.HAY,
+      libPave: MAT.COBBLE, libWall: MAT.C_WHITE, libTrim: MAT.OAK_FRAME, libFloor: MAT.OAK, libStair: 'oak', libDoor: 'oak',
+      market: [MAT.GRASS_PATH, MAT.COBBLE], wellRim: MAT.COBBLE, wellRoof: MAT.OAK },
+  },
 };
 export const STYLE_NAMES = Object.keys(STYLES);
 export const styleOf = (name) => STYLES[name] || STYLES.modern;

@@ -170,13 +170,17 @@ export function generatePlan(cfg, rng) {
     const small = Math.min(w, d);
     const t = Math.pow(zone, 1.7);
     const jitter = lerp(0.6, 1.4, fbm2(lot.x0 * 3.1, lot.z0 * 3.1, cfg.seed ^ 0x2545f491, 9));
-    let floors = Math.round(lerp(1, cfg.maxFloors, t) * jitter);
+    // a village is low: cottages of one or two storeys, with the odd
+    // three-storey inn or granary in the middle of it
+    const ceiling = cfg.lowRise ? Math.min(cfg.maxFloors, 3) : cfg.maxFloors;
+    let floors = Math.round(lerp(1, ceiling, t) * jitter);
     const byArea = small < 7 ? 1 : small < 9 ? 4 : small < 12 ? 10 : small < 16 ? 24 : cfg.maxFloors;
-    floors = clamp(floors, 1, Math.min(cfg.maxFloors, byArea));
+    floors = clamp(floors, 1, Math.min(ceiling, byArea));
     if (zone < 0.10 && small >= 9) floors = Math.min(floors, 2);
 
     let style;
-    if (floors <= 2 && zone < 0.36) style = 'house';
+    if (cfg.lowRise) style = floors >= 3 ? 'mid' : 'house';    // no towers in a village
+    else if (floors <= 2 && zone < 0.36) style = 'house';
     else if (floors >= Math.max(7, cfg.maxFloors * 0.32)) style = 'tower';
     else style = 'mid';
 

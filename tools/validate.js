@@ -2026,6 +2026,41 @@ section('2w. square, stadium, cemetery, allotments, bandstand');
 }
 
 // ===========================================================================
+// 2x. the village style
+// ===========================================================================
+section('2x. village style');
+{
+  let tall = 0, towers = 0, cities = 0, farms = 0, houses = 0, all = 0, oaky = 0;
+  for (const [size, seed] of [[192, 7], [160, 3], [256, 12]]) {
+    const r = generateCity({ ...DEFAULTS, size, seed, cityStyle: 'village' });
+    cities++;
+    farms += r.stats.farms;
+    for (const b of r.buildings) {
+      if (b.landmark) continue;                       // a church tower or lighthouse may rise
+      all++;
+      if (b.style === 'house') houses++;
+      if (b.style === 'tower') towers++;
+      if (b.floors > 3) tall++;
+    }
+    // it should read as a village: oak, cobble, hay, dirt paths
+    const counts = new Map();
+    r.world.forEach((x, y, z, id) => {
+      const n = MATERIALS.def(id).block;
+      counts.set(n, (counts.get(n) || 0) + 1);
+    });
+    const village = ['minecraft:planks', 'minecraft:cobblestone', 'minecraft:hay_block', 'minecraft:grass_path', 'minecraft:log'];
+    if (village.filter((n) => (counts.get(n) || 0) > 100).length >= 3) oaky++;
+  }
+  check('village: nothing above three storeys but the landmarks', tall === 0 && towers === 0, `${tall} too tall, ${towers} towers`);
+  check('village: mostly cottages', houses > all * 0.4, `${houses} of ${all} are houses`);
+  check('village: more ground is worked than in a town', farms >= cities * 3, `${farms} farms across ${cities} villages`);
+  check('village: built of the materials a village is built of', oaky === cities, `${oaky}/${cities}`);
+  const set = generateCity({ ...DEFAULTS, size: 160, seed: 3, cityStyle: 'village', farmChance: 0 });
+  check('village: a deliberate setting still wins', set.stats.farms === 0);
+  note(`${cities} villages · ${houses}/${all} cottages · ${farms} farms`);
+}
+
+// ===========================================================================
 // 2u. nothing falls down
 // ===========================================================================
 section('2u. nothing falls');

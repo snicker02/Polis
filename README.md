@@ -1,4 +1,4 @@
-# Polis v0.10.0
+# Polis v0.10.1
 
 *Created with help from Claude AI.*
 
@@ -680,6 +680,14 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.10.1** — A **Village** style, after the villages the game builds itself:
+oak and spruce, white plaster between the timbers, cobble footings, hay roofs,
+dirt paths and lantern posts. It is low by nature — cottages of one or two
+storeys with the odd three-storey inn or granary, and no towers — while the
+landmarks still rise above it, so a village keeps its church tower and its
+clock. It works more ground too, with farms and animal pens more common than
+in a town, unless those sliders have been moved deliberately.
 
 **0.10.0** — Five new landmarks: a town square with a fountain, benches and
 market stalls; a stadium with terraced seating, goals, floodlights and a
