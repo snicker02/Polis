@@ -1,4 +1,4 @@
-# Polis v0.11.2
+# Polis v0.11.3
 
 *Created with help from Claude AI.*
 
@@ -340,6 +340,10 @@ copies a `/tp` straight to the spot: the **corner** with `build`, or the
 on exactly the ground it was fitted to. The corner spot is the first block of
 the city, not the corner of the site: an outline rarely reaches the site edge,
 so those differ.
+
+**Scroll on the map to zoom**, from about 3000 blocks across down to 250; it
+zooms about the pointer, so what you are looking at stays where it is, and the
+scale is written under the map.
 
 Click the map to choose a site, or type coordinates (an F3 position pasted
 straight in works: `-6926.11 69.00 -10080.98`) to jump anywhere in the world.
@@ -688,6 +692,12 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.11.3** — The world map zooms. Scrolling moves through seven steps from
+about 3000 blocks across down to 250, keeping whatever is under the pointer in
+place, with the scale written underneath; chunks are drawn several pixels
+across when zoomed in, so a site can be placed precisely. Picking, the site
+outline and the coordinate box all follow the zoom.
 
 **0.11.2** — A **Name** box in the export panel. Minecraft takes a pack's name
 from inside it, not from the file, so renaming the download changed nothing —

@@ -174,6 +174,18 @@ export async function runUiCheck(worldFile) {
   fire('goCoords', 'click');
   const typed = elements.get('siteInfo').innerHTML;
 
+  // zoom in and out, then pick from a zoomed map: the site must land where
+  // the pointer was, at every zoom
+  const zooms = [];
+  const mapEl = elements.get('worldMap');
+  for (const dir of [-1, -1, 1]) {
+    const l = listeners.get('worldMap');
+    if (l && l.wheel) l.wheel({ deltaY: dir, clientX: 96, clientY: 96, preventDefault() {} });
+    zooms.push(elements.get('mapScale').textContent);
+  }
+  fire('worldMap', 'click', { clientX: 96, clientY: 96 });
+  const zoomedPick = elements.get('siteInfo').innerHTML.match(/centre <b>(-?\d+), (-?\d+)/);
+
   // click the middle of the map, then take the site
   fire('worldMap', 'click', { clientX: 96, clientY: 96 });
   const info = elements.get('siteInfo').innerHTML;
@@ -199,7 +211,7 @@ export async function runUiCheck(worldFile) {
   fire('copyTpCentre', 'click');
   const [cornerCopy, centreCopy] = copied;
 
-  const result = { problems, status, info, typed, offered, tpLabel, tpCentreLabel, cornerCopy, centreCopy, copied, sizes, ids: ids.length, wired: listeners.size,
+  const result = { problems, status, info, typed, offered, tpLabel, tpCentreLabel, cornerCopy, centreCopy, copied, sizes, zooms, zoomedPick: zoomedPick ? zoomedPick.slice(1).join(',') : null, ids: ids.length, wired: listeners.size,
     stats: (elements.get('stats') || {}).innerHTML || '' };
   cleanup();
   return result;
@@ -212,6 +224,8 @@ if (process.argv[1] && process.argv[1].endsWith('ui-check.mjs')) {
   console.log('after typing coordinates:', (r.typed || '(nothing)').replace(/<[^>]+>/g, ''));
   console.log('after clicking the map:', (r.info || '(nothing)').replace(/<[^>]+>/g, ''));
   console.log('site offered:', r.offered, '| teleport button:', r.tpLabel || '(none)');
+  console.log('map zoom:', (r.zooms || []).join(' | '));
+  console.log('picked while zoomed:', r.zoomedPick || '(none)');
   console.log('size slider:', (r.sizes || []).map((s) => `asked ${s.asked} → site ${s.got}`).join(', ') || 'n/a');
   console.log('corner button:', r.tpLabel || '(none)', '=> copied', r.cornerCopy || '(nothing)');
   console.log('centre button:', r.tpCentreLabel || '(none)', '=> copied', r.centreCopy || '(nothing)');

@@ -15,7 +15,7 @@ import { makeZip } from './engine/blockcore.js';
 import { decodeNbt } from './tools/nbt-read.js';
 import { THEMES } from './engine/materials.js';
 
-const VERSION = '0.11.2';
+const VERSION = '0.11.3';
 const $ = (id) => document.getElementById(id);
 const numVal = (id) => Number($(id).value);      // readCfg has its own local num()
 
@@ -98,6 +98,16 @@ function boot() {
   $('goCoords').addEventListener('click', goToCoords);
   $('siteCoords').addEventListener('keydown', (e) => { if (e.key === 'Enter') goToCoords(); });
   $('worldMap').addEventListener('click', (e) => { try { pickSite(e); } catch (err) { wstatus('could not read that site: ' + err.message); } });
+  $('worldMap').addEventListener('wheel', (e) => {
+    if (!world) return;
+    e.preventDefault();
+    const under = chunkAt(e);                       // keep this spot where it is
+    const next = Math.max(0, Math.min(ZOOMS.length - 1, (world.zoom === undefined ? 4 : world.zoom) + (e.deltaY > 0 ? 1 : -1)));
+    if (next === world.zoom) return;
+    world.zoom = next;
+    world.view = under;
+    drawWorldMap();
+  }, { passive: false });
   // an arrow function, or the click event arrives as the "centred" argument
   // and every click copies the centre
   $('copyTp').addEventListener('click', () => copyTeleport(false));
@@ -412,34 +422,51 @@ async function loadWorld(file) {
   drawWorldMap();
 }
 
+// how many chunks the map shows either way, and how big each is drawn: the
+// canvas stays about the same size on screen at every zoom
+const ZOOMS = [8, 16, 32, 64, 96, 160, 256];
+function mapView() {
+  const R = ZOOMS[world.zoom === undefined ? 4 : world.zoom];
+  const px = Math.max(1, Math.min(12, Math.round(256 / (R * 2))));    // pixels per chunk
+  return { R, px, near: world.view || world.near };
+}
+
 function drawWorldMap() {
   const c = $('worldMap'), ctx = c.getContext('2d');
   const { chunks } = world;
-  const near = world.view || world.near;
-  const R = 96;                                   // chunks either way
-  c.width = c.height = R * 2;
-  const img = ctx.createImageData(R * 2, R * 2);
+  const { R, px, near } = mapView();
+  c.width = c.height = R * 2 * px;
+  const img = ctx.createImageData(R * 2 * px, R * 2 * px);
   let lo = 999, hi = -999;
   for (const h of chunks.values()) for (const y of h) { if (y < -900 || y <= SEA_LEVEL) continue; lo = Math.min(lo, y); hi = Math.max(hi, y); }
+  const W = R * 2 * px;
+  const put = (cx, cz, r, g, b) => {
+    for (let dy = 0; dy < px; dy++)
+      for (let dx = 0; dx < px; dx++) {
+        const o = ((cz * px + dy) * W + (cx * px + dx)) * 4;
+        img.data[o] = r; img.data[o + 1] = g; img.data[o + 2] = b; img.data[o + 3] = 255;
+      }
+  };
   for (let cz = 0; cz < R * 2; cz++)
     for (let cx = 0; cx < R * 2; cx++) {
       const h = chunks.get((near[0] - R + cx) + ',' + (near[1] - R + cz));
-      const o = (cz * R * 2 + cx) * 4;
-      if (!h) { img.data[o] = img.data[o + 1] = img.data[o + 2] = 24; img.data[o + 3] = 255; continue; }
+      if (!h) { put(cx, cz, 24, 24, 24); continue; }
       let sum = 0, n = 0, water = 0;
       for (const y of h) { if (y < -900) continue; sum += y; n++; if (y <= SEA_LEVEL) water++; }
       const mean = n ? sum / n : 0, t = Math.max(0, Math.min(1, (mean - lo) / Math.max(1, hi - lo)));
-      if (water / Math.max(1, n) > 0.5) { img.data[o] = 32; img.data[o + 1] = 70 + 60 * t; img.data[o + 2] = 150; }
-      else { img.data[o] = 60 + 150 * t; img.data[o + 1] = 110 + 90 * t; img.data[o + 2] = 60 + 50 * t; }
-      img.data[o + 3] = 255;
+      if (water / Math.max(1, n) > 0.5) put(cx, cz, 32, 70 + 60 * t, 150);
+      else put(cx, cz, 60 + 150 * t, 110 + 90 * t, 60 + 50 * t);
     }
   ctx.putImageData(img, 0, 0);
   c.style.display = 'block';
   if (world.site) {                                // outline the chosen site
-    const size = numVal('size');
-    ctx.strokeStyle = '#ffd700'; ctx.lineWidth = 1;
-    ctx.strokeRect((world.site.x / 16) - (near[0] - R), (world.site.z / 16) - (near[1] - R), size / 16, size / 16);
+    const size = world.site.size;
+    ctx.strokeStyle = '#ffd700';
+    ctx.lineWidth = Math.max(1, px / 2);
+    ctx.strokeRect(((world.site.x0 / 16) - (near[0] - R)) * px, ((world.site.z0 / 16) - (near[1] - R)) * px,
+      (size / 16) * px, (size / 16) * px);
   }
+  $('mapScale').textContent = `showing ${R * 32} blocks across · scroll to zoom`;
 }
 
 // "-6926.11 69.00 -10080.98", "-6926, -10080" and the like: the first and
@@ -461,12 +488,18 @@ function goToCoords() {
   showSite(groundAtSite(c[0] - (size >> 1), c[1] - (size >> 1), size));
 }
 
+// which chunk the pointer is over
+function chunkAt(ev) {
+  const c = $('worldMap'), rect = c.getBoundingClientRect();
+  const { R, px, near } = mapView();
+  const cx = Math.floor((ev.clientX - rect.left) / rect.width * c.width / px) + near[0] - R;
+  const cz = Math.floor((ev.clientY - rect.top) / rect.height * c.height / px) + near[1] - R;
+  return [cx, cz];
+}
+
 function pickSite(ev) {
   if (!world) return;
-  const c = $('worldMap'), rect = c.getBoundingClientRect(), R = 96;
-  const view = world.view || world.near;
-  const cx = Math.floor((ev.clientX - rect.left) / rect.width * c.width) + view[0] - R;
-  const cz = Math.floor((ev.clientY - rect.top) / rect.height * c.height) + view[1] - R;
+  const [cx, cz] = chunkAt(ev);
   const size = numVal('size');
   showSite(groundAtSite(cx * 16, cz * 16, size));
 }

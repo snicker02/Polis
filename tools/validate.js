@@ -1906,7 +1906,13 @@ section('2s. front end');
     try { both = await runUiCheck(worldPath); } catch { both = null; }
     try { unlinkSync(worldPath); } catch { /* it was only a scratch file */ }
     if (both && both.cornerCopy && both.centreCopy) {
-      if (both && both.sizes && both.sizes.length === 2) {
+      if (both && both.zooms && both.zooms.length === 3) {
+      const spans = both.zooms.map((t) => Number((t.match(/showing (\d+)/) || [])[1] || 0));
+      check('front end: the map zooms in and back out', spans[0] > spans[1] && spans[2] > spans[1],
+        spans.join(' → ') + ' blocks across');
+      check('front end: a site can be picked from a zoomed map', !!both.zoomedPick, both.zoomedPick || 'nothing picked');
+    }
+    if (both && both.sizes && both.sizes.length === 2) {
       check('front end: moving the size slider measures the site again',
         both.sizes.every((s) => s.asked === s.got), both.sizes.map((s) => `${s.asked}→${s.got}`).join(' '));
     }
