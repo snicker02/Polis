@@ -1779,6 +1779,61 @@ section('2s. front end');
 }
 
 // ===========================================================================
+// 2v. reading a Java world
+// ===========================================================================
+section('2v. Java worlds');
+{
+  const { makeRegion, makeLevelDat, packHeightmap } = await import('./make-java-world.mjs');
+  const { makeZip } = await import('../engine/blockcore.js');
+  const { readJavaWorld, readJavaLevelDat, worldKind, unpackHeightmap, gunzip, readJavaNbt } = await import('../engine/javaworld.js');
+  const { siteGround, findSites } = await import('../engine/worldfile.js');
+
+  // the packing Java uses for heightmaps: nine bits at a time, no value split
+  // across two longs
+  const heights = new Int16Array(256);
+  for (let i = 0; i < 256; i++) heights[i] = (i * 7) % 384;
+  const back = unpackHeightmap(packHeightmap(heights));
+  check('java worlds: heightmaps pack and unpack exactly', [...heights].every((h, i) => h === back[i]));
+
+  // a region file in Anvil format, read back
+  const ground = (x, z) => 64 + Math.round(6 * Math.sin(x / 40) + 4 * Math.cos(z / 33));
+  const region = makeRegion(0, 0, ground);
+  const files = [
+    { name: 'level.dat', data: new Uint8Array(makeLevelDat('Test World', [100, 70, 60])) },
+    { name: 'region/r.0.0.mca', data: new Uint8Array(region) },
+  ];
+  const zipped = await makeZip(files, { deflateRaw });
+  const bytes = new Uint8Array(zipped);
+  check('java worlds: a zipped world folder is recognised as Java', worldKind(bytes) === 'java');
+  const lvl = readJavaLevelDat(bytes);
+  check('java worlds: level.dat gives the name and spawn', lvl && lvl.name === 'Test World' && lvl.spawn[0] === 100,
+    lvl ? `${lvl.name} at ${lvl.spawn.join(',')}` : 'unreadable');
+  const { chunks } = readJavaWorld(bytes);
+  check('java worlds: every chunk of the region is read', chunks.size === 1024, `${chunks.size}`);
+  let wrong = 0, checked = 0;
+  for (const [key, h] of chunks) {
+    const [cx, cz] = key.split(',').map(Number);
+    for (let i = 0; i < 256; i += 31) {
+      const x = cx * 16 + (i % 16), z = cz * 16 + Math.floor(i / 16);
+      checked++;
+      if (h[i] !== ground(x, z)) wrong++;
+    }
+  }
+  check('java worlds: the heights read back are the heights that were written', wrong === 0, `${wrong} of ${checked} wrong`);
+
+  // and a city fitted to that ground, the same path a Bedrock world takes
+  const sites = findSites(chunks, 160, { step: 64 });
+  const best = sites.map((s) => ({ s, g: siteGround(chunks, s.x, s.z, 160) }))
+    .sort((a, b) => b.g.buildableShare - a.g.buildableShare)[0];
+  const city = generateCity({ ...DEFAULTS, size: 160, seed: 7, terrain: best.g, transit: 'rails' });
+  const v = verifyAll(city.world, city.buildings);
+  check('java worlds: a city fits the ground read from one, and everything is reachable',
+    city.buildings.length > 10 && v.ok === v.total && v.floorsReached === v.floorsChecked && city.reach.unreached.length === 0,
+    `${city.buildings.length} buildings on ${(best.g.buildableShare * 100).toFixed(0)}% buildable ground`);
+  note(`read ${chunks.size} chunks from an Anvil region and fitted a ${city.buildings.length}-building city to them`);
+}
+
+// ===========================================================================
 // 2u. nothing falls down
 // ===========================================================================
 section('2u. nothing falls');

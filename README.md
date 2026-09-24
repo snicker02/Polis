@@ -1,4 +1,4 @@
-# Polis v0.8.7
+# Polis v0.9.0
 
 A procedural city generator that exports to **Minecraft Bedrock**. Plans a
 street grid, subdivides it into lots, raises buildings with real interiors —
@@ -272,7 +272,16 @@ Load a world exported from Minecraft (**Worlds → pencil → Export World**) in
 the **Fit to your world** panel and Polis will build a city that suits the real
 ground.
 
-It reads the world itself: a `.mcworld` is a zip, and inside it `db/*.ldb` are
+**Either edition.** A Bedrock world is a `.mcworld`; a Java world is the world
+folder from `saves`, zipped. Polis works out which it has and reads it: for
+Bedrock, `db/*.ldb` are LevelDB tables holding a record per chunk; for Java,
+`region/*.mca` are Anvil region files, each holding up to 1024 chunks behind a
+sector header, with the ground heights packed nine bits at a time into longs
+in `Heightmaps.WORLD_SURFACE`. Both are read here in plain JavaScript —
+LevelDB, Anvil, zip, gzip and DEFLATE all written from scratch — and both come
+out as the same heightmap, so everything after that is shared.
+
+The Bedrock path in detail: a `.mcworld` is a zip, and inside it `db/*.ldb` are
 LevelDB tables holding a record per chunk. Polis unzips, walks the tables and
 takes the 1.18-and-later "Data3D" record, which starts with the chunk's
 heightmap and carries its biomes. All of it is done here, in plain JavaScript —
@@ -422,8 +431,7 @@ holding the structures, a build function and a readme. Drop it in the world's
 `datapacks` folder, `/reload`, stand where you want the north-west corner and
 run `/function <city>:build`.
 
-Still to do for Java: reading worlds for terrain fitting (Anvil region files
-rather than LevelDB).
+Java worlds can now be read for terrain fitting too, so both editions have it.
 
 ## Landmarks
 
@@ -652,6 +660,14 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.9.0** — Terrain fitting for Java worlds. Zip a world folder from `saves`
+and load it like a `.mcworld`: Polis works out which edition it is and reads
+Anvil region files — sector header, zlib or gzip chunks, big-endian NBT, and
+heightmaps packed nine bits to a value — giving the same heightmap the Bedrock
+reader produces, so site picking and fitting are unchanged. Tested against a
+region file written in Java's own format by `tools/make-java-world.mjs`, with
+a fitted city generated from it.
 
 **0.8.7** — Only part of a big Java city appeared. A piece placed into a chunk
 the game has not loaded is silently dropped, and a city is far wider than the

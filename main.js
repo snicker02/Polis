@@ -9,11 +9,12 @@ import { Renderer } from './engine/renderer.js';
 import { exportPack, exportStructuresZip, tileList, commandList, cityId, exportSalt, POLIS_VERSION } from './engine/export.js';
 import { readWorld, readLevelDat, siteGround, findSites, SEA_LEVEL } from './engine/worldfile.js';
 import { javaTiles, javaPackFiles } from './engine/export-java.js';
+import { readJavaWorld, readJavaLevelDat, worldKind } from './engine/javaworld.js';
 import { makeZip } from './engine/blockcore.js';
 import { decodeNbt } from './tools/nbt-read.js';
 import { THEMES } from './engine/materials.js';
 
-const VERSION = '0.8.7';
+const VERSION = '0.9.0';
 const $ = (id) => document.getElementById(id);
 const numVal = (id) => Number($(id).value);      // readCfg has its own local num()
 
@@ -381,17 +382,21 @@ function wstatus(t) { $('worldStatus').textContent = t; }
 async function loadWorld(file) {
   wstatus(`reading ${(file.size / 1048576).toFixed(0)} MB…`);
   const bytes = new Uint8Array(await file.arrayBuffer());
+  // Bedrock keeps its chunks in a LevelDB, Java in Anvil region files; either
+  // can be dropped in and the rest of the fitting works the same
+  const kind = worldKind(bytes);
+  if (!kind) { wstatus('that file does not look like a Minecraft world (no db or region folder inside)'); return; }
   let info = null;
-  try { info = readLevelDat(bytes, decodeNbt); } catch {}
-  wstatus('unpacking chunks… this can take a minute');
+  try { info = kind === 'java' ? readJavaLevelDat(bytes) : readLevelDat(bytes, decodeNbt); } catch {}
+  wstatus(`unpacking ${kind === 'java' ? 'Java region files' : 'Bedrock chunks'}… this can take a minute`);
   await new Promise((r) => setTimeout(r, 30));
   const spawn = info ? [Math.floor(info.spawn[0] / 16), Math.floor(info.spawn[2] / 16)] : [0, 0];
   const t0 = Date.now();
-  const { chunks } = readWorld(bytes);                  // the whole world: panning and coordinates are then instant
+  const { chunks } = kind === 'java' ? readJavaWorld(bytes) : readWorld(bytes);
   if (!chunks.size) { wstatus('no chunks found in that file'); return; }
-  world = { chunks, info, near: spawn, view: spawn, site: null };
+  world = { chunks, info, near: spawn, view: spawn, site: null, kind };
   $('coordRow').style.display = 'flex';
-  wstatus(`${info ? info.name + ': ' : ''}${chunks.size.toLocaleString()} chunks read in ${((Date.now() - t0) / 1000).toFixed(0)}s. `
+  wstatus(`${info ? info.name + ' (' + kind + '): ' : ''}${chunks.size.toLocaleString()} chunks read in ${((Date.now() - t0) / 1000).toFixed(0)}s. `
     + 'Click the map to place the city, or type coordinates to go there.');
   drawWorldMap();
 }

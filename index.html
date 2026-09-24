@@ -126,12 +126,12 @@
   }
 </style>
 </head>
-<body class="mode-city" data-version="0.8.7">
+<body class="mode-city" data-version="0.9.0">
 <div id="app">
   <div id="panel">
     <div id="panelScroll">
       <h1>PO<span>L</span>IS</h1>
-      <div class="sub">procedural city → Minecraft Bedrock · v0.8.7</div>
+      <div class="sub">procedural city → Minecraft Bedrock · v0.9.0</div>
 
       <fieldset>
         <legend>Mode</legend>
@@ -144,7 +144,7 @@
         <div class="row" style="display:block">
           <label style="display:block;margin-bottom:4px">Fit to your world</label>
           <input type="file" id="worldFile" accept=".mcworld,.zip" style="width:100%;font-size:11px">
-          <div class="hint" id="worldStatus">Export a world from Minecraft (Worlds → pencil → Export World) and load it here to build a city that fits the real ground.</div>
+          <div class="hint" id="worldStatus">Load a world to build a city that fits its real ground. <b>Bedrock</b>: Worlds → pencil → Export World (.mcworld). <b>Java</b>: zip the world folder from your saves and load the zip.</div>
           <div class="row" id="coordRow" style="display:none;margin-top:6px">
             <label for="siteCoords" style="font-size:11px">Go to</label>
             <input type="text" id="siteCoords" placeholder="-6926 69 -10080" style="width:130px;font-size:11px">
@@ -298,6 +298,6 @@
     <div id="busy">generating…</div>
   </div>
 </div>
-<script type="module" src="./main.js?v=0.8.7"></script>
+<script type="module" src="./main.js?v=0.9.0"></script>
 </body>
 </html>
