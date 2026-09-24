@@ -273,8 +273,9 @@ export function makeBuilding(world, spec, rng) {
   slab(top, roofY, theme.floor);
 
   if (style === 'house') {
+    // a rustic roof hangs further out, the way a village cottage's does
     gableRoof(world, { x0: top.x0 - 1, z0: top.z0 - 1, x1: top.x1 + 1, z1: top.z1 + 1 },
-      roofY + 1, theme, spec.useStairs);
+      roofY + 1, theme, spec.useStairs, spec.rustic ? 1 : 0);
   } else {
     const ph = style === 'tower' ? 2 : 1;
     world.ring(top.x0, top.z0, top.x1, top.z1, roofY + 1, roofY + ph, theme.wall);
@@ -329,7 +330,7 @@ export function makeBuilding(world, spec, rng) {
   if (spec.detail !== false) {
     facadeDetail(world, {
       rects: Array.from({ length: floors }, (_, k) => rect(k)), floorYs, roofY, top, theme, style, face, P,
-      doorCells, outv, gy, floors, core, hut, hutDoor,
+      doorCells, outv, gy, floors, core, hut, hutDoor, rustic: spec.rustic,
     }, rng);
   }
 
@@ -354,7 +355,7 @@ export function makeBuilding(world, spec, rng) {
 // roof. Everything that sticks out is only placed into empty space and always
 // above head height, so it can never block a street, a doorway or a lamp.
 function facadeDetail(world, c, rng) {
-  const { rects, floorYs, roofY, top, theme, style, face, P, doorCells, outv, gy, floors, core, hut, hutDoor } = c;
+  const { rects, floorYs, roofY, top, theme, style, face, P, doorCells, outv, gy, floors, core, hut, hutDoor, rustic } = c;
   // the way out onto the roof stays clear: the hut and the space round its door
   const roofBusy = (x, z) => {
     if (hut && core && x >= core.x0 - 2 && x <= core.x1 + 2 && z >= core.z0 - 2 && z <= core.z1 + 2) return true;
@@ -364,15 +365,25 @@ function facadeDetail(world, c, rng) {
   const put = (x, y, z, m) => { if (!world.has(x, y, z)) world.set(x, y, z, m); };
   const isDoor = (x, z) => doorCells.some(([a, b]) => a === x && b === z);
 
-  // quoins: alternating corner blocks, all the way up
+  // corners: alternating quoins on a town building, solid posts on a rustic
+  // one, where the frame is the structure and shows it
   for (let k = 0; k < floors; k++) {
     const r = rects[k], sy = floorYs[k];
     for (const [cx, cz] of [[r.x0, r.z0], [r.x1, r.z0], [r.x0, r.z1], [r.x1, r.z1]])
-      for (let y = sy + 1; y <= sy + P - 1; y += 2) world.set(cx, y, cz, theme.trim);
+      for (let y = sy + 1; y <= sy + P - 1; y += (rustic ? 1 : 2)) world.set(cx, y, cz, theme.trim);
+  }
+  // a rustic building stands on a footing of stone, a course high
+  if (rustic) {
+    const r0 = rects[0];
+    for (const [px, pz] of perimeter(r0.x0, r0.z0, r0.x1, r0.z1)) {
+      if (isDoor(px, pz)) continue;
+      const id = world.get(px, gy + 1, pz);
+      if (id === theme.wall) world.set(px, gy + 1, pz, MAT.COBBLE);
+    }
   }
 
   // pilasters: the blank columns between window runs, in the trim material
-  if (style !== 'house') {
+  if (style !== 'house' && !rustic) {
     for (let k = 0; k < floors; k++) {
       const r = rects[k], sy = floorYs[k];
       for (const [px, pz, , i, len] of perimeter(r.x0, r.z0, r.x1, r.z1)) {
@@ -414,7 +425,7 @@ function facadeDetail(world, c, rng) {
     else for (let z = r.z0 + 1; z <= r.z1 - 1; z++) cells.push([r.x0, z]);
     return cells;
   };
-  if (style !== 'house') {
+  if (style !== 'house' && !rustic) {
     for (let k = 1; k < floors; k++) {
       if (k % 2 === 0 || !rng.chance(0.7)) continue;
       const cells = front(k);
@@ -428,7 +439,7 @@ function facadeDetail(world, c, rng) {
       }
     }
   }
-  if (style === 'mid' && floors >= 2 && rng.chance(0.5)) {
+  if (style === 'mid' && !rustic && floors >= 2 && rng.chance(0.5)) {
     const cells = front(1);
     if (cells.length >= 5) {
       const start = 1 + Math.floor(rng() * Math.max(1, cells.length - 4));
@@ -480,23 +491,28 @@ function facadeDetail(world, c, rng) {
 }
 
 // ---- pitched roof ----------------------------------------------------------
-function gableRoof(world, r, y0, theme, useStairs) {
+function gableRoof(world, r, y0, theme, useStairs, overhang = 0) {
   const w = r.x1 - r.x0 + 1, d = r.z1 - r.z0 + 1;
   const alongZ = w >= d;                       // slope down the short axis
-  const lo0 = alongZ ? r.z0 : r.x0;
-  const hi0 = alongZ ? r.z1 : r.x1;
+  // a rustic roof starts a course wider than the walls and hangs over them
+  const R = overhang
+    ? { x0: r.x0 - overhang, x1: r.x1 + overhang, z0: r.z0 - overhang, z1: r.z1 + overhang }
+    : r;
+  const lo0 = alongZ ? R.z0 : R.x0;
+  const hi0 = alongZ ? R.z1 : R.x1;
   const solid = theme.roof !== undefined ? theme.roof : theme.trim;
   const kind = theme.stair;
 
   const fillRow = (coord, y, mat) => {
-    if (alongZ) for (let x = r.x0; x <= r.x1; x++) world.set(x, y, coord, mat);
-    else for (let z = r.z0; z <= r.z1; z++) world.set(coord, y, z, mat);
+    if (alongZ) for (let x = R.x0; x <= R.x1; x++) world.set(x, y, coord, mat);
+    else for (let z = R.z0; z <= R.z1; z++) world.set(coord, y, z, mat);
   };
   const fillGableEnds = (a, b, y) => {
+    // the gable itself follows the walls; the overhang is roof, not wall
     if (alongZ) {
-      for (let c = a + 1; c <= b - 1; c++) { world.set(r.x0, y, c, theme.wall); world.set(r.x1, y, c, theme.wall); }
+      for (let c = Math.max(a + 1, r.z0); c <= Math.min(b - 1, r.z1); c++) { world.set(r.x0, y, c, theme.wall); world.set(r.x1, y, c, theme.wall); }
     } else {
-      for (let c = a + 1; c <= b - 1; c++) { world.set(c, y, r.z0, theme.wall); world.set(c, y, r.z1, theme.wall); }
+      for (let c = Math.max(a + 1, r.x0); c <= Math.min(b - 1, r.x1); c++) { world.set(c, y, r.z0, theme.wall); world.set(c, y, r.z1, theme.wall); }
     }
   };
 

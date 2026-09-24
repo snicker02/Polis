@@ -184,6 +184,7 @@ export const STYLES = {
   village: {
     label: 'Village',
     lowRise: true,                 // see city.js: floors are capped for this style
+    rustic: true,                  // deep eaves, stone footings, solid corner posts
     themes: {
       house: [
         T('plaster', MAT.C_WHITE, MAT.OAK_FRAME, MAT.OAK, MAT.GLASS, 'oak', 'oak', MAT.OAK),
@@ -211,8 +212,8 @@ export const STYLES = {
       hallPave: MAT.COBBLE, hallWall: MAT.C_WHITE, hallColumn: MAT.OAK_FRAME, hallCapital: MAT.OAK,
       hallFloor: MAT.OAK, hallGlass: MAT.GLASS, hallStair: 'oak', hallDoor: 'oak', entablature: MAT.OAK_FRAME,
       domeBase: MAT.COBBLE, domeRing: MAT.OAK_FRAME, dome: MAT.HAY, finial: MAT.OAK_FRAME,
-      clockPave: [MAT.COBBLE, MAT.GRASS_PATH], clockWall: MAT.C_WHITE, clockTrim: MAT.OAK_FRAME, clockFloor: MAT.OAK,
-      clockStair: 'oak', clockDoor: 'oak', spire: MAT.HAY,
+      clockPave: [MAT.COBBLE, MAT.GRASS_PATH], clockWall: MAT.COBBLE, clockTrim: MAT.STONEBRICK, clockFloor: MAT.OAK,
+      clockStair: 'cobble', clockDoor: 'oak', spire: MAT.OAK_FRAME,
       libPave: MAT.COBBLE, libWall: MAT.C_WHITE, libTrim: MAT.OAK_FRAME, libFloor: MAT.OAK, libStair: 'oak', libDoor: 'oak',
       market: [MAT.GRASS_PATH, MAT.COBBLE], wellRim: MAT.COBBLE, wellRoof: MAT.OAK },
   },

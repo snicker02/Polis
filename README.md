@@ -1,4 +1,4 @@
-# Polis v0.10.1
+# Polis v0.10.3
 
 *Created with help from Claude AI.*
 
@@ -680,6 +680,21 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.10.3** — The village style is rustier. Cottages stand on a course of
+cobble, their corners are solid log posts rather than alternating quoins, and
+the roofs hang a block further out over the walls, the way the game's own
+village houses do; the town-ish details (pilasters, balconies, bay windows)
+are left off. Villages also sit on rolling ground by default, and the clock
+tower at the middle is built of stone rather than plaster, which gives the
+village its one all-stone building.
+
+**0.10.2** — Trams laid on a village's streets were destroying themselves. A
+rail needs a whole block beneath it, and a village's streets are dirt paths,
+which will not hold one — the track popped off as it was placed, leaving only
+the boosters on their blocks of redstone. Track is now given a bed of ballast
+wherever what is under it cannot hold it (dirt path, farmland, a slab, snow),
+and the validator checks every style and both kinds of line.
 
 **0.10.1** — A **Village** style, after the villages the game builds itself:
 oak and spruce, white plaster between the timbers, cobble footings, hay roofs,

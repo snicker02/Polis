@@ -2048,13 +2048,37 @@ section('2x. village style');
       const n = MATERIALS.def(id).block;
       counts.set(n, (counts.get(n) || 0) + 1);
     });
-    const village = ['minecraft:planks', 'minecraft:cobblestone', 'minecraft:hay_block', 'minecraft:grass_path', 'minecraft:log'];
+    const village = ['minecraft:oak_planks', 'minecraft:cobblestone', 'minecraft:grass_path', 'minecraft:oak_log', 'minecraft:white_concrete'];
     if (village.filter((n) => (counts.get(n) || 0) > 100).length >= 3) oaky++;
   }
   check('village: nothing above three storeys but the landmarks', tall === 0 && towers === 0, `${tall} too tall, ${towers} towers`);
   check('village: mostly cottages', houses > all * 0.4, `${houses} of ${all} are houses`);
   check('village: more ground is worked than in a town', farms >= cities * 3, `${farms} farms across ${cities} villages`);
   check('village: built of the materials a village is built of', oaky === cities, `${oaky}/${cities}`);
+  {
+    const r = generateCity({ ...DEFAULTS, size: 192, seed: 7, cityStyle: 'village' });
+    const w = r.world;
+    let footings = 0, posts = 0, eaves = 0, cottages = 0;
+    for (const b of r.buildings) {
+      if (b.style !== 'house' || b.landmark) continue;
+      cottages++;
+      const foot = w.get(b.x0 + 1, b.groundY + 1, b.z0);
+      if (foot >= 0 && MATERIALS.def(foot).block === 'minecraft:cobblestone') footings++;
+      const post = w.get(b.x0, b.groundY + 2, b.z0);
+      if (post >= 0 && /log|frame|planks/.test(MATERIALS.def(post).block)) posts++;
+      let over = 0;
+      for (let x = b.x0 - 2; x <= b.x1 + 2; x++)
+        for (let z = b.z0 - 2; z <= b.z1 + 2; z++) {
+          if (x >= b.x0 && x <= b.x1 && z >= b.z0 && z <= b.z1) continue;
+          for (let y = b.roofY; y <= b.roofY + 4; y++) if (w.has(x, y, z)) { over++; break; }
+        }
+      if (over > 10) eaves++;
+    }
+    check('village: cottages have stone footings, corner posts and eaves that hang over',
+      cottages > 0 && footings > cottages * 0.7 && posts > cottages * 0.7 && eaves > cottages * 0.7,
+      `${cottages} cottages · ${footings} footed · ${posts} posted · ${eaves} with eaves`);
+    check('village: the ground rolls', r.stats.hillBlocks >= 15, `${r.stats.hillBlocks} raised blocks`);
+  }
   const set = generateCity({ ...DEFAULTS, size: 160, seed: 3, cityStyle: 'village', farmChance: 0 });
   check('village: a deliberate setting still wins', set.stats.farms === 0);
   note(`${cities} villages · ${houses}/${all} cottages · ${farms} farms`);
@@ -2090,6 +2114,26 @@ section('2u. nothing falls');
   }
   check('nothing falls: no gravel or sand with empty space under it', falling === 0, `${falling}`);
   check('nothing falls: every rail has something under it', floatingRail === 0, `${floatingRail}`);
+  // a rail needs a whole block beneath it: a dirt path, farmland, a slab or
+  // snow will not hold one, and a village's streets are dirt paths
+  {
+    const NO_HOLD = /(grass_path|dirt_path|farmland|snow_layer|_slab|slab$|soul_sand|_fence|fence$)/;
+    let weak = 0, checked = 0;
+    for (const style of ['village', 'modern', 'snowy', 'medieval', 'desert', 'cherry'])
+      for (const transit of ['rails', 'trams']) {
+        const r = generateCity({ ...DEFAULTS, size: 128, seed: 7, cityStyle: style, transit });
+        for (const line of r.transit ? r.transit.lines : [])
+          for (const [x, y, z] of line.cells) {
+            const id = r.world.get(x, y, z);
+            if (id < 0 || !/rail/.test(MATERIALS.def(id).block)) continue;
+            checked++;
+            const below = r.world.get(x, y - 1, z);
+            if (below < 0 || MATERIALS.isPassable(below) || NO_HOLD.test(MATERIALS.def(below).block)) weak++;
+          }
+      }
+    check('nothing falls: every rail sits on a block that can hold it, in every style', weak === 0,
+      `${weak} of ${checked} rails on ground that cannot hold track`);
+  }
   note(`${madeSafe} blocks made safe across ${cities} cities`);
 }
 

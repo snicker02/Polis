@@ -92,6 +92,8 @@ export function generateCity(cfgIn, onProgress) {
   // also works more ground than a town does
   if (STYLE.lowRise) {
     if (cfgIn.lowRise === undefined) cfg.lowRise = true;
+    // a village sits on ground that rolls, not on a table
+    if (cfg.hills === DEFAULTS.hills) cfg.hills = 3;
     // more ground is worked than in a town — but only if the slider is still
     // where it started, so a deliberate setting is left alone
     if (cfg.farmChance === DEFAULTS.farmChance) cfg.farmChance = 0.45;
@@ -272,6 +274,7 @@ export function generateCity(cfgIn, onProgress) {
     const theme = themeRng.pick(STYLE.themes[lot.style] || STYLE.themes.mid);
     const rec = makeBuilding(world, {
       detail: cfg.detail,
+      rustic: !!STYLE.rustic,
       x0: fx0, z0: fz0, x1: fx1, z1: fz1,
       floors: lot.floors, pitch: cfg.pitch, groundY: GROUND,
       style: lot.style, facing: front.side, theme,
@@ -448,6 +451,11 @@ export function generateCity(cfgIn, onProgress) {
   {
     const FALLING = new Set(['minecraft:gravel', 'minecraft:sand', 'minecraft:red_sand', 'minecraft:suspicious_gravel']);
     const loose = (id) => id === -1 || MATERIALS.isPassable(id);
+    // Track needs a whole block under it. Air is the obvious failure, but a
+    // dirt path, farmland, a slab or a layer of snow will not hold a rail
+    // either — it pops off the moment it is placed. A village's streets are
+    // dirt paths, so its trams ran on nothing at all.
+    const NO_HOLD = /(grass_path|dirt_path|farmland|snow_layer|_slab|slab$|soul_sand|_fence|fence$)/;
     let propped = 0;
     if (transit) {
       for (const line of transit.lines)
@@ -455,9 +463,10 @@ export function generateCity(cfgIn, onProgress) {
           const id = world.get(x, y, z);
           if (id < 0 || !/rail/.test(MATERIALS.def(id).block)) continue;
           const below = world.get(x, y - 1, z);
-          if (!loose(below)) continue;
+          const weak = below < 0 || loose(below) || NO_HOLD.test(MATERIALS.def(below).block);
+          if (!weak) continue;
           if (below >= 0 && /rail/.test(MATERIALS.def(below).block)) continue;   // never pave over track
-          world.set(x, y - 1, z, MAT.BASE);
+          world.set(x, y - 1, z, MAT.GRAVEL);                                    // ballast, as under any track
           propped++;
         }
     }
