@@ -2001,6 +2001,31 @@ section('2t. Java edition');
     !!fn, `${files.length} files`);
   check('java: the build function places every piece', fn &&
     fn.text.split('\n').filter((l) => l.startsWith('place template ')).length === tiles.length);
+  // a piece placed into an unloaded chunk is silently dropped, so the ground
+  // is forceloaded first and released afterwards
+  {
+    const big = generateCity({ ...DEFAULTS, size: 352, seed: 897321763, transit: 'rails' });
+    const bigTiles = javaTiles(big.world, { prefix: 'city', fillAir: true, clearAbove: 32, foundation: 8 });
+    const bigFn = javaPackFiles(bigTiles, { namespace: 'polis' }).find((f) => /build[.]mcfunction$/.test(f.name)).text.split('\n');
+    const adds = bigFn.filter((l) => l.startsWith('forceload add'));
+    const removes = bigFn.filter((l) => l.startsWith('forceload remove'));
+    let over = 0, covered = { x: 0, z: 0 };
+    for (const l of adds) {
+      const m = l.match(/~(-?\d+) ~(-?\d+) ~(-?\d+) ~(-?\d+)/).slice(1).map(Number);
+      // worst case the player stands mid-chunk, so a span can touch one more chunk
+      const cx = Math.floor(m[2] / 16) - Math.floor(m[0] / 16) + 2;
+      const cz = Math.floor(m[3] / 16) - Math.floor(m[1] / 16) + 2;
+      if (cx * cz > 256) over++;
+      covered.x = Math.max(covered.x, m[2]);
+      covered.z = Math.max(covered.z, m[3]);
+    }
+    const needX = Math.max(...bigTiles.map((t) => t.offset[0] + t.size[0]));
+    const needZ = Math.max(...bigTiles.map((t) => t.offset[2] + t.size[2]));
+    check('java: the ground is held loaded while the city is placed, and released after',
+      adds.length > 0 && adds.length === removes.length && over === 0 &&
+      covered.x >= needX - 1 && covered.z >= needZ - 1,
+      `${adds.length} areas, ${over} over the chunk limit, covering ${covered.x}x${covered.z} of ${needX}x${needZ}`);
+  }
   note(`datapack: ${files.length} files, ${tiles.length} structures, ${total.toLocaleString()} blocks`);
 }
 

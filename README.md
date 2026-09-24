@@ -1,4 +1,4 @@
-# Polis v0.8.6
+# Polis v0.8.7
 
 A procedural city generator that exports to **Minecraft Bedrock**. Plans a
 street grid, subdivides it into lots, raises buildings with real interiors —
@@ -652,6 +652,14 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.8.7** — Only part of a big Java city appeared. A piece placed into a chunk
+the game has not loaded is silently dropped, and a city is far wider than the
+loaded area round the player — a 352-block city is 22 chunks across. The build
+function now forceloads the ground first, in rectangles small enough to stay
+under the 256-chunk limit for one command even when standing mid-chunk, and
+releases them when it is done. This is the Java counterpart of the ticking
+areas the Bedrock pack has always used.
 
 **0.8.6** — Java packs can be made in the app: an Edition choice in the export
 panel, and a datapack export with the structures, a build function and a

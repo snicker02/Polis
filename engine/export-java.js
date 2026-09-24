@@ -260,11 +260,29 @@ export function javaPackFiles(structures, opts = {}) {
     }, null, 2),
   });
   for (const s of structures) files.push({ name: `data/${ns}/structure/${s.name}.nbt`, data: s.nbt });
-  // one function places every piece, each at its own offset from the player
+  // A piece placed into a chunk the game has not loaded is silently dropped,
+  // and a city is far wider than the loaded area around the player. So the
+  // ground is forceloaded first, in rectangles of at most 256 chunks (the
+  // limit for one command), and released afterwards.
+  let x1 = 0, z1 = 0;
+  for (const s of structures) {
+    x1 = Math.max(x1, s.offset[0] + s.size[0]);
+    z1 = Math.max(z1, s.offset[2] + s.size[2]);
+  }
+  // 15 chunks wide: standing mid-chunk it can still only touch 16, so the
+  // command never asks for more than the 256 chunks it allows
+  const STEP = 15 * 16;
+  const areas = [];
+  for (let x = 0; x <= x1; x += STEP)
+    for (let z = 0; z <= z1; z += STEP)
+      areas.push([x, z, Math.min(x + STEP - 1, x1), Math.min(z + STEP - 1, z1)]);
   const lines = [
     '# Polis — stand where you want the north-west corner and run this',
+    `say Polis: loading the ground (${areas.length} area${areas.length === 1 ? '' : 's'})...`,
+    ...areas.map(([ax, az, bx, bz]) => `forceload add ~${ax} ~${az} ~${bx} ~${bz}`),
     `say Polis: placing ${structures.length} pieces...`,
     ...structures.map((s) => `place template ${ns}:${s.name} ~${s.offset[0]} ~${s.offset[1]} ~${s.offset[2]}`),
+    ...areas.map(([ax, az, bx, bz]) => `forceload remove ~${ax} ~${az} ~${bx} ~${bz}`),
     'say Polis: done.',
   ];
   files.push({ name: `data/${ns}/function/build.mcfunction`, text: lines.join('\n') + '\n' });
