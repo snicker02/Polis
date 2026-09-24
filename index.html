@@ -126,12 +126,12 @@
   }
 </style>
 </head>
-<body class="mode-city" data-version="0.11.0">
+<body class="mode-city" data-version="0.11.2">
 <div id="app">
   <div id="panel">
     <div id="panelScroll">
       <h1>PO<span>L</span>IS</h1>
-      <div class="sub">procedural city → Minecraft Bedrock · v0.11.0</div>
+      <div class="sub">procedural city → Minecraft Bedrock · v0.11.2</div>
 
       <fieldset>
         <legend>Mode</legend>
@@ -276,6 +276,11 @@
         <div class="row"><label>Foundation depth</label><input type="range" id="foundation" min="0" max="32" step="1" value="8"><span class="val" id="foundation_v"></span></div>
         <div class="hint">For uneven ground: the foundation fills solid ground under the city (stone-brick retaining face at the edge); clearing removes hills inside the city up to that height.</div>
         <div class="row">
+          <label for="cityName">Name</label>
+          <input type="text" id="cityName" placeholder="Polis City" maxlength="32" style="width:150px">
+        </div>
+        <div class="hint" id="nameHint">What the pack is called in game, and what the file is called. Leave it blank for the city's own id.</div>
+        <div class="row">
           <label for="edition">Edition</label>
           <select id="edition">
             <option value="bedrock" selected>Bedrock (.mcpack)</option>
@@ -300,6 +305,6 @@
     <div id="busy">generating…</div>
   </div>
 </div>
-<script type="module" src="./main.js?v=0.11.0"></script>
+<script type="module" src="./main.js?v=0.11.2"></script>
 </body>
 </html>

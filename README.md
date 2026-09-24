@@ -1,4 +1,4 @@
-# Polis v0.11.0
+# Polis v0.11.2
 
 *Created with help from Claude AI.*
 
@@ -688,6 +688,20 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.11.2** — A **Name** box in the export panel. Minecraft takes a pack's name
+from inside it, not from the file, so renaming the download changed nothing —
+a city still appeared in the game's list as `polis_<seed>_<hash>`. A name
+given now becomes the pack's name in game, the file's name, and the commands
+(`/function city_12_30e8/build`), with the city's own short id kept on the end
+so two packs of the same name cannot collide. Leave it blank and nothing
+changes.
+
+**0.11.1** — On a loaded world the size slider did nothing. A site is measured
+as a square of ground at whatever size was set when it was picked, and the
+city is fitted to that square, so moving the slider afterwards changed a
+number nobody read. The slider now measures the ground again about the same
+centre, and the headless check moves it and fails if the site does not follow.
 
 **0.11.0** — Bedrock sites are read from the blocks rather than the heightmap.
 The heightmap counts treetops, and the filter that removes them was flattening

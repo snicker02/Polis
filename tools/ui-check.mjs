@@ -136,6 +136,9 @@ export async function runUiCheck(worldFile) {
     for (const id of ['gen', 'reroll']) if (listeners.has(id)) fire(id, 'click');
     await new Promise((r) => setTimeout(r, 400));          // generation may be deferred a frame
     // and the exports, both editions: they must not throw
+    elements.get('cityName').value = 'City 12';           // a name the user typed
+    const named = listeners.get('cityName');
+    if (named && named.input) named.input();
     const downloads = [];
     globalThis.URL.createObjectURL = (blob) => { downloads.push(blob); return 'blob:stub'; };
     for (const edition of ['bedrock', 'java']) {
@@ -146,11 +149,12 @@ export async function runUiCheck(worldFile) {
     }
     const said = (elements.get('toast') || {}).textContent || '';
     problems.push(...(downloads.length >= 2 ? [] : [`only ${downloads.length} exports produced a file; the app said: ${said}`]));
+    const commands = (elements.get('cmds') || {}).value || '';
     // with nothing chosen, the teleport button must be hidden and harmless
     fire('copyTp', 'click');
     const out = { problems, status: elements.get('worldStatus').textContent, info: elements.get('siteInfo').innerHTML,
       offered: false, tpHidden: elements.get('copyTp').style.display !== 'block', copied, downloads: downloads.length,
-      cornerCopy: null, centreCopy: null,
+      cornerCopy: null, centreCopy: null, named: commands,
       ids: ids.length, wired: listeners.size, stats: (elements.get('stats') || {}).innerHTML || '' };
     cleanup();
     return out;
@@ -173,6 +177,18 @@ export async function runUiCheck(worldFile) {
   // click the middle of the map, then take the site
   fire('worldMap', 'click', { clientX: 96, clientY: 96 });
   const info = elements.get('siteInfo').innerHTML;
+  // moving the size slider must re-measure the site, not leave it as it was
+  const sizes = [];
+  const sizeEl = elements.get('size');
+  for (const s of ['96', '224']) {
+    sizeEl.value = s;
+    const l = listeners.get('size');
+    if (l && l.input) l.input();
+    sizes.push({ asked: s, got: elements.get('siteInfo').innerHTML.match(/Site (\d+)×/)?.[1] || '?' });
+  }
+  sizeEl.value = '160';
+  { const l = listeners.get('size'); if (l && l.input) l.input(); }
+
   const offered = elements.get('useSite').style.display === 'block';
   if (offered) fire('useSite', 'click');                   // generate, so both spots exist
   await new Promise((r) => setTimeout(r, 300));
@@ -183,7 +199,7 @@ export async function runUiCheck(worldFile) {
   fire('copyTpCentre', 'click');
   const [cornerCopy, centreCopy] = copied;
 
-  const result = { problems, status, info, typed, offered, tpLabel, tpCentreLabel, cornerCopy, centreCopy, copied, ids: ids.length, wired: listeners.size,
+  const result = { problems, status, info, typed, offered, tpLabel, tpCentreLabel, cornerCopy, centreCopy, copied, sizes, ids: ids.length, wired: listeners.size,
     stats: (elements.get('stats') || {}).innerHTML || '' };
   cleanup();
   return result;
@@ -196,6 +212,7 @@ if (process.argv[1] && process.argv[1].endsWith('ui-check.mjs')) {
   console.log('after typing coordinates:', (r.typed || '(nothing)').replace(/<[^>]+>/g, ''));
   console.log('after clicking the map:', (r.info || '(nothing)').replace(/<[^>]+>/g, ''));
   console.log('site offered:', r.offered, '| teleport button:', r.tpLabel || '(none)');
+  console.log('size slider:', (r.sizes || []).map((s) => `asked ${s.asked} → site ${s.got}`).join(', ') || 'n/a');
   console.log('corner button:', r.tpLabel || '(none)', '=> copied', r.cornerCopy || '(nothing)');
   console.log('centre button:', r.tpCentreLabel || '(none)', '=> copied', r.centreCopy || '(nothing)');
   console.log('exports produced:', r.downloads === undefined ? 'n/a' : r.downloads);

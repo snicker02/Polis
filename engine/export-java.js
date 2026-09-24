@@ -253,7 +253,7 @@ export function javaPackFiles(structures, opts = {}) {
     name: 'pack.mcmeta',
     text: JSON.stringify({
       pack: {
-        description: `Polis — ${opts.description || 'a procedural city'}`,
+        description: `${opts.name || 'Polis'} — ${opts.description || 'a procedural city'}`,
         pack_format: opts.packFormat || 48,
         supported_formats: { min_inclusive: 26, max_inclusive: 81 },
       },

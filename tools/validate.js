@@ -1883,6 +1883,10 @@ section('2s. front end');
   check('front end: pressing Generate fills the stats panel', /blocks/.test(text) && /buildings/.test(text), text.slice(0, 80));
   check('front end: clicking the map with no world loaded does nothing', !r.info);
   check('front end: both editions export a file when the button is pressed', r.downloads >= 2, `${r.downloads} files`);
+  // a name typed in is what the pack is called in game, and what the
+  // commands are called: renaming the file does nothing on its own
+  check('front end: a name given becomes the commands as well as the pack',
+    /city_12/.test(r.named || ''), (r.named || '').split('\n')[0] || '(no commands)');
   // each teleport button must copy its own spot: passing the handler straight
   // to addEventListener makes the click event the argument, and both copied
   // the centre
@@ -1902,7 +1906,11 @@ section('2s. front end');
     try { both = await runUiCheck(worldPath); } catch { both = null; }
     try { unlinkSync(worldPath); } catch { /* it was only a scratch file */ }
     if (both && both.cornerCopy && both.centreCopy) {
-      check('front end: the corner and centre buttons copy different commands',
+      if (both && both.sizes && both.sizes.length === 2) {
+      check('front end: moving the size slider measures the site again',
+        both.sizes.every((s) => s.asked === s.got), both.sizes.map((s) => `${s.asked}→${s.got}`).join(' '));
+    }
+    check('front end: the corner and centre buttons copy different commands',
         both.cornerCopy !== both.centreCopy && /^\/tp /.test(both.cornerCopy) && /^\/tp /.test(both.centreCopy),
         `${both.cornerCopy} vs ${both.centreCopy}`);
     } else {

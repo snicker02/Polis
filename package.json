@@ -1,6 +1,6 @@
 {
   "name": "polis",
-  "version": "0.11.0",
+  "version": "0.11.2",
   "type": "module",
   "private": true,
   "description": "Polis — Minecraft Bedrock city generator",

@@ -15,7 +15,7 @@ import { makeZip } from './engine/blockcore.js';
 import { decodeNbt } from './tools/nbt-read.js';
 import { THEMES } from './engine/materials.js';
 
-const VERSION = '0.11.0';
+const VERSION = '0.11.2';
 const $ = (id) => document.getElementById(id);
 const numVal = (id) => Number($(id).value);      // readCfg has its own local num()
 
@@ -70,6 +70,10 @@ function boot() {
     el.addEventListener('input', () => {
       upd();
       if (id === 'clip') applyClip();
+      // a site was measured at whatever size was set when it was picked, and
+      // the city is fitted to that square — so moving the size slider has to
+      // measure the ground again, about the same centre
+      if (id === 'size' && world && world.site) resizeSite();
     });
     upd();
   }
@@ -88,6 +92,7 @@ function boot() {
   $('mcstruct').addEventListener('click', () => doExport('zip'));
   $('copycmd').addEventListener('click', copyCommands);
   $('edition').addEventListener('change', showEdition);
+  $('cityName').addEventListener('input', () => { if (result) { cityNs = nsNow(); refreshCommands(); } });
   showEdition();
   $('worldFile').addEventListener('change', (e) => { if (e.target.files[0]) loadWorld(e.target.files[0]).catch((err) => wstatus('could not read that world: ' + err.message)); });
   $('goCoords').addEventListener('click', goToCoords);
@@ -466,6 +471,15 @@ function pickSite(ev) {
   showSite(groundAtSite(cx * 16, cz * 16, size));
 }
 
+// keep the chosen site centred where it is, at the size now asked for
+function resizeSite() {
+  const g = world.site;
+  const size = numVal('size');
+  if (!g || g.size === size) return;
+  const cx = g.x0 + (g.size >> 1), cz = g.z0 + (g.size >> 1);
+  try { showSite(groundAtSite(cx - (size >> 1), cz - (size >> 1), size)); } catch (err) { wstatus('could not read that site: ' + err.message); }
+}
+
 // the ground under a site: from the blocks themselves where they can be read
 function groundAtSite(x0, z0, size) {
   let exact = null;
@@ -533,8 +547,20 @@ function exportOpts() {
   }
   return o;
 }
+// What the city is called. A name typed in is used for the pack's name in
+// game, for the file, and for the commands; the city's own id is kept on the
+// end of the namespace so two packs of the same name cannot collide.
+function cityName() {
+  return ($('cityName').value || '').trim();
+}
+function nameSlug() {
+  return cityName().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 24);
+}
 function nsNow() {
-  return result ? cityId(result.world, result.cfg.seed, POLIS_VERSION, exportSalt(exportOpts())) : 'polis';
+  const id = result ? cityId(result.world, result.cfg.seed, POLIS_VERSION, exportSalt(exportOpts())) : 'polis';
+  const slug = nameSlug();
+  if (!slug) return id;
+  return `${slug}_${id.slice(-4)}`;
 }
 let cityNs = 'polis';
 
@@ -630,7 +656,7 @@ async function exportJava() {
   });
   for (const t of tiles) t.nbt = await gzip(t.nbt);
   const ns = cityNs.replace(/[^a-z0-9_]/g, '');
-  const files = javaPackFiles(tiles, { namespace: ns, description: summaryLine() });
+  const files = javaPackFiles(tiles, { namespace: ns, description: summaryLine(), name: cityName() });
   // a note in the pack, since a datapack has nowhere else to say this
   files.push({
     name: 'polis-readme.txt',
@@ -671,15 +697,15 @@ async function doExport(kind) {
     };
     if ($('edition').value === 'java') {
       const out = await exportJava();
-      const name = `${cityNs}_java_v${VERSION}.zip`;
+      const name = `${nameSlug() || cityNs}_java_v${VERSION}.zip`;
       download(out.data, name);
       toast(`${name} — put it in your world's datapacks folder, then /reload and /function ${out.ns}:build`);
     } else {
       const out = kind === 'mcpack'
-        ? await exportPack(result.world, opts)
-        : await exportStructuresZip(result.world, opts);
-      // same spelling as the city id used in game: polis_<seed>_<hash>_v<version>
-      const name = `${cityNs}_v${VERSION}.` + (kind === 'mcpack' ? 'mcpack' : 'zip');
+        ? await exportPack(result.world, { ...opts, packName: cityName() || undefined, description: summaryLine() })
+        : await exportStructuresZip(result.world, { ...opts, packName: cityName() || undefined, description: summaryLine() });
+      // the name given, or the city id: polis_<seed>_<hash>_v<version>
+      const name = `${nameSlug() || cityNs}_v${VERSION}.` + (kind === 'mcpack' ? 'mcpack' : 'zip');
       download(out.data, name);
       toast(`${name} — in game: /function ${cityNs}/build_centered, then populate_centered`);
     }
