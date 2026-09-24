@@ -19,13 +19,16 @@ import { makeBuilding, OUTWARD } from './building.js';
 import { MAT, WOOLS, pumpkinId, smokerId, stairId, WEIRDO, STAINED, gateId, signId, SIGN_FACING } from './materials.js';
 import { N } from './blockcore.js';
 import { USE, frontage } from './plan.js';
+import { townSquare, stadium, cemetery, allotments, bandstand } from './landmarks-extra.js';
 import { FLOWERS as FLOWERS_M } from './materials.js';
 import { styleOf } from './styles.js';
 
-export const LANDMARKS = ['townhall', 'clocktower', 'library', 'market', 'church', 'mansion', 'school', 'lighthouse', 'castle'];
+export const LANDMARKS = ['townhall', 'clocktower', 'library', 'market', 'church', 'mansion', 'school', 'lighthouse', 'castle',
+  'townsquare', 'stadium', 'cemetery', 'allotments', 'bandstand'];
 const NEED = {                       // [shorter side, longer side] of the lot
   townhall: [13, 15], clocktower: [9, 9], library: [11, 12], market: [12, 12],
   church: [13, 15], mansion: [15, 20], school: [16, 22], lighthouse: [9, 9], castle: [13, 13],
+  townsquare: [13, 13], stadium: [17, 21], cemetery: [12, 14], allotments: [13, 13], bandstand: [9, 9],
 };
 
 // Mark the lots, each kind at most once:
@@ -44,7 +47,18 @@ export function chooseLandmarks(plan, cfg, hills = null, canal = null) {
     .map((c) => ({ ...c, d: Math.hypot(c.cx - fx, c.cz - fz) }));
   const fits = (c, kind) => !c.l.landmark && c.a >= NEED[kind][0] && c.b >= NEED[kind][1];
   const out = [];
-  const take = (kind, list) => { const pick = list.find((c) => fits(c, kind)); if (pick) { pick.l.landmark = kind; out.push(pick.l); } };
+  // A town should not be mostly landmarks: they take the big lots, and what
+  // is left makes poorer buildings. The civic core always goes in; the rest
+  // come as there is room for them.
+  // the nine that have always been here go in wherever they fit; the newer
+  // ones — square, stadium, cemetery, allotments, bandstand — are rationed
+  const CORE = new Set(['townhall', 'clocktower', 'library', 'market', 'church', 'school', 'lighthouse', 'castle', 'mansion']);
+  const budget = Math.max(CORE.size, Math.round(all.length * (cfg.landmarkShare ?? 0.16)));
+  const take = (kind, list) => {
+    if (!CORE.has(kind) && out.length >= budget) return;
+    const pick = list.find((c) => fits(c, kind));
+    if (pick) { pick.l.landmark = kind; out.push(pick.l); }
+  };
   const downtown = all.filter((c) => c.l.style !== 'house' && c.d <= reach).sort((p, q) => p.d - q.d);
   for (const kind of ['townhall', 'clocktower', 'library', 'market', 'church']) take(kind, downtown);
   const maxD = Math.max(1, ...all.map((c) => c.d));
@@ -70,6 +84,18 @@ export function chooseLandmarks(plan, cfg, hills = null, canal = null) {
   if (!out.some((l) => l.landmark === 'lighthouse')) take('lighthouse', all.slice().sort((p, q) => q.d - p.d));
   const elev = (c) => (hills ? hills.elev[Math.round(c.cz) * plan.W + Math.round(c.cx)] : 0);
   take('castle', all.slice().sort((p, q) => elev(q) - elev(p) || q.a - p.a));
+
+  // the town square belongs among the shops and offices, near the middle
+  take('townsquare', downtown.slice().sort((p, q) => p.d - q.d));
+  // the bandstand likes a small open lot, a little way out from the square
+  take('bandstand', all.slice().sort((p, q) => Math.abs(p.d - maxD * 0.35) - Math.abs(q.d - maxD * 0.35)));
+  // the stadium needs room, so it takes the biggest lot left, out of the centre
+  take('stadium', all.slice().filter((c) => c.d > maxD * 0.3).sort((p, q) => (q.a * q.b) - (p.a * p.b)));
+  // the cemetery and the allotments sit out towards the edge, where the
+  // ground is cheap and quiet
+  const outskirts = all.slice().sort((p, q) => q.d - p.d);
+  take('cemetery', outskirts);
+  take('allotments', outskirts);
   return out;
 }
 
@@ -679,9 +705,11 @@ function mansion(world, lot, face, cfg, rng, G) {
   return { kind: 'mansion', rec, wings, lot, portico, garden, gate: at(0, doorA) };
 }
 
-const BUILDERS = { townhall: townHall, clocktower: clockTower, library, market, church, mansion, school, lighthouse, castle };
+const BUILDERS = { townhall: townHall, clocktower: clockTower, library, market, church, mansion, school, lighthouse, castle,
+  townsquare: townSquare, stadium, cemetery, allotments, bandstand };
 export const LANDMARK_NAMES = { townhall: 'Town Hall', clocktower: 'Clock Tower', library: 'Library', market: 'Market',
-  church: 'Church', school: 'School', lighthouse: 'Lighthouse', castle: 'Castle', mansion: 'Mansion' };
+  church: 'Church', school: 'School', lighthouse: 'Lighthouse', castle: 'Castle', mansion: 'Mansion',
+  townsquare: 'Town Square', stadium: 'Stadium', cemetery: 'Cemetery', allotments: 'Allotments', bandstand: 'Bandstand' };
 
 export function buildLandmark(world, lot, face, cfg, rng, G) {
   const L = BUILDERS[lot.landmark](world, lot, face, cfg, rng, G);

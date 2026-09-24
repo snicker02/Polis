@@ -17,7 +17,7 @@ import { makeRng } from './rng.js';
 // Must match main.js VERSION, package.json and index.html data-version;
 // tools/validate.js fails if they drift. The app refuses to export when the
 // browser has mixed cached copies of old and new files.
-export const POLIS_VERSION = '0.9.4';
+export const POLIS_VERSION = '0.10.0';
 
 export const CHUNK = 64;          // Bedrock structure limit per horizontal axis
 export const GROUND_DROP = 2;     // base layer y=0 sits 2 below feet; surface y=1 replaces the block you stand on
@@ -156,9 +156,11 @@ function columnLimits(world, opts) {
       if (x < 0 || z < 0 || x >= size || z >= size) return -9999;
       const gy = groundY(x, z), ry = rawY(x, z);
       const roof = tops[z * size + x];
-      // a retaining wall holds the hillside up: clearing to the height of the
-      // land here would cut away the very thing the wall is facing
-      if (world.cutFaces && world.cutFaces.has(x + ',' + z)) return roof >= -9000 ? roof + 2 : -9999;
+      // a graded step: the hillside above it is exactly what has to go, so
+      // clear well above the step rather than stopping at it
+      if (world.cutFaces && world.cutFaces.has(x + ',' + z)) {
+        return Math.max(roof >= -9000 ? roof + headroom : -9999, ry === null ? -9999 : ry + 3);
+      }
       // above the city's own roofs by the clearance asked for, and above
       // anything that was standing there (trees included)
       return Math.max(

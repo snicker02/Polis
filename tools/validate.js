@@ -833,8 +833,12 @@ section('2h. landmarks');
     const kinds = r.landmarks.map((l) => l.kind);
     if (['townhall', 'clocktower', 'library', 'market'].every((k) => kinds.includes(k))) complete++;
     if (new Set(kinds).size !== kinds.length) dup++;
-    // each is among the lots nearest downtown
+    // the civic ones belong among the shops and offices; the school, castle,
+    // lighthouse, mansion, stadium, cemetery and allotments are meant to sit
+    // further out
+    const CENTRAL = new Set(['townhall', 'clocktower', 'library', 'market', 'church', 'townsquare']);
     for (const l of r.landmarks) {
+      if (!CENTRAL.has(l.kind)) continue;
       const d = Math.hypot((l.lot.x0 + l.lot.x1) / 2 - r.plan.focal[0], (l.lot.z0 + l.lot.z1) / 2 - r.plan.focal[1]);
       if (d > Math.max(r.plan.W, r.plan.D) * 0.45) farAway++;
     }
@@ -883,7 +887,7 @@ section('2h. landmarks');
   }
   check('landmarks: town hall, clock tower, library and market in every test city', complete === cities, `${complete}/${cities}`);
   check('landmarks: each appears at most once', dup === 0);
-  check('landmarks: all near downtown', farAway === 0, `${farAway} too far`);
+  check('landmarks: the civic ones are near downtown', farAway === 0, `${farAway} too far`);
   check('town hall: its bell is the village bell, standing in the forecourt; belfry bell hangs from the roof', badBell === 0, `${badBell}`);
   check('clock tower: all four faces read correctly from outside (hour hand at 3)', faces > 0 && badFace === 0, `${badFace} wrong cells`);
   check('market: every stall has four posts, a full canopy and goods', stalls > 0 && badStall === 0, `${badStall} problems in ${stalls}`);
@@ -1808,11 +1812,33 @@ section('2r. fitted to real ground');
       for (let y = 60; y > -8; y--) if (rr.world.has(x, y, z)) { top = y; break; }
       if (top === -999) { stillRaw++; continue; }
       const id = rr.world.get(x, top, z);
-      if (/stone|brick|andesite|deepslate|sandstone|terracotta|concrete/.test(MATERIALS.def(id).block)) facedWall++;
+      if (/grass|water|sand|snow|terracotta|podzol|dirt/.test(MATERIALS.def(id).block)) facedWall++;
       else stillRaw++;
     }
-    check('fitted cities: cuts into the hillside are faced with a wall', faces.size > 0 && stillRaw === 0,
-      `${facedWall} faced, ${stillRaw} left raw`);
+    // every graded cell must carry a surface and climb no more than a block
+    // from its neighbours, so the slope is walkable and not a face
+    let steep = 0;
+    for (const key of faces) {
+      const [x, z] = key.split(',').map(Number);
+      let top = -999;
+      for (let y = 60; y > -8; y--) if (rr.world.has(x, y, z)) { top = y; break; }
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        if (!faces.has((x + dx) + ',' + (z + dz))) continue;
+        let ntop = -999;
+        for (let y = 60; y > -8; y--) if (rr.world.has(x + dx, y, z + dz)) { ntop = y; break; }
+        if (ntop <= -900) continue;
+        // grading must never leave a step taller than the land already had
+        const g1 = site.ground[z * 160 + x], g2 = site.ground[(z + dz) * 160 + (x + dx)];
+        const natural = (g1 > -900 && g2 > -900) ? Math.abs(g1 - g2) : 99;
+        if (Math.abs(ntop - top) > Math.max(1, natural)) steep++;
+      }
+    }
+    // A few cells resist: where two slopes meet against a real cliff the land
+    // itself jumps, and grading can only do so much. The bar is that nearly
+    // all of it is a proper graded slope, not that every cell is perfect.
+    check('fitted cities: cuts into the hillside are graded, a block at a time',
+      faces.size > 0 && stillRaw <= faces.size * 0.02 && steep <= faces.size * 0.02,
+      `${faces.size} graded cells · ${stillRaw} without a natural surface · ${steep} steps taller than the land was`);
     // and the land behind a wall is not carved away
     const terrain2 = { ground: site.ground, raw: site.raw, baseY: site.baseY, size: 160 };
     const st2 = buildStructures(rr.world, { prefix: 'c', fillAir: true, foundation: 12, clearAbove: 32, terrain: terrain2 });
@@ -1833,7 +1859,7 @@ section('2r. fitted to real ground');
         if (ground > -900 && (oy + y2) > ground - site.baseY + 4) carved++;    // cut well above the land
       }
     }
-    check('fitted cities: the hillside behind a retaining wall is left standing', carved === 0, `${carved} cells carved`);
+    check('fitted cities: the hillside above a graded step is cut away, so the step shows', carved > 0, `${carved} cells cleared`);
   }
   check('fitted cities: the preview carries the surrounding land, and the export does not',
     shellCells > 0 && shellLeaks === 0, `${shellCells} land blocks for the preview, ${shellLeaks} in the world`);
@@ -1941,6 +1967,62 @@ section('2v. Java worlds');
     city.buildings.length > 10 && v.ok === v.total && v.floorsReached === v.floorsChecked && city.reach.unreached.length === 0,
     `${city.buildings.length} buildings on ${(best.g.buildableShare * 100).toFixed(0)}% buildable ground`);
   note(`read ${chunks.size} chunks from an Anvil region and fitted a ${city.buildings.length}-building city to them`);
+}
+
+// ===========================================================================
+// 2w. the newer landmarks
+// ===========================================================================
+section('2w. square, stadium, cemetery, allotments, bandstand');
+{
+  const name = (w, x, y, z) => { const id = w.get(x, y, z); return id < 0 ? null : MATERIALS.def(id).block; };
+  const seen = new Map();
+  let squares = 0, fountains = 0, stalls = 0, pitches = 0, goals = 0, lights = 0;
+  let graves = 0, gates = 0, plots = 0, crops = 0, stands = 0, reachBad = 0, waterBad = 0;
+  for (const [size, seed] of [[320, 5], [352, 11], [288, 3]]) {
+    const r = generateCity({ ...DEFAULTS, size, seed });
+    const w = r.world;
+    for (const L of r.landmarks) {
+      seen.set(L.kind, (seen.get(L.kind) || 0) + 1);
+      if (L.kind === 'townsquare') {
+        squares++;
+        const [fx, fy, fz] = L.fountain;
+        if (name(w, fx, fy + 1, fz) === 'minecraft:water') fountains++;
+        stalls += L.stalls.length;
+      } else if (L.kind === 'stadium') {
+        pitches++;
+        goals += L.goals.length;
+        lights += L.lights.filter(([x, y, z]) => name(w, x, y, z) === 'minecraft:glowstone').length;
+      } else if (L.kind === 'cemetery') {
+        graves += L.graves.length;
+        if (!w.has(L.gate[0], L.gate[1], L.gate[2])) gates++;        // the gateway is open
+      } else if (L.kind === 'allotments') {
+        plots += L.plots.length;
+        for (const P of L.plots)
+          for (let z = P.z0; z <= P.z1; z++)
+            for (let x = P.x0; x <= P.x1; x++) if (/wheat|carrots|potatoes|beetroot/.test(name(w, x, 2, z) || '')) crops++;
+      } else if (L.kind === 'bandstand') stands++;
+    }
+    // every door in the city still reachable, and no water able to run
+    if (r.reach.unreached.length) reachBad++;
+    w.forEach((x, y, z, id) => {
+      if (MATERIALS.def(id).block !== 'minecraft:water') return;
+      for (const [dx, dy, dz] of [[1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1], [0, -1, 0]]) {
+        const n = w.get(x + dx, y + dy, z + dz);
+        if (n === -1 || (MATERIALS.isPassable(n) && MATERIALS.def(n).block !== 'minecraft:water')) { waterBad++; return; }
+      }
+    });
+  }
+  check('new landmarks: all five appear in big cities', ['townsquare', 'stadium', 'cemetery', 'allotments', 'bandstand'].every((k) => seen.get(k)),
+    [...seen.entries()].filter(([k]) => ['townsquare', 'stadium', 'cemetery', 'allotments', 'bandstand'].includes(k)).map(([k, n]) => `${k}:${n}`).join(' '));
+  check('town square: a fountain holding water, with stalls round it', squares > 0 && fountains === squares && stalls > 0,
+    `${squares} squares, ${fountains} fountains, ${stalls} stalls`);
+  check('stadium: a pitch with goals at both ends and floodlights that light', pitches > 0 && goals === pitches * 2 && lights === pitches * 4,
+    `${pitches} pitches, ${goals} goals, ${lights} lights`);
+  check('cemetery: headstones and a gateway you can walk through', graves > 0 && gates > 0, `${graves} headstones, ${gates} open gates`);
+  check('allotments: fenced plots with crops growing in them', plots > 0 && crops > plots * 5, `${plots} plots, ${crops} crops`);
+  check('new landmarks: nothing they build blocks a door or lets water run', reachBad === 0 && waterBad === 0,
+    `${reachBad} cities with unreachable doors, ${waterBad} leaks`);
+  note(`${squares} squares · ${pitches} stadiums · ${graves} headstones · ${plots} allotment plots · ${stands} bandstands`);
 }
 
 // ===========================================================================

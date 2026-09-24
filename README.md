@@ -1,4 +1,4 @@
-# Polis v0.9.4
+# Polis v0.10.0
 
 *Created with help from Claude AI.*
 
@@ -308,10 +308,11 @@ or too far above or below to build on. Then:
   envelopes — one shaving the peaks, one filling the hollows — and takes the
   middle of the two, which keeps most of the city within two blocks of the
   real ground;
-- where the city is **cut into rising ground**, the raw face of dirt and stone
-  is faced with a retaining wall, one cell out from the city, running from the
-  street up to the height of the land — and the export is told to clear only
-  just above those walls, so the hillside behind stays standing;
+- where the city is **cut into rising ground**, the cut is graded rather than
+  left as a face: the land outside climbs away a block per cell until it meets
+  the real hillside, each step keeping the surface the land had, with a low
+  retaining wall holding the first step at the city's edge. Where two slopes
+  meet, the higher comes down until the join is a step rather than a jump;
 - each column is **carved and founded only as far as it needs**: cleared to
   the height the clearance setting asks for above the city's own roofs, and
   above anything that stood there (by the raw heightmap, so a tree is taken
@@ -469,6 +470,18 @@ water and the castle on the highest hill (the **Landmarks** checkbox turns them 
   allows), a hedge round the grounds with lit gate piers, a driveway to the
   door, and — on a deep lot — a formal garden behind with crossing paths, a
   fountain, flower beds and benches.
+- **Town square** — paved, with a fountain in the middle (a raised basin with
+  a lantern on its plinth), benches facing it on all four sides, market stalls
+  with cloth roofs along the back, lamps at the corners and flower beds.
+- **Stadium** — a grass pitch in a bowl of three terraced rows of seating,
+  with goals at each end, a halfway line, floodlights at the corners and a
+  tunnel through the terracing for the players.
+- **Cemetery** — walled ground with a lych gate, a path up the middle and rows
+  of headstones, some with flowers.
+- **Allotments** — fenced plots of wheat, carrots, potatoes and beetroot, each
+  watered by a channel down its middle, with a shed and a compost heap.
+- **Bandstand** — a small raised stage on posts with a roof and a lantern,
+  reached by a step from the street.
 - **Castle** — a stone keep on the highest hill: crenellated roof and four
   corner turrets.
 - **Market square** — a chequered square of striped wool-canopied stalls
@@ -667,6 +680,23 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.10.0** — Five new landmarks: a town square with a fountain, benches and
+market stalls; a stadium with terraced seating, goals, floodlights and a
+players' tunnel; a cemetery with a lych gate and rows of headstones;
+allotments of watered plots with a shed and compost heap; and a bandstand. The
+nine older landmarks still appear wherever they fit; the new ones are rationed
+to about a sixth of a city's lots, so a small town keeps its buildings (they
+take the big lots, and without the limit the rooms-per-building ratio fell from
+68% to 57%). Every point a landmark records now rides up with its terrace,
+which the new ones exposed.
+
+**0.9.5** — Cuts into a hillside are graded, not just walled. The wall added in
+0.9.3 only covered the bottom block of the cut and left the hill behind it as a
+raw dirt face; the ground outside the city now steps up a block per cell until
+it meets the real hillside, keeping the surface the land had, with a low wall
+at the city's edge. On a hilly site that is nearly 900 cells of graded slope,
+of which a dozen or so remain imperfect where two slopes meet against a cliff.
 
 **0.9.4** — A line at the foot of the panel and at the top of this file:
 created with help from Claude AI.

@@ -53,7 +53,8 @@ export const DEFAULTS = {
   centreMark: true,          // a gold block and sign marking where build_centered puts you
   canal: true,
   harbour: true,             // a working waterfront on the canal: basin, quay, cranes, warehouses, goods yard               // a canal through the city, with bridges and a dock
-  landmarks: true,           // town hall, clock tower, library, market square near downtown
+  landmarks: true,
+  landmarkShare: 0.16,       // at most this share of the city's lots become landmarks           // town hall, clock tower, library, market square near downtown
   transit: 'roads',
   wallHeight: 3,             // perimeter wall, blocks above ground (0 = none)          // 'roads' | 'rails' (railway instead of roads) | 'trams' (rails down the roads)
   farmChance: 0.2,
@@ -348,7 +349,15 @@ export function generateCity(cfgIn, onProgress) {
       if (L.bell) L.bell[1] += elevAt(L.bell[0], L.bell[2]);
       if (L.belfryBell) L.belfryBell[1] += elevAt(L.belfryBell[0], L.belfryBell[2]);
       if (L.faces) for (const f of L.faces) f.centre[1] += elevAt(f.centre[0], f.centre[2]);
-      for (const key of ['spireTop', 'lantern', 'cupolaBell', 'nameSign']) if (L[key]) L[key][1] += elevAt(L[key][0], L[key][2]);
+      // every point a landmark records rides up with the ground under it —
+      // single spots and lists of them alike, so nothing is left pointing at
+      // where the block used to be
+      const lift = (p) => { if (Array.isArray(p) && p.length === 3 && p.every((n) => typeof n === 'number')) p[1] += elevAt(p[0], p[2]); };
+      for (const key of ['spireTop', 'lantern', 'cupolaBell', 'nameSign', 'fountain', 'gate', 'step', 'heap']) if (L[key]) lift(L[key]);
+      for (const key of ['benches', 'stalls', 'lamps', 'goals', 'lights', 'tunnel', 'posts', 'graves', 'path', 'portico']) {
+        if (!Array.isArray(L[key])) continue;
+        for (const p of L[key]) lift(p);
+      }
     }
     // On invented hills a line sits wholly inside one block, so it rides up as
     // a unit; on real ground every cell has its own height and shiftTransit
@@ -488,37 +497,102 @@ export function terrainShell(plan, terrain, G, style) {
   return out;
 }
 
-// ---- facing the cuts into the hillside -----------------------------------------
-// Where the city is cut into rising ground, the hill is left as a raw face of
-// dirt and stone at the city's edge. This builds a retaining wall against it,
-// one cell out from the city, from the street up to the height of the land —
-// the same thing the terraces inside the city already do. The wall's cells go
-// to the export, which is told to clear only just above them, so the hillside
-// behind is left standing instead of being carved back.
+// ---- grading the cuts into the hillside ----------------------------------------
+// Where the city is cut into rising ground, the cut is a vertical slice and
+// the hill behind it shows as a raw face of dirt. A wall at the bottom only
+// covers the first block of it. So the ground outside the city is graded
+// instead: it climbs away a block per cell until it meets the real hillside,
+// each step topped with the surface the land already has, and a low retaining
+// wall at the city's edge holds the first step. Those cells go to the export,
+// which clears what stood above them.
 function faceCuts(world, plan, hills, terrain, G) {
   const { W, D, mask } = plan;
   const { elev } = hills;
   const faced = new Set();
-  const MAX = 16;
+  const REACH = 14;                                        // how far the grading runs
+  // start at the city's edge, wherever the land outside rises above it
+  let front = [];
+  const level = new Int16Array(W * D).fill(-999);
   for (let z = 1; z < D - 1; z++)
     for (let x = 1; x < W - 1; x++) {
       const i = z * W + x;
       if (!mask[i]) continue;
-      const surface = G + elev[i];
       for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
         const nx = x + dx, nz = z + dz, j = nz * W + nx;
-        if (mask[j]) continue;                             // still inside the city
+        if (mask[j] || level[j] > -900) continue;
         const ground = terrain.ground[j];
-        if (ground < -900) continue;                       // never visited
+        if (ground < -900) continue;
         const land = G + (ground - terrain.baseY);
-        if (land < surface + 2) continue;                  // not a cut worth facing
-        const top = Math.min(land, surface + MAX);
-        for (let y = surface; y <= top; y++) world.set(nx, y, nz, MAT.RETAIN);
-        mask[j] = 1;                                       // the export builds the wall
-        faced.add(nx + ',' + nz);
+        const surface = G + elev[i];
+        if (land < surface + 2) continue;                  // nothing to cut here
+        level[j] = surface + 1;                            // the first step up
+        front.push(j);
       }
     }
-  world.cutFaces = faced;                                  // the export clears only just above these
+  const wallTop = new Map();
+  for (let step = 0; step < REACH && front.length; step++) {
+    const next = [];
+    for (const i of front) {
+      const x = i % W, z = (i - x) / W;
+      const ground = terrain.ground[i];
+      const land = G + (ground - terrain.baseY);
+      const top = level[i];
+      if (land <= top) continue;                           // the hillside has come down to meet us
+      // cut this column back to the step, and keep the surface it had
+      world.set(x, top, z, ground <= 62 ? MAT.WATER : MAT.GRASS);
+      for (let y = top - 3; y < top; y++) if (!world.has(x, y, z)) world.set(x, y, z, MAT.DIRT);
+      for (let y = top + 1; y <= Math.max(land + 2, top + 4); y++) world.clear(x, y, z);
+      mask[i] = 1;
+      faced.add(x + ',' + z);
+      if (step === 0) wallTop.set(i, top);
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = x + dx, nz = z + dz, j = nz * W + nx;
+        if (nx < 1 || nz < 1 || nx >= W - 1 || nz >= D - 1) continue;
+        if (mask[j] || level[j] > -900) continue;
+        if (terrain.ground[j] < -900) continue;
+        level[j] = top + 1;
+        next.push(j);
+      }
+    }
+    front = next;
+  }
+  // two slopes running out from different edges can meet and disagree; let
+  // the higher one come down until the join is a step, not a jump
+  const topOf = (x, z) => { for (let y = 60; y > -8; y--) if (world.has(x, y, z)) return y; return -999; };
+  for (let pass = 0; pass < 12; pass++) {
+    let fixed = 0;
+    for (const key of faced) {
+      const [x, z] = key.split(',').map(Number);
+      const here = topOf(x, z);
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        if (!faced.has((x + dx) + ',' + (z + dz))) continue;
+        const there = topOf(x + dx, z + dz);
+        if (there < -900 || here - there <= 1) continue;
+        const want = there + 1;
+        const id = world.get(x, here, z);
+        // a step keeps a natural surface, never the wall material
+        const block = MATERIALS.def(id).block === MATERIALS.def(MAT.RETAIN).block ? MAT.GRASS : id;
+        for (let y = want + 1; y <= here; y++) world.clear(x, y, z);
+        world.set(x, want, z, block);
+        fixed++;
+        break;
+      }
+    }
+    if (!fixed) break;
+  }
+
+  // a low retaining wall along the city's edge, holding the first step
+  for (const [i, top] of wallTop) {
+    const x = i % W, z = (i - x) / W;
+    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const j = (z + dz) * W + (x + dx);
+      if (!mask[j] || faced.has((x + dx) + ',' + (z + dz))) continue;
+      const surface = G + elev[j];
+      for (let y = surface + 1; y < top; y++) world.set(x, y, z, MAT.RETAIN);   // the step keeps its own surface on top
+      break;
+    }
+  }
+  world.cutFaces = faced;                                  // the export clears what stood above these
   return faced.size;
 }
 
@@ -1199,7 +1273,7 @@ function summarise(world, plan, buildings, cfg, life = {}) {
     art: buildings.reduce((a, b) => a + (b.roomPlans || []).reduce((c, p) => c + ((p && p.art) || 0), 0), 0),
     paintings: (life.spawns || []).filter((p) => p.type === 'painting').length,
     propped: life.unsupported ? `${life.unsupported} blocks made safe (they would have fallen)` : '',
-    cutFaces: life.cutFaces ? `${life.cutFaces} cells of retaining wall against the hillside` : '',
+    cutFaces: life.cutFaces ? `${life.cutFaces} cells graded up into the hillside` : '',
     skirt: life.skirt ? `${life.skirt} cells stepping down to the land` : '',
     terrain: stats_terrain ? `fitted to the land · base y ${stats_terrain.baseY} · terraces to ${stats_terrain.maxTerrace}` : '',
     hillBlocks: life.hills ? life.hills.blocks.filter((b) => b.e > 0).length : 0,
