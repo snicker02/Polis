@@ -8,10 +8,12 @@ import { VoxelWorld } from './engine/blockcore.js';
 import { Renderer } from './engine/renderer.js';
 import { exportPack, exportStructuresZip, tileList, commandList, cityId, exportSalt, POLIS_VERSION } from './engine/export.js';
 import { readWorld, readLevelDat, siteGround, findSites, SEA_LEVEL } from './engine/worldfile.js';
+import { javaTiles, javaPackFiles } from './engine/export-java.js';
+import { makeZip } from './engine/blockcore.js';
 import { decodeNbt } from './tools/nbt-read.js';
 import { THEMES } from './engine/materials.js';
 
-const VERSION = '0.7.3';
+const VERSION = '0.8.6';
 const $ = (id) => document.getElementById(id);
 const numVal = (id) => Number($(id).value);      // readCfg has its own local num()
 
@@ -83,11 +85,14 @@ function boot() {
   $('mcpack').addEventListener('click', () => doExport('mcpack'));
   $('mcstruct').addEventListener('click', () => doExport('zip'));
   $('copycmd').addEventListener('click', copyCommands);
+  $('edition').addEventListener('change', showEdition);
+  showEdition();
   $('worldFile').addEventListener('change', (e) => { if (e.target.files[0]) loadWorld(e.target.files[0]).catch((err) => wstatus('could not read that world: ' + err.message)); });
   $('goCoords').addEventListener('click', goToCoords);
   $('siteCoords').addEventListener('keydown', (e) => { if (e.key === 'Enter') goToCoords(); });
   $('worldMap').addEventListener('click', (e) => { try { pickSite(e); } catch (err) { wstatus('could not read that site: ' + err.message); } });
   $('copyTp').addEventListener('click', copyTeleport);
+  $('copyTpCentre').addEventListener('click', () => copyTeleport(true));
   $('useSite').addEventListener('click', () => {
     if (!world || !world.site) return;
     $('clearSite').style.display = 'block';
@@ -206,6 +211,7 @@ function generate() {
       cityNs = nsNow();
       const t2 = performance.now();
       const mesh = buildMesh(previewWorld(result));
+      showCentreSpot();
       renderer.setMesh(mesh);
       renderer.frameAll();
       applyClip();
@@ -333,7 +339,12 @@ function showStats(mesh, times) {
     if (s.streets) line('streets named', s.streets);
     if (s.shops) line('shopfronts', String(s.shops));
     if (s.terrain) line('fitted to your world', s.terrain);
-    if (world && world.site) line('stand here, run build', `${world.site.x0}, ${world.site.baseY + 1}, ${world.site.z0} (north-west corner)`);
+    if (world && world.site) {
+      const cn = cornerSpot(world.site, result);
+      if (cn) line('corner · run build', cn.join(', '));
+      const cs = centreSpot(world.site, result);
+      if (cs) line('centre · run build_centered', cs.join(', '));
+    }
     if (s.centre) line('centre monument', s.centre);
     if (s.canal) line('canal', s.canal + (s.dock ? ' · dock' : ''));
     if (s.harbour) line('harbour', s.harbour);
@@ -456,11 +467,11 @@ function showSite(g) {
   el.innerHTML = `Site ${g.size}×${g.size} · centre <b>${g.x0 + half}, ${g.z0 + half}</b> · ground y ${g.p05}–${g.p95}<br>`
     + `explored ${(g.coverage * 100).toFixed(0)}% · water ${(g.waterShare * 100).toFixed(0)}% · buildable ${(g.buildableShare * 100).toFixed(0)}%`
     + (ok
-      ? `<br><b>Stand at ${g.x0}, ${g.baseY + 1}, ${g.z0}</b> (the north-west corner) and run <b>build</b> — not build_centered.`
+      ? '<br>Generate, then use either button below: the corner with <b>build</b>, or the centre with <b>build_centered</b>.'
       : `<br><b>${g.coverage < 0.6 ? 'Too little of this is explored' : 'Too little of this is buildable'}</b> — fly over it in game, or try nearby.`);
   $('useSite').style.display = ok ? 'block' : 'none';
-  $('copyTp').style.display = ok ? 'block' : 'none';
-  $('copyTp').textContent = ok ? `Copy /tp ${g.x0} ${g.baseY + 1} ${g.z0}` : '';
+  $('copyTp').style.display = 'none';        // both spots depend on the city, so they appear after it is generated
+  showCentreSpot();
 }
 
 // The preview shows the city standing in the real land when one is loaded:
@@ -474,6 +485,19 @@ function previewWorld(res) {
   return copy;
 }
 
+// the centre button only appears once the city exists, since it depends on
+// where the monument ended up
+function showCentreSpot() {
+  const site = world && world.site ? world.site : null;
+  const centre = site ? centreSpot(site, result) : null;
+  const corner = site ? cornerSpot(site, result) : null;
+  const btnC = $('copyTpCentre'), btn = $('copyTp');
+  btnC.style.display = centre ? 'block' : 'none';
+  if (centre) btnC.textContent = `Copy /tp ${centre[0]} ${centre[1]} ${centre[2]}  (centre · build_centered)`;
+  btn.style.display = corner ? 'block' : 'none';
+  if (corner) btn.textContent = `Copy /tp ${corner[0]} ${corner[1]} ${corner[2]}  (corner · build)`;
+}
+
 function exportOpts() {
   const o = { fillAir: $('fillAir').checked, foundation: Number($('foundation').value) | 0, clearAbove: Number($('clearAbove').value) | 0,
     centre: result && result.centre ? [result.centre.block[0], result.centre.block[2]] : undefined };
@@ -483,7 +507,8 @@ function exportOpts() {
     const g = world.site;
     o.foundation = Math.max(o.foundation, Math.min(48, g.baseY - g.p05 + 6));
     o.clearAbove = Math.max(o.clearAbove, Math.min(160, g.p95 - g.baseY + 16));
-    o.site = { x: g.x0, y: g.baseY, z: g.z0 };
+    const cs = centreSpot(g, result), cn = cornerSpot(g, result);
+    o.site = { x: cn ? cn[0] : g.x0, y: g.baseY, z: cn ? cn[2] : g.z0, centre: cs || undefined };
     o.terrain = { ground: g.ground, baseY: g.baseY, size: g.size };   // carve and found per column
   }
   return o;
@@ -513,12 +538,36 @@ function refreshCommands() {
   }
 }
 
-// the exact spot to stand on to build this city, as a command to paste in game
-function copyTeleport() {
+// Where the city is placed from. Either spot works: the north-west corner
+// with build, or the centre monument's alcove with build_centered — the
+// centred build lines the city up on that block.
+export function centreSpot(site, res) {
+  if (!site || !res || !res.centre) return null;
+  const [cx, cy, cz] = res.centre.stand;
+  return [site.x0 + cx, site.baseY + (cy - 1), site.z0 + cz];     // city y 1 is the base level
+}
+
+// The corner spot is not the corner of the site: the city's blocks start
+// wherever its outline begins, which is usually well inside. build lines the
+// first block of the city up with the player, so the player must stand at the
+// world position of that block, or the whole city lands off the ground it was
+// fitted to.
+export function cornerSpot(site, res) {
+  if (!site || !res) return null;
+  const wb = res.world.box;
+  return [site.x0 + wb.x0, site.baseY + 1, site.z0 + wb.z0];
+}
+
+function copyTeleport(centred = false) {
   if (!world || !world.site) { toast('Choose a site first.', true); return; }
   const g = world.site;
-  const text = `/tp ${g.x0} ${g.baseY + 1} ${g.z0}`;
-  const done = () => toast(`${text} copied — run it, then /function …/build`);
+  const spot = centred ? centreSpot(g, result) : null;
+  if (centred && !spot) { toast('Generate the city first.', true); return; }
+  const corner = cornerSpot(g, result);
+  if (!centred && !corner) { toast('Generate the city first.', true); return; }
+  const at = centred ? spot : corner;
+  const text = `/tp ${at[0]} ${at[1]} ${at[2]}`;
+  const done = () => toast(`${text} copied — run it, then /function …/${centred ? 'build_centered' : 'build'}`);
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(text).then(done).catch(() => { fallbackCopy(text); done(); });
   } else { fallbackCopy(text); done(); }
@@ -545,6 +594,46 @@ function fallbackCopy(text) {
   t.remove();
 }
 
+// Java needs gzip; the browser has it, and so does node for the headless check
+async function gzip(bytes) {
+  const cs = new CompressionStream('gzip');
+  const stream = new Blob([bytes]).stream().pipeThrough(cs);
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+
+// Java Edition: a datapack of structures placed by a function
+async function exportJava() {
+  const o = exportOpts();
+  const tiles = javaTiles(result.world, {
+    prefix: 'city', fillAir: o.fillAir, clearAbove: o.clearAbove, foundation: o.foundation,
+    spawns: result.spawns || [],
+  });
+  for (const t of tiles) t.nbt = await gzip(t.nbt);
+  const ns = cityNs.replace(/[^a-z0-9_]/g, '');
+  const files = javaPackFiles(tiles, { namespace: ns, description: summaryLine() });
+  // a note in the pack, since a datapack has nowhere else to say this
+  files.push({
+    name: 'polis-readme.txt',
+    text: [
+      `Polis v${VERSION} — ${summaryLine()}`,
+      '',
+      'Put this zip in your world\'s datapacks folder (Edit World -> Open World Folder),',
+      'then in game:',
+      '',
+      '    /reload',
+      `    /function ${ns}:build`,
+      '',
+      'You are the north-west corner: stand where you want that corner of the city,',
+      'on the ground, facing anywhere. The city builds around you.',
+      '',
+      'Java villagers arrive unemployed and take up the lecterns, looms, barrels and',
+      'smokers the city provides; the game gives them their trades.',
+    ].join('\n'),
+  });
+  const data = await makeZip(files.map((f) => ({ name: f.name, data: f.data || new TextEncoder().encode(f.text) })));
+  return { data, tiles, ns };
+}
+
 async function doExport(kind) {
   if (!result) { toast('Generate something first.', true); return; }
   const stale = staleFiles();
@@ -560,13 +649,20 @@ async function doExport(kind) {
       packName: `Polis ${cityNs}`,
       description: `/function ${cityNs}/build_centered then populate_centered · Polis v${VERSION}`,
     };
-    const out = kind === 'mcpack'
-      ? await exportPack(result.world, opts)
-      : await exportStructuresZip(result.world, opts);
-    // same spelling as the city id used in game: polis_<seed>_<hash>_v<version>
-    const name = `${cityNs}_v${VERSION}.` + (kind === 'mcpack' ? 'mcpack' : 'zip');
-    download(out.data, name);
-    toast(`${name} — in game: /function ${cityNs}/build_centered, then populate_centered`);
+    if ($('edition').value === 'java') {
+      const out = await exportJava();
+      const name = `${cityNs}_java_v${VERSION}.zip`;
+      download(out.data, name);
+      toast(`${name} — put it in your world's datapacks folder, then /reload and /function ${out.ns}:build`);
+    } else {
+      const out = kind === 'mcpack'
+        ? await exportPack(result.world, opts)
+        : await exportStructuresZip(result.world, opts);
+      // same spelling as the city id used in game: polis_<seed>_<hash>_v<version>
+      const name = `${cityNs}_v${VERSION}.` + (kind === 'mcpack' ? 'mcpack' : 'zip');
+      download(out.data, name);
+      toast(`${name} — in game: /function ${cityNs}/build_centered, then populate_centered`);
+    }
   } catch (e) {
     console.error(e);
     toast('Export failed: ' + e.message, true);
@@ -574,6 +670,15 @@ async function doExport(kind) {
     $('mcpack').disabled = $('mcstruct').disabled = false;
     busy(false);
   }
+}
+
+// the export panel says what it will produce
+function showEdition() {
+  const java = $('edition').value === 'java';
+  $('mcpack').textContent = java ? 'Export Java datapack' : 'Export .mcpack';
+  $('mcstruct').style.display = java ? 'none' : '';
+  $('copycmd').style.display = java ? 'none' : '';
+  $('javaHint').style.display = java ? 'block' : 'none';
 }
 
 function summaryLine() {

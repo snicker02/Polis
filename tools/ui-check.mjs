@@ -86,11 +86,16 @@ export async function runUiCheck(worldFile) {
     if (chosen) elements.get(id).value = chosen[1];
   }
 
+  // the page carries its version on <body data-version="…">, which the app
+  // checks before exporting
+  const pageVersion = (html.match(/data-version="([^"]+)"/) || [])[1] || '';
+  const body = makeElement('body');
+  body.dataset.version = pageVersion;
   const doc = {
     getElementById: (id) => elements.get(id) || null,
     createElement: (tag) => makeElement('created-' + tag, tag),
     querySelector: () => null, querySelectorAll: () => [],
-    addEventListener() {}, body: makeElement('body'), documentElement: makeElement('html'),
+    addEventListener() {}, body, documentElement: makeElement('html'),
     execCommand: () => true,
     createElementNS: (ns, tag) => makeElement('created-' + tag, tag),
   };
@@ -130,10 +135,21 @@ export async function runUiCheck(worldFile) {
     fire('worldMap', 'click', { clientX: 96, clientY: 96 });           // must be harmless with nothing loaded
     for (const id of ['gen', 'reroll']) if (listeners.has(id)) fire(id, 'click');
     await new Promise((r) => setTimeout(r, 400));          // generation may be deferred a frame
+    // and the exports, both editions: they must not throw
+    const downloads = [];
+    globalThis.URL.createObjectURL = (blob) => { downloads.push(blob); return 'blob:stub'; };
+    for (const edition of ['bedrock', 'java']) {
+      elements.get('edition').value = edition;
+      fire('edition', 'change');
+      fire('mcpack', 'click');
+      await new Promise((r) => setTimeout(r, 2500));
+    }
+    const said = (elements.get('toast') || {}).textContent || '';
+    problems.push(...(downloads.length >= 2 ? [] : [`only ${downloads.length} exports produced a file; the app said: ${said}`]));
     // with nothing chosen, the teleport button must be hidden and harmless
     fire('copyTp', 'click');
     const out = { problems, status: elements.get('worldStatus').textContent, info: elements.get('siteInfo').innerHTML,
-      offered: false, tpHidden: elements.get('copyTp').style.display !== 'block', copied,
+      offered: false, tpHidden: elements.get('copyTp').style.display !== 'block', copied, downloads: downloads.length,
       ids: ids.length, wired: listeners.size, stats: (elements.get('stats') || {}).innerHTML || '' };
     cleanup();
     return out;
@@ -174,6 +190,7 @@ if (process.argv[1] && process.argv[1].endsWith('ui-check.mjs')) {
   console.log('after clicking the map:', (r.info || '(nothing)').replace(/<[^>]+>/g, ''));
   console.log('site offered:', r.offered, '| teleport button:', r.tpLabel || '(none)');
   console.log('copied to clipboard:', r.copied && r.copied.length ? r.copied : '(nothing)');
+  console.log('exports produced:', r.downloads === undefined ? 'n/a' : r.downloads);
   console.log('problems:', r.problems.length ? r.problems : 'none');
   if (r.stats) console.log('stats panel:', r.stats.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').slice(0, 300));
 }

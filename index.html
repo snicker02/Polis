@@ -126,12 +126,12 @@
   }
 </style>
 </head>
-<body class="mode-city" data-version="0.7.3">
+<body class="mode-city" data-version="0.8.6">
 <div id="app">
   <div id="panel">
     <div id="panelScroll">
       <h1>PO<span>L</span>IS</h1>
-      <div class="sub">procedural city → Minecraft Bedrock · v0.7.3</div>
+      <div class="sub">procedural city → Minecraft Bedrock · v0.8.6</div>
 
       <fieldset>
         <legend>Mode</legend>
@@ -153,6 +153,7 @@
           <canvas id="worldMap" width="256" height="256" style="width:100%;image-rendering:pixelated;border:1px solid #333;display:none;margin-top:6px;cursor:crosshair"></canvas>
           <div class="hint" id="siteInfo" style="display:none"></div>
           <button id="copyTp" style="display:none;width:100%;margin-top:4px">Copy /tp to the build spot</button>
+          <button id="copyTpCentre" style="display:none;width:100%;margin-top:4px">Copy /tp to the centre spot</button>
           <button id="useSite" style="display:none;width:100%;margin-top:4px">Use this site</button>
           <button id="clearSite" style="display:none;width:100%;margin-top:4px">Back to an invented site</button>
         </div>
@@ -273,9 +274,17 @@
         <div class="row"><label>Clear above ground</label><input type="range" id="clearAbove" min="0" max="96" step="4" value="32"><span class="val" id="clearAbove_v"></span></div>
         <div class="row"><label>Foundation depth</label><input type="range" id="foundation" min="0" max="32" step="1" value="8"><span class="val" id="foundation_v"></span></div>
         <div class="hint">For uneven ground: the foundation fills solid ground under the city (stone-brick retaining face at the edge); clearing removes hills inside the city up to that height.</div>
+        <div class="row">
+          <label for="edition">Edition</label>
+          <select id="edition">
+            <option value="bedrock" selected>Bedrock (.mcpack)</option>
+            <option value="java">Java (datapack)</option>
+          </select>
+        </div>
         <div class="btnrow"><button id="mcpack" class="primary">Export .mcpack</button></div>
         <div class="btnrow"><button id="mcstruct">Export .mcstructure zip</button></div>
         <div class="btnrow"><button id="copycmd">Copy exact /structure commands</button></div>
+        <div class="hint" id="javaHint" style="display:none">Java: the datapack goes in your world's <b>datapacks</b> folder (Edit World → Open World Folder). Then <b>/reload</b>, stand where you want the north-west corner, and run the build function. Java villagers arrive unemployed and take the jobs the city provides.</div>
         <div class="hint">In game: <b>build_centered</b> places the city; once it has finished appearing, <b>populate_centered</b> from the same spot summons the villagers and golems. Each export gets its own city id. Only loaded chunks fill — stand near the middle; rerunning is safe.</div>
         <textarea id="cmds" readonly placeholder="Generate to see the placement commands."></textarea>
       </fieldset>
@@ -289,6 +298,6 @@
     <div id="busy">generating…</div>
   </div>
 </div>
-<script type="module" src="./main.js?v=0.7.3"></script>
+<script type="module" src="./main.js?v=0.8.6"></script>
 </body>
 </html>

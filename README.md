@@ -1,4 +1,4 @@
-# Polis v0.7.3
+# Polis v0.8.6
 
 A procedural city generator that exports to **Minecraft Bedrock**. Plans a
 street grid, subdivides it into lots, raises buildings with real interiors —
@@ -309,8 +309,12 @@ included — so a city cut into a hillside or standing proud of a slope can be
 seen before anything is exported. The land is added to a copy of the world for
 the preview only; the export writes the city and nothing else.
 
-Once a site is chosen there is a button that copies a `/tp` straight to the
-spot you build from, so you can paste it in game and land exactly there.
+A fitted city can be placed either way, and there is a button for each that
+copies a `/tp` straight to the spot: the **corner** with `build`, or the
+**centre** — the monument's alcove — with `build_centered`. Both put the city
+on exactly the ground it was fitted to. The corner spot is the first block of
+the city, not the corner of the site: an outline rarely reaches the site edge,
+so those differ.
 
 Click the map to choose a site, or type coordinates (an F3 position pasted
 straight in works: `-6926.11 69.00 -10080.98`) to jump anywhere in the world.
@@ -383,6 +387,43 @@ lots are laid on it, the hills leave it level with the quay, and it always fits
 inside the block beside the canal — it never swallows a street or a railway.
 The basin follows the same rule as all Polis water: solid stone or water on all
 four sides and underneath. The **Harbour district** checkbox turns it off.
+
+## Java Edition (in progress)
+
+The generator makes blocks with states; only the output is edition-specific.
+`engine/java-blocks.js` translates those states to Java (Bedrock's
+`facing_direction=2` to `facing=north`, `weirdo_direction` and
+`upside_down_bit` to a stair's `facing` and `half`, rail directions to shapes,
+bed colours into block names), and `engine/export-java.js` writes Java's own
+format: big-endian gzipped NBT holding a palette and a list of positioned
+blocks, cut into 48-block pieces, wrapped in a **datapack** whose function
+places them with `/place template`.
+
+Every block state a city produces is checked against Java's own block
+definitions by `tools/check-java-blocks.mjs` — 435 states across 176 blocks,
+all valid — and the validator reads a finished structure back the way the game
+would.
+
+Villagers, golems, cats, pandas, farm animals, paintings, minecarts and boats
+travel in the structures too, written from scratch rather than copied from
+saved templates — Java's entity NBT is small enough to write directly.
+
+One deliberate difference from Bedrock: **Java villagers arrive unemployed**.
+Bedrock's arrive pre-levelled with trades captured from real villagers, but
+writing believable trades for every profession and level in Java would mean
+inventing Mojang's whole trade table, and a villager given a profession with
+no trades has nothing to offer at all. On Java they take up the lecterns,
+looms, barrels and smokers the city already provides, and the game gives them
+proper trades.
+
+**Exporting one.** The export panel has an **Edition** choice: Bedrock gives
+the usual `.mcpack`, Java gives a datapack zip (`<city>_java_v<version>.zip`)
+holding the structures, a build function and a readme. Drop it in the world's
+`datapacks` folder, `/reload`, stand where you want the north-west corner and
+run `/function <city>:build`.
+
+Still to do for Java: reading worlds for terrain fitting (Anvil region files
+rather than LevelDB).
 
 ## Landmarks
 
@@ -611,6 +652,63 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.8.6** — Java packs can be made in the app: an Edition choice in the export
+panel, and a datapack export with the structures, a build function and a
+readme. The headless front-end check now presses both export buttons and fails
+if either produces no file (which caught the version guard blocking exports in
+the stub browser).
+
+**0.8.5** — Railway bridges were laid on a bed of gravel with nothing under
+them. Gravel falls, so in Java the deck dropped into the canal the moment it
+was placed and the track went with it (and it was fragile on Bedrock too —
+those were the "messed up" spots). A last pass before export now swaps any
+gravel or sand that would fall for stone, and gives any unsupported rail a
+footing: 13 to 40 blocks per city. Both editions benefit. The validator fails
+if a city contains a falling block with space under it or a rail with nothing
+beneath it.
+
+**0.8.4** — Two more from building in Java. The air that clears the old
+landscape was written from the bottom of the city box upward, which hollowed
+out the ground beneath the town and left openings wherever the surface broke —
+by the canal, at the bridges, along the rails. Clearing now stops at each
+column's lowest block and the ground below it is filled, as it is on Bedrock.
+And boats were placed in the block of water they sit in rather than on its
+surface, so they started underwater and could not be boarded.
+
+**0.8.3** — Java cities are populated: villagers, golems, cats, pandas, farm
+animals, paintings, minecarts and boats ride along in the structures, written
+directly as Java NBT. Each one lands in exactly one piece. Java villagers come
+unemployed and take the jobs the city provides, since Java generates trades
+itself.
+
+**0.8.2** — Java signs read as words again. Up to 1.20.4 a sign's lines were
+JSON strings; from 1.20.5 they are text components, where a plain string is
+simply the words — so the JSON went on the sign verbatim, braces and all.
+Lines are written plain, and the validator fails if one starts to look like
+JSON.
+
+**0.8.1** — Two fixes from the first Java build in game. Doors were a
+quarter-turn out: Bedrock stores a door's direction rotated from Java's (their
+own mapping table has java `facing=north` as bedrock `east`), and the
+translation passed it straight through — the mirror image of the very first
+Bedrock bug. And a Java structure places only the blocks it lists, so the old
+landscape stayed standing inside the city; air is now written over every city
+column up to its roof plus the clearance. The validator checks both.
+
+**0.8.0** — The beginnings of Java Edition support: a block translation layer
+checked against Java's own block definitions, a big-endian NBT writer, Java
+structures cut to the 48-block limit, and a datapack that places them with
+`/place template`. Signs carry their text as Java writes it. The validator
+gains a Java section that reads a finished structure back.
+
+**0.7.4** — Fitted cities can be placed from the centre as well as the corner:
+a button for each spot, and the pack's guide gives both. This also fixes a
+real misalignment — the corner spot was given as the corner of the *site*, but
+`build` lines up the first block of the city, which is wherever its outline
+begins (23 blocks in, on the test site), so fitted cities were landing offset
+from the ground they were shaped to fit. The validator now checks that both
+placements land in the same place, and on the fitted ground.
 
 **0.7.3** — Clear above ground is respected on fitted sites again. Carving per
 column (0.7.0) cleared only a block above each column's own roof and ignored

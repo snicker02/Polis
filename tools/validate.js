@@ -1730,6 +1730,27 @@ section('2r. fitted to real ground');
     check('fitted cities: the clearance setting decides how much is cleared above', high > low * 1.5,
       `${low.toLocaleString()} cleared at 4, ${high.toLocaleString()} at 48`);
   }
+  // both ways of placing a fitted city must put it in the same place, and on
+  // the ground it was fitted to
+  {
+    const site = siteGround(chunks, sites[0].x, sites[0].z, 160);
+    const r3 = generateCity({ ...DEFAULTS, size: 160, seed: 7, terrain: site, transit: 'rails' });
+    const wb = r3.world.box, tiles = tileList(r3.world, { prefix: 'c', fillAir: true });
+    const corner = [site.x0 + wb.x0, site.baseY + 1, site.z0 + wb.z0];
+    const stand = [site.x0 + r3.centre.stand[0], site.baseY + (r3.centre.stand[1] - 1), site.z0 + r3.centre.stand[2]];
+    const [cx2, cz2] = r3.world.centre;
+    let apart = 0;
+    for (const t of tiles) {
+      const a = [corner[0] + (t.box.x0 - wb.x0), corner[1] + (t.box.y0 - GROUND_DROP), corner[2] + (t.box.z0 - wb.z0)];
+      const b = [stand[0] + (t.box.x0 - cx2), stand[1] + (t.box.y0 - GROUND_DROP), stand[2] + (t.box.z0 - cz2)];
+      if (a.join() !== b.join()) apart++;
+    }
+    const cell0 = [corner[0] + (0 - wb.x0), corner[1] + (1 - GROUND_DROP), corner[2] + (0 - wb.z0)];
+    check('fitted cities: corner with build and centre with build_centered land in the same place',
+      apart === 0, `${apart} tiles apart`);
+    check('fitted cities: placed on the very ground they were fitted to',
+      cell0.join() === [site.x0, site.baseY, site.z0].join(), `${cell0.join(',')} vs ${[site.x0, site.baseY, site.z0].join(',')}`);
+  }
   check('fitted cities: the preview carries the surrounding land, and the export does not',
     shellCells > 0 && shellLeaks === 0, `${shellCells} land blocks for the preview, ${shellLeaks} in the world`);
   check('fitted cities: the outline keeps off deep water', worst > 0.85, `${(worst * 100).toFixed(0)}% of deep water left alone`);
@@ -1751,9 +1772,236 @@ section('2s. front end');
   const text = r.stats.replace(/<[^>]+>/g, ' ');
   check('front end: pressing Generate fills the stats panel', /blocks/.test(text) && /buildings/.test(text), text.slice(0, 80));
   check('front end: clicking the map with no world loaded does nothing', !r.info);
+  check('front end: both editions export a file when the button is pressed', r.downloads >= 2, `${r.downloads} files`);
   check('front end: the teleport button stays hidden until a site is chosen, and copies nothing',
     r.tpHidden && (!r.copied || r.copied.length === 0));
   note(`front end booted, generated a city and reported: ${text.replace(/\s+/g, ' ').trim().slice(0, 90)}…`);
+}
+
+// ===========================================================================
+// 2u. nothing falls down
+// ===========================================================================
+section('2u. nothing falls');
+{
+  // Gravel and sand fall when there is nothing under them, which on a bridge
+  // means the deck drops into the water and takes the track with it. Rails
+  // need something under them too.
+  let falling = 0, floatingRail = 0, cities = 0, madeSafe = 0;
+  for (const [size, seed, transit] of [[128, 12345, 'rails'], [160, 7, 'rails'], [192, 1, 'trams'], [224, 3, 'rails']]) {
+    const r = generateCity({ ...DEFAULTS, size, seed, transit });
+    cities++;
+    const w = r.world;
+    const loose = (id) => id === -1 || MATERIALS.isPassable(id);
+    w.forEach((x, y, z, id) => {
+      const def = MATERIALS.def(id);
+      if (!def) { falling++; return; }                       // an undefined block is a hole
+      if (!/gravel|sand$/.test(def.block)) return;
+      if (loose(w.get(x, y - 1, z))) falling++;
+    });
+    for (const line of r.transit ? r.transit.lines : [])
+      for (const [x, y, z] of line.cells) {
+        const id = w.get(x, y, z);
+        if (id < 0 || !/rail/.test(MATERIALS.def(id).block)) continue;
+        if (loose(w.get(x, y - 1, z))) floatingRail++;
+      }
+    madeSafe += Number((r.stats.propped || '0').split(' ')[0]) || 0;
+  }
+  check('nothing falls: no gravel or sand with empty space under it', falling === 0, `${falling}`);
+  check('nothing falls: every rail has something under it', floatingRail === 0, `${floatingRail}`);
+  note(`${madeSafe} blocks made safe across ${cities} cities`);
+}
+
+// ===========================================================================
+// 2t. Java Edition output
+// ===========================================================================
+section('2t. Java edition');
+{
+  const { loadJavaBlocks, checkJavaBlocks } = await import('./check-java-blocks.mjs');
+  const { javaTiles, javaPackFiles } = await import('../engine/export-java.js');
+
+  // every block a city makes must exist in Java, with properties Java defines
+  const javaBlocks = loadJavaBlocks();
+  const r = checkJavaBlocks(javaBlocks, { configs: [
+    { size: 128, seed: 12345, transit: 'rails', cityStyle: 'modern' },
+    { size: 96, seed: 7, transit: 'trams', cityStyle: 'medieval' },
+  ] });
+  check('java: every block translates to a real Java block with valid properties',
+    r.problems.length === 0, r.problems.slice(0, 3).join('; '));
+  note(`${r.blocks} block states across ${r.names} Java blocks`);
+
+  // the structures themselves: readable, within the 48-block limit, complete
+  const city = generateCity({ ...DEFAULTS, size: 96, seed: 4242, transit: 'rails' });
+  const tiles = javaTiles(city.world, { prefix: 'polis' });
+  check('java: the city is cut into pieces a structure block can place', tiles.length > 0 &&
+    tiles.every((t) => t.size.every((s) => s <= 48)), tiles.map((t) => t.size.join('x')).join(' '));
+  const total = tiles.reduce((a, t) => a + t.blocks, 0);
+  check('java: every block of the city is in a piece', total === city.stats.blocks, `${total} vs ${city.stats.blocks}`);
+
+  // a big-endian reader, to check a finished structure the way the game reads it
+  function readStructure(nbt) {
+    const b2 = Buffer.from(nbt);
+    const d2 = new DataView(b2.buffer, b2.byteOffset, b2.byteLength);
+    let i = 0;
+    const st = () => { const n = d2.getUint16(i, false); i += 2; const v = b2.subarray(i, i + n).toString('utf8'); i += n; return v; };
+    const vl = (t) => {
+      switch (t) {
+        case 1: { const v = d2.getInt8(i); i += 1; return v; }
+        case 3: { const v = d2.getInt32(i, false); i += 4; return v; }
+        case 6: { const v = d2.getFloat64(i, false); i += 8; return v; }
+        case 8: return st();
+        case 9: { const et = b2[i]; i += 1; const n = d2.getInt32(i, false); i += 4; const o = []; for (let k = 0; k < n; k++) o.push(vl(et)); return o; }
+        case 10: { const o = {}; for (;;) { const tt = b2[i]; i += 1; if (tt === 0) break; const k = st(); o[k] = vl(tt); } return o; }
+        default: throw new Error('tag ' + t);
+      }
+    };
+    const tag = b2[i]; i += 1; st();
+    return vl(tag);
+  }
+
+  // read one back with a big-endian reader, as the game would
+  const buf = Buffer.from(tiles[0].nbt);
+  const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
+  let p = 0;
+  const str = () => { const n = dv.getUint16(p, false); p += 2; const v = buf.subarray(p, p + n).toString('utf8'); p += n; return v; };
+  const val = (t) => {
+    switch (t) {
+      case 1: { const v = dv.getInt8(p); p += 1; return v; }
+      case 2: { const v = dv.getInt16(p, false); p += 2; return v; }
+      case 3: { const v = dv.getInt32(p, false); p += 4; return v; }
+      case 8: return str();
+      case 9: { const et = buf[p]; p += 1; const n = dv.getInt32(p, false); p += 4; const o = []; for (let i = 0; i < n; i++) o.push(val(et)); return o; }
+      case 10: { const o = {}; for (;;) { const tt = buf[p]; p += 1; if (tt === 0) break; const k = str(); o[k] = val(tt); } return o; }
+      default: throw new Error('tag ' + t);
+    }
+  };
+  const tag = buf[p]; p += 1; str();
+  const root = val(tag);
+  check('java: a structure reads back with its version, size, palette and blocks',
+    root.DataVersion > 3000 && root.size.length === 3 && root.palette.length > 0 && root.blocks.length > 0,
+    `version ${root.DataVersion}, ${root.palette.length} palette, ${root.blocks.length} blocks`);
+  const everyPos = root.blocks.every((b) => b.pos.length === 3 && b.pos.every((v, i) => v >= 0 && v < root.size[i]));
+  check('java: every block sits inside its own structure', everyPos);
+  const signs = root.blocks.filter((b) => b.nbt && /sign/.test(b.nbt.id || ''));
+  // from 1.20.5 a sign's lines are text components: plain words, not JSON
+  check('java: sign lines are plain text, four to a side', signs.length > 0 &&
+    signs.every((b) => b.nbt.front_text && b.nbt.front_text.messages.length === 4 &&
+      b.nbt.front_text.messages.every((m) => typeof m === 'string' && !/^\s*[{"]/.test(m))),
+    `${signs.length} signs, e.g. ${signs[0] ? JSON.stringify(signs[0].nbt.front_text.messages) : ''}`);
+
+  // a Java structure only places what it lists, so the empty part of every
+  // city column must be written as air or the old landscape stays standing
+  const withAir = javaTiles(city.world, { prefix: 'polis', fillAir: true, clearAbove: 24 });
+  const airEntries = withAir.reduce((a, t) => a + t.blocks, 0) - total;
+  check('java: air is written over the city so the old landscape is cleared', airEntries > total,
+    `${airEntries.toLocaleString()} filler blocks for ${total.toLocaleString()} city blocks`);
+  // clearing must stop at the city's lowest block: below that the column is
+  // filled, or the town stands over a cavern with holes into it
+  {
+    const withGround = javaTiles(city.world, { prefix: 'polis', fillAir: true, clearAbove: 16, foundation: 8 });
+    const lowest = new Map();
+    city.world.forEach((x, y, z) => {
+      const k = x + ',' + z;
+      const b = lowest.get(k);
+      if (b === undefined || y < b) lowest.set(k, y);
+    });
+    let hollow = 0, filled = 0;
+    for (const t of withGround) {
+      const root = readStructure(t.nbt);
+      const names = root.palette.map((e) => e.Name);
+      for (const b of root.blocks) {
+        const wx = t.offset[0] + b.pos[0] + city.world.box.x0;
+        const wy = t.offset[1] + b.pos[1] + 2;
+        const wz = t.offset[2] + b.pos[2] + city.world.box.z0;
+        const floor = lowest.get(wx + ',' + wz);
+        if (floor === undefined || wy >= floor) continue;
+        if (names[b.state] === 'minecraft:air') hollow++; else filled++;
+      }
+    }
+    check('java: the ground under the city is filled, not hollowed out', hollow === 0 && filled > 0,
+      `${filled.toLocaleString()} filled, ${hollow} left as air`);
+  }
+
+  // a door in Java faces the way you walk in
+  {
+    const { toJava } = await import('../engine/java-blocks.js');
+    const VEC = { north: [0, -1], south: [0, 1], west: [-1, 0], east: [1, 0] };
+    let wrong = 0;
+    for (const b of city.buildings) {
+      const def = MATERIALS.def(city.world.get(b.door.x, b.door.y, b.door.z));
+      if (!def || !/door/.test(def.block)) continue;
+      const { props } = toJava(def.block, def.states);
+      const v = VEC[props.facing];
+      if (!v || v[0] !== b.door.out[0] || v[1] !== b.door.out[1]) wrong++;
+    }
+    check('java: doors face the way you walk in (Bedrock stores them a quarter-turn round)', wrong === 0, `${wrong} wrong`);
+  }
+
+  // the city's living things
+  {
+    const pop = generateCity({ ...DEFAULTS, size: 128, seed: 12345, transit: 'rails' });
+    const withMobs = javaTiles(pop.world, { prefix: 'polis', spawns: pop.spawns });
+    const placed = withMobs.reduce((a, t) => a + t.entities, 0);
+    check('java: every villager, animal, painting, cart and boat is in exactly one piece',
+      placed === pop.spawns.length, `${placed} of ${pop.spawns.length}`);
+    // read them back and check the ids and the details Java needs
+    const piece = withMobs.find((t) => t.entities > 3);
+    const buf = Buffer.from(piece.nbt);
+    const dv2 = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
+    let q = 0;
+    const rstr = () => { const n = dv2.getUint16(q, false); q += 2; const v = buf.subarray(q, q + n).toString('utf8'); q += n; return v; };
+    const rval = (t) => {
+      switch (t) {
+        case 1: { const v = dv2.getInt8(q); q += 1; return v; }
+        case 3: { const v = dv2.getInt32(q, false); q += 4; return v; }
+        case 6: { const v = dv2.getFloat64(q, false); q += 8; return v; }
+        case 8: return rstr();
+        case 9: { const et = buf[q]; q += 1; const n = dv2.getInt32(q, false); q += 4; const o = []; for (let i = 0; i < n; i++) o.push(rval(et)); return o; }
+        case 10: { const o = {}; for (;;) { const tt = buf[q]; q += 1; if (tt === 0) break; const k = rstr(); o[k] = rval(tt); } return o; }
+        default: throw new Error('tag ' + t);
+      }
+    };
+    const tg = buf[q]; q += 1; rstr();
+    const rt = rval(tg);
+    const ents = rt.entities;
+    check('java: entities read back with an id, a position and a block position',
+      ents.length > 0 && ents.every((e) => /^minecraft:/.test(e.nbt.id) && e.pos.length === 3 && e.blockPos.length === 3),
+      `${ents.length} entities`);
+    const all = withMobs.flatMap(() => []);
+    // paintings need a variant Java knows, villagers a villager record
+    const { javaEntity } = await import('../engine/java-entities.js');
+    const { J } = await import('../engine/export-java.js');
+    let badPainting = 0, badVillager = 0;
+    for (const sp of pop.spawns) {
+      const e = javaEntity(sp, J);
+      if (!e) { if (sp.type !== 'painting') badVillager++; continue; }
+      if (sp.type === 'painting' && !/^minecraft:[a-z_0-9]+$/.test(e.nbt.variant[1])) badPainting++;
+      if (sp.type === 'villager' && !e.nbt.VillagerData) badVillager++;
+    }
+    // a boat given the block of water it sits in must be lifted to the surface
+    {
+      const { javaEntityPos } = await import('../engine/java-entities.js');
+      const box0 = { x0: 0, y0: 0, z0: 0 };
+      const boat = pop.spawns.find((sp) => sp.type === 'boat');
+      const cow = pop.spawns.find((sp) => sp.type === 'cow');
+      const okBoat = !boat || javaEntityPos(boat, box0)[1] === boat.y + 1;
+      const okCow = !cow || javaEntityPos(cow, box0)[1] === cow.y;
+      check('java: boats sit on the water, everything else stands on its block', okBoat && okCow);
+    }
+    check('java: paintings carry a variant and villagers a villager record', badPainting === 0 && badVillager === 0,
+      `${badPainting} paintings, ${badVillager} villagers`);
+  }
+
+  // the datapack itself
+  const files = javaPackFiles(tiles, { namespace: 'polis' });
+  const meta = JSON.parse(files.find((f) => f.name === 'pack.mcmeta').text);
+  const fn = files.find((f) => /build\.mcfunction$/.test(f.name));
+  check('java: the datapack has its pack.mcmeta, structures and a build function',
+    meta.pack.pack_format > 0 &&
+    files.filter((f) => /^data\/polis\/structure\/.*\.nbt$/.test(f.name)).length === tiles.length &&
+    !!fn, `${files.length} files`);
+  check('java: the build function places every piece', fn &&
+    fn.text.split('\n').filter((l) => l.startsWith('place template ')).length === tiles.length);
+  note(`datapack: ${files.length} files, ${tiles.length} structures, ${total.toLocaleString()} blocks`);
 }
 
 // ===========================================================================

@@ -17,7 +17,7 @@ import { makeRng } from './rng.js';
 // Must match main.js VERSION, package.json and index.html data-version;
 // tools/validate.js fails if they drift. The app refuses to export when the
 // browser has mixed cached copies of old and new files.
-export const POLIS_VERSION = '0.7.3';
+export const POLIS_VERSION = '0.8.6';
 
 export const CHUNK = 64;          // Bedrock structure limit per horizontal axis
 export const GROUND_DROP = 2;     // base layer y=0 sits 2 below feet; surface y=1 replaces the block you stand on
@@ -359,8 +359,15 @@ export function placementGuide(tiles, opts = {}) {
     L.push('');
     L.push(`    /function ${ns}/build`);
     L.push('');
-    L.push('Use build, not build_centered: the centred version would put the city half a');
-    L.push('city away from the ground it was shaped to fit.');
+    if (opts.site.centre) {
+      L.push('Or stand in the centre monument\'s alcove and use the centred version:');
+      L.push('');
+      L.push(`    /tp ${opts.site.centre.join(' ')}`);
+      L.push(`    /function ${ns}/build_centered`);
+      L.push('');
+    }
+    L.push('Either spot places the city on the ground it was fitted to. What matters is');
+    L.push('standing on the right block: the corner for build, the alcove for build_centered.');
     L.push('');
   }
   if (opts.centre) L.push('The city centre is a diamond monument with beacons on top: build_centered puts you in its alcove, under the sign.');

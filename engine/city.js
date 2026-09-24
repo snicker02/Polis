@@ -80,9 +80,11 @@ const GROUND = 1;   // surface layer; players walk at GROUND+1
 let STYLE = styleOf('modern');
 
 let stats_terrain = null;
+let stats_unsupported = 0;
 
 export function generateCity(cfgIn, onProgress) {
   stats_terrain = null;
+  stats_unsupported = 0;
   const cfg = { ...DEFAULTS, ...cfgIn };
   STYLE = styleOf(cfg.cityStyle);
   const rng = makeRng(cfg.seed);
@@ -417,8 +419,42 @@ export function generateCity(cfgIn, onProgress) {
   const reach = { total: buildings.length, reached: buildings.length - unreached.length, unreached };
 
   if (cfg.terrain) stats_terrain = { baseY: cfg.terrain.baseY, maxTerrace: Math.max(0, ...hills.blocks.map((b) => b.e)) };
+  // Last of all, make sure nothing will fall down or drop off when the city
+  // is placed. Gravel and sand fall: a railway bed of gravel across a bridge
+  // has nothing under it, so in Java it drops into the water the moment it
+  // lands, taking the track with it (and it is fragile on Bedrock too). Track
+  // with no support goes the same way, so it is given a footing.
+  {
+    const FALLING = new Set(['minecraft:gravel', 'minecraft:sand', 'minecraft:red_sand', 'minecraft:suspicious_gravel']);
+    const loose = (id) => id === -1 || MATERIALS.isPassable(id);
+    let propped = 0;
+    if (transit) {
+      for (const line of transit.lines)
+        for (const [x, y, z] of line.cells) {
+          const id = world.get(x, y, z);
+          if (id < 0 || !/rail/.test(MATERIALS.def(id).block)) continue;
+          if (!loose(world.get(x, y - 1, z))) continue;
+          world.set(x, y - 1, z, MAT.BASE);
+          propped++;
+        }
+    }
+    let swapped = 0;
+    for (let pass = 0; pass < 8; pass++) {           // a stack of gravel falls as a stack
+      const swap = [];
+      world.forEach((x, y, z, id) => {
+        if (!FALLING.has(MATERIALS.def(id).block)) return;
+        if (!loose(world.get(x, y - 1, z))) return;
+        swap.push([x, y, z]);
+      });
+      if (!swap.length) break;
+      for (const [x, y, z] of swap) world.set(x, y, z, MAT.BASE);
+      swapped += swap.length;
+    }
+    stats_unsupported = swapped + propped;
+  }
+
   const shell = cfg.terrain ? terrainShell(plan, cfg.terrain, GROUND, cfg.cityStyle) : null;
-  const stats = summarise(world, plan, buildings, cfg, { farms, beds, spawns, bell, transit, wall, ranches, landmarks, hills, stairRuns, reach, canal, centre, streets, harbour, skirt });
+  const stats = summarise(world, plan, buildings, cfg, { farms, beds, spawns, bell, transit, wall, ranches, landmarks, hills, stairRuns, reach, canal, centre, streets, harbour, skirt, unsupported: stats_unsupported });
   return { world, plan, buildings, cfg, stats, shell, farms, ranches, spawns, bell, transit, wall, landmarks, canal, centre, streets, harbour, harbourPlan,
     hills, stairRuns, reach, groundAt: (x, z) => GROUND + elevAt(x, z) };
 }
@@ -442,7 +478,7 @@ export function terrainShell(plan, terrain, G, style) {
       const top = G + (g - terrain.baseY);
       const water = g <= 62;
       out.push([x, top, z, water ? MAT.WATER : MAT.GRASS]);
-      for (let d = 1; d <= DEPTH; d++) out.push([x, top - d, z, d < 2 ? MAT.DIRT : MAT.STONE]);
+      for (let d = 1; d <= DEPTH; d++) out.push([x, top - d, z, d < 2 ? MAT.DIRT : MAT.BASE]);
     }
   return out;
 }
@@ -1055,6 +1091,7 @@ function summarise(world, plan, buildings, cfg, life = {}) {
     dock: !!(life.canal && life.canal.dock),
     art: buildings.reduce((a, b) => a + (b.roomPlans || []).reduce((c, p) => c + ((p && p.art) || 0), 0), 0),
     paintings: (life.spawns || []).filter((p) => p.type === 'painting').length,
+    propped: life.unsupported ? `${life.unsupported} blocks made safe (they would have fallen)` : '',
     skirt: life.skirt ? `${life.skirt} cells stepping down to the land` : '',
     terrain: stats_terrain ? `fitted to the land · base y ${stats_terrain.baseY} · terraces to ${stats_terrain.maxTerrace}` : '',
     hillBlocks: life.hills ? life.hills.blocks.filter((b) => b.e > 0).length : 0,
