@@ -1,4 +1,4 @@
-# Polis v0.13.2
+# Polis v0.13.3
 
 *Created with help from Claude AI.*
 
@@ -707,6 +707,16 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.13.3** — Cities fitted to real ground often had no curved rails at all,
+and this turns out to be old rather than new: the loop is traced round a ring
+of cells and only works when they sit in a tidy circuit, which a city cut to a
+hillside seldom does. One spur or pinch and there was no loop — and since the
+loop carries every curve, the whole city went straight. When the ring will not
+trace, the edge is now walked instead, with a hand on the wall, which closes
+however ragged the shape is; a walk that comes back beside its own middle is
+trimmed to the circuit inside it. Twelve fitted test cities now all have a
+loop with curves, where a quarter of them had none.
 
 **0.13.2** — Outlying districts were left almost without track. Restoring the
 loop in 0.13.1 measured "how far in from the edge" across the main district

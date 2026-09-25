@@ -103,11 +103,22 @@ export function layTransit(world, plan, mode, G) {
   const O = edgeDistance(plan);
   const Oloop = main ? edgeDistance(plan, (x, z) => inMain(x, z)) : O;
   let loop = null;
-  for (const k of [3, 2]) {
+  for (const k of [3, 2, 4]) {
     const ring = [];
     for (let z = 0; z < D; z++) for (let x = 0; x < W; x++) if (Oloop[z * W + x] === k && inMain(x, z)) ring.push([x, z]);
     const cyc = traceCycle(ring, (x, z) => road(x, z) && inMain(x, z));
     if (cyc) { loop = { k, cells: cyc }; break; }
+  }
+  // A ring only traces when the cells sit in a tidy circuit, which a city cut
+  // to real ground seldom does: one spur or pinch and there is no loop at
+  // all, and with it go every curved rail in the city. So when that fails,
+  // the edge is walked instead — a contour always closes, however ragged the
+  // shape — and the walk is tidied into a circuit.
+  if (!loop) {
+    for (const k of [3, 2, 4]) {
+      const cyc = traceContour(W, D, (x, z) => Oloop[z * W + x] >= k && road(x, z) && inMain(x, z));
+      if (cyc && cyc.length >= 40) { loop = { k, cells: cyc }; break; }
+    }
   }
   const minO = loop ? loop.k + 2 : 2;
   // an outlying district has no loop round it, so its lines only have to stay
@@ -334,6 +345,53 @@ export function edgeDistance(plan, within = null) {
     }
   }
   return O;
+}
+
+// Walking the edge of a region: from the top-left cell, step round it with a
+// hand on the wall, which comes back to where it started however ragged the
+// shape is. The result is thinned so that no cell repeats and each is next to
+// the one before, which is what the rails need.
+function traceContour(W, D, ok) {
+  let start = null;
+  for (let z = 0; z < D && !start; z++) for (let x = 0; x < W; x++) if (ok(x, z)) { start = [x, z]; break; }
+  if (!start) return null;
+  const DIRS = [[1, 0], [0, 1], [-1, 0], [0, -1]];
+  const path = [];
+  const seen = new Set();
+  let [cx, cz] = start, dir = 0;
+  for (let step = 0; step < W * D * 4; step++) {
+    const key = cx + ',' + cz;
+    if (!seen.has(key)) { seen.add(key); path.push([cx, cz]); }
+    // turn as far left as possible, then try straight on, then right
+    let moved = false;
+    for (let t = 3; t <= 6; t++) {
+      const nd = (dir + t) % 4;
+      const nx = cx + DIRS[nd][0], nz = cz + DIRS[nd][1];
+      if (nx < 0 || nz < 0 || nx >= W || nz >= D || !ok(nx, nz)) continue;
+      cx = nx; cz = nz; dir = nd; moved = true;
+      break;
+    }
+    if (!moved) return null;
+    if (cx === start[0] && cz === start[1] && path.length > 8) break;
+  }
+  // the walk may double back on itself; keep only the cells that carry on
+  const out = [];
+  for (const [x, z] of path) {
+    if (!out.length) { out.push([x, z]); continue; }
+    const [px, pz] = out[out.length - 1];
+    if (Math.abs(px - x) + Math.abs(pz - z) === 1) out.push([x, z]);
+  }
+  // The ends have to meet. A walk that comes back beside its own middle
+  // rather than its start still holds a circuit inside it, so the lead-in is
+  // dropped and the circuit kept.
+  const [lx, lz] = out[out.length - 1];
+  let cut = -1;
+  for (let i = 0; i < out.length - 8; i++) {
+    if (Math.abs(out[i][0] - lx) + Math.abs(out[i][1] - lz) === 1) { cut = i; break; }
+  }
+  if (cut < 0) return null;
+  const ring = out.slice(cut);
+  return ring.length >= 40 ? ring : null;
 }
 
 // The cells must form one simple closed loop: every cell a road cell with

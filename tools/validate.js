@@ -2035,7 +2035,29 @@ section('2z. bridges');
           if (per[k] < 20) bare++;
         });
       }
-      check('bridges: every district of any size gets track, not just the main one', bare === 0,
+          // the loop is what carries every curve in a city, so a city fitted to
+      // real ground must have one — that is where it used to be lost
+      {
+        let fitted = 0, looped2 = 0, curvy2 = 0;
+        for (const s3 of findSites(chunks, 192, { step: 64 }).slice(0, 6)) {
+          const site = siteGround(chunks, s3.x, s3.z, 192);
+          for (const seed of [7, 1118]) {
+            const r3 = generateCity({ ...DEFAULTS, size: 192, seed, terrain: site, transit: 'rails' });
+            fitted++;
+            if (r3.transit.stats.loop) looped2++;
+            let c3 = 0;
+            r3.world.forEach((x, y, z, id) => {
+              const d = MATERIALS.def(id);
+              if (/rail/.test(d.block) && d.states.rail_direction && d.states.rail_direction.value >= 6) c3++;
+            });
+            if (c3 > 0) curvy2++;
+          }
+        }
+        check('rails: every city fitted to real ground has a loop, and curves on it',
+          fitted > 0 && looped2 === fitted && curvy2 === fitted,
+          `${fitted} fitted cities · ${looped2} with a loop · ${curvy2} with curves`);
+      }
+  check('bridges: every district of any size gets track, not just the main one', bare === 0,
         `${bare} of ${checked} districts without track`);
     }
   }
