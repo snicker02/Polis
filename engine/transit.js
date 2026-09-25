@@ -90,12 +90,18 @@ export function layTransit(world, plan, mode, G) {
   // the ring road's middle row; on an organic one it follows every bend,
   // with a curved rail at each corner. Every other line stays at O >= k + 2,
   // so nothing crosses or touches the loop, and no rail is ever under the wall.
-  const O = edgeDistance(plan);
+  // The loop runs round the city's edge, which has to be a single ring. A
+  // city split into districts and joined by bridges has several edges, so the
+  // loop follows the main district and the outlying ones are reached by the
+  // bridge instead of being ringed as well.
+  const main = plan.districts && plan.districts.length > 1 ? plan.districts[0] : null;
+  const inMain = (x, z) => !main || main.has(z * W + x);
+  const O = edgeDistance(plan, main ? (x, z) => inMain(x, z) : null);
   let loop = null;
   for (const k of [3, 2]) {
     const ring = [];
-    for (let z = 0; z < D; z++) for (let x = 0; x < W; x++) if (O[z * W + x] === k) ring.push([x, z]);
-    const cyc = traceCycle(ring, (x, z) => road(x, z));
+    for (let z = 0; z < D; z++) for (let x = 0; x < W; x++) if (O[z * W + x] === k && inMain(x, z)) ring.push([x, z]);
+    const cyc = traceCycle(ring, (x, z) => road(x, z) && inMain(x, z));
     if (cyc) { loop = { k, cells: cyc }; break; }
   }
   const minO = loop ? loop.k + 2 : 2;
@@ -291,9 +297,12 @@ export function trimOverRails(world, transit) {
 
 // Chebyshev distance of every city cell to the nearest non-city cell (or the
 // edge of the plan). 0 outside the city.
-export function edgeDistance(plan) {
+export function edgeDistance(plan, within = null) {
   const { W, D } = plan;
-  const inCity = (i) => (plan.mask ? plan.mask[i] === 1 : plan.use[i] !== USE.EMPTY);
+  // "within" narrows it to one district, so a split city measures its main
+  // part rather than the gaps between its pieces
+  const inCity = (i) => ((plan.mask ? plan.mask[i] === 1 : plan.use[i] !== USE.EMPTY)
+    && (!within || within(i % W, (i - (i % W)) / W)));
   const O = new Int16Array(W * D);
   const q = [];
   for (let z = 0; z < D; z++)

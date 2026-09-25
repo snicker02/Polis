@@ -1,4 +1,4 @@
-# Polis v0.13.0
+# Polis v0.13.1
 
 *Created with help from Claude AI.*
 
@@ -707,6 +707,14 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.13.1** — A city split into districts lost its railway loop, and with it
+every curved rail: the loop is traced round the city's edge, and keeping the
+outlying districts (0.13.0) meant there was no longer a single edge to trace.
+The loop now follows the main district — the others are reached by their
+bridge, not ringed as well. On a split test site that is a 934-block loop with
+38 curves where there had been none. The validator checks that a city in
+pieces still has a loop and curved rails.
 
 **0.13.0** — Long bridges join the parts of a city that the ground splits up.
 Districts the outline cannot reach are kept rather than discarded, and each is

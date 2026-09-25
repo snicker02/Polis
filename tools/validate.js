@@ -1995,6 +1995,27 @@ section('2z. bridges');
   check('bridges: a split site gets viaducts joining its districts', withBridges > 0, `${withBridges} cities, ${spans} bridges`);
   check('bridges: you can walk from one end to the other', decks > 0 && deckWalkable === decks, `${deckWalkable}/${decks}`);
   check('bridges: every door is still reachable once they are built', unreachable === 0, `${unreachable} cut off`);
+  // a split city still gets its loop: it follows the main district, since a
+  // city in pieces has no single edge to run round
+  {
+    let looped = 0, curved = 0, split = 0;
+    for (const s of findSites(chunks, 192, { step: 64 }).slice(0, 6)) {
+      const site = siteGround(chunks, s.x, s.z, 192);
+      const r = generateCity({ ...DEFAULTS, size: 192, seed: 7, terrain: site, transit: 'rails' });
+      if ((r.plan.districts || []).length < 2) continue;
+      split++;
+      if (r.transit.stats.loop) looped++;
+      let c = 0;
+      r.world.forEach((x, y, z, id) => {
+        const d = MATERIALS.def(id);
+        if (!/rail/.test(d.block) || !d.states.rail_direction) return;
+        if (d.states.rail_direction.value >= 6) c++;
+      });
+      if (c > 0) curved++;
+    }
+    check('bridges: a city in pieces still has its loop, with curves', split === 0 || (looped === split && curved === split),
+      `${split} split cities · ${looped} with a loop · ${curved} with curved rails`);
+  }
   check('bridges: they are worth building (the districts they save carry buildings)', buildingsGained > 0,
     `${buildingsGained} more buildings than without them`);
   note(`${spans} bridges across ${withBridges} cities, ${buildingsGained} buildings saved`);
