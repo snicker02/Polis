@@ -1,4 +1,4 @@
-# Polis v0.11.3
+# Polis v0.12.0
 
 *Created with help from Claude AI.*
 
@@ -470,8 +470,11 @@ water and the castle on the highest hill (the **Landmarks** checkbox turns them 
   floor, lantern posts flanking the entrance.
 - **Church** — a tall nave with stained-glass windows, pews facing the
   altar, and a bell tower rising over the entrance to a spire with a gold top.
-- **School** — three storeys, set back behind a front yard: a covered porch
-  over the entrance, a bell cupola, a flagpole, and — on a lot deep enough — a fenced sports
+- **School** — two storeys set back behind a front yard, built like a chapel:
+  one open hall to a floor with a chalkboard across the wall opposite the
+  door, a lectern in front of it and desks in rows facing it, the staircase
+  tucked against the back wall out of the hall. A covered porch over the
+  entrance, a bell cupola, a flagpole, and — on a lot deep enough — a fenced sports
   field behind with a gate, white lines and two goals. Inside, classrooms with
   a lectern and rows of desks and chairs facing it, aisles left clear. It
   prefers a big lot that runs deep from its street.
@@ -692,6 +695,14 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.12.0** — The school is a hall, not a warren: two storeys, each an open
+floor with a chalkboard across the wall facing the door, a lectern in front of
+it and desks in rows, with the staircase against the back wall. A small school
+keeps one row, and if the furniture would ever shut a floor off it is taken
+out rather than leaving it unreachable. Loop boosters are spaced properly too:
+a booster after a bend used to mean five in a row on an organic outline, so
+they are now never closer than six blocks nor further than sixteen.
 
 **0.11.3** — The world map zooms. Scrolling moves through seven steps from
 about 3000 blocks across down to 250, keeping whatever is under the pointer in

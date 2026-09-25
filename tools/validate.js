@@ -564,16 +564,24 @@ section('2d. railways');
       const L = r.transit.lines.find((l) => l.loop);
       const n = L.cells.length;
       const isCurve = (i) => dirOf(w, L.cells[(i + n) % n][0], L.cells[(i + n) % n][1], L.cells[(i + n) % n][2]) >= 6;
-      let curves = 0, badBoost = 0, onWall = 0;
+      let curves = 0, onWall = 0;
+      const boosts = [];
       for (let i = 0; i < n; i++) {
-        if (isCurve(i)) { curves++; continue; }
-        let d = 0; while (d < n && !isCurve(i + d) && !isCurve(i - d)) d++;
+        if (isCurve(i)) curves++;
         const [x, y, z] = L.cells[i];
-        if (d === 2 && MATERIALS.def(w.get(x, y, z)).block !== 'minecraft:golden_rail') badBoost++;
+        if (MATERIALS.def(w.get(x, y, z)).block === 'minecraft:golden_rail') boosts.push(i);
         if (r.wall && r.wall.ring.some(([a, b]) => a === x && b === z)) onWall++;
       }
+      // A cart leaves a curve slowly, so boosters follow the bends — but an
+      // organic loop bends constantly, and one at every bend puts five in a
+      // row. They are spaced instead: never closer than six, never further
+      // than sixteen (plus the two-block leeway a curve forces).
+      const gaps = boosts.slice(1).map((v, i) => v - boosts[i]);
+      const tooClose = gaps.filter((g) => g < 6).length;
+      const tooFar = gaps.filter((g) => g > 18).length;
       check(`${tag}: the loop turns with curved rails (at least four corners)`, curves >= 4, `${curves}`);
-      check(`${tag}: powered boosters two blocks either side of every curve`, badBoost === 0, `${badBoost} missing`);
+      check(`${tag}: boosters spaced along the loop, neither bunched nor missing`, tooClose === 0 && tooFar === 0 && boosts.length > 3,
+        `${boosts.length} boosters · ${tooClose} bunched · ${tooFar} too far apart`);
       check(`${tag}: no loop rail under the wall`, onWall === 0);
     }
     const carts = r.spawns.filter((p) => p.type === 'minecart');
@@ -1155,7 +1163,7 @@ section('2l. canal, art, new landmarks');
   let canals = 0, badOpen = 0, badBridge = 0, nearWall = 0, bridges = 0, rails = 0, docks = 0, dockUnreached = 0, badDock = 0;
   let panels = 0, badPanel = 0, complete = 0, cities = 0;
   let pews = 0, spires = 0, bells = 0, classrooms = 0, lecterns = 0, bands = 0, lanterns = 0, lhFar = 0, castles = 0, notHighest = 0, merlons = 0, turrets = 0;
-  let schools = 0, porchBad = 0, signs = 0, signBad = 0, signable = 0, cupolas = 0, fields = 0, fieldBad = 0, desksN = 0, chairBad = 0;
+  let schools = 0, porchBad = 0, signs = 0, signBad = 0, signable = 0, cupolas = 0, fields = 0, fieldBad = 0, desksN = 0, chairBad = 0, boards = 0;
   const WDIR = [[1, 0], [-1, 0], [0, 1], [0, -1]];          // weirdo_direction 0..3: east, west, south, north
   for (const [size, seed, st, transit] of [[160, 12345, 'modern', 'roads'], [192, 1, 'medieval', 'rails'], [224, 3, 'desert', 'trams'], [256, 5, 'cherry', 'roads'], [128, 2, 'snowy', 'rails']]) {
     const r = generateCity({ ...DEFAULTS, size, seed, cityStyle: st, transit });
@@ -1256,25 +1264,49 @@ section('2l. canal, art, new landmarks');
           if (![[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dz]) => walked.has(`${gx + dx},${gy + 1},${gz + dz}`) &&
               !(gx + dx >= f.x0 && gx + dx <= f.x1 && gz + dz >= f.z0 && gz + dz <= f.z1))) fieldBad++;
         }
-        // chairs: every oak stair in a classroom has a desk in front of it, on the lectern's side
-        L.rec.roomPlans.forEach((plan, k) => {
-          if (!plan) return;
-          const y = L.rec.floorYs[k] + 1;
-          for (const rm of plan.rooms) if (rm.type === 'classroom')
-            for (let z = rm.z0; z <= rm.z1; z++) for (let x = rm.x0; x <= rm.x1; x++) {
-              const id = w.get(x, y, z);
-              if (id < 0 || MATERIALS.def(id).block !== 'minecraft:oak_stairs') continue;
-              desksN++;
-              const [bx, bz] = WDIR[MATERIALS.def(id).states.weirdo_direction.value];   // the chair back points this way
-              if (name(w, x - bx, y, z - bz) !== 'minecraft:oak_slab') chairBad++;          // the desk is in front
-            }
-        });
-        for (const plan of L.rec.roomPlans || []) if (plan) for (const rm of plan.rooms) if (rm.type === 'classroom') {
-          classrooms++;
-          const y = L.rec.floorYs[L.rec.roomPlans.indexOf(plan)] + 1;
+        // the school is one hall per floor: a chalkboard across the wall
+        // opposite the door, desks facing it, and both floors reachable
+        {
+          const face = L.rec.facing;
+          const out = { north: [0, -1], south: [0, 1], east: [1, 0], west: [-1, 0] }[face];
+          const r0 = L.rec.rects[0];
+          const alongX = out[1] !== 0;
+          const wallC = alongX ? (out[1] > 0 ? r0.z0 : r0.z1) : (out[0] > 0 ? r0.x0 : r0.x1);
+          let boardBlocks = 0;
+          for (let k = 0; k < L.rec.floors; k++) {
+            const y0 = L.rec.floorYs[k];
+            for (let u = (alongX ? r0.x0 : r0.z0); u <= (alongX ? r0.x1 : r0.z1); u++)
+              for (let y = y0 + 2; y <= y0 + 3; y++) {
+                const [bx, bz] = alongX ? [u, wallC] : [wallC, u];
+                if (name(w, bx, y, bz) === 'minecraft:deepslate_tiles') boardBlocks++;
+              }
+          }
+          if (boardBlocks >= 4) boards++;
+          classrooms += L.rec.floors;                   // one hall to a floor
           let lec = false;
-          for (let z = rm.z0; z <= rm.z1; z++) for (let x = rm.x0; x <= rm.x1; x++) if (name(w, x, y, z) === 'minecraft:lectern') lec = true;
-          if (lec) lecterns++;
+          for (let k = 0; k < L.rec.floors; k++) {
+            const y = L.rec.floorYs[k] + 1;
+            for (let z = r0.z0; z <= r0.z1; z++) for (let x = r0.x0; x <= r0.x1; x++) if (name(w, x, y, z) === 'minecraft:lectern') lec = true;
+          }
+          if (lec) lecterns += L.rec.floors;            // one to each hall
+          // desks: every seat has a desk in front of it
+          for (let k = 0; k < L.rec.floors; k++) {
+            const y = L.rec.floorYs[k] + 1;
+            for (let z = r0.z0; z <= r0.z1; z++) for (let x = r0.x0; x <= r0.x1; x++) {
+              const core = L.rec.core;
+              // the staircase is made of stairs too, and is not seating
+              if (core && x >= core.x0 - 1 && x <= core.x1 + 1 && z >= core.z0 - 1 && z <= core.z1 + 1) continue;
+              const id = w.get(x, y, z);
+              if (id < 0 || !/_stairs$/.test(MATERIALS.def(id).block)) continue;
+              const st = MATERIALS.def(id).states.weirdo_direction;
+              if (!st) continue;
+              desksN++;
+              const [bx, bz] = WDIR[st.value];
+              if (name(w, x - bx, y, z - bz) !== 'minecraft:oak_slab') chairBad++;
+            }
+          }
+          const vs = verifyAll(w, [L.rec]);
+          if (vs.floorsReached !== vs.floorsChecked) fieldBad++;
         }
       } else if (L.kind === 'lighthouse') {
         if (L.red > 0) bands++;
@@ -1309,13 +1341,13 @@ section('2l. canal, art, new landmarks');
   check('art: panels on the inside walls, each four tiles of one glaze facing four ways', panels > 0 && badPanel === 0, `${panels} panels, ${badPanel} bad`);
   check('landmarks: all eight in every test city', complete === cities, `${complete}/${cities}`);
   check('church: pews, a gold-topped spire and a bell in the tower', pews > 0 && spires === cities && bells === cities, `${pews} pews, ${spires} spires, ${bells} bells`);
-  check('school: classrooms, each with a lectern', classrooms > 0 && lecterns === classrooms, `${lecterns}/${classrooms}`);
+  check('school: a hall on each floor, each with a lectern', classrooms > 0 && lecterns === classrooms, `${lecterns}/${classrooms}`);
   check('school: a covered porch (two columns and a roof) over the entrance', porchBad === 0 && schools === cities, `${porchBad} problems`);
   check('landmarks: every one has a standing sign with its name, beside the way to its door, facing the street',
     signs === signable && signBad === 0, `${signs}/${signable} signs, ${signBad} problems`);
   check('school: a bell hung in a cupola on the roof', cupolas === cities, `${cupolas}/${cities}`);
   check('school: where there is room, a fenced sports field with a gate and two goals, reached from the street', fields > 0 && fieldBad === 0, `${fields} fields, ${fieldBad} problems`);
-  check('school: desks and chairs in rows, every chair behind a desk and facing the lectern', desksN > 0 && chairBad === 0, `${desksN} chairs, ${chairBad} facing wrong`);
+  check('school: desks in rows, every seat behind its desk and facing the board', desksN > 0 && chairBad === 0, `${desksN} chairs, ${chairBad} facing wrong`);
   check('lighthouse: red bands, a glass lantern room with a light, beside the canal', bands === cities && lanterns === cities && lhFar === 0, `${bands} banded, ${lanterns} lit, ${lhFar} far from the water`);
   check('castle: on the highest hill, crenellated, four turrets', castles === cities && notHighest === 0 && merlons > 0 && turrets === castles * 4, `${notHighest} not on the highest hill`);
   note(`${canals} canals · ${bridges} bridges · ${docks} docks · ${panels} art panels · ${pews} pews · ${classrooms} classrooms`);

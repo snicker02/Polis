@@ -433,12 +433,13 @@ function school(world, lot, face, cfg, rng, G) {
   if (bDepth < 7 || lotWidth < 9) return null;
   const r = rectOf(front, front + bDepth - 1, 1, lotWidth - 2);
   const wide = lotWidth - 2;
-  const floors = 3;                                  // a big, easy-to-find building that carries its sign in proportion
+  const floors = 2;                                  // a hall below, a gallery above
   const theme = { name: 'school', wall: LP.schoolWall || MAT.BRICK, trim: LP.schoolTrim || MAT.C_WHITE, floor: LP.libFloor,
     glass: MAT.GLASS, stair: LP.libStair, door: 'oak' };
-  const rec = makeBuilding(world, { ...r, floors, pitch: cfg.pitch, groundY: G, style: 'mid', facing: face, theme,
+  const rec = makeBuilding(world, { ...r, floors, pitch: Math.max(cfg.pitch, 6), groundY: G, style: 'mid', facing: face, theme,
     roofAccess: false, useStairs: cfg.useStairs, stairStyle: 'switchback', lights: cfg.lights, setback: false, setbackEvery: 99 }, rng);
   if (!rec) return null;
+  rec.schoolHall = true;   // the stair core sits against the back wall, out of the hall                             // furnished as a hall, not divided into rooms
   const [dx, dz] = rec.doorCells[0];
   // the door's a (across) position
   let doorA = 0;

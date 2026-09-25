@@ -391,6 +391,64 @@ export function furnish(world, rec, rng, opts = {}) {
     }
   };
 
+  // A school is one hall, not a warren of rooms: desks in rows down the
+  // floor, facing a chalkboard across the front wall, the way a church faces
+  // its altar. The upper floor is a gallery over the same hall.
+  const schoolHall = (sy, k, allDoors, rows = 99) => {
+    const r0 = rec.rects[k];
+    const face = rec.facing, [ox, oz] = OUTWARD[face];
+    const alongX = oz !== 0;                          // the front wall runs along x
+    const inner = { x0: r0.x0 + 1, z0: r0.z0 + 1, x1: r0.x1 - 1, z1: r0.z1 - 1 };
+    // the chalkboard: dark blocks across the wall opposite the door, at eye level
+    const wallC = alongX ? (oz > 0 ? r0.z0 : r0.z1) : (ox > 0 ? r0.x0 : r0.x1);
+    const lo = alongX ? inner.x0 : inner.z0, hi = alongX ? inner.x1 : inner.z1;
+    const mid = Math.floor((lo + hi) / 2);
+    const board = [];
+    for (let u = mid - 2; u <= mid + 2; u++) {
+      if (u < lo || u > hi) continue;
+      for (let y = sy + 2; y <= sy + 3; y++) {
+        const [bx, bz] = alongX ? [u, wallC] : [wallC, u];
+        if (!world.has(bx, y, bz)) continue;                  // only onto a real wall
+        if (allDoors && allDoors.has(bx + ',' + bz)) continue;
+        world.set(bx, y, bz, MAT.DEEPSLATE);
+        board.push([bx, y, bz]);
+      }
+    }
+    // a lectern in front of the board, facing the desks
+    const inward = alongX ? [0, oz > 0 ? 1 : -1] : [ox > 0 ? 1 : -1, 0];
+    {
+      const [lx, lz] = alongX ? [mid, wallC + inward[1]] : [wallC + inward[0], mid];
+      if (!world.has(lx, sy + 1, lz)) world.set(lx, sy + 1, lz, lecternId(face));
+    }
+    // the way to the stairs and the doors stays clear of furniture
+    const core = rec.core;
+    const blocked = (x, z) => {
+      if (core && x >= core.x0 - 1 && x <= core.x1 + 1 && z >= core.z0 - 1 && z <= core.z1 + 1) return true;
+      return (rec.doorCells || []).some(([cx, cz]) => Math.abs(cx - x) + Math.abs(cz - z) <= 2);
+    };
+    // rows of desks, each with a seat behind it, all facing the board
+    // a stair's facing is the way its back looks, so a pupil facing the board
+    // sits with the stair turned away from it
+    const seatDir = alongX ? (oz > 0 ? WEIRDO.south : WEIRDO.north) : (ox > 0 ? WEIRDO.east : WEIRDO.west);
+    let desks = 0;
+    const depthFrom = alongX ? inner.z0 : inner.x0, depthTo = alongX ? inner.z1 : inner.x1;
+    const step = inward[0] + inward[1] > 0 ? 1 : -1;
+    const start = step > 0 ? depthFrom + 2 : depthTo - 2;
+    let row = 0;
+    for (let d = start; d >= depthFrom && d <= depthTo && row < rows; d += step * 3, row++) {
+      for (let u = lo + 1; u <= hi - 1; u += 2) {
+        const [dx2, dz2] = alongX ? [u, d] : [d, u];
+        if (world.has(dx2, sy + 1, dz2) || blocked(dx2, dz2)) continue;
+        const [sx2, sz2] = alongX ? [u, d + step] : [d + step, u];
+        if (blocked(sx2, sz2)) continue;
+        world.set(dx2, sy + 1, dz2, MAT.DESK);
+        if (!world.has(sx2, sy + 1, sz2)) world.set(sx2, sy + 1, sz2, stairId(rec.theme.stair, seatDir));
+        desks++;
+      }
+    }
+    return { board: board.length, desks };
+  };
+
   // A shop at street level: a glass front between the piers, an awning over
   // the pavement, a counter inside, and a sign on the pier with its name.
   const SHOPS = ['Bakery', 'Butcher', 'Grocer', 'Florist', 'Tailor', 'Bookshop', 'Apothecary', 'Cobbler',
@@ -438,6 +496,43 @@ export function furnish(world, rec, rng, opts = {}) {
       break;
     }
   };
+
+  // a school is furnished as one hall per floor
+  if (rec.schoolHall) {
+    const halls = [];
+    for (let k = 0; k < rec.floors; k++) halls.push(schoolHall(rec.floorYs[k], k, null));
+    let v0 = verifyBuilding(world, rec);
+    if (!v0.ok) {                                     // clear the desks rather than shut a floor off
+      for (let k = 0; k < rec.floors; k++) {
+        const r0 = rec.rects[k], sy = rec.floorYs[k];
+        for (let x = r0.x0 + 1; x <= r0.x1 - 1; x++)
+          for (let z = r0.z0 + 1; z <= r0.z1 - 1; z++) {
+            const id = world.get(x, sy + 1, z);
+            if (id < 0) continue;
+            const n = MATERIALS.def(id).block;
+            if (/slab|stairs/.test(n)) world.clear(x, sy + 1, z);    // the lectern stays: it blocks nothing
+          }
+      }
+      v0 = verifyBuilding(world, rec);
+      // put back what a small hall can take: one row of desks by the board
+      if (v0.ok) for (let k = 0; k < rec.floors; k++) {
+        const again = schoolHall(rec.floorYs[k], k, null, 1);
+        halls[k] = again;
+        if (!verifyBuilding(world, rec).ok) {                        // still in the way: leave it open
+          const r0 = rec.rects[k], sy = rec.floorYs[k];
+          for (let x = r0.x0 + 1; x <= r0.x1 - 1; x++)
+            for (let z = r0.z0 + 1; z <= r0.z1 - 1; z++) {
+              const id = world.get(x, sy + 1, z);
+              if (id >= 0 && /slab|stairs/.test(MATERIALS.def(id).block)) world.clear(x, sy + 1, z);
+            }
+          halls[k] = { board: again.board, desks: 0 };
+        }
+      }
+      v0 = verifyBuilding(world, rec);
+    }
+    return { ok: v0.ok, beds: [], placed: 0, stations: rec.floors, plants: 0, shelves: 0, rooms: 0,
+      desks: halls.reduce((a, h) => a + h.desks, 0), shops: [], paintings: [], halls };
+  }
 
   for (let k = 0; k < rec.floors; k++) {
     const r = rec.rects[k];

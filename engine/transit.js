@@ -34,6 +34,7 @@ export const TRANSIT_MODES = ['roads', 'rails', 'trams'];
 const RAMP = 4;           // blocks of climb
 const CLEAR_GAP = 10;     // crossings closer than this share one bridge
 const BOOST_EVERY = 16;
+const BOOST_MIN = 6;              // no closer together than this, even at bends
 
 export function layTransit(world, plan, mode, G) {
   if (mode !== 'rails' && mode !== 'trams') return null;
@@ -246,8 +247,11 @@ export function layTransit(world, plan, mode, G) {
         stats.rails++;
         sinceBoost++;
       } else {
-        // boosters two blocks either side of every curve, and at least every 16 blocks
-        const boost = toCurve[i] === 2 || sinceBoost >= BOOST_EVERY;
+        // A cart leaves a curve slowly, so a booster goes just after one —
+        // but an organic outline bends every few blocks, and a booster at
+        // every bend puts five of them in a row doing nothing. So they are
+        // kept at least BOOST_MIN apart, and never further than BOOST_EVERY.
+        const boost = (toCurve[i] === 2 && sinceBoost >= BOOST_MIN) || sinceBoost >= BOOST_EVERY;
         flatRail(x, z, dirs[i], boost);
         sinceBoost = boost ? 0 : sinceBoost + 1;
       }
