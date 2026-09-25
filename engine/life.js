@@ -406,10 +406,29 @@ export function furnish(world, rec, rng, opts = {}) {
   const schoolHall = (sy, k, allDoors, rows = 99) => {
     const r0 = rec.rects[k];
     const face = rec.facing, [ox, oz] = OUTWARD[face];
-    const alongX = oz !== 0;                          // the front wall runs along x
     const inner = { x0: r0.x0 + 1, z0: r0.z0 + 1, x1: r0.x1 - 1, z1: r0.z1 - 1 };
-    // the chalkboard: dark blocks across the wall opposite the door, at eye level
-    const wallC = alongX ? (oz > 0 ? r0.z0 : r0.z1) : (ox > 0 ? r0.x0 : r0.x1);
+    // The board goes on a side wall, not the wall facing the door: the stairs
+    // stand against that one, and a flight across the board would hide it.
+    // Of the two sides, the one clear of the staircase takes it, and the
+    // class is turned a quarter to face it.
+    const core = rec.core;
+    const sideRuns = (wall) => {
+      let free = 0;
+      const [from, to] = oz !== 0 ? [inner.z0, inner.z1] : [inner.x0, inner.x1];
+      for (let u = from; u <= to; u++) {
+        const [x, z] = oz !== 0 ? [wall, u] : [u, wall];
+        if (!world.has(x, sy + 2, z)) continue;
+        if (core && x >= core.x0 - 1 && x <= core.x1 + 1 && z >= core.z0 - 1 && z <= core.z1 + 1) continue;
+        free++;
+      }
+      return free;
+    };
+    // the two walls at right angles to the front
+    const sides = oz !== 0 ? [r0.x0, r0.x1] : [r0.z0, r0.z1];
+    const wallC = sideRuns(sides[0]) >= sideRuns(sides[1]) ? sides[0] : sides[1];
+    // the board's wall runs along z when the front runs along x, so the rows
+    // of desks now run the other way
+    const alongX = oz === 0;
     const lo = alongX ? inner.x0 : inner.z0, hi = alongX ? inner.x1 : inner.z1;
     const mid = Math.floor((lo + hi) / 2);
     const board = [];
@@ -424,13 +443,14 @@ export function furnish(world, rec, rng, opts = {}) {
       }
     }
     // a lectern in front of the board, facing the desks
-    const inward = alongX ? [0, oz > 0 ? 1 : -1] : [ox > 0 ? 1 : -1, 0];
+    const inward = alongX
+      ? [0, wallC === r0.z0 ? 1 : -1]
+      : [wallC === r0.x0 ? 1 : -1, 0];
     {
       const [lx, lz] = alongX ? [mid, wallC + inward[1]] : [wallC + inward[0], mid];
       if (!world.has(lx, sy + 1, lz)) world.set(lx, sy + 1, lz, lecternId(face));
     }
     // the way to the stairs and the doors stays clear of furniture
-    const core = rec.core;
     const blocked = (x, z) => {
       if (core && x >= core.x0 - 1 && x <= core.x1 + 1 && z >= core.z0 - 1 && z <= core.z1 + 1) return true;
       return (rec.doorCells || []).some(([cx, cz]) => Math.abs(cx - x) + Math.abs(cz - z) <= 2);
@@ -438,7 +458,9 @@ export function furnish(world, rec, rng, opts = {}) {
     // rows of desks, each with a seat behind it, all facing the board
     // a stair's facing is the way its back looks, so a pupil facing the board
     // sits with the stair turned away from it
-    const seatDir = alongX ? (oz > 0 ? WEIRDO.south : WEIRDO.north) : (ox > 0 ? WEIRDO.east : WEIRDO.west);
+    const seatDir = alongX
+      ? (inward[1] > 0 ? WEIRDO.south : WEIRDO.north)
+      : (inward[0] > 0 ? WEIRDO.east : WEIRDO.west);
     let desks = 0;
     const depthFrom = alongX ? inner.z0 : inner.x0, depthTo = alongX ? inner.z1 : inner.x1;
     const step = inward[0] + inward[1] > 0 ? 1 : -1;

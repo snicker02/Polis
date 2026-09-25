@@ -1,4 +1,4 @@
-# Polis v0.13.4
+# Polis v0.13.5
 
 *Created with help from Claude AI.*
 
@@ -483,9 +483,9 @@ water and the castle on the highest hill (the **Landmarks** checkbox turns them 
 - **Church** — a tall nave with stained-glass windows, pews facing the
   altar, and a bell tower rising over the entrance to a spire with a gold top.
 - **School** — two storeys set back behind a front yard, built like a chapel:
-  one open hall to a floor with a chalkboard across the wall opposite the
-  door, a lectern in front of it and desks in rows facing it, the staircase
-  tucked against the back wall out of the hall. A covered porch over the
+  one open hall to a floor with a chalkboard down one side wall, a lectern in
+  front of it and desks in rows facing it, the staircase against the wall
+  opposite the door. A covered porch over the
   entrance, a bell cupola, a flagpole, and — on a lot deep enough — a fenced sports
   field behind with a gate, white lines and two goals. Inside, classrooms with
   a lectern and rows of desks and chairs facing it, aisles left clear. It
@@ -708,6 +708,14 @@ inside WebGL1's limits.
 
 ## Changelog
 
+**0.13.5** — The school's chalkboard has moved to a side wall, and the desks
+have turned a quarter to face it. The staircase stands against the wall
+opposite the door, so a board there was simply hidden behind a flight of
+stairs; of the two side walls the one clear of the staircase now takes it.
+Moving the board rather than the stairs leaves every other building alone —
+and it fixed a school whose upper floor could not be reached, since the board
+is no longer competing with the stairwell for the same wall.
+
 **0.13.4** — Schools on ground-fitted sites had lost their sports fields: the
 field wanted 23 blocks of lot depth and a fitted lot is usually 22, so every
 fitted city quietly dropped it. A shorter field and a slightly shallower hall
@@ -718,11 +726,8 @@ they will breed. A test town went from 6 composters to 11, a village to 22.
 Beds were never the problem: a 224-block city has 349 of them for 60
 villagers.
 
-Still to do: the school's chalkboard sits behind the staircase, because the
-stair core is placed against the wall opposite the door — the same wall the
-board wants. Three ways round it were tried and each broke stairs elsewhere in
-the city, so the core placement needs reworking properly rather than patching.
-The upper floor should open over the hall as a gallery, too.
+Still to do: the school's upper floor should open over the hall as a gallery,
+so the class upstairs can see the board too.
 
 **0.13.3** — Cities fitted to real ground often had no curved rails at all,
 and this turns out to be old rather than new: the loop is traced round a ring
