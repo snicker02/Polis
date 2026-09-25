@@ -1,4 +1,4 @@
-# Polis v0.13.1
+# Polis v0.13.2
 
 *Created with help from Claude AI.*
 
@@ -707,6 +707,15 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.13.2** — Outlying districts were left almost without track. Restoring the
+loop in 0.13.1 measured "how far in from the edge" across the main district
+only, and the ordinary lines use that same measure to decide where they may
+run — so outside the main district it read as zero and no line could be laid.
+There are now two measures: the whole city's, which the lines use, and the
+main district's, which the loop is traced on. On the split test site the
+outlying district went from 25 rails to 93, with the loop and its 38 curves
+intact. The validator checks that every district of any size gets track.
 
 **0.13.1** — A city split into districts lost its railway loop, and with it
 every curved rail: the loop is traced round the city's edge, and keeping the

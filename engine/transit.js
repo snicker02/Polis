@@ -96,16 +96,23 @@ export function layTransit(world, plan, mode, G) {
   // bridge instead of being ringed as well.
   const main = plan.districts && plan.districts.length > 1 ? plan.districts[0] : null;
   const inMain = (x, z) => !main || main.has(z * W + x);
-  const O = edgeDistance(plan, main ? (x, z) => inMain(x, z) : null);
+  // Two measures of "how far in from the edge": one for the whole city, which
+  // decides where the ordinary lines may run, and one for the main district
+  // alone, which the loop is traced on. Using the main-district one for both
+  // leaves the outlying districts with no lines at all.
+  const O = edgeDistance(plan);
+  const Oloop = main ? edgeDistance(plan, (x, z) => inMain(x, z)) : O;
   let loop = null;
   for (const k of [3, 2]) {
     const ring = [];
-    for (let z = 0; z < D; z++) for (let x = 0; x < W; x++) if (O[z * W + x] === k && inMain(x, z)) ring.push([x, z]);
+    for (let z = 0; z < D; z++) for (let x = 0; x < W; x++) if (Oloop[z * W + x] === k && inMain(x, z)) ring.push([x, z]);
     const cyc = traceCycle(ring, (x, z) => road(x, z) && inMain(x, z));
     if (cyc) { loop = { k, cells: cyc }; break; }
   }
   const minO = loop ? loop.k + 2 : 2;
-  const inner = (x, z) => road(x, z) && O[z * W + x] >= minO;
+  // an outlying district has no loop round it, so its lines only have to stay
+  // off its own edge
+  const inner = (x, z) => road(x, z) && (inMain(x, z) ? Oloop[z * W + x] >= minO : O[z * W + x] >= 2);
   xRuns = pick(rows, W, (z, x) => inner(x, z));
   zRuns = pick(cols, D, (x, z) => inner(x, z));
 

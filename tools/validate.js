@@ -2015,6 +2015,29 @@ section('2z. bridges');
     }
     check('bridges: a city in pieces still has its loop, with curves', split === 0 || (looped === split && curved === split),
       `${split} split cities · ${looped} with a loop · ${curved} with curved rails`);
+    // and the outlying districts get track of their own, not just the main one
+    {
+      let bare = 0, checked = 0;
+      for (const s2 of findSites(chunks, 192, { step: 64 }).slice(0, 6)) {
+        const site = siteGround(chunks, s2.x, s2.z, 192);
+        const r2 = generateCity({ ...DEFAULTS, size: 192, seed: 7, terrain: site, transit: 'rails' });
+        const ds = r2.plan.districts || [];
+        if (ds.length < 2) continue;
+        const per = ds.map(() => 0);
+        r2.world.forEach((x, y, z, id) => {
+          if (!/rail/.test(MATERIALS.def(id).block)) return;
+          const i = z * 192 + x;
+          ds.forEach((d, k) => { if (d.has(i)) per[k]++; });
+        });
+        ds.forEach((d, k) => {
+          if (d.size < 400) return;                    // too small to expect a line
+          checked++;
+          if (per[k] < 20) bare++;
+        });
+      }
+      check('bridges: every district of any size gets track, not just the main one', bare === 0,
+        `${bare} of ${checked} districts without track`);
+    }
   }
   check('bridges: they are worth building (the districts they save carry buildings)', buildingsGained > 0,
     `${buildingsGained} more buildings than without them`);
