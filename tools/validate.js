@@ -1961,6 +1961,46 @@ section('2s. front end');
 }
 
 // ===========================================================================
+// 2z. bridges between districts
+// ===========================================================================
+section('2z. bridges');
+{
+  const { siteGround, findSites } = await import('../engine/worldfile.js');
+  const raw = JSON.parse(readFileSync(new URL('./test-terrain.json', import.meta.url), 'utf8'));
+  const chunks = new Map(Object.entries(raw).map(([k, v]) => [k, Int16Array.from(v)]));
+  // a fragmented site: the outline keeps the outlying districts and joins them
+  let withBridges = 0, spans = 0, unreachable = 0, deckWalkable = 0, decks = 0, buildingsGained = 0;
+  for (const s of findSites(chunks, 192, { step: 64 }).slice(0, 6)) {
+    const site = siteGround(chunks, s.x, s.z, 192);
+    const off = generateCity({ ...DEFAULTS, size: 192, seed: 7, terrain: site, transit: 'rails', bridges: false });
+    const on = generateCity({ ...DEFAULTS, size: 192, seed: 7, terrain: site, transit: 'rails' });
+    if (!on.bridges || !on.bridges.length) continue;
+    withBridges++;
+    spans += on.bridges.length;
+    buildingsGained += on.buildings.length - off.buildings.length;
+    unreachable += on.reach.unreached.length;
+    // you can walk the deck from end to end
+    const walked = walkCity(on.world, on.plan, 1, (on.hills.H || 0) + 6, false);
+    for (const b of on.bridges) {
+      decks++;
+      let ok = 0;
+      for (let k = 0; k < b.length; k++) {
+        const x = b.axis === 'x' ? b.from[0] + b.dir * k : b.from[0];
+        const z = b.axis === 'x' ? b.from[1] : b.from[1] + b.dir * k;
+        if (walked.has(x + ',' + (b.deckY + 1) + ',' + z)) ok++;
+      }
+      if (ok > b.length * 0.9) deckWalkable++;
+    }
+  }
+  check('bridges: a split site gets viaducts joining its districts', withBridges > 0, `${withBridges} cities, ${spans} bridges`);
+  check('bridges: you can walk from one end to the other', decks > 0 && deckWalkable === decks, `${deckWalkable}/${decks}`);
+  check('bridges: every door is still reachable once they are built', unreachable === 0, `${unreachable} cut off`);
+  check('bridges: they are worth building (the districts they save carry buildings)', buildingsGained > 0,
+    `${buildingsGained} more buildings than without them`);
+  note(`${spans} bridges across ${withBridges} cities, ${buildingsGained} buildings saved`);
+}
+
+// ===========================================================================
 // 2y. reading Bedrock blocks
 // ===========================================================================
 section('2y. Bedrock blocks');

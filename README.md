@@ -1,4 +1,4 @@
-# Polis v0.12.0
+# Polis v0.13.0
 
 *Created with help from Claude AI.*
 
@@ -453,6 +453,18 @@ run `/function <city>:build`.
 
 Java worlds can now be read for terrain fitting too, so both editions have it.
 
+## Bridges between districts
+
+On real ground a city rarely comes out as one lump: a river, a bluff or a
+patch of unexplored land splits it. The outline used to keep only the piece
+holding downtown and throw the rest away — on one test site that left a single
+building out of fifty. Now the outlying districts are kept and joined by a
+**viaduct**: a straight deck on piers every four blocks, as wide as the street
+it carries, with parapets, a lamp every eight blocks, steps down where it
+meets a lower street, and track along it where the city has a railway. The
+perimeter wall does not follow a bridge — both ends are inside walled ground
+already. The **Bridges between districts** checkbox turns them off.
+
 ## Landmarks
 
 Each city builds up to eight one-off landmarks — the civic ones on the lots
@@ -695,6 +707,15 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.13.0** — Long bridges join the parts of a city that the ground splits up.
+Districts the outline cannot reach are kept rather than discarded, and each is
+given a viaduct to the main one: deck, piers, parapets, lamps, steps at a
+lower end, and rails where the city has a railway. On a split test site that
+is the difference between 1 building and 49. Building them turned up three
+places where a doorway could be walled in — by a bridge ramp, by the hillside
+grading, and by the pavement settling a block proud of a lot — all of which
+are now cleared.
 
 **0.12.0** — The school is a hall, not a warren: two storeys, each an open
 floor with a chalkboard across the wall facing the door, a lectern in front of

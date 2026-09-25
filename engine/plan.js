@@ -191,13 +191,13 @@ export function generatePlan(cfg, rng) {
   }
 
   // ---- 5. organic outline ----------------------------------------------------
-  let keptBlocks = cityBlocks, keptLots = lots;
-  if (cfg.terrain) ({ keptBlocks, keptLots } = terrainOutline(W, D, use, roadWidthAt, cityBlocks, lots, cfg, [fx, fz]));
-  else if (cfg.outline === 'organic') ({ keptBlocks, keptLots } = organicOutline(W, D, use, roadWidthAt, cityBlocks, lots, cfg, [fx, fz]));
+  let keptBlocks = cityBlocks, keptLots = lots, districts = [];
+  if (cfg.terrain) ({ keptBlocks, keptLots, districts } = terrainOutline(W, D, use, roadWidthAt, cityBlocks, lots, cfg, [fx, fz]));
+  else if (cfg.outline === 'organic') ({ keptBlocks, keptLots, districts } = organicOutline(W, D, use, roadWidthAt, cityBlocks, lots, cfg, [fx, fz]));
   const mask = new Uint8Array(W * D);
   for (let i = 0; i < W * D; i++) mask[i] = use[i] !== USE.EMPTY ? 1 : 0;
 
-  return { W, D, use, roadAxis, roadWidthAt, corridors, cityBlocks: keptBlocks, lots: keptLots, zoneAt, focal: [fx, fz], mask };
+  return { W, D, use, roadAxis, roadWidthAt, corridors, cityBlocks: keptBlocks, lots: keptLots, zoneAt, focal: [fx, fz], mask, districts };
 }
 
 // On real ground the outline is decided by the land: a block is kept if
@@ -233,7 +233,7 @@ function terrainOutline(W, D, use, roadWidthAt, blocks, lots, cfg, focal) {
     // real pond in it is left to the water rather than filled in
     return all > 0 && ok / all >= (cfg.terrainCover || 0.75) && wet / all <= (cfg.terrainWater ?? 0.1);
   });
-  return finishOutline(W, D, use, roadWidthAt, blocks, lots, keep, focal);
+  return finishOutline(W, D, use, roadWidthAt, blocks, lots, keep, focal, cfg);
 }
 
 // The city keeps only the blocks inside a lobed shape and the streets that
@@ -253,12 +253,12 @@ function organicOutline(W, D, use, roadWidthAt, blocks, lots, cfg, focal) {
     return Math.hypot(dx, dz) < radius(Math.atan2(dz, dx));
   };
   let keep = blocks.map((b) => inside((b.x0 + b.x1) / 2, (b.z0 + b.z1) / 2));
-  return finishOutline(W, D, use, roadWidthAt, blocks, lots, keep, focal);
+  return finishOutline(W, D, use, roadWidthAt, blocks, lots, keep, focal, cfg);
 }
 
 // Shared tidy-up for any outline: keep the focal block, fill holes, drop
 // islands, then clear everything that is not city and trim the streets back.
-function finishOutline(W, D, use, roadWidthAt, blocks, lots, keep, focal) {
+function finishOutline(W, D, use, roadWidthAt, blocks, lots, keep, focal, cfg) {
   const at = (x, z) => z * W + x;
   const blockOf = new Int32Array(W * D).fill(-1);
   blocks.forEach((b, i) => { for (let z = b.z0; z <= b.z1; z++) for (let x = b.x0; x <= b.x1; x++) blockOf[at(x, z)] = i; });
@@ -327,7 +327,38 @@ function finishOutline(W, D, use, roadWidthAt, blocks, lots, keep, focal) {
         }
       }
     }
-    blocks.forEach((b, i) => { if (keep[i] && !comp[i]) { keep[i] = false; changed = true; } });
+    // A district cut off from downtown is dropped — unless bridges are on,
+    // in which case one big enough to be worth reaching is kept and joined by
+    // a viaduct later.
+    const minIsland = cfg && cfg.bridges ? Math.max(2, cfg.bridgeMinBlocks | 0 || 3) : Infinity;
+    if (minIsland === Infinity) {
+      blocks.forEach((b, i) => { if (keep[i] && !comp[i]) { keep[i] = false; changed = true; } });
+    } else {
+      // group the cut-off blocks and keep the substantial groups
+      const island = new Int32Array(blocks.length).fill(-1);
+      let groups = 0;
+      const near = (a, b2) => !(a.x1 + 12 < b2.x0 || b2.x1 + 12 < a.x0 || a.z1 + 12 < b2.z0 || b2.z1 + 12 < a.z0);
+      blocks.forEach((b, i) => {
+        if (!keep[i] || comp[i] || island[i] >= 0) return;
+        const g = groups++;
+        const stack = [i];
+        island[i] = g;
+        while (stack.length) {
+          const cur = stack.pop();
+          blocks.forEach((b2, j) => {
+            if (!keep[j] || comp[j] || island[j] >= 0) return;
+            if (!near(blocks[cur], b2)) return;
+            island[j] = g; stack.push(j);
+          });
+        }
+      });
+      const size = new Int32Array(groups);
+      blocks.forEach((b, i) => { if (island[i] >= 0) size[island[i]]++; });
+      blocks.forEach((b, i) => {
+        if (!keep[i] || comp[i]) return;
+        if (size[island[i]] < minIsland) { keep[i] = false; changed = true; }
+      });
+    }
     if (!changed) break;
   }
 
@@ -337,6 +368,34 @@ function finishOutline(W, D, use, roadWidthAt, blocks, lots, keep, focal) {
     const kb = blockOf[i] >= 0 ? keep[blockOf[i]] : (use[i] === 1 && dist[i] <= Math.max(1, roadWidthAt[i]));
     if (!kb) use[i] = 0;                    // EMPTY: natural ground, nothing placed
   }
+  // the districts, as sets of city cells, so bridges can join them: the one
+  // holding downtown first
+  const districts = [];
+  {
+    const seen = new Uint8Array(W * D);
+    const cityCell = (i) => (blockOf[i] >= 0 ? keep[blockOf[i]] : use[i] === USE.ROAD);
+    for (let i = 0; i < W * D; i++) {
+      if (seen[i] || !cityCell(i)) continue;
+      const set = new Set();
+      const q = [i]; seen[i] = 1;
+      for (let h = 0; h < q.length; h++) {
+        const j = q[h];
+        set.add(j);
+        const x = j % W, z = (j - x) / W;
+        for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const nx = x + dx, nz = z + dz;
+          if (nx < 0 || nz < 0 || nx >= W || nz >= D) continue;
+          const k = nz * W + nx;
+          if (seen[k] || !cityCell(k)) continue;
+          seen[k] = 1; q.push(k);
+        }
+      }
+      districts.push(set);
+    }
+    const focalCell = at(Math.max(0, Math.min(W - 1, Math.round(focal[0]))), Math.max(0, Math.min(D - 1, Math.round(focal[1]))));
+    districts.sort((a, b) => (b.has(focalCell) ? 1 : 0) - (a.has(focalCell) ? 1 : 0) || b.size - a.size);
+  }
+
   // a road cell only stays if it is within its own street's width of a kept block
   // (so a street bordering the city is kept whole, one beyond it is not)
   const keptBlocks = blocks.filter((b, i) => keep[i]);
@@ -344,7 +403,7 @@ function finishOutline(W, D, use, roadWidthAt, blocks, lots, keep, focal) {
     const i = blockOf[at(Math.round((l.x0 + l.x1) / 2), Math.round((l.z0 + l.z1) / 2))];
     return i >= 0 && keep[i];
   });
-  return { keptBlocks, keptLots };
+  return { keptBlocks, keptLots, districts };
 }
 
 // Which side of a lot faces public space? Returns {side, score}.

@@ -15,7 +15,7 @@ import { makeZip } from './engine/blockcore.js';
 import { decodeNbt } from './tools/nbt-read.js';
 import { THEMES } from './engine/materials.js';
 
-const VERSION = '0.12.0';
+const VERSION = '0.13.0';
 const $ = (id) => document.getElementById(id);
 const numVal = (id) => Number($(id).value);      // readCfg has its own local num()
 
@@ -25,7 +25,7 @@ const SLIDERS = {
   maxFloors: 0, pitch: 0, setbackEvery: 0, bw: 0, bd: 0, floors: 0, clip: 0,
   farmChance: 2, pondChance: 2, villagers: 0, wallHeight: 0, foundation: 0, clearAbove: 0, hills: 0, golemsPer10: 0,
 };
-const CHECKS = ['setback', 'roofAccess', 'useStairs', 'lights', 'lamps', 'trees', 'markings', 'landmarks', 'canal', 'harbour', 'detail', 'streetSigns'];
+const CHECKS = ['setback', 'roofAccess', 'useStairs', 'lights', 'lamps', 'trees', 'markings', 'landmarks', 'canal', 'harbour', 'bridges', 'detail', 'streetSigns'];
 
 let renderer = null;
 let result = null;       // { world, plan, buildings, cfg, stats }
@@ -367,6 +367,7 @@ function showStats(mesh, times) {
     if (s.centre) line('centre monument', s.centre);
     if (s.canal) line('canal', s.canal + (s.dock ? ' · dock' : ''));
     if (s.harbour) line('harbour', s.harbour);
+    if (s.bridges) line('bridges', s.bridges);
     if (s.art) line('art panels', String(s.art));
     if (s.paintings) line('paintings', String(s.paintings));
     if (s.ranches !== undefined) line('pens / farm animals', `${s.ranches} / ${s.animals}`);

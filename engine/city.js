@@ -10,6 +10,7 @@ import { farm, pond, scatterFlowers, furnish, bedSpawns, placeBell, golemSpawns,
 import { layTransit, trimOverRails, edgeDistance } from './transit.js';
 import { planCanal, buildCanal, USE_CANAL } from './water.js';
 import { planHarbour, buildHarbour, harbourSidings } from './harbour.js';
+import { planBridges, buildBridges, bridgeRails } from './bridges.js';
 import { chooseLandmarks, buildLandmark } from './landmarks.js';
 import { planHills, liftBlocks, cutStairs, shiftBuilding, walkCity } from './terrain.js';
 import { styleOf, remapTable } from './styles.js';
@@ -52,6 +53,8 @@ export const DEFAULTS = {
   streetSigns: true,         // street names on signs at the junctions
   centreMark: true,          // a gold block and sign marking where build_centered puts you
   canal: true,
+  bridges: true,             // join outlying districts to the city with viaducts
+  bridgeMinBlocks: 3,        // a district smaller than this is not worth a bridge
   harbour: true,             // a working waterfront on the canal: basin, quay, cranes, warehouses, goods yard               // a canal through the city, with bridges and a dock
   landmarks: true,
   landmarkShare: 0.16,       // at most this share of the city's lots become landmarks           // town hall, clock tower, library, market square near downtown
@@ -82,10 +85,12 @@ let STYLE = styleOf('modern');
 
 let stats_terrain = null;
 let stats_unsupported = 0;
+let stats_freedDoors = 0;
 
 export function generateCity(cfgIn, onProgress) {
   stats_terrain = null;
   stats_unsupported = 0;
+  stats_freedDoors = 0;
   const cfg = { ...DEFAULTS, ...cfgIn };
   STYLE = styleOf(cfg.cityStyle);
   // a village is low by nature, so the style says so and the plan obeys; it
@@ -108,6 +113,8 @@ export function generateCity(cfgIn, onProgress) {
   // the canal takes over one long street before anything is laid on it
   const canal = planCanal(plan, cfg, edgeDistance(plan));
   const harbourPlan = planHarbour(plan, canal, cfg);
+  // districts the outline kept but could not join up: give them viaducts
+  const bridgeSpans = planBridges(plan, cfg, plan.districts || []);
   const at = (x, z) => z * W + x;
 
   // ---- base + surface ------------------------------------------------------
@@ -427,15 +434,45 @@ export function generateCity(cfgIn, onProgress) {
   // ---- city style: restyle the role materials, then snow -----------------------
   applyStyle(world, plan, STYLE, (x, z) => GROUND + elevAt(x, z));
 
+  // ---- the bridges between districts -----------------------------------------
+  const bridges = bridgeSpans.length ? buildBridges(world, plan, bridgeSpans, hills, GROUND, cfg.terrain, buildings) : [];
+  if (bridges.length && transit && cfg.transit !== 'roads') bridgeRails(world, bridges, transit, GROUND);
+
   // ---- blending the edge into the land ---------------------------------------
-  const skirt = cfg.terrain && hills.rolling ? buildSkirt(world, plan, hills, cfg.terrain, GROUND) : 0;
+  const skirt = cfg.terrain && hills.rolling ? buildSkirt(world, plan, hills, cfg.terrain, GROUND, buildings) : 0;
 
   // ---- facing the cuts into the hillside -------------------------------------
-  const cutFaces = cfg.terrain && hills.rolling ? faceCuts(world, plan, hills, cfg.terrain, GROUND) : 0;
+  const cutFaces = cfg.terrain && hills.rolling ? faceCuts(world, plan, hills, cfg.terrain, GROUND, buildings) : 0;
 
   // ---- the centre marker -----------------------------------------------------
   const centre = cfg.centreMark ? markCentre(world, plan, buildings, GROUND, elevAt, spawns) : null;
   if (centre) world.centre = [centre.block[0], centre.block[2]];   // the export centres on it
+
+  // A doorway opens onto the cell in front of it, and that cell's surface has
+  // to be at the door's own level. Settling the ground can leave the pavement
+  // a block proud of a lot, which walls the door in. Where that happened, the
+  // step is taken down.
+  {
+    let freed = 0;
+    for (const rec of buildings) {
+      for (const [dx, dz] of rec.doorCells || []) {
+        const [ox, oz] = rec.door.out;
+        const x = dx + ox, z = dz + oz, y = rec.door.y;
+        const id = world.get(x, y, z);
+        if (id < 0 || MATERIALS.isPassable(id)) continue;                 // already clear
+        if (plan.mask && !plan.mask[z * plan.W + x]) continue;
+        const below = world.get(x, y - 1, z);
+        world.clear(x, y, z);
+        if (below === -1) world.set(x, y - 1, z, id);                     // keep something to stand on
+        for (let h = 1; h <= 2; h++) {
+          const above = world.get(x, y + h, z);
+          if (above >= 0 && !MATERIALS.isPassable(above)) world.clear(x, y + h, z);
+        }
+        freed++;
+      }
+    }
+    stats_freedDoors = freed;
+  }
 
   // ---- can everything be reached from the streets? ---------------------------
   const reached = walkCity(world, plan, GROUND, hills.H + 4);
@@ -486,8 +523,8 @@ export function generateCity(cfgIn, onProgress) {
   }
 
   const shell = cfg.terrain ? terrainShell(plan, cfg.terrain, GROUND, cfg.cityStyle) : null;
-  const stats = summarise(world, plan, buildings, cfg, { farms, beds, spawns, bell, transit, wall, ranches, landmarks, hills, stairRuns, reach, canal, centre, streets, harbour, skirt, cutFaces, unsupported: stats_unsupported });
-  return { world, plan, buildings, cfg, stats, shell, farms, ranches, spawns, bell, transit, wall, landmarks, canal, centre, streets, harbour, harbourPlan,
+  const stats = summarise(world, plan, buildings, cfg, { farms, beds, spawns, bell, transit, wall, ranches, landmarks, hills, stairRuns, reach, canal, centre, streets, harbour, skirt, cutFaces, bridges, unsupported: stats_unsupported });
+  return { world, plan, buildings, cfg, stats, shell, bridges, farms, ranches, spawns, bell, transit, wall, landmarks, canal, centre, streets, harbour, harbourPlan,
     hills, stairRuns, reach, groundAt: (x, z) => GROUND + elevAt(x, z) };
 }
 
@@ -523,9 +560,14 @@ export function terrainShell(plan, terrain, G, style) {
 // each step topped with the surface the land already has, and a low retaining
 // wall at the city's edge holds the first step. Those cells go to the export,
 // which clears what stood above them.
-function faceCuts(world, plan, hills, terrain, G) {
+function faceCuts(world, plan, hills, terrain, G, buildings = []) {
   const { W, D, mask } = plan;
   const { elev } = hills;
+  // grading must not wall in a doorway: the buildings are already up
+  const doorways = new Set();
+  for (const rec of buildings)
+    for (const [dx, dz] of rec.doorCells || [])
+      for (let ox = -2; ox <= 2; ox++) for (let oz = -2; oz <= 2; oz++) doorways.add((dx + ox) + ',' + (dz + oz));
   const faced = new Set();
   const REACH = 14;                                        // how far the grading runs
   // start at the city's edge, wherever the land outside rises above it
@@ -543,6 +585,7 @@ function faceCuts(world, plan, hills, terrain, G) {
         const land = G + (ground - terrain.baseY);
         const surface = G + elev[i];
         if (land < surface + 2) continue;                  // nothing to cut here
+        if (doorways.has(nx + ',' + nz)) continue;         // never in front of a door
         level[j] = surface + 1;                            // the first step up
         front.push(j);
       }
@@ -620,9 +663,14 @@ function faceCuts(world, plan, hills, terrain, G) {
 // wall around the town. This walks that difference down outside the city, a
 // block per cell, until it meets the real ground, and hands those cells to
 // the export so they are built along with the city.
-function buildSkirt(world, plan, hills, terrain, G) {
+function buildSkirt(world, plan, hills, terrain, G, buildings = []) {
   const { W, D, mask } = plan;
   const { elev } = hills;
+  // the skirt steps down outside the city, and must not bury a doorway
+  const doorways = new Set();
+  for (const rec of buildings)
+    for (const [dx, dz] of rec.doorCells || [])
+      for (let ox = -2; ox <= 2; ox++) for (let oz = -2; oz <= 2; oz++) doorways.add((dx + ox) + ',' + (dz + oz));
   const level = new Int16Array(W * D).fill(-999);
   let queue = [];
   for (let z = 0; z < D; z++)
@@ -648,6 +696,7 @@ function buildSkirt(world, plan, hills, terrain, G) {
       const lv = level[i];
       if (lv <= 0 || lv <= rel) continue;                        // already down to the land
       if (ground > -900 && ground <= 62) continue;               // never out over water
+      if (doorways.has(x + ',' + z)) continue;                   // nor in front of a door
       world.set(x, G + lv, z, MAT.GRASS);
       elev[i] = lv;                                              // the skirt's own height, on the record
       for (let y = Math.max(1, rel + 1); y < G + lv; y++) world.set(x, y, z, MAT.BASE);
@@ -1292,6 +1341,7 @@ function summarise(world, plan, buildings, cfg, life = {}) {
     paintings: (life.spawns || []).filter((p) => p.type === 'painting').length,
     propped: life.unsupported ? `${life.unsupported} blocks made safe (they would have fallen)` : '',
     cutFaces: life.cutFaces ? `${life.cutFaces} cells graded up into the hillside` : '',
+    bridges: life.bridges && life.bridges.length ? `${life.bridges.length} joining the districts (longest ${Math.max(...life.bridges.map((b) => b.length))} blocks)` : '',
     skirt: life.skirt ? `${life.skirt} cells stepping down to the land` : '',
     terrain: stats_terrain ? `fitted to the land · base y ${stats_terrain.baseY} · terraces to ${stats_terrain.maxTerrace}` : '',
     hillBlocks: life.hills ? life.hills.blocks.filter((b) => b.e > 0).length : 0,
