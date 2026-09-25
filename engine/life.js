@@ -446,9 +446,19 @@ export function furnish(world, rec, rng, opts = {}) {
     const inward = alongX
       ? [0, wallC === r0.z0 ? 1 : -1]
       : [wallC === r0.x0 ? 1 : -1, 0];
-    {
-      const [lx, lz] = alongX ? [mid, wallC + inward[1]] : [wallC + inward[0], mid];
-      if (!world.has(lx, sy + 1, lz)) world.set(lx, sy + 1, lz, lecternId(face));
+    // the spot straight out from the middle of the board may be taken by the
+    // stairs, so the lectern slides along until it finds a free one
+    for (let off = 0; off <= 4; off++) {
+      let placed = false;
+      for (const u of off === 0 ? [mid] : [mid - off, mid + off]) {
+        if (u < lo || u > hi) continue;
+        const [lx, lz] = alongX ? [u, wallC + inward[1]] : [wallC + inward[0], u];
+        if (world.has(lx, sy + 1, lz)) continue;
+        world.set(lx, sy + 1, lz, lecternId(face));
+        placed = true;
+        break;
+      }
+      if (placed) break;
     }
     // the way to the stairs and the doors stays clear of furniture
     const blocked = (x, z) => {

@@ -1,4 +1,4 @@
-# Polis v0.13.5
+# Polis v0.13.6
 
 *Created with help from Claude AI.*
 
@@ -708,6 +708,15 @@ inside WebGL1's limits.
 
 ## Changelog
 
+**0.13.6** — Schools are bigger and keep their field. The school now takes the
+deepest lot it can find, size breaking the tie, and the field is no longer the
+first thing sacrificed: the hall is given nine blocks of depth (the least that
+takes rows of desks with the board down one side) and the field has what is
+left, down to five. Nine of ten test schools now have a field where fitted
+cities had none at all, every one has desks, and each floor keeps its own
+board and lectern — the lectern slides along the board until it finds a spot
+the stairs have not taken.
+
 **0.13.5** — The school's chalkboard has moved to a side wall, and the desks
 have turned a quarter to face it. The staircase stands against the wall
 opposite the door, so a board there was simply hidden behind a flight of
@@ -726,8 +735,7 @@ they will breed. A test town went from 6 composters to 11, a village to 22.
 Beds were never the problem: a 224-block city has 349 of them for 60
 villagers.
 
-Still to do: the school's upper floor should open over the hall as a gallery,
-so the class upstairs can see the board too.
+
 
 **0.13.3** — Cities fitted to real ground often had no curved rails at all,
 and this turns out to be old rather than new: the loop is traced round a ring

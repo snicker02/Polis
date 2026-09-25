@@ -27,7 +27,7 @@ export const LANDMARKS = ['townhall', 'clocktower', 'library', 'market', 'church
   'townsquare', 'stadium', 'cemetery', 'allotments', 'bandstand'];
 const NEED = {                       // [shorter side, longer side] of the lot
   townhall: [13, 15], clocktower: [9, 9], library: [11, 12], market: [12, 12],
-  church: [13, 15], mansion: [15, 20], school: [16, 22], lighthouse: [9, 9], castle: [13, 13],
+  church: [13, 15], mansion: [15, 20], school: [17, 25], lighthouse: [9, 9], castle: [13, 13],
   townsquare: [13, 13], stadium: [17, 21], cemetery: [12, 14], allotments: [13, 13], bandstand: [9, 9],
 };
 
@@ -45,7 +45,15 @@ export function chooseLandmarks(plan, cfg, hills = null, canal = null) {
     .map((l) => ({ l, cx: (l.x0 + l.x1) / 2, cz: (l.z0 + l.z1) / 2,
       a: Math.min(l.x1 - l.x0 + 1, l.z1 - l.z0 + 1), b: Math.max(l.x1 - l.x0 + 1, l.z1 - l.z0 + 1) }))
     .map((c) => ({ ...c, d: Math.hypot(c.cx - fx, c.cz - fz) }));
+  // A school wants the biggest lot it can get — hall, yard and a field
+  // behind — but a small town may have nothing that size, and a town with no
+  // school is worse than a tight one, so it settles for less if it must.
+  const FALLBACK = { school: [14, 20] };
   const fits = (c, kind) => !c.l.landmark && c.a >= NEED[kind][0] && c.b >= NEED[kind][1];
+  const fitsLoose = (c, kind) => {
+    const n = FALLBACK[kind];
+    return n ? (!c.l.landmark && c.a >= n[0] && c.b >= n[1]) : fits(c, kind);
+  };
   const out = [];
   // A town should not be mostly landmarks: they take the big lots, and what
   // is left makes poorer buildings. The civic core always goes in; the rest
@@ -56,7 +64,7 @@ export function chooseLandmarks(plan, cfg, hills = null, canal = null) {
   const budget = Math.max(CORE.size, Math.round(all.length * (cfg.landmarkShare ?? 0.16)));
   const take = (kind, list) => {
     if (!CORE.has(kind) && out.length >= budget) return;
-    const pick = list.find((c) => fits(c, kind));
+    const pick = list.find((c) => fits(c, kind)) || list.find((c) => fitsLoose(c, kind));
     if (pick) { pick.l.landmark = kind; out.push(pick.l); }
   };
   const downtown = all.filter((c) => c.l.style !== 'house' && c.d <= reach).sort((p, q) => p.d - q.d);
@@ -69,9 +77,17 @@ export function chooseLandmarks(plan, cfg, hills = null, canal = null) {
   take('mansion', byArea);
   // prefer a lot that runs deep back from its street: room for a sports field behind
   const depthOf = (c) => { const side = frontage(plan, c.l).side; return side === 'north' || side === 'south' ? c.l.z1 - c.l.z0 + 1 : c.l.x1 - c.l.x0 + 1; };
+  // A school takes the biggest lot it can: deep enough for a field behind,
+  // and roomy rather than merely adequate, since a hall two storeys high with
+  // desks in rows wants the space. Distance from downtown only breaks ties.
   const halfway = all.slice().sort((p, q) => {
     const fp = depthOf(p) >= SCHOOL_FIELD_DEPTH ? 0 : 1, fq = depthOf(q) >= SCHOOL_FIELD_DEPTH ? 0 : 1;
-    return fp - fq || Math.abs(p.d - maxD * 0.5) - Math.abs(q.d - maxD * 0.5);
+    // depth first: it is depth that leaves room for a field behind the hall.
+    // Size breaks the tie, so of two deep lots the school takes the roomier.
+    return fp - fq
+      || depthOf(q) - depthOf(p)
+      || (q.a * q.b) - (p.a * p.b)
+      || Math.abs(p.d - maxD * 0.5) - Math.abs(q.d - maxD * 0.5);
   });
   take('school', halfway);
   if (!out.some((l) => l.landmark === 'school')) { const keep = NEED.school; NEED.school = [13, 14]; take('school', halfway); NEED.school = keep; }
@@ -403,7 +419,7 @@ function church(world, lot, face, cfg, rng, G) {
 // cupola, a flagpole, and (on a big enough lot) a fenced sports field behind.
 // Inside, classrooms with rows of desks facing the lectern (life.js).
 // lot depth (back from the street) that fits yard, building, path and field
-export const SCHOOL_FIELD_DEPTH = 5 + 8 + 1 + 6;   // yard, hall, path, field
+export const SCHOOL_FIELD_DEPTH = 4 + 9 + 1 + 5;   // yard, hall, path, field
 
 function school(world, lot, face, cfg, rng, G) {
   const LP = styleOf(cfg.cityStyle).landmark;
@@ -422,14 +438,17 @@ function school(world, lot, face, cfg, rng, G) {
     const [x0, z0] = at(d0, a0), [x1, z1] = at(d1, a1);
     return { x0: Math.min(x0, x1), x1: Math.max(x0, x1), z0: Math.min(z0, z1), z1: Math.max(z0, z1) };
   };
-  const front = 5;                                   // yard, flagpole and porch in front
+  const front = 4;                                   // yard, flagpole and porch in front
   const avail = lotDepth - front;
-  // a field (at least 8 deep) behind a building at least 9 deep, with a path between
+  // The field is reserved first and the hall takes what is left, so a school
+  // always has somewhere to play; only a lot too small for both loses it.
   let bDepth, fieldDepth = 0;
-  // a lot fitted to real ground is rarely deep enough for the old 9+1+8, and
-  // a school with nowhere to play is a poor school, so a shorter field fits
-  if (avail >= 8 + 1 + 6) {
-    bDepth = Math.max(8, Math.min(12, avail - 1 - 6));
+  // The hall comes first — nine deep is the least that takes rows of desks
+  // with the board down one side — and the field has whatever is left, down
+  // to six. Only a lot too small for both goes without.
+  const MIN_HALL = 9, MIN_FIELD = 5;   // a five-deep pitch is small but playable
+  if (avail >= MIN_HALL + 1 + MIN_FIELD) {
+    bDepth = Math.max(MIN_HALL, Math.min(12, avail - 1 - MIN_FIELD));
     fieldDepth = Math.min(14, avail - bDepth - 1);
   } else bDepth = Math.min(avail - 1, 14);
   if (bDepth < 7 || lotWidth < 9) return null;
