@@ -103,6 +103,15 @@ export function farm(world, lot, side, rng, G, plan) {
   else if (side === 'west') comp = [L.x0 + 1, L.z0 + 1];
   else comp = [L.x1 - 1, L.z0 + 1];
   world.set(comp[0], G + 1, comp[1], MAT.COMPOSTER);
+  // A composter is a farmer's workstation, and only farmers harvest crops and
+  // hand food to their neighbours — which is what villagers need before they
+  // will breed. One to a farm left almost no farmers in a town, so the spare
+  // corners take one too.
+  for (const [ex, ez] of [[L.x1 - 1, L.z0 + 1], [L.x0 + 1, L.z1 - 1], [L.x1 - 1, L.z1 - 1]]) {
+    if (ex === comp[0] && ez === comp[1]) continue;
+    if (world.has(ex, G + 1, ez)) continue;
+    world.set(ex, G + 1, ez, MAT.COMPOSTER);
+  }
   // hay bales stacked in the two inner corners on the far side
   const far = (side === 'north' || side === 'west')
     ? [[L.x1 - 1, L.z1 - 1], side === 'north' ? [L.x0 + 1, L.z1 - 1] : [L.x1 - 1, L.z0 + 1]]

@@ -1,4 +1,4 @@
-# Polis v0.13.3
+# Polis v0.13.4
 
 *Created with help from Claude AI.*
 
@@ -707,6 +707,22 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.13.4** — Schools on ground-fitted sites had lost their sports fields: the
+field wanted 23 blocks of lot depth and a fitted lot is usually 22, so every
+fitted city quietly dropped it. A shorter field and a slightly shallower hall
+now fit in 20. Farms also carry composters in their spare corners rather than
+one apiece — a composter is a farmer's workstation, and only farmers harvest
+crops and hand food to their neighbours, which is what villagers need before
+they will breed. A test town went from 6 composters to 11, a village to 22.
+Beds were never the problem: a 224-block city has 349 of them for 60
+villagers.
+
+Still to do: the school's chalkboard sits behind the staircase, because the
+stair core is placed against the wall opposite the door — the same wall the
+board wants. Three ways round it were tried and each broke stairs elsewhere in
+the city, so the core placement needs reworking properly rather than patching.
+The upper floor should open over the hall as a gallery, too.
 
 **0.13.3** — Cities fitted to real ground often had no curved rails at all,
 and this turns out to be old rather than new: the loop is traced round a ring

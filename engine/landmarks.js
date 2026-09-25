@@ -403,7 +403,7 @@ function church(world, lot, face, cfg, rng, G) {
 // cupola, a flagpole, and (on a big enough lot) a fenced sports field behind.
 // Inside, classrooms with rows of desks facing the lectern (life.js).
 // lot depth (back from the street) that fits yard, building, path and field
-export const SCHOOL_FIELD_DEPTH = 5 + 9 + 1 + 8;
+export const SCHOOL_FIELD_DEPTH = 5 + 8 + 1 + 6;   // yard, hall, path, field
 
 function school(world, lot, face, cfg, rng, G) {
   const LP = styleOf(cfg.cityStyle).landmark;
@@ -426,8 +426,10 @@ function school(world, lot, face, cfg, rng, G) {
   const avail = lotDepth - front;
   // a field (at least 8 deep) behind a building at least 9 deep, with a path between
   let bDepth, fieldDepth = 0;
-  if (avail >= 9 + 1 + 8) {
-    bDepth = Math.max(9, Math.min(12, avail - 1 - 8));
+  // a lot fitted to real ground is rarely deep enough for the old 9+1+8, and
+  // a school with nowhere to play is a poor school, so a shorter field fits
+  if (avail >= 8 + 1 + 6) {
+    bDepth = Math.max(8, Math.min(12, avail - 1 - 6));
     fieldDepth = Math.min(14, avail - bDepth - 1);
   } else bDepth = Math.min(avail - 1, 14);
   if (bDepth < 7 || lotWidth < 9) return null;
