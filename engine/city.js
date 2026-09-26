@@ -237,7 +237,7 @@ export function generateCity(cfgIn, onProgress) {
         for (const wing of L.wings || []) {
           buildings.push(wing);
           if (cfg.furnish) {
-            const fw = furnish(world, wing, lifeRng);
+            const fw = furnish(world, wing, lifeRng, { useStairs: cfg.useStairs });
             wing.beds = fw.beds; wing.furniture = fw;
             for (const b of fw.beds) beds.push(b);
           } else wing.beds = [];
@@ -245,7 +245,7 @@ export function generateCity(cfgIn, onProgress) {
         if (L.rec) {
           buildings.push(L.rec);
           if (cfg.furnish) {
-            const f = furnish(world, L.rec, lifeRng);
+            const f = furnish(world, L.rec, lifeRng, { useStairs: cfg.useStairs });
             L.rec.beds = f.beds; L.rec.furniture = f;
             for (const b of f.beds) beds.push(b);
           } else L.rec.beds = [];
@@ -292,7 +292,7 @@ export function generateCity(cfgIn, onProgress) {
     if (rec) {
       buildings.push(rec);
       if (cfg.furnish) {
-        const f = furnish(world, rec, lifeRng);
+        const f = furnish(world, rec, lifeRng, { useStairs: cfg.useStairs });
         rec.beds = f.beds; rec.furniture = f;
         for (const b of f.beds) beds.push(b);
       } else { rec.beds = []; }
@@ -1168,7 +1168,7 @@ export function generateSingle(cfgIn) {
 
   const buildings = rec ? [rec] : [];
   let beds = [];
-  if (rec && cfg.furnish) { const f = furnish(world, rec, makeRng(cfg.seed ^ 0x51f3)); rec.beds = f.beds; rec.furniture = f; beds = f.beds; }
+  if (rec && cfg.furnish) { const f = furnish(world, rec, makeRng(cfg.seed ^ 0x51f3), { useStairs: cfg.useStairs }); rec.beds = f.beds; rec.furniture = f; beds = f.beds; }
   if (rec) {
     const [ox, oz] = OUTWARD[rec.facing];
     let px = rec.door.x + ox, pz = rec.door.z + oz;

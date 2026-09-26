@@ -241,7 +241,28 @@ export function layTransit(world, plan, mode, G) {
   }
 
   // ---- lay the loop -------------------------------------------------------------
-  if (loop) {
+  // Each district gets a ring of its own: the main one keeps the city loop,
+  // and an island joined by a bridge is circled too, so a cart can go round
+  // it rather than only arriving and stopping.
+  const extraLoops = [];
+  if (main) {
+    for (const d of plan.districts.slice(1)) {
+      if (d.size < 600) continue;               // too small to be worth a circuit
+      const inD = (x, z) => d.has(z * W + x);
+      const Od = edgeDistance(plan, inD);
+      for (const k of [3, 2]) {
+        const ring = [];
+        for (let z = 0; z < D; z++) for (let x = 0; x < W; x++) if (Od[z * W + x] === k && inD(x, z)) ring.push([x, z]);
+        let cyc = traceCycle(ring, (x, z) => road(x, z) && inD(x, z));
+        if (!cyc) cyc = traceContour(W, D, (x, z) => Od[z * W + x] >= k && road(x, z) && inD(x, z));
+        if (cyc && cyc.length >= 40) { extraLoops.push({ k, cells: cyc }); break; }
+      }
+    }
+  }
+
+  for (const ring of [loop, ...extraLoops]) {
+  if (ring) {
+    const loop = ring;
     const cells = loop.cells;                   // in order round the cycle
     const n = cells.length;
     const dirOf = (i) => {
@@ -286,7 +307,9 @@ export function layTransit(world, plan, mode, G) {
     line.stations.push([cells[start][0], G + 1, cells[start][1]]);
     lines.push(line);
     stats.loop = true;
-    stats.loopLength = n;
+    stats.loopLength = Math.max(stats.loopLength || 0, n);
+    stats.loops = (stats.loops || 0) + 1;
+  }
   }
 
   stats.lines = lines.length;

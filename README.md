@@ -1,4 +1,4 @@
-# Polis v0.13.7
+# Polis v0.14.0
 
 *Created with help from Claude AI.*
 
@@ -453,6 +453,14 @@ run `/function <city>:build`.
 
 Java worlds can now be read for terrain fitting too, so both editions have it.
 
+## The canal's grandest crossing
+
+One crossing of the canal — the widest — is built as a piece of architecture
+rather than a slab of road: a stone tower at each corner with a lamp on top,
+an arch of stone springing between them over the water, and a balustrade along
+both parapets. The deck is left alone, so the street and any railway across it
+still run.
+
 ## Bridges between districts
 
 On real ground a city rarely comes out as one lump: a river, a bluff or a
@@ -707,6 +715,26 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.14.0** — Two things finished. The widest crossing of the canal is now a
+landmark: four stone towers with lamps, an arch over the water and a
+balustrade, with the deck untouched so the road and rails still cross. And
+every district of any size is circled by a line of its own — an island joined
+by a bridge used to be somewhere a cart arrived and stopped, and is now
+somewhere it can go round, curves and all. Both are checked: a test site with
+two districts gets two rings, of 24 and 25 curved rails.
+
+**0.13.9** — A school hall is now genuinely one room. The partition that
+fenced off the staircase came down, shaft and all, so both floors see the
+board and the stair stands open in the corner. Where the stairs are ladders
+rather than steps the shaft stays, since a ladder needs a wall to hang on —
+which is exactly what the ladder-equipped test city caught.
+
+**0.13.8** — A canal needs a straight street it can run down, and the run it
+demanded — a third of the city's width, at least 24 blocks — is a lot to ask
+of a city cut to real ground. On a fitted site it now settles for a fifth of
+the width, at least 16. A city with no straight run at all still goes without,
+which is what happens on a badly broken site.
 
 **0.13.7** — Three fixes from a build review. Staircases that climbed nothing
 are no longer cut: where the street outside had settled to the same height as

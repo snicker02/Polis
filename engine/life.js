@@ -405,6 +405,42 @@ export function furnish(world, rec, rng, opts = {}) {
   // its altar. The upper floor is a gallery over the same hall.
   const schoolHall = (sy, k, allDoors, rows = 99) => {
     const r0 = rec.rects[k];
+    // A hall is one room: the partitions that fence off the staircase come
+    // down, shaft and all, so the whole floor sees the board. The steps
+    // themselves stay — an open stair in the corner of the hall. With
+    // ladders instead of stairs the shaft has to stand, since a ladder needs
+    // a wall to hang on.
+    const ladderInCore = (() => {
+      const c0 = rec.core;
+      if (!c0) return false;
+      for (let y = sy; y <= sy + (rec.pitch || 5); y++)
+        for (let z = c0.z0; z <= c0.z1; z++)
+          for (let x = c0.x0; x <= c0.x1; x++) {
+            const id = world.get(x, y, z);
+            if (id >= 0 && /ladder/.test(MATERIALS.def(id).block)) return true;
+          }
+      return false;
+    })();
+    if (!ladderInCore && opts.useStairs !== false) {
+      for (let y = sy + 1; y <= sy + (rec.pitch || 5) - 1; y++)
+        for (let z = r0.z0 + 1; z <= r0.z1 - 1; z++)
+          for (let x = r0.x0 + 1; x <= r0.x1 - 1; x++) {
+            const id = world.get(x, y, z);
+            if (id < 0 || MATERIALS.isPassable(id)) continue;
+            // everything solid inside comes down except the steps themselves;
+            // this runs before the hall is furnished, so nothing else is here
+            if (/_stairs$/.test(MATERIALS.def(id).block)) continue;
+            // a ladder hangs on a wall: take that wall away and the way
+            // upstairs goes with it
+            let holdsLadder = false;
+            for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+              const nb = world.get(x + dx, y, z + dz);
+              if (nb >= 0 && /ladder/.test(MATERIALS.def(nb).block)) { holdsLadder = true; break; }
+            }
+            if (holdsLadder) continue;
+            world.clear(x, y, z);
+          }
+    }
     const face = rec.facing, [ox, oz] = OUTWARD[face];
     const inner = { x0: r0.x0 + 1, z0: r0.z0 + 1, x1: r0.x1 - 1, z1: r0.z1 - 1 };
     // The board goes on a side wall, not the wall facing the door: the stairs

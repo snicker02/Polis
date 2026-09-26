@@ -44,7 +44,11 @@ export function planCanal(plan, cfg, edgeDist) {
       }
       if (ok) run.push(u); else { if (run.length > bestRun.length) bestRun = run; run = []; }
     }
-    if (bestRun.length < Math.max(24, Math.min(W, D) * 0.35)) continue;
+    // A city cut to real ground is rarely straight for a third of its width,
+    // and a short canal is better than none, so the run needed is shorter on
+    // a fitted site than it was.
+    const need = cfg.terrain ? Math.max(16, Math.min(W, D) * 0.2) : Math.max(24, Math.min(W, D) * 0.35);
+    if (bestRun.length < need) continue;
     const score = bestRun.length * 10 + c.w;
     if (!best || score > best.score) best = { score, axis: c.axis, u0: bestRun[0], u1: bestRun[bestRun.length - 1], a0, a1, w: a1 - a0 + 1 };
   }
@@ -127,7 +131,62 @@ export function buildCanal(world, plan, canal, G, rng) {
   }
   canal.water = water;
   canal.dock = buildDock(world, plan, canal, G);
+  canal.landmarkBridge = dressBridge(world, plan, canal, G);
   return canal;
+}
+
+// One crossing is made a piece of architecture rather than a slab of road:
+// the widest span gets a stone tower at each corner, an arch of stairs
+// springing between them over the water, a lamp on every tower and a
+// balustrade along both parapets. The deck itself is untouched, so the street
+// and any railway across it still run.
+function dressBridge(world, plan, canal, G) {
+  const { W } = plan;
+  const cell = (u, a) => (canal.axis === 'x' ? [u, a] : [a, u]);
+  if (!canal.bridgeSpans || !canal.bridgeSpans.length) return null;
+  // the widest span, and wide enough to be worth dressing
+  let best = null;
+  for (const [b0, b1] of canal.bridgeSpans) if (!best || b1 - b0 > best[1] - best[0]) best = [b0, b1];
+  if (!best || best[1] - best[0] < 2) return null;
+  const [b0, b1] = best;
+  const a0 = canal.ch0 - 1, a1 = canal.ch1 + 1;          // the banks either side
+  const towers = [];
+  const HEIGHT = 5;
+  for (const u of [b0, b1])
+    for (const a of [a0, a1]) {
+      const [x, z] = cell(u, a);
+      for (let y = G + 1; y <= G + HEIGHT; y++) world.set(x, y, z, MAT.STONEBRICK);
+      world.set(x, G + HEIGHT + 1, z, MAT.LAMP);
+      towers.push([x, G + HEIGHT + 1, z]);
+    }
+  // the arch: stairs rising from each tower to meet over the middle
+  const mid = Math.floor((a0 + a1) / 2);
+  let arches = 0;
+  for (const u of [b0, b1]) {
+    for (let step = 1; a0 + step < mid; step++) {
+      const y = G + HEIGHT - step + 1;
+      if (y <= G + 1) break;
+      for (const a of [a0 + step, a1 - step]) {
+        const [x, z] = cell(u, a);
+        if (world.has(x, y, z)) continue;
+        world.set(x, y, z, MAT.STONEBRICK);
+        arches++;
+      }
+    }
+    const [mx, mz] = cell(u, mid);
+    const capY = G + HEIGHT - Math.max(1, mid - a0) + 1;
+    if (capY > G + 1 && !world.has(mx, capY, mz)) { world.set(mx, capY, mz, MAT.STONEBRICK); arches++; }
+  }
+  // a balustrade along both parapets, between the towers
+  let rails = 0;
+  for (const u of [b0, b1])
+    for (let a = a0 + 1; a <= a1 - 1; a++) {
+      const [x, z] = cell(u, a);
+      if (world.has(x, G + 1, z)) continue;
+      world.set(x, G + 1, z, MAT.FENCE);
+      rails++;
+    }
+  return { span: [b0, b1], towers, arches, rails, height: HEIGHT };
 }
 
 // A dock on one bank: three stairs down from the walkway (y G) to a wooden

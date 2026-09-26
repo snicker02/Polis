@@ -2059,6 +2059,39 @@ section('2z. bridges');
           fitted > 0 && looped2 === fitted && curvy2 === fitted,
           `${fitted} fitted cities · ${looped2} with a loop · ${curvy2} with curves`);
       }
+      // each substantial district gets a ring of its own, with curves on it
+      {
+        let ringed = 0, want = 0;
+        for (const s4 of findSites(chunks, 192, { step: 64 }).slice(0, 6)) {
+          const site = siteGround(chunks, s4.x, s4.z, 192);
+          const r4 = generateCity({ ...DEFAULTS, size: 192, seed: 7, terrain: site, transit: 'rails' });
+          const ds = r4.plan.districts || [];
+          if (ds.length < 2) continue;
+          const curves = ds.map(() => 0);
+          r4.world.forEach((x, y, z, id) => {
+            const d = MATERIALS.def(id);
+            if (!/rail/.test(d.block) || !d.states.rail_direction || d.states.rail_direction.value < 6) return;
+            const i = z * 192 + x;
+            ds.forEach((dd, k) => { if (dd.has(i)) curves[k]++; });
+          });
+          ds.forEach((d, k) => { if (d.size < 600) return; want++; if (curves[k] > 0) ringed++; });
+        }
+        check('bridges: each district of any size is circled by its own line, curves and all',
+          want === 0 || ringed === want, `${ringed}/${want} districts ringed`);
+      }
+      // the canal's grandest crossing is built as a landmark
+      {
+        let dressed = 0, canals = 0;
+        for (const [size, seed] of [[192, 7], [256, 3], [224, 12345]]) {
+          const rc = generateCity({ ...DEFAULTS, size, seed });
+          if (!rc.canal) continue;
+          canals++;
+          const lb = rc.canal.landmarkBridge;
+          if (lb && lb.towers.length === 4 && lb.arches > 0) dressed++;
+        }
+        check('canal: one crossing is built as a landmark, with towers and an arch', canals > 0 && dressed === canals,
+          `${dressed}/${canals} canals with a dressed crossing`);
+      }
   check('bridges: every district of any size gets track, not just the main one', bare === 0,
         `${bare} of ${checked} districts without track`);
     }
