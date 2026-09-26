@@ -103,7 +103,12 @@ export function layTransit(world, plan, mode, G) {
   const O = edgeDistance(plan);
   const Oloop = main ? edgeDistance(plan, (x, z) => inMain(x, z)) : O;
   let loop = null;
-  for (const k of [3, 2, 4]) {
+  {
+    const body = main || (() => { const set = new Set(); for (let i = 0; i < W * D; i++) if (road(i % W, (i - (i % W)) / W)) set.add(i); return set; })();
+    const rect = rectRing(W, D, body, (x, z) => road(x, z) && inMain(x, z) && Oloop[z * W + x] >= 2);
+    if (rect) loop = { k: 3, cells: rect };
+  }
+  for (const k of loop ? [] : [3, 2, 4]) {
     const ring = [];
     for (let z = 0; z < D; z++) for (let x = 0; x < W; x++) if (Oloop[z * W + x] === k && inMain(x, z)) ring.push([x, z]);
     const cyc = traceCycle(ring, (x, z) => road(x, z) && inMain(x, z));
@@ -117,7 +122,10 @@ export function layTransit(world, plan, mode, G) {
   if (!loop) {
     for (const k of [3, 2, 4]) {
       const cyc = traceContour(W, D, (x, z) => Oloop[z * W + x] >= k && road(x, z) && inMain(x, z));
-      if (cyc && cyc.length >= 40) { loop = { k, cells: cyc }; break; }
+      // the same standard the district rings are held to: a walk that runs
+      // back alongside itself lays track in circles, which is worse than no
+      // ring at all
+      if (cyc && cyc.length >= 40 && tidyRing(cyc)) { loop = { k, cells: cyc }; break; }
     }
   }
   const minO = loop ? loop.k + 2 : 2;
@@ -250,6 +258,8 @@ export function layTransit(world, plan, mode, G) {
       if (d.size < 600) continue;               // too small to be worth a circuit
       const inD = (x, z) => d.has(z * W + x);
       const Od = edgeDistance(plan, inD);
+      const rect = rectRing(W, D, d, (x, z) => road(x, z) && inD(x, z) && Od[z * W + x] >= 2);
+      if (rect) { extraLoops.push({ k: 3, cells: rect }); continue; }
       for (const k of [3, 2]) {
         const ring = [];
         for (let z = 0; z < D; z++) for (let x = 0; x < W; x++) if (Od[z * W + x] === k && inD(x, z)) ring.push([x, z]);
@@ -375,6 +385,29 @@ export function edgeDistance(plan, within = null) {
     }
   }
   return O;
+}
+
+// A ring that follows the city's edge, like the wall does: the bounding box
+// of the district, drawn inward until every cell of the rectangle is road.
+// It cannot double back on itself the way a traced contour can, so the track
+// is a plain circuit with four corners.
+function rectRing(W, D, cells, isRoad) {
+  let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+  for (const i of cells) {
+    const x = i % W, z = (i - x) / W;
+    x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z);
+  }
+  for (let m = 2; m <= 14; m++) {
+    const a = x0 + m, b = x1 - m, c = z0 + m, d = z1 - m;
+    if (b - a < 16 || d - c < 16) break;
+    const ring = [];
+    for (let x = a; x <= b; x++) ring.push([x, c]);
+    for (let z = c + 1; z <= d; z++) ring.push([b, z]);
+    for (let x = b - 1; x >= a; x--) ring.push([x, d]);
+    for (let z = d - 1; z > c; z--) ring.push([a, z]);
+    if (ring.every(([x, z]) => isRoad(x, z))) return ring;
+  }
+  return null;
 }
 
 // Is this ring a real circuit — no cell beside another it is not next to in

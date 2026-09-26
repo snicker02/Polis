@@ -2120,6 +2120,34 @@ section('2z. bridges');
         check('bridges: the track across a bridge joins the rings at both ends',
           spans === 0 || joinedAll === spans, `${joinedAll}/${spans} bridges carrying a joined-up railway`);
       }
+      // no ring anywhere may run back alongside itself: that lays track in
+      // circles instead of a circuit
+      {
+        let rings = 0, messy = 0;
+        const look = (r6, size) => {
+          for (const line of r6.transit.lines) {
+            if (!line.loop) continue;
+            rings++;
+            const n = line.cells.length;
+            const at = new Map();
+            line.cells.forEach(([x, y, z], i) => at.set(x + ',' + z, i));
+            for (let i = 0; i < n; i++) {
+              const [x, , z] = line.cells[i];
+              for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+                const j = at.get((x + dx) + ',' + (z + dz));
+                if (j === undefined) continue;
+                if (Math.min((j - i + n) % n, (i - j + n) % n) > 1) { messy++; return; }
+              }
+            }
+          }
+        };
+        for (const [size, seed] of [[192, 7], [256, 3]]) look(generateCity({ ...DEFAULTS, size, seed, transit: 'rails' }), size);
+        for (const s6 of findSites(chunks, 192, { step: 64 }).slice(0, 6)) {
+          const site = siteGround(chunks, s6.x, s6.z, 192);
+          look(generateCity({ ...DEFAULTS, size: 192, seed: 7, terrain: site, transit: 'rails' }), 192);
+        }
+        check('rails: no ring doubles back alongside itself', messy === 0, `${rings} rings · ${messy} messy`);
+      }
       // the canal's grandest crossing is built as a landmark
       {
         let dressed = 0, canals = 0;

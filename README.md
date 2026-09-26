@@ -1,4 +1,4 @@
-# Polis v0.14.2
+# Polis v0.14.3
 
 *Created with help from Claude AI.*
 
@@ -715,6 +715,15 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.14.3** — Rings follow the city's edge rather than a traced contour
+wherever they can. The first thing tried is now a plain rectangle drawn inward
+from the district's own bounding box until every cell of it is road — four
+corners, no doubling back, the way the perimeter wall runs. Only if no
+rectangle fits does the contour walk get a turn, and its result is now
+refused unless no cell of it sits beside another it is not next to in the
+walk. That is what produced the little circles of track: a walk running back
+alongside itself. Eight test cities, ten rings, none self-touching.
 
 **0.14.2** — The railway crosses the bridges. A rail connects in two
 directions only — there is no three-way junction without a switch — so a spur
