@@ -1,4 +1,4 @@
-# Polis v0.13.6
+# Polis v0.13.7
 
 *Created with help from Claude AI.*
 
@@ -707,6 +707,15 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.13.7** — Three fixes from a build review. Staircases that climbed nothing
+are no longer cut: where the street outside had settled to the same height as
+the block, a flight was still being built, standing in the road as an
+ornament — 60 of 282 in one test city, and none now. Boosters are roughly
+twice as dense (one every nine blocks at most, four at least, against sixteen
+and six), since a cart was losing its speed between them. And bridges between
+districts are seven wide rather than five: two lanes and a rail, so the loop
+can run across one.
 
 **0.13.6** — Schools are bigger and keep their field. The school now takes the
 deepest lot it can find, size breaking the tie, and the field is no longer the

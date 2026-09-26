@@ -33,8 +33,8 @@ import { USE } from './plan.js';
 export const TRANSIT_MODES = ['roads', 'rails', 'trams'];
 const RAMP = 4;           // blocks of climb
 const CLEAR_GAP = 10;     // crossings closer than this share one bridge
-const BOOST_EVERY = 16;
-const BOOST_MIN = 6;              // no closer together than this, even at bends
+const BOOST_EVERY = 9;            // a cart loses speed long before 16 blocks
+const BOOST_MIN = 4;              // no closer together than this, even at bends
 
 export function layTransit(world, plan, mode, G) {
   if (mode !== 'rails' && mode !== 'trams') return null;

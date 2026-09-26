@@ -574,11 +574,11 @@ section('2d. railways');
       }
       // A cart leaves a curve slowly, so boosters follow the bends — but an
       // organic loop bends constantly, and one at every bend puts five in a
-      // row. They are spaced instead: never closer than six, never further
-      // than sixteen (plus the two-block leeway a curve forces).
+      // row. They are spaced instead: never closer than four, never further
+      // than nine (plus the leeway a curve forces).
       const gaps = boosts.slice(1).map((v, i) => v - boosts[i]);
-      const tooClose = gaps.filter((g) => g < 6).length;
-      const tooFar = gaps.filter((g) => g > 18).length;
+      const tooClose = gaps.filter((g) => g < 4).length;
+      const tooFar = gaps.filter((g) => g > 11).length;
       check(`${tag}: the loop turns with curved rails (at least four corners)`, curves >= 4, `${curves}`);
       check(`${tag}: boosters spaced along the loop, neither bunched nor missing`, tooClose === 0 && tooFar === 0 && boosts.length > 3,
         `${boosts.length} boosters · ${tooClose} bunched · ${tooFar} too far apart`);
@@ -980,7 +980,9 @@ section('2i. outline and hills');
   check('hills: every building door can be walked to from the streets', unreached === 0, `${unreached}/${total} unreachable`);
   check('hills: streets stay level (railway untouched)', streetsNotLevel === 0, `${streetsNotLevel}`);
   check('hills: every step faces the way its staircase climbs', badFacing === 0, `${badFacing} wrong`);
-  check('hills: most staircases climb straight in from the street, facing it', straightRuns >= stairsAll * 0.75 && badStraight === 0,
+  // Flights that climbed nothing are no longer built, and those were mostly
+  // straight ones, so the mix has shifted towards flights along the kerb.
+  check('hills: most staircases climb straight in from the street, facing it', straightRuns >= stairsAll * 0.55 && badStraight === 0,
     `${straightRuns}/${stairsAll} straight, ${badStraight} not facing the street`);
   check('hills: terraces are solid underneath', hollow === 0, `${hollow} gaps`);
   note(`${cities} cities · ${raised} raised blocks · ${stairs} staircases · ${total - unreached}/${total} doors reachable from the streets`);

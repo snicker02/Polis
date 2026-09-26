@@ -377,6 +377,16 @@ export function cutStairs(world, plan, hills, G, avoid) {
       // reserve the steps, the landing above them, and a block either side of the
       // flight, so no other staircase is cut across this one
       const last = steps[steps.length - 1];
+      // A flight is only worth building if the ground it leaves and the
+      // ground it reaches are at different heights. Where the street outside
+      // has settled to the same level as the block, the steps climb nothing
+      // and stand in the road looking like an ornament.
+      {
+        const foot = [steps[steps.length - 1][0] + out[0], steps[steps.length - 1][1] + out[1]];
+        const fx = Math.max(0, Math.min(W - 1, foot[0])), fz = Math.max(0, Math.min(D - 1, foot[1]));
+        const outside = hills.elev ? hills.elev[fz * W + fx] : 0;
+        if (outside === e) return false;   // cut() reports that it built nothing
+      }
       const landing = [last[0] + dir[0], last[1] + dir[1]];
       for (const [x, z] of steps.concat([landing]))
         for (const [ax, az] of [[0, 0], [dir[1], dir[0]], [-dir[1], -dir[0]]]) claimed.add((x + ax) + ',' + (z + az));
@@ -386,6 +396,7 @@ export function cutStairs(world, plan, hills, G, avoid) {
         world.set(x, G + 1 + i, z, stairId('stonebrick', UP(dir[0], dir[1])));
       });
       runs.push({ block: b, cells: steps, dir, e, kind, out });
+      return true;
     };
     for (const sd of sides) {
       const inward = [-sd.out[0], -sd.out[1]];
@@ -406,8 +417,7 @@ export function cutStairs(world, plan, hills, G, avoid) {
         if (!onPavement(landing) && use[landing[1] * W + landing[0]] !== USE.LOT) return false;
         // the landing must be terrace you can stand on
         if (!blocked(landing[0], G + e, landing[1])) return false;
-        cut(steps, inward, 'straight', sd.out);
-        return true;
+        return cut(steps, inward, 'straight', sd.out);
       };
       // 2) along the kerb, where a straight flight will not fit
       const along = (i0) => {
@@ -418,8 +428,7 @@ export function cutStairs(world, plan, hills, G, avoid) {
         }
         const [x0, z0] = sd.cells(i0);
         if (!streetOk(x0 + sd.out[0], z0 + sd.out[1])) return false;
-        cut(Array.from({ length: e }, (_, i) => sd.cells(i0 + i)), sd.along, 'along', sd.out);
-        return true;
+        return cut(Array.from({ length: e }, (_, i) => sd.cells(i0 + i)), sd.along, 'along', sd.out);
       };
       let placed = 0;
       for (let i0 = 3; i0 < sd.len; i0 += 10) if (straight(i0) || along(i0)) placed++;

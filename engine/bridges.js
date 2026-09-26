@@ -21,7 +21,9 @@ export function planBridges(plan, cfg, districts) {
   if (!cfg.bridges || districts.length < 2) return [];
   const { W, D, use } = plan;
   const main = districts[0];
-  const width = Math.max(3, Math.min(7, cfg.streetWidth | 0 || 5));
+  // Two lanes and a rail: a bridge carries the traffic of the street it
+  // joins, and the loop has to be able to run across it.
+  const width = Math.max(7, Math.min(9, (cfg.streetWidth | 0 || 5) + 2));
   const spans = [];
   const inMain = (i) => main.has(i);
 
