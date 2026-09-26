@@ -254,7 +254,14 @@ export function layTransit(world, plan, mode, G) {
         const ring = [];
         for (let z = 0; z < D; z++) for (let x = 0; x < W; x++) if (Od[z * W + x] === k && inD(x, z)) ring.push([x, z]);
         let cyc = traceCycle(ring, (x, z) => road(x, z) && inD(x, z));
-        if (!cyc) cyc = traceContour(W, D, (x, z) => Od[z * W + x] >= k && road(x, z) && inD(x, z));
+        if (!cyc) {
+          const walked = traceContour(W, D, (x, z) => Od[z * W + x] >= k && road(x, z) && inD(x, z));
+          // A walk round a narrow strip goes out along one side and back
+          // along the other, and the two runs end up side by side: track
+          // laid on that is a thicket of curves, not a circuit. Such a ring
+          // is refused, and the district keeps its straight lines.
+          cyc = walked && tidyRing(walked) ? walked : null;
+        }
         if (cyc && cyc.length >= 40) { extraLoops.push({ k, cells: cyc }); break; }
       }
     }
@@ -368,6 +375,26 @@ export function edgeDistance(plan, within = null) {
     }
   }
   return O;
+}
+
+// Is this ring a real circuit — no cell beside another it is not next to in
+// the walk, and wide enough to be a loop rather than a there-and-back?
+function tidyRing(cells) {
+  const n = cells.length;
+  const at = new Map();
+  cells.forEach(([x, z], i) => at.set(x + ',' + z, i));
+  let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+  for (let i = 0; i < n; i++) {
+    const [x, z] = cells[i];
+    x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z);
+    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const j = at.get((x + dx) + ',' + (z + dz));
+      if (j === undefined) continue;
+      const step = Math.min((j - i + n) % n, (i - j + n) % n);
+      if (step > 1) return false;               // the ring touches itself
+    }
+  }
+  return Math.min(x1 - x0, z1 - z0) >= 12;      // and it encloses something
 }
 
 // Walking the edge of a region: from the top-left cell, step round it with a

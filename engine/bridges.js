@@ -153,36 +153,93 @@ export function buildBridges(world, plan, spans, hills, G, terrain, buildings = 
 
 // Track along a bridge, laid after the railway so it joins the same records:
 // a line of its own, buffered at both ends, with a cart on it.
+// Track across a bridge, joined to the rings at both ends.
+//
+// A rail connects in two directions only — there is no three-way junction
+// without a switch — so a spur cannot simply tee into a ring. Instead the
+// bridge carries two tracks, one each way, and each ring is DIVERTED into
+// one of them: the ring cell where the bridge meets it is turned into a
+// curve leading onto the deck. What was three separate railways (ring,
+// bridge, ring) becomes one circuit that runs round one district, crosses,
+// runs round the other, and crosses back.
 export function bridgeRails(world, bridges, transit, G) {
   if (!transit || !bridges.length) return 0;
+  const railAt = (x, y, z) => {
+    const id = world.get(x, y, z);
+    return id >= 0 && /rail/.test(MATERIALS.def(id).block);
+  };
   let laid = 0;
   for (const b of bridges) {
     const alongX = b.axis === 'x';
     const dir = alongX ? RAIL.EW : RAIL.NS;
-    const cells = [];
-    for (let k = 1; k < b.length - 1; k++) {
-      const x = alongX ? b.from[0] + b.dir * k : b.from[0];
-      const z = alongX ? b.from[1] : b.from[1] + b.dir * k;
-      const y = b.deckY + 1;
-      const boost = k % 16 === 8;
-      world.set(x, b.deckY, z, boost ? MAT.REDSTONE : MAT.GRAVEL);
-      world.set(x, y, z, boost ? poweredRailId(dir) : railId(dir));
-      for (let h = 1; h <= 3; h++) world.clear(x, y + h, z);
-      cells.push([x, y, z]);
+    const half = b.width >> 1;
+    // the two lanes sit either side of the middle of the deck
+    const lanes = [-1, 1].map((side) => {
+      const cells = [];
+      for (let k = 1; k < b.length - 1; k++) {
+        const base = [alongX ? b.from[0] + b.dir * k : b.from[0], alongX ? b.from[1] : b.from[1] + b.dir * k];
+        const x = alongX ? base[0] : base[0] + side * (half - 1);
+        const z = alongX ? base[1] + side * (half - 1) : base[1];
+        const y = b.deckY + 1;
+        const boost = k % 9 === 4;
+        world.set(x, b.deckY, z, boost ? MAT.REDSTONE : MAT.GRAVEL);
+        world.set(x, y, z, boost ? poweredRailId(dir) : railId(dir));
+        for (let h = 1; h <= 3; h++) world.clear(x, y + h, z);
+        cells.push([x, y, z]);
+      }
+      return cells;
+    });
+
+    // Where a lane runs out onto the bank, look for the district's ring
+    // within a few blocks and lead the lane onto it, bending the ring's own
+    // rail to meet the lane so a cart runs straight through.
+    let joined = 0;
+    for (const cells of lanes) {
+      if (cells.length < 4) continue;
+      for (const end of [cells[0], cells[cells.length - 1]]) {
+        const inward = end === cells[0] ? -b.dir : b.dir;
+        const step = alongX ? [inward, 0] : [0, inward];
+        let hit = null;
+        for (let k = 1; k <= 10 && !hit; k++) {
+          const x = end[0] + step[0] * k, z = end[2] + step[1] * k;
+          for (let dy = 1; dy >= -1; dy--) if (railAt(x, end[1] + dy, z)) { hit = [x, end[1] + dy, z, k]; break; }
+        }
+        if (!hit) continue;
+        // pave the gap between the lane's end and the ring
+        for (let k = 1; k < hit[3]; k++) {
+          const x = end[0] + step[0] * k, z = end[2] + step[1] * k;
+          const y = end[1];
+          if (!world.has(x, y - 1, z)) world.set(x, y - 1, z, MAT.GRAVEL);
+          world.set(x, y, z, railId(dir));
+          for (let h = 1; h <= 3; h++) world.clear(x, y + h, z);
+          cells.push([x, y, z]);
+        }
+        // and bend the ring's rail into the lane
+        const [jx, jy, jz] = hit;
+        const along = alongX ? [b.dir, 0] : [0, b.dir];
+        const ringDir = railAt(jx + (alongX ? 0 : 1), jy, jz + (alongX ? 1 : 0)) || railAt(jx - (alongX ? 0 : 1), jy, jz - (alongX ? 1 : 0));
+        if (ringDir) {
+          const toward = -inward;
+          const curve = alongX
+            ? (toward > 0 ? (railAt(jx, jy, jz + 1) ? RAIL.SE : RAIL.NE) : (railAt(jx, jy, jz + 1) ? RAIL.SW : RAIL.NW))
+            : (toward > 0 ? (railAt(jx + 1, jy, jz) ? RAIL.SE : RAIL.SW) : (railAt(jx + 1, jy, jz) ? RAIL.NE : RAIL.NW));
+          world.set(jx, jy, jz, railId(curve));
+        }
+        joined++;
+      }
     }
-    if (cells.length < 4) continue;
-    for (const [x, y, z] of [cells[0], cells[cells.length - 1]]) {
-      const step = [cells[1][0] - cells[0][0], cells[1][2] - cells[0][2]];
-      const away = (x === cells[0][0] && z === cells[0][2]) ? [-step[0], -step[1]] : step;
-      world.set(x + away[0], y - 1, z + away[1], MAT.GRAVEL);
-      world.set(x + away[0], y, z + away[1], MAT.STONEBRICK);
+
+    for (const cells of lanes) {
+      if (cells.length < 4) continue;
+      const mid = cells[Math.floor(cells.length / 2)];
+      transit.lines.push({ axis: alongX ? 'x' : 'z', bridge: true, cells, stations: [mid] });
+      transit.carts.push({ type: 'minecart', x: mid[0], y: mid[1], z: mid[2] });
+      transit.stats.lines++;
+      transit.stats.rails += cells.length;
+      laid++;
     }
-    const mid = cells[Math.floor(cells.length / 2)];
-    transit.lines.push({ axis: alongX ? 'x' : 'z', bridge: true, cells, stations: [mid] });
-    transit.carts.push({ type: 'minecart', x: mid[0], y: mid[1], z: mid[2] });
-    transit.stats.lines++;
-    transit.stats.rails += cells.length;
-    laid++;
+    b.joined = joined;
   }
   return laid;
 }
+

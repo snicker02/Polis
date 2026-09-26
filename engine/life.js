@@ -426,10 +426,14 @@ export function furnish(world, rec, rng, opts = {}) {
         for (let z = r0.z0 + 1; z <= r0.z1 - 1; z++)
           for (let x = r0.x0 + 1; x <= r0.x1 - 1; x++) {
             const id = world.get(x, y, z);
-            if (id < 0 || MATERIALS.isPassable(id)) continue;
+            if (id < 0) continue;
+            const nm = MATERIALS.def(id).block;
+            if (MATERIALS.isPassable(id) && !/_door$|ladder/.test(nm)) continue;
             // everything solid inside comes down except the steps themselves;
             // this runs before the hall is furnished, so nothing else is here
             if (/_stairs$/.test(MATERIALS.def(id).block)) continue;
+            // a door in a wall that is coming down goes with it, both halves
+            if (/_door$/.test(MATERIALS.def(id).block)) { world.clear(x, y, z); continue; }
             // a ladder hangs on a wall: take that wall away and the way
             // upstairs goes with it
             let holdsLadder = false;

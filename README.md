@@ -1,4 +1,4 @@
-# Polis v0.14.0
+# Polis v0.14.2
 
 *Created with help from Claude AI.*
 
@@ -715,6 +715,26 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.14.2** — The railway crosses the bridges. A rail connects in two
+directions only — there is no three-way junction without a switch — so a spur
+cannot tee into a ring. The bridge therefore carries **two tracks**, one each
+way, and each ring is diverted into one of them: the ring's own rail at the
+meeting point is bent onto the deck. What was three separate railways (ring,
+bridge, ring) is now one circuit that runs round a district, crosses, runs
+round the other and crosses back. On the split test site the largest
+connected run of track went from a single district's ring to 1,577 rails
+spanning both districts and the deck, and the validator checks exactly that.
+
+**0.14.1** — Two faults from a build review. Knocking the school's partitions
+through left the doors standing in mid-air, because a door is not a solid
+block and the demolition only took solid ones; doors in a wall that comes
+down now go with it, both halves. And a district ring traced round a narrow
+strip walked out along one side and back along the other, leaving the two runs
+side by side — track laid on that is a thicket of curves rather than a
+circuit. A ring is now refused unless no cell sits beside another it is not
+next to in the walk, and it encloses at least twelve blocks across; a district
+that cannot be ringed keeps its straight lines.
 
 **0.14.0** — Two things finished. The widest crossing of the canal is now a
 landmark: four stone towers with lamps, an arch over the water and a

@@ -2079,6 +2079,47 @@ section('2z. bridges');
         check('bridges: each district of any size is circled by its own line, curves and all',
           want === 0 || ringed === want, `${ringed}/${want} districts ringed`);
       }
+      // the bridge's track joins the rings at both ends, so a cart can ride
+      // from one district to the other rather than three separate railways
+      {
+        let spans = 0, joinedAll = 0;
+        for (const s5 of findSites(chunks, 192, { step: 64 }).slice(0, 6)) {
+          const site = siteGround(chunks, s5.x, s5.z, 192);
+          const r5 = generateCity({ ...DEFAULTS, size: 192, seed: 7, terrain: site, transit: 'rails' });
+          if (!r5.bridges || !r5.bridges.length) continue;
+          spans++;
+          const rails = new Map();
+          r5.world.forEach((x, y, z, id) => {
+            if (/rail/.test(MATERIALS.def(id).block)) rails.set(x + ',' + y + ',' + z, [x, y, z]);
+          });
+          // the biggest connected run of track
+          const seen5 = new Set();
+          let best = [];
+          for (const key of rails.keys()) {
+            if (seen5.has(key)) continue;
+            const comp = [];
+            const q = [key];
+            seen5.add(key);
+            while (q.length) {
+              const k = q.pop();
+              comp.push(rails.get(k));
+              const [x, y, z] = rails.get(k);
+              for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]])
+                for (const dy of [0, 1, -1]) {
+                  const nk = (x + dx) + ',' + (y + dy) + ',' + (z + dz);
+                  if (rails.has(nk) && !seen5.has(nk)) { seen5.add(nk); q.push(nk); }
+                }
+            }
+            if (comp.length > best.length) best = comp;
+          }
+          const ds = r5.plan.districts || [];
+          const both = ds.slice(0, 2).every((d) => best.some(([x, y, z]) => d.has(z * 192 + x)));
+          const deck = best.some(([x, y, z]) => r5.bridges.some((b) => y === b.deckY + 1));
+          if (both && deck) joinedAll++;
+        }
+        check('bridges: the track across a bridge joins the rings at both ends',
+          spans === 0 || joinedAll === spans, `${joinedAll}/${spans} bridges carrying a joined-up railway`);
+      }
       // the canal's grandest crossing is built as a landmark
       {
         let dressed = 0, canals = 0;
