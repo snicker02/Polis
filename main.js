@@ -15,7 +15,7 @@ import { makeZip } from './engine/blockcore.js';
 import { decodeNbt } from './tools/nbt-read.js';
 import { THEMES } from './engine/materials.js';
 
-const VERSION = '0.17.0';
+const VERSION = '0.17.1';
 const $ = (id) => document.getElementById(id);
 const numVal = (id) => Number($(id).value);      // readCfg has its own local num()
 
@@ -418,7 +418,8 @@ async function loadWorld(file) {
   // ones under a chosen site
   world = { chunks, info, near: spawn, view: spawn, site: null, kind, zip: read.zip || null, index: read.index || null };
   $('coordRow').style.display = 'flex';
-  wstatus(`${info ? info.name + ' (' + kind + '): ' : ''}${chunks.size.toLocaleString()} chunks read in ${((Date.now() - t0) / 1000).toFixed(0)}s. `
+  const logNote = read.stats && read.stats.logs ? ` (tables + ${read.stats.logs} log file${read.stats.logs === 1 ? '' : 's'})` : '';
+  wstatus(`${info ? info.name + ' (' + kind + '): ' : ''}${chunks.size.toLocaleString()} chunks read${logNote} in ${((Date.now() - t0) / 1000).toFixed(0)}s. `
     + 'Click the map to place the city, or type coordinates to go there.');
   drawWorldMap();
 }

@@ -1,4 +1,4 @@
-# Polis v0.17.0
+# Polis v0.17.1
 
 *Created with help from Claude AI.*
 
@@ -295,15 +295,19 @@ ground.
 
 **Either edition.** A Bedrock world is a `.mcworld`; a Java world is the world
 folder from `saves`, zipped. Polis works out which it has and reads it: for
-Bedrock, `db/*.ldb` are LevelDB tables holding a record per chunk; for Java,
+Bedrock, `db/` is a LevelDB (tables plus a write-ahead log) holding records per chunk; for Java,
 `region/*.mca` are Anvil region files, each holding up to 1024 chunks behind a
 sector header, with the ground heights packed nine bits at a time into longs
 in `Heightmaps.WORLD_SURFACE`. Both are read here in plain JavaScript —
 LevelDB, Anvil, zip, gzip and DEFLATE all written from scratch — and both come
 out as the same heightmap, so everything after that is shared.
 
-The Bedrock path in detail: a `.mcworld` is a zip, and inside it `db/*.ldb` are
-LevelDB tables holding a record per chunk. Polis unzips, walks the tables and
+The Bedrock path in detail: a `.mcworld` is a zip, and inside it `db/` is a
+LevelDB: sorted tables (`*.ldb`) and a write-ahead log (`*.log`) of everything
+written since the last compaction. Bedrock can leave freshly generated chunks
+in the log for a long time, so both are read, and where a key appears more
+than once the record with the highest sequence number wins (a newer deletion
+removes it). Polis unzips, walks the tables and the log and
 takes the 1.18-and-later "Data3D" record, which starts with the chunk's
 heightmap and carries its biomes. All of it is done here, in plain JavaScript —
 the zip, the LevelDB block format and the DEFLATE decompression (`inflate.js`),
@@ -733,6 +737,21 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.17.1** — Chunks in the LevelDB log are read.
+
+The world reader only walked the `.ldb` tables. Bedrock writes new and changed
+chunks to the write-ahead log (`db/*.log`) first and moves them into tables
+later, so recently generated terrain — a freshly pre-generated area especially
+— was missing from the map. Because LevelDB orders keys by little-endian chunk
+coordinates, the chunks that were in tables were scattered across the map, and
+the missing ones showed as speckle rather than as a clean edge. The log is now
+parsed (32 KB blocks, CRC32C, fragmented records, a torn tail tolerated), and
+every key resolves to its newest record by sequence number across tables and
+log, with deletions honoured; this also fixes an older record in one table
+occasionally winning over a newer one in another. The exact-ground read under
+a chosen site uses the same rules. New section 2za builds a world from scratch
+with a real table writer and log writer and checks all of it.
 
 **0.17.0** — Decks bend to meet the ring, and a bridge may run at an angle.
 

@@ -15,7 +15,7 @@
 // still uses the heightmaps and this is done only for the square the city
 // will stand on — a hundred chunks or so.
 
-import { tableEntries } from './worldfile.js';
+import { dbRecords } from './worldfile.js';
 
 // ---- little-endian NBT, one value at a time -------------------------------
 const T = { END: 0, BYTE: 1, SHORT: 2, INT: 3, LONG: 4, FLOAT: 5, DOUBLE: 6, BYTE_ARRAY: 7, STRING: 8, LIST: 9, COMPOUND: 10, INT_ARRAY: 11 };
@@ -150,7 +150,7 @@ export function chunkGround(subchunks, bottom = -64) {
 }
 
 // ---- the ground under a site ---------------------------------------------
-// index: Map of "cx,cz" -> which zip entry that chunk's records live in,
+// index: Map of "cx,cz" -> which zip entries (tables or log) that chunk's records live in,
 // built while the world was first read.
 export function exactGround(zip, index, x0, z0, size) {
   const need = new Map();                                       // entry -> [chunk keys]
@@ -167,35 +167,47 @@ export function exactGround(zip, index, x0, z0, size) {
   const ground = new Int16Array(size * size).fill(-999);
   const water = new Uint8Array(size * size);
   const surface = new Array(size * size).fill('');
-  for (const [entryIndex, keys] of need) {
-    const wanted = new Set(keys);
+  // A subchunk can appear in more than one file (the log and a table, or two
+  // tables); keep the record with the highest sequence, and let a newer
+  // deletion remove it.
+  const wanted = new Set();
+  for (const keys of need.values()) for (const k of keys) wanted.add(k);
+  const newest = new Map();                                    // "cx,cz,y" -> { seq, value, name }
+  for (const entryIndex of need.keys()) {
+    const entry = zip.entries[entryIndex];
     let data;
-    try { data = zip.read(zip.entries[entryIndex]); } catch { continue; }
-    const perChunk = new Map();
-    for (const [key, value] of tableEntries(data)) {
+    try { data = zip.read(entry); } catch { continue; }
+    for (const [key, value, seq, type] of dbRecords(entry.name, data)) {
       if (key.length !== 10 || key[8] !== 47) continue;          // a subchunk record
       const dv = new DataView(key.buffer, key.byteOffset, key.byteLength);
-      const cx = dv.getInt32(0, true), cz = dv.getInt32(4, true);
-      const name = cx + ',' + cz;
+      const name = dv.getInt32(0, true) + ',' + dv.getInt32(4, true);
       if (!wanted.has(name)) continue;
-      const sc = decodeSubChunk(value);
-      if (!sc) continue;
-      if (!perChunk.has(name)) perChunk.set(name, []);
-      perChunk.get(name).push(sc);
+      const id = name + ',' + dv.getInt8(9);
+      const cur = newest.get(id);
+      if (cur && cur.seq >= seq) continue;
+      newest.set(id, { seq, value: type === 1 ? value : null, name });
     }
-    for (const [name, subs] of perChunk) {
-      const [cx, cz] = name.split(',').map(Number);
-      const g = chunkGround(subs);
-      for (let lz = 0; lz < 16; lz++)
-        for (let lx = 0; lx < 16; lx++) {
-          const wx = cx * 16 + lx, wz = cz * 16 + lz;
-          if (wx < x0 || wz < z0 || wx >= x0 + size || wz >= z0 + size) continue;
-          const i = (wz - z0) * size + (wx - x0);
-          ground[i] = g.ground[lz * 16 + lx];
-          water[i] = g.water[lz * 16 + lx];
-          surface[i] = g.surface[lz * 16 + lx];
-        }
-    }
+  }
+  const perChunk = new Map();
+  for (const { value, name } of newest.values()) {
+    if (!value) continue;
+    const sc = decodeSubChunk(value);
+    if (!sc) continue;
+    if (!perChunk.has(name)) perChunk.set(name, []);
+    perChunk.get(name).push(sc);
+  }
+  for (const [name, subs] of perChunk) {
+    const [cx, cz] = name.split(',').map(Number);
+    const g = chunkGround(subs);
+    for (let lz = 0; lz < 16; lz++)
+      for (let lx = 0; lx < 16; lx++) {
+        const wx = cx * 16 + lx, wz = cz * 16 + lz;
+        if (wx < x0 || wz < z0 || wx >= x0 + size || wz >= z0 + size) continue;
+        const i = (wz - z0) * size + (wx - x0);
+        ground[i] = g.ground[lz * 16 + lx];
+        water[i] = g.water[lz * 16 + lx];
+        surface[i] = g.surface[lz * 16 + lx];
+      }
   }
   return { ground, water, surface, size, x0, z0 };
 }
