@@ -435,7 +435,7 @@ export function generateCity(cfgIn, onProgress) {
   applyStyle(world, plan, STYLE, (x, z) => GROUND + elevAt(x, z));
 
   // ---- the bridges between districts -----------------------------------------
-  const bridges = bridgeSpans.length ? buildBridges(world, plan, bridgeSpans, hills, GROUND, cfg.terrain, buildings) : [];
+  const bridges = bridgeSpans.length ? buildBridges(world, plan, bridgeSpans, hills, GROUND, cfg.terrain, buildings, cfg.transit !== 'roads' ? transit : null) : [];
   if (bridges.length && transit && cfg.transit !== 'roads') bridgeRails(world, bridges, transit, GROUND);
 
   // ---- blending the edge into the land ---------------------------------------

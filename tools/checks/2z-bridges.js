@@ -1,4 +1,6 @@
 import { DEFAULTS } from '../../engine/city.js';
+import { planBridges, stepsAlong, unitPath, dirAt } from '../../engine/bridges.js';
+import { USE } from '../../engine/plan.js';
 import { MATERIALS } from '../../engine/materials.js';
 import { walkCity } from '../../engine/terrain.js';
 
@@ -30,12 +32,8 @@ export default async function run(ctx) {
     for (const b of on.bridges) {
       decks++;
       let ok = 0;
-      for (let k = 0; k < b.length; k++) {
-        const x = b.axis === 'x' ? b.from[0] + b.dir * k : b.from[0];
-        const z = b.axis === 'x' ? b.from[1] : b.from[1] + b.dir * k;
-        if (walked.has(x + ',' + (b.deckY + 1) + ',' + z)) ok++;
-      }
-      if (ok > b.length * 0.9) deckWalkable++;
+      for (const [x, z] of b.path) if (walked.has(x + ',' + (b.deckY + 1) + ',' + z)) ok++;
+      if (ok > b.path.length * 0.9) deckWalkable++;
     }
   }
   check('bridges: a split site gets viaducts joining its districts', withBridges > 0, `${withBridges} cities, ${spans} bridges`);
@@ -175,7 +173,7 @@ export default async function run(ctx) {
   // the spur to descend. Those two are counted and named rather than
   // waved through, and any other reason is a failure.
   {
-    let ends = 0, joined = 0, straight = 0, bent = 0;
+    let ends = 0, joined = 0, straight = 0, bent = 0, bentEnds = 0, bentStraight = 0;
     const why = new Map();
     for (let i = 0; i < SITES; i++) {
       for (const seed of [7, 1118]) {
@@ -186,6 +184,14 @@ export default async function run(ctx) {
             if (e.joined) { joined++; if (e.leg) bent++; else straight++; continue; }
             why.set(e.why, (why.get(e.why) || 0) + 1);
           }
+          // Two lane ends sit at each end of the deck, so a deck bent at both
+          // ends should show four joins with no leg and nothing further than
+          // the next cell.
+          for (const e of b.ends || []) {
+            if (!(e.head ? b.bentHead : b.bentFoot)) continue;
+            bentEnds++;
+            if (e.joined && !e.leg && e.a === 1) bentStraight++;
+          }
         }
       }
     }
@@ -194,11 +200,21 @@ export default async function run(ctx) {
     check('bridges: a lane end with track in front of it is always led onto it',
       ends > 0 && joined + unreachable === ends,
       `${joined}/${ends} joined (${straight} straight, ${bent} round a corner)${reasons ? ' · ' + reasons : ''}`);
-    // the corner spur is the whole point of the L: if none is ever built,
-    // the search has quietly gone back to looking straight ahead
-    check('bridges: lane ends are reached by turning a corner, not only straight on',
-      ends === 0 || bent > 0, `${bent} of ${joined} joins needed a turn`);
+    // Alignment inverts what this section used to want. The L-shaped spur was
+    // once the whole point, and a run of nothing but straight joins meant the
+    // corner search had quietly stopped working. Now a straight join is the
+    // RIGHT shape — the deck has been bent to face the ring, so the junction
+    // is one curve and no detour — and a lateral leg is the fallback for the
+    // ends no bend could serve. So the test is that straight joins are the
+    // majority, not that bent ones exist.
+    check('bridges: an aligned deck meets the ring head on, so most joins are straight',
+      joined > 0 && straight >= bent && straight > 0,
+      `${straight} straight · ${bent} round a corner`);
+    check('bridges: a bent end puts its lane one cell short of the ring',
+      bentEnds === 0 || bentStraight === bentEnds,
+      `${bentStraight}/${bentEnds} bent ends joined by a single curve`);
     note(`lane ends ${joined}/${ends} joined · ${bent} round a corner · ${unreachable} with nothing at deck level to join`);
+    note(`${bentEnds} lane ends sitting at a bent deck end`);
   }
 
   // Track that leads nowhere, and two lines laid on the same ground.
@@ -297,8 +313,8 @@ export default async function run(ctx) {
         const districtOf = (x, z) => { const c = z * 192 + x; for (let k = 0; k < ds.length; k++) if (ds[k].has(c)) return k; return -1; };
         for (const b of r.bridges || []) {
           spans++;
-          const far = b.axis === 'x' ? [b.from[0] + b.dir * (b.length - 1), b.from[1]] : [b.from[0], b.from[1] + b.dir * (b.length - 1)];
-          const near = districtOf(b.from[0], b.from[1]), end = districtOf(far[0], far[1]);
+          const far = b.spanPath[b.spanPath.length - 1], home = b.spanPath[0];
+          const near = districtOf(home[0], home[1]), end = districtOf(far[0], far[1]);
           if (end === 0 || near === 0) toMain++;
           else wrong.push(`site ${i} seed ${seed}: ${near} to ${end}`);
         }
@@ -347,6 +363,93 @@ export default async function run(ctx) {
     }
     check('canal: one crossing is built as a landmark, with towers and an arch', canals > 0 && dressed === canals,
       `${dressed}/${canals} canals with a dressed crossing`);
+  }
+
+  // ---- the shape of a span --------------------------------------------------
+  // A span is a polyline now, so the first thing to know is that it really is
+  // one: every step exactly one cell north, south, east or west, the flying
+  // part of it still inside the polyline, and the deck a single piece.
+  {
+    let decks2 = 0, broken = 0, detached = 0;
+    for (const { r } of cities) {
+      for (const b of r.bridges || []) {
+        decks2++;
+        if (!unitPath(b.path) || b.path.length !== b.length) broken++;
+        // the span the planner chose has to survive inside the built path
+        const at = b.path.findIndex(([x, z]) => x === b.spanPath[0][0] && z === b.spanPath[0][1]);
+        if (at < 0 || b.spanPath.some(([x, z], k) => !b.path[at + k] || b.path[at + k][0] !== x || b.path[at + k][1] !== z)) detached++;
+      }
+    }
+    check('bridges: a span is a polyline of single steps', decks2 > 0 && broken === 0, `${broken} of ${decks2} malformed`);
+    check('bridges: the built deck still contains the span that was planned', detached === 0, `${detached} detached`);
+  }
+
+  // A staircase between two banks that share no row and no column. The fitted
+  // sites do not throw one of these up reliably, so the crossing search is put
+  // to a plan of its own: two square districts set corner to corner, which no
+  // straight run can join.
+  {
+    const W = 64, D = 64;
+    const mk = (x0, z0, x1, z1, use, mask) => {
+      const set = new Set();
+      for (let z = z0; z <= z1; z++) for (let x = x0; x <= x1; x++) { const i = z * W + x; set.add(i); use[i] = USE.ROAD; mask[i] = 1; }
+      return set;
+    };
+    const use = new Uint8Array(W * D), mask = new Uint8Array(W * D);
+    const main = mk(40, 40, 56, 56, use, mask);
+    const island = mk(6, 6, 20, 20, use, mask);
+    const plan = { W, D, use, mask };
+    const spans = planBridges(plan, { bridges: true, streetWidth: 5 }, [main, island]);
+    const s0 = spans[0];
+    check('bridges: two banks that share no row or column still get a span', spans.length === 1, `${spans.length} spans`);
+    check('bridges: that span is laid as a staircase', !!s0 && s0.angled === true && unitPath(s0.path),
+      s0 ? `${s0.path.length} cells, angled ${s0.angled}` : 'no span');
+    check('bridges: the staircase runs from the island to the main district',
+      !!s0 && island.has(s0.path[0][1] * W + s0.path[0][0]) && main.has(s0.path[s0.path.length - 1][1] * W + s0.path[s0.path.length - 1][0]));
+    // and its carriageway is one piece, not a chain of squares with gaps at
+    // the corners
+    if (s0) {
+      const deck = new Set(s0.cells.map(([x, z]) => x + ',' + z));
+      const q = [s0.cells[0]];
+      const seen = new Set([q[0][0] + ',' + q[0][1]]);
+      while (q.length) {
+        const [x, z] = q.pop();
+        for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const k = (x + dx) + ',' + (z + dz);
+          if (deck.has(k) && !seen.has(k)) { seen.add(k); q.push([x + dx, z + dz]); }
+        }
+      }
+      check('bridges: an angled deck is one connected piece', seen.size === deck.size, `${seen.size}/${deck.size} cells reachable`);
+      // every cell of it is street, so the city builds and exports it
+      check('bridges: an angled deck is reserved as carriageway',
+        s0.cells.every(([x, z]) => use[z * W + x] === USE.ROAD && mask[z * W + x] === 1));
+    }
+    // a straight crossing is still preferred where one exists
+    {
+      const u2 = new Uint8Array(W * D), m2 = new Uint8Array(W * D);
+      const m = mk(40, 20, 56, 36, u2, m2), i2 = mk(6, 20, 20, 36, u2, m2);
+      const st = planBridges({ W, D, use: u2, mask: m2 }, { bridges: true, streetWidth: 5 }, [m, i2]);
+      check('bridges: a straight crossing is still preferred where there is one',
+        st.length === 1 && !st[0].angled && st[0].path.every(([, z]) => z === st[0].path[0][1]),
+        st.length ? `angled ${st[0].angled}` : 'no span');
+    }
+  }
+
+  // the staircase generator itself: it must land exactly on its target and
+  // never take a diagonal step, whatever the slope
+  {
+    let bad = 0, cases = 0;
+    for (const dx of [-13, -7, -1, 0, 1, 4, 9, 20])
+      for (const dz of [-11, -4, 0, 1, 6, 20]) {
+        cases++;
+        const path = stepsAlong([30, 30], [30 + dx, 30 + dz]);
+        const last = path[path.length - 1];
+        if (last[0] !== 30 + dx || last[1] !== 30 + dz) { bad++; continue; }
+        if (path.length !== Math.abs(dx) + Math.abs(dz) + 1) { bad++; continue; }
+        if (path.length > 1 && !unitPath(path)) bad++;
+        if (path.length > 1 && dirAt(path, 0).every((v) => v === 0)) bad++;
+      }
+    check('bridges: a staircase lands on its target in single steps', bad === 0, `${bad} of ${cases} wrong`);
   }
 
   check('bridges: they are worth building (the districts they save carry buildings)', buildingsGained > 0,

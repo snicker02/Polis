@@ -1,4 +1,4 @@
-# Polis v0.16.0
+# Polis v0.17.0
 
 *Created with help from Claude AI.*
 
@@ -733,6 +733,74 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.17.0** — Decks bend to meet the ring, and a bridge may run at an angle.
+
+Two faults, one shape. A viaduct's deck stopped at the first cell of whatever
+district it reached, wherever that happened to be, and the track then went
+looking for the ring with an L-shaped spur — onward a few cells, then a leg
+off to the side. That leg is the wrong shape. A junction wants to be a single
+curve: the lane arrives facing the ring and turns onto it.
+
+So a span is a polyline now — a list of centre cells, each one step north,
+south, east or west from the last — rather than a row, a direction and a
+length. Straight bridges are laid exactly as before; the polyline is what lets
+the other two things exist.
+
+**Bent ends.** After the railway is laid, each end of a deck looks for a ring
+within reach that is at deck level and runs straight for the width of the
+carriageway. Finding one, the deck carries on past the bank and round a corner
+until it stands one cell short of the track, square on, with its two lanes
+straddling the crossing. Each lane then joins with one curve and no detour.
+That stretch is a bridgehead, not a viaduct: no parapets, laid at street
+level, and stopping flush so the ring is never paved over. Where it has
+claimed ground outside the city outline it is added to the city and given a
+footing down to the terrain, the way the span gets piers.
+
+Where the ring runs alongside the deck a cell away there is no room to turn
+onto it — an offset lane taken round a corner lands on the ring instead of in
+front of it — so that end is left to the spur search, which is still there.
+
+An end is only bent when it needs to be. Bending moves both lanes, and a bend
+chosen to fix one lane can push the other off a join it already had: on the
+256-block sites that traded four clean joins for two. So each end is asked
+first whether both its lanes already face a ring square on, and left alone if
+they do. Bends are therefore rare — one or two across a whole test set — and
+they are the ends that had nothing better.
+
+**Angled spans.** Two districts are not always a row or a column apart, and a
+district no straight run could reach got no bridge at all — it and everything
+built on it stayed off the network however big it was. When no straight
+crossing exists, the span is laid as a staircase between the two nearest
+banks. The deck follows the staircase, and so do both lanes: a rail cannot run
+diagonally, so an angled lane is a chain of curves, boosted on its straights.
+A straight crossing still wins wherever one exists.
+
+**Four ends at once.** Which junction a lane end may use depends on what the
+other three have taken, and a lane only earns its keep if both of its ends
+join. They were settled one after another, so the first end could claim a
+junction the second needed and push it out onto a long lateral detour — a
+shape chosen for no better reason than which lane was looked at first. All
+four are now costed together: most lanes joined end to end, then most ends
+joined, then the tidiest shapes.
+
+Also fixed: a parapet was built down the middle of the carriageway wherever a
+deck cell had been left unpaved to spare a rail underneath it; a bend's stop
+line was a half-plane across the whole city, so on a deck bent at both ends
+one end quietly cut away the other's deck; and a bridgehead is now registered
+in the plan as street, so the walk that proves the city is connected and the
+export both see it.
+
+Measured against 0.16.0. On the six 192-block fitted sites at two seeds: 12 of
+16 lane ends joined, unchanged, but 7 straight against 6 and 5 round a corner
+against 6. On the 256- and 320-block sites: 42 of 52 lane ends joined against
+38, with the same 23 straight — four ends that used to reach nothing now reach
+the ring, and none of the joins that were already clean were spoiled. Most of
+that gain is the four-ends-at-once change rather than the bending.
+
+The ends that still join nothing have a ring below deck level or no track
+within reach. A spur cannot descend, so those want a ramped approach carrying
+sloped rails, which this release does not attempt.
 
 **0.16.0** — A viaduct carries one track rather than two half-tracks.
 
