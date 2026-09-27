@@ -131,8 +131,8 @@ function writeZip(files) {                        // stored entries
 
 export default async function run(ctx) {
   const { check, note } = ctx;
-  const { readWorld, tableEntries, logRecords } = await import('../../engine/worldfile.js');
-  const { exactGround } = await import('../../engine/bedrockblocks.js');
+  const { readWorld, tableEntries, logRecords, worldReport } = await import('../../engine/worldfile.js');
+  const { exactGround, rebuildHeights } = await import('../../engine/bedrockblocks.js');
   const D3 = 43, SUB = 47;
   const h = (chunks, cx, cz) => { const c = chunks.get(cx + ',' + cz); return c ? c[0] : undefined; };
 
@@ -210,5 +210,39 @@ export default async function run(ctx) {
   const whole = readWorld(zip3).chunks.size;
   check('split region: tables alone miss chunks, tables + log find all 4096',
     tablesOnly < 4096 && whole === 4096, `tables only ${tablesOnly}, with log ${whole}`);
-  note('LevelDB: .ldb tables and .log write-ahead log, newest sequence wins, deletions honoured');
+
+  // ---- chunks without a heightmap record --------------------------------
+  // F: blocks only (two subchunks); G: generation started, no terrain yet;
+  // H: pre-1.18 Data2D heightmap; I: an all-air subchunk only; J: normal.
+  const i32 = (n) => { const b = new Uint8Array(4); new DataView(b.buffer).setInt32(0, n, true); return b; };
+  const data2d = (height) => { const b = new Uint8Array(512 + 256); const dv = new DataView(b.buffer); for (let i = 0; i < 256; i++) dv.setInt16(i * 2, height, true); return b; };
+  const airOnly = (y) => { const enc = new TextEncoder(), n = enc.encode('minecraft:air'), k = enc.encode('name');
+    return cat([u8([9, 1, y & 0xff, 3]), new Uint8Array(512), u32(1), u8([10, 0, 0, 8, k.length, 0, ...k, n.length, 0, ...n, 0])]); };
+  const t4 = writeTable([
+    [chunkKey(20, 0, SUB, 4), subchunk(4, 9), 1],
+    [chunkKey(20, 0, SUB, 5), subchunk(5, 2), 2],
+    [chunkKey(20, 0, 54), i32(2), 3],
+    [chunkKey(21, 0, 54), i32(1), 4],
+    [chunkKey(21, 0, 44), u8([40]), 5],
+    [chunkKey(22, 0, 45), data2d(70), 6],
+    [chunkKey(23, 0, SUB, 6), airOnly(6), 7],
+    [chunkKey(24, 0, D3), data3d(66), 8],
+  ], 4);
+  const w4 = readWorld(writeZip([['db/000011.ldb', t4]]));
+  const st = w4.stats;
+  check('census: every chunk with any record is counted', st.withRecords === 5, String(st.withRecords));
+  check('Data2D heightmap is used when there is no Data3D', h(w4.chunks, 22, 0) === 70 && st.fromLegacy === 1);
+  check('chunks with blocks but no heightmap are listed for rebuilding',
+    st.blocksOnly.slice().sort().join('|') === '20,0|23,0', st.blocksOnly.join('|'));
+  check('chunks with records but no blocks are listed as bare', st.bare.join('|') === '21,0' && w4.census.get('21,0').fin === 1);
+  const rb = rebuildHeights(w4.zip, w4.index, st.blocksOnly);
+  check('heights rebuilt from blocks: top non-air block + 1, highest subchunk wins',
+    rb.get('20,0') && rb.get('20,0')[0] === 5 * 16 + 2 + 1 && rb.get('20,0')[255] === 83, rb.get('20,0') ? String(rb.get('20,0')[0]) : 'missing');
+  check('an all-air chunk is not given a height', !rb.has('23,0'));
+  const bareSet = new Set(['21,0', '23,0']);
+  const rep = worldReport(st, rb.size, bareSet, w4.census);
+  check('report names rebuilt and red chunks with their generation state',
+    /1 rebuilt from blocks/.test(rep) && /2 have records but no terrain/.test(rep) && /1 need population/.test(rep) && /1 no state/.test(rep) && /1 from old-format/.test(rep), rep);
+  check('report is empty for a plain world', worldReport({ logs: 0, fromLegacy: 0 }, 0, new Set(), new Map()) === '');
+  note('LevelDB: .ldb tables and .log write-ahead log, newest sequence wins, deletions honoured; census, Data2D, heights from blocks');
 }

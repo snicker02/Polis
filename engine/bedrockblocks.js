@@ -211,3 +211,54 @@ export function exactGround(zip, index, x0, z0, size) {
   }
   return { ground, water, surface, size, x0, z0 };
 }
+
+// ---- heights rebuilt from blocks ------------------------------------------
+// For chunks that have subchunk records but no heightmap record: the height of
+// each column is the top non-air block + 1 (the convention of the Data3D
+// heightmap), read from the subchunks themselves. The subchunk's height comes
+// from its key, which every format version carries. Where one subchunk is
+// stored more than once, the newest record is used.
+const AIR = /(^|:)(air|cave_air|void_air)$/;
+export function rebuildHeights(zip, index, names) {
+  const want = new Set(names);
+  const files = new Set();
+  for (const n of want) for (const e of index.get(n) || []) files.add(e);
+  const newest = new Map();                                   // "cx,cz,y" -> seq applied
+  const tops = new Map();                                     // "cx,cz,y" -> Int8Array(256) local tops, -1 none
+  for (const entryIndex of files) {
+    const entry = zip.entries[entryIndex];
+    let data;
+    try { data = zip.read(entry); } catch { continue; }
+    for (const [key, value, seq, type] of dbRecords(entry.name, data)) {
+      if (key.length !== 10 || key[8] !== 47) continue;
+      const dv = new DataView(key.buffer, key.byteOffset, key.byteLength);
+      const name = dv.getInt32(0, true) + ',' + dv.getInt32(4, true);
+      if (!want.has(name)) continue;
+      const id = name + ',' + dv.getInt8(9);
+      const prev = newest.get(id);
+      if (prev !== undefined && prev >= seq) continue;
+      newest.set(id, seq);
+      if (type !== 1) { tops.delete(id); continue; }
+      const sc = decodeSubChunk(value);
+      if (!sc) { tops.delete(id); continue; }
+      const solid = sc.names.map((n) => !!n && !AIR.test(n));
+      if (!solid.some(Boolean)) { tops.delete(id); continue; }
+      const top = new Int8Array(256).fill(-1);
+      for (let x = 0; x < 16; x++)
+        for (let z = 0; z < 16; z++) {
+          const base = ((x * 16) + z) * 16;
+          for (let y = 15; y >= 0; y--) if (solid[sc.indices[base + y]]) { top[z * 16 + x] = y; break; }
+        }
+      tops.set(id, top);
+    }
+  }
+  const out = new Map();
+  for (const [id, top] of tops) {
+    const parts = id.split(',');
+    const name = parts[0] + ',' + parts[1], sy = Number(parts[2]);
+    let h = out.get(name);
+    if (!h) { h = new Int16Array(256).fill(-999); out.set(name, h); }
+    for (let i = 0; i < 256; i++) if (top[i] >= 0) { const y = sy * 16 + top[i] + 1; if (y > h[i]) h[i] = y; }
+  }
+  return out;
+}

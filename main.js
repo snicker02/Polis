@@ -7,15 +7,15 @@ import { buildMesh } from './engine/mesher.js';
 import { VoxelWorld } from './engine/blockcore.js';
 import { Renderer } from './engine/renderer.js';
 import { exportPack, exportStructuresZip, tileList, commandList, cityId, exportSalt, POLIS_VERSION } from './engine/export.js';
-import { readWorld, readLevelDat, siteGround, findSites, SEA_LEVEL } from './engine/worldfile.js';
+import { readWorld, readLevelDat, siteGround, findSites, SEA_LEVEL, worldReport } from './engine/worldfile.js';
 import { javaTiles, javaPackFiles } from './engine/export-java.js';
 import { readJavaWorld, readJavaLevelDat, worldKind } from './engine/javaworld.js';
-import { exactGround } from './engine/bedrockblocks.js';
+import { exactGround, rebuildHeights } from './engine/bedrockblocks.js';
 import { makeZip } from './engine/blockcore.js';
 import { decodeNbt } from './tools/nbt-read.js';
 import { THEMES } from './engine/materials.js';
 
-const VERSION = '0.17.1';
+const VERSION = '0.17.2';
 const $ = (id) => document.getElementById(id);
 const numVal = (id) => Number($(id).value);      // readCfg has its own local num()
 
@@ -413,14 +413,25 @@ async function loadWorld(file) {
   const t0 = Date.now();
   const read = kind === 'java' ? readJavaWorld(bytes) : readWorld(bytes);
   const { chunks } = read;
+  const st = read.stats || null;
+  // chunks that have blocks but no heightmap record: work the heights out
+  // from the blocks, so they show and can be built on
+  let rebuilt = 0;
+  if (st && st.blocksOnly && st.blocksOnly.length) {
+    wstatus(`${st.blocksOnly.length.toLocaleString()} chunks have blocks but no heightmap; reading their blocks…`);
+    await new Promise((r) => setTimeout(r, 30));
+    const hs = rebuildHeights(read.zip, read.index, st.blocksOnly);
+    for (const [name, h] of hs) { chunks.set(name, h); rebuilt++; }
+  }
   if (!chunks.size) { wstatus('no chunks found in that file'); return; }
   // a Bedrock world keeps its blocks; hold on to what is needed to read the
   // ones under a chosen site
-  world = { chunks, info, near: spawn, view: spawn, site: null, kind, zip: read.zip || null, index: read.index || null };
+  const bare = new Set(st && st.bare ? st.bare : []);
+  if (st && st.blocksOnly) for (const n of st.blocksOnly) if (!chunks.has(n)) bare.add(n);
+  world = { chunks, info, near: spawn, view: spawn, site: null, kind, zip: read.zip || null, index: read.index || null, bare };
   $('coordRow').style.display = 'flex';
-  const logNote = read.stats && read.stats.logs ? ` (tables + ${read.stats.logs} log file${read.stats.logs === 1 ? '' : 's'})` : '';
-  wstatus(`${info ? info.name + ' (' + kind + '): ' : ''}${chunks.size.toLocaleString()} chunks read${logNote} in ${((Date.now() - t0) / 1000).toFixed(0)}s. `
-    + 'Click the map to place the city, or type coordinates to go there.');
+  wstatus(`${info ? info.name + ' (' + kind + '): ' : ''}${chunks.size.toLocaleString()} chunks read in ${((Date.now() - t0) / 1000).toFixed(0)}s`
+    + (st ? worldReport(st, rebuilt, bare, read.census) : '') + '. Click the map to place the city, or type coordinates to go there.');
   drawWorldMap();
 }
 
@@ -452,7 +463,12 @@ function drawWorldMap() {
   for (let cz = 0; cz < R * 2; cz++)
     for (let cx = 0; cx < R * 2; cx++) {
       const h = chunks.get((near[0] - R + cx) + ',' + (near[1] - R + cz));
-      if (!h) { put(cx, cz, 24, 24, 24); continue; }
+      if (!h) {
+        const name = (near[0] - R + cx) + ',' + (near[1] - R + cz);
+        if (world.bare && world.bare.has(name)) put(cx, cz, 110, 36, 36);   // records, no terrain
+        else put(cx, cz, 24, 24, 24);                                      // not in the world
+        continue;
+      }
       let sum = 0, n = 0, water = 0;
       for (const y of h) { if (y < -900) continue; sum += y; n++; if (y <= SEA_LEVEL) water++; }
       const mean = n ? sum / n : 0, t = Math.max(0, Math.min(1, (mean - lo) / Math.max(1, hi - lo)));
@@ -468,7 +484,8 @@ function drawWorldMap() {
     ctx.strokeRect(((world.site.x0 / 16) - (near[0] - R)) * px, ((world.site.z0 / 16) - (near[1] - R)) * px,
       (size / 16) * px, (size / 16) * px);
   }
-  $('mapScale').textContent = `showing ${R * 32} blocks across · scroll to zoom`;
+  $('mapScale').textContent = `showing ${R * 32} blocks across · scroll to zoom`
+    + (world.bare && world.bare.size ? ' · red: chunk has records but no terrain' : '');
 }
 
 // "-6926.11 69.00 -10080.98", "-6926, -10080" and the like: the first and

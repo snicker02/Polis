@@ -217,7 +217,13 @@ export function* dbRecords(name, bytes) {
 }
 
 // ---- chunks --------------------------------------------------------------
-const CHUNK_KEY = 9, DATA3D = 43;
+// Per-chunk record tags (the byte after the 8 coordinate bytes). Data3D holds
+// the heightmap (1.18+); Data2D is the pre-1.18 heightmap; SubChunk records
+// hold the blocks; FinalizedState says how far generation got
+// (0 needs instaticking, 1 needs population, 2 done).
+const CHUNK_KEY = 9, DATA3D = 43, DATA2D = 45, SUBCHUNK = 47, FINALIZED = 54;
+export const TAGS = { DATA3D, DATA2D, SUBCHUNK, FINALIZED };
+const BIT = { [DATA3D]: 1, [DATA2D]: 2, [SUBCHUNK]: 4, [FINALIZED]: 8 };
 
 function biomeSections(v) {
   let i = 512;
@@ -243,6 +249,9 @@ function biomeSections(v) {
 // Read the surface heights (and the biome at the surface) of every chunk in
 // the world, optionally only those near a point, which is much faster.
 // Tables and the log are both read; for each chunk the newest record wins.
+// Heights come from Data3D, else Data2D. A census of every chunk that has any
+// record at all is kept, so chunks without a heightmap can be told apart from
+// chunks that are not in the world (and rebuilt from blocks by the caller).
 export function readWorld(bytes, opts = {}) {
   const zip = readZipEntries(bytes);
   const files = zip.entries.filter((e) => isDbFile(e.name));
@@ -250,6 +259,8 @@ export function readWorld(bytes, opts = {}) {
   const chunks = new Map();
   const biomeOf = new Map();
   const seqOf = new Map();          // chunk -> sequence of the Data3D record kept
+  const legacy = new Map();         // chunk -> { seq, heights } from Data2D
+  const census = new Map();         // chunk -> { mask, fin, finSeq }
   // which db files each chunk's records live in, so the blocks of a chosen
   // site can be read later without going through the whole world again
   const index = new Map();
@@ -262,18 +273,36 @@ export function readWorld(bytes, opts = {}) {
     if (isLog) logs++;
     for (const [key, value, seq, type] of dbRecords(e.name, data)) {
       if (isLog) logRecordsSeen++;
-      if (key.length === 9 || key.length === 10) {
-        const kv = new DataView(key.buffer, key.byteOffset, key.byteLength);
-        const k = kv.getInt32(0, true) + ',' + kv.getInt32(4, true);
-        let list = index.get(k);
-        if (!list) { list = new Set(); index.set(k, list); }
-        list.add(entryIndex);
-      }
-      if (key.length !== CHUNK_KEY || key[8] !== DATA3D) continue;
-      const dv = new DataView(key.buffer, key.byteOffset, key.byteLength);
-      const cx = dv.getInt32(0, true), cz = dv.getInt32(4, true);
-      if (near && (Math.abs(cx - near[0]) > radius || Math.abs(cz - near[1]) > radius)) continue;
+      if (key.length !== 9 && key.length !== 10) continue;           // overworld chunk keys only
+      const kv = new DataView(key.buffer, key.byteOffset, key.byteLength);
+      const cx = kv.getInt32(0, true), cz = kv.getInt32(4, true);
       const name = cx + ',' + cz;
+      let list = index.get(name);
+      if (!list) { list = new Set(); index.set(name, list); }
+      list.add(entryIndex);
+      const tag = key[8];
+      if (near && (Math.abs(cx - near[0]) > radius || Math.abs(cz - near[1]) > radius)) continue;
+      if (type === TYPE_VALUE) {
+        let c = census.get(name);
+        if (!c) { c = { mask: 0, fin: -1, finSeq: -1 }; census.set(name, c); }
+        c.mask |= BIT[tag] || 16;
+        if (tag === FINALIZED && value && value.length >= 4 && seq > c.finSeq) {
+          c.fin = new DataView(value.buffer, value.byteOffset, 4).getInt32(0, true);
+          c.finSeq = seq;
+        }
+      }
+      if (key.length !== CHUNK_KEY) continue;
+      if (tag === DATA2D) {
+        const prev = legacy.get(name);
+        if (prev && prev.seq >= seq) continue;
+        if (type !== TYPE_VALUE || !value || value.length < 512) { legacy.set(name, { seq, heights: null }); continue; }
+        const hv = new DataView(value.buffer, value.byteOffset, value.byteLength);
+        const heights = new Int16Array(256);
+        for (let i = 0; i < 256; i++) heights[i] = hv.getInt16(i * 2, true);   // pre-1.18: measured from y = 0
+        legacy.set(name, { seq, heights });
+        continue;
+      }
+      if (tag !== DATA3D) continue;
       const prev = seqOf.get(name);
       if (prev !== undefined && prev >= seq) continue;
       seqOf.set(name, seq);
@@ -292,7 +321,49 @@ export function readWorld(bytes, opts = {}) {
       }
     }
   }
-  return { chunks, biomes: biomeOf, zip, index, stats: { files: files.length, logs, logRecords: logRecordsSeen } };
+  let fromLegacy = 0;
+  for (const [name, { heights }] of legacy)
+    if (heights && !chunks.has(name) && !seqOf.has(name)) { chunks.set(name, heights); fromLegacy++; }
+  // chunks with blocks but no heightmap, and chunks with no terrain records at all
+  const blocksOnly = [], bare = [];
+  const finalized = { needsInstaticking: 0, needsPopulation: 0, done: 0, unknown: 0 };
+  for (const [name, c] of census) {
+    if (chunks.has(name)) continue;
+    if (c.mask & BIT[SUBCHUNK]) blocksOnly.push(name); else bare.push(name);
+    if (c.fin === 0) finalized.needsInstaticking++;
+    else if (c.fin === 1) finalized.needsPopulation++;
+    else if (c.fin === 2) finalized.done++;
+    else finalized.unknown++;
+  }
+  return {
+    chunks, biomes: biomeOf, zip, index, census,
+    stats: { files: files.length, logs, logRecords: logRecordsSeen, withRecords: census.size,
+      heightmaps: chunks.size - fromLegacy, fromLegacy, blocksOnly, bare, finalized },
+  };
+}
+
+// what the read found, in words: where heights came from, and how many chunks
+// have records but no terrain yet (with Bedrock's own generation state)
+export function worldReport(st, rebuilt, bareSet, census) {
+  const bare = bareSet ? bareSet.size : 0;
+  const f = { needsInstaticking: 0, needsPopulation: 0, done: 0, unknown: 0 };
+  if (bareSet && census) for (const n of bareSet) {
+    const c = census.get(n), s = c ? c.fin : -1;
+    if (s === 0) f.needsInstaticking++; else if (s === 1) f.needsPopulation++; else if (s === 2) f.done++; else f.unknown++;
+  }
+  const parts = [];
+  if (st.logs) parts.push(`tables + ${st.logs} log file${st.logs === 1 ? '' : 's'}`);
+  if (st.fromLegacy) parts.push(`${st.fromLegacy.toLocaleString()} from old-format heightmaps`);
+  if (rebuilt) parts.push(`${rebuilt.toLocaleString()} rebuilt from blocks (no heightmap record)`);
+  if (bare) {
+    const why = [];
+    if (f.needsInstaticking) why.push(`${f.needsInstaticking.toLocaleString()} need instaticking`);
+    if (f.needsPopulation) why.push(`${f.needsPopulation.toLocaleString()} need population`);
+    if (f.done) why.push(`${f.done.toLocaleString()} marked done`);
+    if (f.unknown) why.push(`${f.unknown.toLocaleString()} no state`);
+    parts.push(`${bare.toLocaleString()} have records but no terrain, shown red${why.length ? ' (' + why.join(', ') + ')' : ''}`);
+  }
+  return parts.length ? ` (${parts.join('; ')})` : '';
 }
 
 // The world's name, spawn and seed, from level.dat (an 8-byte header, then

@@ -1,4 +1,4 @@
-# Polis v0.17.1
+# Polis v0.17.2
 
 *Created with help from Claude AI.*
 
@@ -737,6 +737,19 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.17.2** — A world map that says why a chunk is dark.
+
+A chunk only showed if it had a Data3D heightmap record; anything else was
+drawn dark, the same as a chunk that is not in the world. Now every chunk with
+any record is counted while reading. Chunks with blocks but no heightmap have
+their heights worked out from the subchunks themselves (top non-air block + 1,
+the heightmap's own convention) and show normally; pre-1.18 Data2D heightmaps
+are used where there is no Data3D. Chunks that have records but no terrain are
+drawn red, and the status line gives how many there are and Bedrock's own
+generation state for them (FinalizedState: needs instaticking, needs
+population, done). Dark now only means the world has nothing at all there.
+Section 2za covers the census, Data2D, the rebuild and the report.
 
 **0.17.1** — Chunks in the LevelDB log are read.
 
