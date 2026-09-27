@@ -7,7 +7,7 @@ import { MAT, THEMES } from './materials.js';
 import { makeBuilding, OUTWARD } from './building.js';
 import { doorId, DIR, MATERIALS } from './materials.js';
 import { farm, pond, scatterFlowers, furnish, bedSpawns, placeBell, golemSpawns, ranch, pandaGrove, catSpawns, RANCH_ANIMALS } from './life.js';
-import { layTransit, trimOverRails, edgeDistance } from './transit.js';
+import { layTransit, trimOverRails, sweepStrandedRails, edgeDistance } from './transit.js';
 import { planCanal, buildCanal, USE_CANAL } from './water.js';
 import { planHarbour, buildHarbour, harbourSidings } from './harbour.js';
 import { planBridges, buildBridges, bridgeRails } from './bridges.js';
@@ -443,6 +443,14 @@ export function generateCity(cfgIn, onProgress) {
 
   // ---- facing the cuts into the hillside -------------------------------------
   const cutFaces = cfg.terrain && hills.rolling ? faceCuts(world, plan, hills, cfg.terrain, GROUND, buildings) : 0;
+
+  // Last of all — after the viaducts have cut through whatever was at grade,
+  // after their spurs have joined what they could, and after the skirt and
+  // the face cuts have taken their bites out of the city's edge — any track
+  // left leading nowhere is taken up. It has to come last: each of those
+  // steps can sever a line, and a sweep run before them would tidy a world
+  // that no longer exists.
+  if (transit && cfg.transit !== 'roads') sweepStrandedRails(world, transit, GROUND);
 
   // ---- the centre marker -----------------------------------------------------
   const centre = cfg.centreMark ? markCentre(world, plan, buildings, GROUND, elevAt, spawns) : null;

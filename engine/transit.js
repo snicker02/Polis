@@ -27,12 +27,13 @@
 // that stops there is pushed off again, so every line is a shuttle that runs
 // back and forth on its own. Hop in as it passes, or wait at an end.
 
-import { MAT, railId, poweredRailId, RAIL } from './materials.js';
+import { MAT, MATERIALS, railId, poweredRailId, RAIL } from './materials.js';
 import { USE } from './plan.js';
 
 export const TRANSIT_MODES = ['roads', 'rails', 'trams'];
 const RAMP = 4;           // blocks of climb
 const CLEAR_GAP = 10;     // crossings closer than this share one bridge
+const STRANDED_MAX = 14;   // a run shorter than this with no station is scrap
 const BOOST_EVERY = 9;            // a cart loses speed long before 16 blocks
 const BOOST_MIN = 4;              // no closer together than this, even at bends
 
@@ -128,10 +129,55 @@ export function layTransit(world, plan, mode, G) {
       if (cyc && cyc.length >= 40 && tidyRing(cyc)) { loop = { k, cells: cyc }; break; }
     }
   }
+  const extraLoops = [];
+  if (main) {
+    for (const d of plan.districts.slice(1)) {
+      if (d.size < 600) continue;               // too small to be worth a circuit
+      const inD = (x, z) => d.has(z * W + x);
+      const Od = edgeDistance(plan, inD);
+      const rect = rectRing(W, D, d, (x, z) => road(x, z) && inD(x, z) && Od[z * W + x] >= 2);
+      if (rect) { extraLoops.push({ k: 3, cells: rect }); continue; }
+      for (const k of [3, 2]) {
+        const ring = [];
+        for (let z = 0; z < D; z++) for (let x = 0; x < W; x++) if (Od[z * W + x] === k && inD(x, z)) ring.push([x, z]);
+        let cyc = traceCycle(ring, (x, z) => road(x, z) && inD(x, z));
+        if (!cyc) {
+          const walked = traceContour(W, D, (x, z) => Od[z * W + x] >= k && road(x, z) && inD(x, z));
+          // A walk round a narrow strip goes out along one side and back
+          // along the other, and the two runs end up side by side: track
+          // laid on that is a thicket of curves, not a circuit. Such a ring
+          // is refused, and the district keeps its straight lines.
+          cyc = walked && tidyRing(walked) ? walked : null;
+        }
+        if (cyc && cyc.length >= 40) { extraLoops.push({ k, cells: cyc }); break; }
+      }
+    }
+  }
+
+
+  // Every ring has to be worked out before the straight lines are picked,
+  // because a line may not be laid where a ring is going to run. On flat
+  // ground two lines sharing a cell went unnoticed: the second simply wrote
+  // its rail over the first. On real ground they are lifted to different
+  // heights, and what is left is one line at grade and pieces of the other
+  // stranded in the air above it — the little humps and closed circles of
+  // track that join nothing. The main district was already protected by
+  // minO; its outlying districts have had rings of their own since they
+  // started getting them, and nothing kept the lines off those.
+  const ringGuard = new Uint8Array(W * D);
+  for (const ring of [loop, ...extraLoops]) {
+    if (!ring) continue;
+    for (const [x, z] of ring.cells)
+      for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
+        const nx = x + dx, nz = z + dz;
+        if (nx >= 0 && nz >= 0 && nx < W && nz < D) ringGuard[nz * W + nx] = 1;
+      }
+  }
+
   const minO = loop ? loop.k + 2 : 2;
-  // an outlying district has no loop round it, so its lines only have to stay
-  // off its own edge
-  const inner = (x, z) => road(x, z) && (inMain(x, z) ? Oloop[z * W + x] >= minO : O[z * W + x] >= 2);
+  // Outlying districts big enough to be worth it are ringed too, so a line
+  // there keeps off its own district's ring as well as off its edge.
+  const inner = (x, z) => road(x, z) && !ringGuard[z * W + x] && (inMain(x, z) ? Oloop[z * W + x] >= minO : O[z * W + x] >= 2);
   xRuns = pick(rows, W, (z, x) => inner(x, z));
   zRuns = pick(cols, D, (x, z) => inner(x, z));
 
@@ -252,31 +298,6 @@ export function layTransit(world, plan, mode, G) {
   // Each district gets a ring of its own: the main one keeps the city loop,
   // and an island joined by a bridge is circled too, so a cart can go round
   // it rather than only arriving and stopping.
-  const extraLoops = [];
-  if (main) {
-    for (const d of plan.districts.slice(1)) {
-      if (d.size < 600) continue;               // too small to be worth a circuit
-      const inD = (x, z) => d.has(z * W + x);
-      const Od = edgeDistance(plan, inD);
-      const rect = rectRing(W, D, d, (x, z) => road(x, z) && inD(x, z) && Od[z * W + x] >= 2);
-      if (rect) { extraLoops.push({ k: 3, cells: rect }); continue; }
-      for (const k of [3, 2]) {
-        const ring = [];
-        for (let z = 0; z < D; z++) for (let x = 0; x < W; x++) if (Od[z * W + x] === k && inD(x, z)) ring.push([x, z]);
-        let cyc = traceCycle(ring, (x, z) => road(x, z) && inD(x, z));
-        if (!cyc) {
-          const walked = traceContour(W, D, (x, z) => Od[z * W + x] >= k && road(x, z) && inD(x, z));
-          // A walk round a narrow strip goes out along one side and back
-          // along the other, and the two runs end up side by side: track
-          // laid on that is a thicket of curves, not a circuit. Such a ring
-          // is refused, and the district keeps its straight lines.
-          cyc = walked && tidyRing(walked) ? walked : null;
-        }
-        if (cyc && cyc.length >= 40) { extraLoops.push({ k, cells: cyc }); break; }
-      }
-    }
-  }
-
   for (const ring of [loop, ...extraLoops]) {
   if (ring) {
     const loop = ring;
@@ -339,6 +360,137 @@ export function layTransit(world, plan, mode, G) {
 // blocks a cart and rider need. Trim foliage out of that space along every
 // line (foliage only: nothing structural is ever placed there).
 const FOLIAGE = new Set([MAT.LEAVES, MAT.SPRUCE_LEAF, MAT.LOG, MAT.SPRUCE_LOG]);
+// Track that leads nowhere.
+//
+// A few pieces of rail always end up stranded: a viaduct's deck is cut
+// through a line that was already at grade, or a line is severed where the
+// ground was terraced under it, and what is left is a stub of five or ten
+// blocks sitting in a street with nothing at either end. In the game it reads
+// as a mistake — a little "U" of track beside a house, or a closed circle of
+// curves joining itself — so it is taken up again rather than left.
+//
+// A run is only removed if it is short AND holds no station: every real line
+// records one, bridge lanes included, so anything with a station is a railway
+// someone can use however odd it looks.
+export function sweepStrandedRails(world, transit, G) {
+  if (!transit) return 0;
+  const isRail = (id) => id >= 0 && /rail/.test(MATERIALS.def(id).block);
+  const rails = new Map();
+  world.forEach((x, y, z, id) => { if (isRail(id)) rails.set(x + ',' + y + ',' + z, [x, y, z]); });
+  // What counts as scrap. A run is spared if it holds a station or a cart —
+  // that is a line the planner meant to lay, however short, and some of them
+  // are short by design — or if it is part of a viaduct's lane, which a
+  // six-block bridge makes four cells long. What is left over is the other
+  // kind: a piece of a line whose station went with the part that was cut
+  // away, or track no line claims at all.
+  const spared = new Set();
+  for (const l of transit.lines) {
+    for (const [x, y, z] of l.stations || []) spared.add(x + ',' + y + ',' + z);
+    if (l.bridge) for (const [x, y, z] of l.cells) spared.add(x + ',' + y + ',' + z);
+  }
+  for (const c of transit.carts || []) spared.add(c.x + ',' + c.y + ',' + c.z);
+
+  const seen = new Set();
+  let taken = 0, runs = 0;
+  for (const start of rails.keys()) {
+    if (seen.has(start)) continue;
+    const comp = [];
+    const q = [start];
+    seen.add(start);
+    let keeps = false;
+    while (q.length) {
+      const k = q.pop();
+      comp.push(k);
+      if (spared.has(k)) keeps = true;
+      const [x, y, z] = rails.get(k);
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]])
+        for (const dy of [0, 1, -1]) {
+          const nk = (x + dx) + ',' + (y + dy) + ',' + (z + dz);
+          if (rails.has(nk) && !seen.has(nk)) { seen.add(nk); q.push(nk); }
+        }
+    }
+    if (keeps || comp.length > STRANDED_MAX) continue;
+    runs++;
+    for (const k of comp) {
+      const [x, y, z] = rails.get(k);
+      world.clear(x, y, z);
+      // a booster's redstone block underneath is no use without its rail
+      if (world.get(x, y - 1, z) === MAT.REDSTONE) world.set(x, y - 1, z, MAT.GRAVEL);
+      taken++;
+    }
+    // The records go too, or the stats, the exporter and the minecart that
+    // was going to be spawned all still believe in the track.
+    const gone = new Set(comp);
+    for (const l of transit.lines) {
+      const before = l.cells.length;
+      l.cells = l.cells.filter(([x, y, z]) => !gone.has(x + ',' + y + ',' + z));
+      if (l.cells.length !== before) transit.stats.rails -= before - l.cells.length;
+      l.stations = (l.stations || []).filter(([x, y, z]) => !gone.has(x + ',' + y + ',' + z));
+    }
+    transit.carts = (transit.carts || []).filter((c) => !gone.has(c.x + ',' + c.y + ',' + c.z));
+  }
+  // A viaduct is raised over ground the railway was already crossing, and its
+  // piers and abutment take out the track underneath. The line survives
+  // either side, so nothing here is stranded — but its record still lists the
+  // cells that were wiped, and the stats and the exported carts are counted
+  // off that record. So the record is trimmed to the track that is actually
+  // there.
+  let ghosts = 0;
+  for (const l of transit.lines) {
+    const before = l.cells.length;
+    // where the track ended up a block off the record, the record is
+    // corrected rather than tolerated, so "the line says there is rail here"
+    // and "there is rail here" mean the same thing afterwards
+    l.cells = l.cells.filter((c) => {
+      const [x, y, z] = c;
+      for (const dy of [0, -1, 1]) if (isRail(world.get(x, y + dy, z))) { c[1] = y + dy; return true; }
+      return false;
+    });
+    if (l.cells.length !== before) {
+      ghosts += before - l.cells.length;
+      transit.stats.rails -= before - l.cells.length;
+      const live = new Set(l.cells.map(([x, y, z]) => x + ',' + y + ',' + z));
+      l.stations = (l.stations || []).filter(([x, y, z]) => live.has(x + ',' + y + ',' + z));
+    }
+  }
+  // One rail, one owner. Where a viaduct's lane was laid along track that was
+  // already at grade, the world holds a single rail and two lines both claim
+  // it. The lane is what was actually built there, so the older line gives up
+  // the cell — otherwise the stats count the rail twice and a cart is spawned
+  // on a line that no longer runs where it thinks it does.
+  const claimed = new Map();
+  for (const l of transit.lines) if (l.bridge) for (const [x, y, z] of l.cells) claimed.set(x + ',' + y + ',' + z, l);
+  for (const l of transit.lines) {
+    if (l.bridge) continue;
+    const before = l.cells.length;
+    l.cells = l.cells.filter(([x, y, z]) => claimed.get(x + ',' + y + ',' + z) === undefined);
+    if (l.cells.length !== before) {
+      transit.stats.rails -= before - l.cells.length;
+      const kept = new Set(l.cells.map(([x, y, z]) => x + ',' + y + ',' + z));
+      l.stations = (l.stations || []).filter(([x, y, z]) => kept.has(x + ',' + y + ',' + z));
+    }
+  }
+
+  transit.lines = transit.lines.filter((l) => l.cells.length);
+  const live = new Set();
+  for (const l of transit.lines) for (const [x, y, z] of l.cells) live.add(x + ',' + y + ',' + z);
+  // A line that lost the cell its cart or its station stood on keeps both —
+  // they move to track it still has. Dropping them instead would leave a
+  // working railway with nothing running on it.
+  transit.carts = (transit.carts || []).filter((c) => live.has(c.x + ',' + c.y + ',' + c.z));
+  const hasCart = new Set(transit.carts.map((c) => c.x + ',' + c.y + ',' + c.z));
+  for (const l of transit.lines) {
+    if (!l.stations || !l.stations.length) l.stations = [l.cells[Math.floor(l.cells.length / 2)].slice()];
+    if (l.cells.some(([x, y, z]) => hasCart.has(x + ',' + y + ',' + z))) continue;
+    const [x, y, z] = l.stations[0];
+    transit.carts.push({ type: 'minecart', x, y, z });
+    hasCart.add(x + ',' + y + ',' + z);
+  }
+  transit.stats.stranded = runs;
+  transit.stats.ghosts = ghosts;
+  return taken;
+}
+
 export function trimOverRails(world, transit) {
   if (!transit) return 0;
   let n = 0;

@@ -201,6 +201,113 @@ export default async function run(ctx) {
     note(`lane ends ${joined}/${ends} joined · ${bent} round a corner · ${unreachable} with nothing at deck level to join`);
   }
 
+  // Track that leads nowhere, and two lines laid on the same ground.
+  //
+  // On flat ground a second line laid along the same cells as the first just
+  // overwrote it and nothing looked wrong. On real ground the two are lifted
+  // to different heights, and what survives is one railway at grade with
+  // pieces of the other stranded above it: the little humps and closed
+  // circles of track that join nothing. So: no two lines may share more than
+  // a crossing, every run of track must be a railway rather than a stub, and
+  // a line's record must point at track that is really there.
+  {
+    let pairWorst = 0, pairName = '', orphanRuns = 0, orphanRails = 0, ghosts = 0;
+    for (let i = 0; i < SITES; i++) {
+      for (const seed of [7, 1118]) {
+        const { r } = await fx.fitted(192, i, { seed });
+        const lines = r.transit.lines;
+
+        // two lines on the same ground cell: a crossing is one cell, a line
+        // laid along another is many
+        // A viaduct legitimately flies over a street railway, so height is
+        // part of the test: two lines sharing ground is only wrong when they
+        // share it at the same level. (How much headroom a low deck leaves
+        // the track beneath is a separate question this does not answer.)
+        const owner = new Map(), pairs = new Map();
+        lines.forEach((line, li) => {
+          for (const [x, y, z] of line.cells) {
+            const k = x + ',' + z;
+            const had = owner.get(k);
+            if (had && had.li !== li) {
+              if (Math.abs(had.y - y) <= 1) {
+                const p = [had.li, li].sort((a, b) => a - b).join('+');
+                pairs.set(p, (pairs.get(p) || 0) + 1);
+              }
+            } else owner.set(k, { li, y });
+          }
+        });
+        for (const [p, n] of pairs) if (n > pairWorst) { pairWorst = n; pairName = `site ${i} seed ${seed} lines ${p}`; }
+
+        // the record must agree with the world
+        const railAt = (x, y, z) => { const id = r.world.get(x, y, z); return id >= 0 && /rail/.test(MATERIALS.def(id).block); };
+        for (const line of lines) for (const [x, y, z] of line.cells) if (!railAt(x, y, z)) ghosts++;
+
+        // every run of track, and whether it is a railway or a scrap
+        const rails = new Map();
+        r.world.forEach((x, y, z, mid) => { if (/rail/.test(MATERIALS.def(mid).block)) rails.set(x + ',' + y + ',' + z, [x, y, z]); });
+        // The same standard the engine sweeps by: a run is a railway if it
+        // has a station or a cart on it, or is a viaduct's lane. Some lines
+        // are short by design, so length alone does not make a stub.
+        const onBridge = new Set();
+        for (const line of lines) {
+          for (const [x, y, z] of line.stations || []) onBridge.add(x + ',' + y + ',' + z);
+          if (line.bridge) for (const [x, y, z] of line.cells) onBridge.add(x + ',' + y + ',' + z);
+        }
+        for (const c of r.transit.carts || []) onBridge.add(c.x + ',' + c.y + ',' + c.z);
+        const seen = new Set();
+        for (const start of rails.keys()) {
+          if (seen.has(start)) continue;
+          const comp = [];
+          const q = [start];
+          seen.add(start);
+          let spared = false;
+          while (q.length) {
+            const k = q.pop();
+            comp.push(k);
+            if (onBridge.has(k)) spared = true;
+            const [x, y, z] = rails.get(k);
+            for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]])
+              for (const dy of [0, 1, -1]) {
+                const nk = (x + dx) + ',' + (y + dy) + ',' + (z + dz);
+                if (rails.has(nk) && !seen.has(nk)) { seen.add(nk); q.push(nk); }
+              }
+          }
+          if (!spared && comp.length <= 14) { orphanRuns++; orphanRails += comp.length; }
+        }
+      }
+    }
+    check('rails: no line is laid along another, only across it', pairWorst <= 2,
+      `worst pair shares ${pairWorst} cells${pairWorst > 2 ? ' · ' + pairName : ''}`);
+    check('rails: no stub of track is left leading nowhere', orphanRuns === 0,
+      `${orphanRuns} stranded runs holding ${orphanRails} rails`);
+    check('rails: every cell a line claims has track on it', ghosts === 0, `${ghosts} claimed cells with no rail`);
+  }
+
+  // Each viaduct joins an outlying district to the main one. A bridge between
+  // two offshoots leaves both of them off the network however well built it
+  // is, so which districts an span actually lands in is checked, not assumed.
+  {
+    let spans = 0, toMain = 0;
+    const wrong = [];
+    for (let i = 0; i < SITES; i++) {
+      for (const seed of [7, 1118]) {
+        const { r } = await fx.fitted(192, i, { seed });
+        const ds = r.plan.districts || [];
+        if (ds.length < 2) continue;
+        const districtOf = (x, z) => { const c = z * 192 + x; for (let k = 0; k < ds.length; k++) if (ds[k].has(c)) return k; return -1; };
+        for (const b of r.bridges || []) {
+          spans++;
+          const far = b.axis === 'x' ? [b.from[0] + b.dir * (b.length - 1), b.from[1]] : [b.from[0], b.from[1] + b.dir * (b.length - 1)];
+          const near = districtOf(b.from[0], b.from[1]), end = districtOf(far[0], far[1]);
+          if (end === 0 || near === 0) toMain++;
+          else wrong.push(`site ${i} seed ${seed}: ${near} to ${end}`);
+        }
+      }
+    }
+    check('bridges: every span joins an outlying district to the main one', spans === 0 || toMain === spans,
+      `${toMain}/${spans} spans reach the main district${wrong.length ? ' · ' + wrong.slice(0, 3).join('; ') : ''}`);
+  }
+
   // no ring anywhere may run back alongside itself: that lays track in
   // circles instead of a circuit
   {

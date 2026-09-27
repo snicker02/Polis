@@ -1,4 +1,4 @@
-# Polis v0.15.0
+# Polis v0.15.1
 
 *Created with help from Claude AI.*
 
@@ -733,6 +733,35 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.15.1** — Rails that led nowhere.
+
+Two lines could be laid along the same ground. The main district's ring was
+protected — every straight line had to keep `k + 2` clear of it — but
+outlying districts have had rings of their own for a while, and nothing kept
+the lines off those. On flat ground it went unnoticed, because the second line
+simply wrote its rail over the first. On real ground the two are lifted to
+different heights, and what was left was one railway at grade with pieces of
+the other stranded in the air above it: three-block humps and closed circles
+of curved track, joined to nothing, at regular intervals down a street. Across
+the fitted test sites, pairs of lines sharing 297, 216 and 138 ground cells;
+now at most two, which is a crossing.
+
+Every ring is now worked out before the straight lines are picked, and no line
+may be laid on one. What that does not cover is track cut after the fact — a
+viaduct raised through a line already at grade, or the skirt and face cuts
+taking a bite out of the city's edge — so a last pass takes up whatever is
+left leading nowhere. A run is only scrap if it holds no station and no cart
+and is no part of a viaduct's lane: some lines are short by design, and length
+alone does not make a stub. The records are trimmed with it, so the stats, the
+exported carts and the line records agree with the track on the ground; where
+a lane was laid along a line already there, the older line gives up the cell
+rather than both counting the same rail.
+
+Four checks were added to hold it: no line laid along another at the same
+level (a viaduct over a street railway is fine), no stub left leading nowhere,
+every cell a line claims has track on it, and every viaduct joining an
+outlying district to the main one rather than to another offshoot.
 
 **0.15.0** — Two things, one of them structural.
 
