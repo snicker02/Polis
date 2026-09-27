@@ -162,16 +162,47 @@ export function buildBridges(world, plan, spans, hills, G, terrain, buildings = 
 // curve leading onto the deck. What was three separate railways (ring,
 // bridge, ring) becomes one circuit that runs round one district, crosses,
 // runs round the other, and crosses back.
+//
+// A lane end does not always have the ring straight in front of it. Where the
+// ring runs parallel to one side of the deck, the lane on that side meets it
+// at once and the lane on the other side never does: searching straight
+// inward walks alongside the ring for its whole length and finds nothing, and
+// that end is left as a buffer. So the search is L-shaped — inward, then a
+// turn — and the spur is built with a curve at the corner. Four lane ends per
+// bridge, four joins.
 export function bridgeRails(world, bridges, transit, G) {
   if (!transit || !bridges.length) return 0;
+  const REACH_IN = 28;            // how far inward a spur may run
+  const REACH_LAT = 20;           // and how far it may turn aside after that
+
   const railAt = (x, y, z) => {
     const id = world.get(x, y, z);
     return id >= 0 && /rail/.test(MATERIALS.def(id).block);
   };
+  // The cells of every ring. A spur should join the loop, not the first
+  // stray piece of track it happens to meet, so a ring cell always beats a
+  // nearer non-ring one.
+  const ringCells = new Set();
+  for (const line of transit.lines || []) {
+    if (!line.loop) continue;
+    for (const [x, y, z] of line.cells) ringCells.add(x + ',' + y + ',' + z);
+  }
+  // cells this function has laid or bent: two spurs must not cross, and a
+  // ring cell already turned onto one lane cannot be turned onto another
+  const taken = new Set();
+  const key = (x, y, z) => x + ',' + y + ',' + z;
+
+  // the curve joining two directions, each a unit step
+  const curveFor = (a, b) => {
+    const dx = a[0] + b[0], dz = a[1] + b[1];
+    return dx > 0 ? (dz > 0 ? RAIL.SE : RAIL.NE) : (dz > 0 ? RAIL.SW : RAIL.NW);
+  };
+
   let laid = 0;
   for (const b of bridges) {
     const alongX = b.axis === 'x';
     const dir = alongX ? RAIL.EW : RAIL.NS;
+    const cross = alongX ? RAIL.NS : RAIL.EW;
     const half = b.width >> 1;
     // the two lanes sit either side of the middle of the deck
     const lanes = [-1, 1].map((side) => {
@@ -190,42 +221,106 @@ export function bridgeRails(world, bridges, transit, G) {
       return cells;
     });
 
-    // Where a lane runs out onto the bank, look for the district's ring
-    // within a few blocks and lead the lane onto it, bending the ring's own
-    // rail to meet the lane so a cart runs straight through.
+    // Where a lane runs out onto the bank, look for a ring — in front of the
+    // end, or off to one side of it — and lead the lane onto it, bending the
+    // ring's own rail to meet the spur so a cart runs straight through.
     let joined = 0;
+    const ends = [];
     for (const cells of lanes) {
       if (cells.length < 4) continue;
       for (const end of [cells[0], cells[cells.length - 1]]) {
         const inward = end === cells[0] ? -b.dir : b.dir;
-        const step = alongX ? [inward, 0] : [0, inward];
-        let hit = null;
-        for (let k = 1; k <= 10 && !hit; k++) {
-          const x = end[0] + step[0] * k, z = end[2] + step[1] * k;
-          for (let dy = 1; dy >= -1; dy--) if (railAt(x, end[1] + dy, z)) { hit = [x, end[1] + dy, z, k]; break; }
-        }
-        if (!hit) continue;
-        // pave the gap between the lane's end and the ring
-        for (let k = 1; k < hit[3]; k++) {
-          const x = end[0] + step[0] * k, z = end[2] + step[1] * k;
+        const step = alongX ? [inward, 0] : [0, inward];       // along the bridge
+        const latU = alongX ? [0, 1] : [1, 0];                 // across it
+        // where a cell (a inward, l aside) lands
+        const at = (a, l) => [end[0] + step[0] * a + latU[0] * l, end[2] + step[1] * a + latU[1] * l];
+
+        // Try one corner: a cells inward, then l aside. A candidate only
+        // counts if the whole spur can actually be built — the way to it
+        // clear of track, and the rail it reaches lying across the approach
+        // so there is something to curve onto. Checking that here rather
+        // than after choosing means a blocked or unturnable candidate is
+        // passed over for the next one instead of losing the end.
+        let sawRail = false;               // track at deck level, usable or not
+        const consider = (a, l) => {
+          const [jx, jz] = at(a, l);
+          let jy = null;
+          for (let dy = 1; dy >= -1; dy--) {
+            const yy = end[1] + dy;
+            if (!railAt(jx, yy, jz)) continue;
+            sawRail = true;
+            if (!taken.has(key(jx, yy, jz))) { jy = yy; break; }
+          }
+          if (jy === null) return null;
+
+          const sign = Math.sign(l);
           const y = end[1];
-          if (!world.has(x, y - 1, z)) world.set(x, y - 1, z, MAT.GRAVEL);
-          world.set(x, y, z, railId(dir));
-          for (let h = 1; h <= 3; h++) world.clear(x, y + h, z);
-          cells.push([x, y, z]);
+          const path = [];
+          for (let k = 1; k <= (l === 0 ? a - 1 : a); k++) path.push({ pos: at(k, 0), rail: dir });
+          if (l !== 0) {
+            if (!path.length) return null;                     // no room for a corner
+            path[path.length - 1].rail = curveFor([-step[0], -step[1]], [latU[0] * sign, latU[1] * sign]);
+            for (let m = 1; m < Math.abs(l); m++) path.push({ pos: at(a, sign * m), rail: cross });
+          }
+          for (const { pos } of path)
+            if (taken.has(key(pos[0], y, pos[1])) || railAt(pos[0], y, pos[1])) return null;
+
+          // Which side of the junction the rest of the ring lies on decides
+          // the curve, so it is looked up rather than assumed — and "side"
+          // is relative to however the spur arrives, not to the bridge,
+          // since it may come round a corner.
+          const approach = l === 0 ? step : [latU[0] * sign, latU[1] * sign];
+          const side = [[approach[1], approach[0]], [-approach[1], -approach[0]]];
+          let ringSide = null;
+          for (const [sx, sz] of side)
+            if (railAt(jx + sx, jy, jz + sz) || railAt(jx + sx, jy + 1, jz + sz) || railAt(jx + sx, jy - 1, jz + sz)) { ringSide = [sx, sz]; break; }
+          if (!ringSide) return null;
+
+          const curve = curveFor([-approach[0], -approach[1]], ringSide);
+          const ring = ringCells.has(key(jx, jy, jz));
+          // a ring always beats a stray piece of track, then the shortest
+          // run, then the straightest
+          const score = (ring ? 0 : 1e6) + (a + Math.abs(l)) * 10 + Math.abs(l);
+          return { score, a, l, path, jx, jy, jz, curve, ring, y };
+        };
+
+        let best = null;
+        for (let a = 1; a <= REACH_IN; a++)
+          for (let l = -REACH_LAT; l <= REACH_LAT; l++) {
+            const c = consider(a, l);
+            if (c && (!best || c.score < best.score)) best = c;
+          }
+        if (!best) {
+          // Say which of the three it is, because they want different fixes.
+          // A ring below the deck needs the spur to descend, which it cannot
+          // do; nothing in reach at all means the bank carries no railway
+          // near this end; anything else is a spur that could not be routed.
+          let below = false;
+          for (let a = 1; a <= REACH_IN && !below; a++)
+            for (let l = -REACH_LAT; l <= REACH_LAT && !below; l++) {
+              const [x, z] = at(a, l);
+              for (let dy = -5; dy <= 5; dy++)
+                if (Math.abs(dy) > 1 && railAt(x, end[1] + dy, z)) { below = true; break; }
+            }
+          ends.push({ joined: false, why: sawRail ? 'no way through to the track in front of it' : below ? 'the ring is not at deck level' : 'no track within reach' });
+          continue;
         }
-        // and bend the ring's rail into the lane
-        const [jx, jy, jz] = hit;
-        const along = alongX ? [b.dir, 0] : [0, b.dir];
-        const ringDir = railAt(jx + (alongX ? 0 : 1), jy, jz + (alongX ? 1 : 0)) || railAt(jx - (alongX ? 0 : 1), jy, jz - (alongX ? 1 : 0));
-        if (ringDir) {
-          const toward = -inward;
-          const curve = alongX
-            ? (toward > 0 ? (railAt(jx, jy, jz + 1) ? RAIL.SE : RAIL.NE) : (railAt(jx, jy, jz + 1) ? RAIL.SW : RAIL.NW))
-            : (toward > 0 ? (railAt(jx + 1, jy, jz) ? RAIL.SE : RAIL.SW) : (railAt(jx + 1, jy, jz) ? RAIL.NE : RAIL.NW));
-          world.set(jx, jy, jz, railId(curve));
+
+        for (const { pos, rail } of best.path) {
+          const [x, z] = pos;
+          if (!world.has(x, best.y - 1, z)) world.set(x, best.y - 1, z, MAT.GRAVEL);
+          world.set(x, best.y, z, railId(rail));
+          for (let h = 1; h <= 3; h++) world.clear(x, best.y + h, z);
+          taken.add(key(x, best.y, z));
+          cells.push([x, best.y, z]);
         }
+        // Bend the ring's own rail so it leads onto the spur. A rail joins
+        // two directions and no more, so the ring gives way here: a cart
+        // coming round is turned onto the bridge instead of carrying on.
+        world.set(best.jx, best.jy, best.jz, railId(best.curve));
+        taken.add(key(best.jx, best.jy, best.jz));
         joined++;
+        ends.push({ joined: true, a: best.a, leg: Math.abs(best.l), ring: best.ring });
       }
     }
 
@@ -239,7 +334,7 @@ export function bridgeRails(world, bridges, transit, G) {
       laid++;
     }
     b.joined = joined;
+    b.ends = ends;
   }
   return laid;
 }
-

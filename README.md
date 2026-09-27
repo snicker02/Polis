@@ -1,4 +1,4 @@
-# Polis v0.14.3
+# Polis v0.15.0
 
 *Created with help from Claude AI.*
 
@@ -27,7 +27,13 @@ polis/
     export.js            chunk split, placement guide, .mcpack / .zip
   tools/
     nbt-read.js          little-endian NBT + zip reader (validation only)
-    validate.js          headless test harness
+    validate.js          headless test runner
+    combine.js           adds the shards of a split run into one result
+    checks/
+      registry.js        every section, its group and the fixtures it shares
+      harness.js         counters, per-section timing, shard output
+      fixtures.js        the expensive cities, built once and shared
+      <id>-<name>.js     one file per section of checks
 ```
 
 ## Running it
@@ -48,8 +54,20 @@ banner and refuses to export until you hard-refresh (Ctrl+Shift+R).
 Headless checks:
 
 ```
-npm run validate                 # node tools/validate.js
+npm run validate                 # all 39 sections, about three and a half minutes
+npm run validate:fast            # the quick ones, about 35 seconds
+npm run validate:slow:1          # heavy sections, first half
+npm run validate:slow:2          # second half
+npm run combine                  # adds the shards up
+npm run validate:list            # the sections, and how long each took last time
 ```
+
+The suite outgrew a single command, so it can be run in pieces: each run
+writes a shard to `.validate/`, and `npm run combine` adds them into one
+total. The combiner will not report a pass if a section was missed, counted
+twice, or measured before the newest source file changed. `node
+tools/validate.js --only 2z,3` runs named sections; `--part k/n` splits a
+group by measured cost.
 
 ## The requirements, and how they are met
 
@@ -715,6 +733,72 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.15.0** — Two things, one of them structural.
+
+The validator is no longer a single 3,500-line file that has to run all the
+way through. The checks are 39 modules under `tools/checks/`, listed in
+`tools/checks/registry.js`, and `tools/validate.js` is a runner over them:
+
+    npm run validate              everything, as before
+    npm run validate:fast         the quick sections (~35s)
+    npm run validate:slow:1       first half of the heavy ones (~1m40s)
+    npm run validate:slow:2       second half (~1m20s)
+    npm run combine               adds the shards up
+    npm run validate:list         what there is, and how long each took
+
+Every run writes a shard to `.validate/` with its counts, its failures and its
+per-section times, and `tools/combine.js` adds them into the one number that
+means anything. The combiner refuses to report a pass if a section was missed,
+counted twice, or measured before the newest source file changed — a green
+total over two thirds of the suite is worse than no total. `--part k/n` splits
+a group by measured cost; those times are only rewritten by an unsplit run, so
+the boundary cannot move between part 1 and part 2.
+
+Each section is timed and its time printed as it finishes, so a slow one shows
+while the run is still going. The expensive fixtures — the ten swept cities,
+the sites cut from the saved terrain, the cities fitted to them — are built
+once per process in `tools/checks/fixtures.js` and shared. The bridge section
+alone had been generating the same six fitted cities seven times over. The
+whole suite went from about seven minutes to three and a half, and no single
+command now needs more than two.
+
+And the bridge spurs are L-shaped. A lane end used to look only straight
+inward, so where the ring ran parallel and offset to one side of the deck, the
+lane on that side met it immediately and the lane on the other side walked
+alongside it for its whole length and found nothing — two of four lane ends
+left at a buffer, a cart running to the edge of the deck and stopping. The
+search now considers every corner within reach: so many blocks inward, then a
+turn, with a curved rail laid at the corner and the junction curve worked out
+from whichever direction the spur actually arrives rather than from the
+bridge's axis. A candidate only counts if the whole spur can be built — the
+way to it clear of track, and the rail it reaches lying across the approach so
+there is something to curve onto — so a blocked or unturnable corner is passed
+over for the next one instead of losing the end. A ring cell always beats a
+stray piece of track, and no two spurs may cross or claim the same junction.
+
+Across the fitted test sites that is 12 of 16 lane ends joined, up from 9, and
+on the site the fault was found on all four now join where two did. The four
+that remain are on one bridge that spans nearly the whole plan: two of its
+ends sit at the edge of the plan with no railway in front of them at all, and
+two have their ring two blocks below deck level, which would need the spur to
+descend on sloped rails. Those are named as such in `bridge.ends` rather than
+counted as joins, and the validator fails on any end that had track in front
+of it and did not reach it.
+
+**0.14.4** — The bridge junction curves the right way. A lane now looks 28
+blocks inward for the ring rather than 10, and the curve it bends the ring
+into is chosen by looking up which side the rest of the ring actually lies on
+instead of assuming. Two of a bridge's four lane ends join on the test site,
+up from one; the remaining two need an L-shaped spur, since a lane that
+searches straight inward never meets a ring running parallel and offset to one
+side. The validator takes a section name as an argument now, because the whole
+suite has outgrown a single run in some environments.
+
+Known: two lane ends per bridge still end at a buffer rather than joining the
+ring. The full suite was last run green at 0.14.3; only the bridge junction
+and the validator's argument have changed since, and both were checked
+directly.
 
 **0.14.3** — Rings follow the city's edge rather than a traced contour
 wherever they can. The first thing tried is now a plain rectangle drawn inward
