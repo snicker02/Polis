@@ -1,4 +1,4 @@
-# Polis v0.15.1
+# Polis v0.16.0
 
 *Created with help from Claude AI.*
 
@@ -733,6 +733,28 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.16.0** — A viaduct carries one track rather than two half-tracks.
+
+A bridge lays a lane down each side of its deck, and each lane has to find the
+ring at both ends. Where it could not, the lane was left hanging: a cart ran
+to the end of the deck and stopped. The spur added in 0.15.0 reaches further
+and turns a corner to find the ring, but some ends have nothing to reach — a
+deck that meets the edge of the plan, or a ring sitting below deck level.
+
+Those lanes are now taken up. A lane is kept only if it joins a ring at both
+ends; otherwise its track is removed, its booster beds are put back to gravel,
+and the ring's own rail is restored to what it was where the lane had already
+bent it. A deck may end up carrying a single track, which is a railway, rather
+than two that each stop halfway, which is not.
+
+This is the shape of the fix Brad made by hand: delete the lane that cannot
+get there, re-point the curve, keep one route a cart can ride.
+
+NOT in this release: deck alignment, and bridges that bend to meet the ring.
+The deck is still placed on the shortest gap between districts with no regard
+for where the ring runs, so the spur is still doing work that better placement
+would make unnecessary.
 
 **0.15.1** — Rails that led nowhere.
 

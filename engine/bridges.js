@@ -226,8 +226,10 @@ export function bridgeRails(world, bridges, transit, G) {
     // ring's own rail to meet the spur so a cart runs straight through.
     let joined = 0;
     const ends = [];
-    for (const cells of lanes) {
-      if (cells.length < 4) continue;
+    const laneEnds = lanes.map(() => []);
+    const record = (li, rec) => { ends.push(rec); laneEnds[li].push(rec); };
+    lanes.forEach((cells, li) => {
+      if (cells.length < 4) return;
       for (const end of [cells[0], cells[cells.length - 1]]) {
         const inward = end === cells[0] ? -b.dir : b.dir;
         const step = alongX ? [inward, 0] : [0, inward];       // along the bridge
@@ -302,7 +304,7 @@ export function bridgeRails(world, bridges, transit, G) {
               for (let dy = -5; dy <= 5; dy++)
                 if (Math.abs(dy) > 1 && railAt(x, end[1] + dy, z)) { below = true; break; }
             }
-          ends.push({ joined: false, why: sawRail ? 'no way through to the track in front of it' : below ? 'the ring is not at deck level' : 'no track within reach' });
+          record(li, { joined: false, why: sawRail ? 'no way through to the track in front of it' : below ? 'the ring is not at deck level' : 'no track within reach' });
           continue;
         }
 
@@ -317,15 +319,45 @@ export function bridgeRails(world, bridges, transit, G) {
         // Bend the ring's own rail so it leads onto the spur. A rail joins
         // two directions and no more, so the ring gives way here: a cart
         // coming round is turned onto the bridge instead of carrying on.
+        // keep what the ring's rail was, so the bend can be undone if this
+        // lane is taken up again below
+        const wasRail = world.get(best.jx, best.jy, best.jz);
         world.set(best.jx, best.jy, best.jz, railId(best.curve));
         taken.add(key(best.jx, best.jy, best.jz));
         joined++;
-        ends.push({ joined: true, a: best.a, leg: Math.abs(best.l), ring: best.ring });
+        record(li, { joined: true, a: best.a, leg: Math.abs(best.l), ring: best.ring,
+          junction: [best.jx, best.jy, best.jz], wasRail, spur: best.path.map(({ pos }) => [pos[0], best.y, pos[1]]) });
       }
-    }
+    });
 
-    for (const cells of lanes) {
-      if (cells.length < 4) continue;
+    // A lane that cannot reach a ring at both ends is taken up rather than
+    // left hanging. Half a lane is not half a railway — it is a cart running
+    // to the end of the deck and stopping, which is what a buffer at the end
+    // of a viaduct looks like from the ground. One lane that runs right
+    // through is worth more than two that do not, so the deck carries a
+    // single track in that case, and the ring's own rail is put back the way
+    // it was where the lane had already bent it.
+    const kept = [], e_removed = [];
+    lanes.forEach((cells, li) => {
+      if (cells.length < 4) return;
+      const mine = laneEnds[li];
+      if (mine.length === 2 && mine.every((e) => e.joined)) { kept.push(cells); return; }
+      for (const e of mine) {
+        if (!e.joined) continue;
+        const [jx, jy, jz] = e.junction;
+        world.set(jx, jy, jz, e.wasRail);          // unbend the ring
+        taken.delete(key(jx, jy, jz));
+        joined--;
+      }
+      for (const [x, y, z] of cells) {
+        world.clear(x, y, z);
+        if (world.get(x, y - 1, z) === MAT.REDSTONE) world.set(x, y - 1, z, MAT.GRAVEL);
+        taken.delete(key(x, y, z));
+      }
+      e_removed.push(li);
+    });
+
+    for (const cells of kept) {
       const mid = cells[Math.floor(cells.length / 2)];
       transit.lines.push({ axis: alongX ? 'x' : 'z', bridge: true, cells, stations: [mid] });
       transit.carts.push({ type: 'minecart', x: mid[0], y: mid[1], z: mid[2] });
@@ -335,6 +367,8 @@ export function bridgeRails(world, bridges, transit, G) {
     }
     b.joined = joined;
     b.ends = ends;
+    b.lanes = kept.length;
+    b.lanesRemoved = e_removed.length;
   }
   return laid;
 }
