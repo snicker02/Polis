@@ -527,7 +527,7 @@ export function furnish(world, rec, rng, opts = {}) {
         desks++;
       }
     }
-    return { board: board.length, desks };
+    return { board: board.length, desks, boardWall: wallC, alongX };
   };
 
   // A shop at street level: a glass front between the piers, an awning over
@@ -608,12 +608,54 @@ export function furnish(world, rec, rng, opts = {}) {
               const id = world.get(x, sy + 1, z);
               if (id >= 0 && /slab|stairs/.test(MATERIALS.def(id).block)) world.clear(x, sy + 1, z);
             }
-          halls[k] = { board: again.board, desks: 0 };
+          halls[k] = { board: again.board, desks: 0, boardWall: again.boardWall, alongX: again.alongX };
         }
       }
       v0 = verifyBuilding(world, rec);
     }
-    return { ok: v0.ok, beds: [], placed: 0, stations: rec.floors, plants: 0, shelves: 0, rooms: 0,
+    // Lights and books. Lanterns hang from the ceiling on a three-block grid,
+    // wherever there is solid ceiling to hang from and clear of the stair.
+    // Bookshelves, two high, line the walls that are neither the front (the
+    // doorway's) nor the board's, each keeping the cell in front of it clear as
+    // an aisle; if a floor would not walk through with its shelves, they go.
+    let lights = 0, shelves = 0;
+    const face = rec.facing, [fox, foz] = OUTWARD[face];
+    const core = rec.core;
+    const nearC = (x, z) => core && x >= core.x0 - 1 && x <= core.x1 + 1 && z >= core.z0 - 1 && z <= core.z1 + 1;
+    const doorCellsS = rec.doorCells || [];
+    for (let k = 0; k < rec.floors; k++) {
+      const r0 = rec.rects[k], sy = rec.floorYs[k], P = rec.pitch || 5, cy = sy + P - 1, h = halls[k] || {};
+      for (let x = r0.x0 + 2; x <= r0.x1 - 2; x += 3)
+        for (let z = r0.z0 + 2; z <= r0.z1 - 2; z += 3) {
+          if (nearC(x, z) || world.has(x, cy, z) || !solidAt(world, x, cy + 1, z)) continue;
+          if (cy - 1 <= sy + 3) continue;                          // too low a ceiling to hang one clear of heads
+          world.set(x, cy, z, MAT.LAMP_HANG);
+          lights++;
+        }
+      // the walls: [inner row cell] with the wall's outward direction
+      const rowCells = [];
+      for (let x = r0.x0 + 1; x <= r0.x1 - 1; x++) { rowCells.push([x, r0.z0 + 1, 0, -1]); rowCells.push([x, r0.z1 - 1, 0, 1]); }
+      for (let z = r0.z0 + 2; z <= r0.z1 - 2; z++) { rowCells.push([r0.x0 + 1, z, -1, 0]); rowCells.push([r0.x1 - 1, z, 1, 0]); }
+      const placedHere = [];
+      for (const [x, z, wx, wz] of rowCells) {
+        if (wx === fox && wz === foz) continue;                                // the front wall
+        const wallX = x + wx, wallZ = z + wz;
+        if (h.boardWall !== undefined && (h.alongX ? (wz !== 0 && wallZ === h.boardWall) : (wx !== 0 && wallX === h.boardWall))) continue;
+        if (nearC(x, z)) continue;
+        if (k === 0 && doorCellsS.some(([a, b]) => Math.abs(a - x) + Math.abs(b - z) <= 2)) continue;
+        if (world.has(x, sy + 1, z) || world.has(x, sy + 2, z) || !solidAt(world, x, sy, z)) continue;
+        const ax = x - wx, az = z - wz;                                       // the aisle in front
+        if (world.has(ax, sy + 1, az) || world.has(ax, sy + 2, az)) continue;
+        world.set(x, sy + 1, z, MAT.BOOKSHELF);
+        world.set(x, sy + 2, z, MAT.BOOKSHELF);
+        placedHere.push([x, z]);
+      }
+      if (placedHere.length && !verifyBuilding(world, rec).ok) {
+        for (const [x, z] of placedHere) { world.clear(x, sy + 1, z); world.clear(x, sy + 2, z); }
+      } else shelves += placedHere.length;
+    }
+    v0 = verifyBuilding(world, rec);
+    return { ok: v0.ok, beds: [], placed: 0, stations: rec.floors, plants: 0, shelves, lights, rooms: 0,
       desks: halls.reduce((a, h) => a + h.desks, 0), shops: [], paintings: [], halls };
   }
 

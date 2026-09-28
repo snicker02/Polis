@@ -1,4 +1,4 @@
-# Polis v0.21.0
+# Polis v0.22.0
 
 *Created with help from Claude AI.*
 
@@ -754,6 +754,36 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.22.0** — Courtyard blocks, and a school with lights and books.
+
+*Courtyard blocks* (engine/courtyard.js). A mid-rise lot may be built as an L
+or a U round a courtyard that opens onto the street. The block is made of
+wings, each a whole Polis building with its own stair core, rooms, furniture
+and walk-through, sharing one theme, floor count and height, so from outside
+it reads as one block. Side wings run the full depth with their door on the
+street end; the back wing opens onto the court. The court is a lawn with a
+path from the back wing's door to the street, flowers along its edges and a
+lantern post. A wing narrower than seven cannot carry its stair above one
+floor, so every wing is at least seven across: an L needs about 14 across the
+street face, a U 21 (its side wings take the thickest they can and still leave
+the back wing seven). Most mid-rise lots are 10 to 16 wide, so L blocks are
+common and U blocks rare at the default lot size; raise the downtown lot size
+for more. If the wings ever came out at different heights the lot is built the
+usual way instead. Each block is decided by a hash and built and furnished
+from its own random stream. A "Courtyard blocks" slider sets the share.
+
+*School.* The hall had desks, a board and a lectern but no light and no books.
+Each floor now gets lanterns hung from the ceiling on a three-block grid (clear
+of the stair) and bookshelves, two high, along the walls that are neither the
+front nor the board's, each keeping an aisle clear in front of it; a floor that
+would not walk through with its shelves keeps none.
+
+New section 2zg (18 checks): courtyards on flat ground in every facing, both
+hands and both kinds (wings and court partition the footprint exactly, the
+court opens onto the street, doors where they belong, the path, the lantern,
+one theme and height), courtyards in cities (hills too) with every building
+verified and every door reached, and the school's lights and shelves.
 
 **0.21.0** — Shaped towers, Romanesque arcades, a Flamboyant portal.
 

@@ -13,6 +13,7 @@ function towerShape(u) {
   return TOWER_SHAPES[0][0];
 }
 import { plantBeds } from './building.js';
+import { courtyardPlan, makeCourtyard } from './courtyard.js';
 import { megalith } from './megaliths.js';
 import { fishSpawns } from './fish.js';
 import { generatePlan, frontage, USE } from './plan.js';
@@ -83,6 +84,7 @@ export const DEFAULTS = {
                              // (twisting square, octagon or hexagon, tapered twist, round, round with helical ribs)
   megaliths: true,           // Celtic monuments in parks: a menhir, a dolmen or a stone circle
   megalithChance: 0.5,       // share of parks that get one
+  courtyardChance: 0.3,      // share of mid-rise lots, where one fits, built as an L or U round a courtyard
   furnish: true,
   flowers: true,
   villagers: 60,
@@ -230,6 +232,7 @@ export function generateCity(cfgIn, onProgress) {
   const pandas = [];
   const megaliths = [];
   const ponds = [];
+  const courtyards = [];
   const beds = [];
   const themeRng = rng.fork();
   const lifeRng = rng.fork();
@@ -299,6 +302,44 @@ export function generateCity(cfgIn, onProgress) {
 
     const front = frontage(plan, lot);
     const theme = themeRng.pick(STYLE.themes[lot.style] || STYLE.themes.mid);
+    // An L or U round a courtyard: decided per lot from a hash, and built (and
+    // furnished) from its own random stream. Every wing is a whole building.
+    if (cfg.courtyardChance > 0 && lot.style === 'mid') {
+      const cp = courtyardPlan(fx0, fz0, fx1, fz1, front.side);
+      if (cp.kinds.length && hash2(lot.x0 + 7, lot.z0 + 3, (cfg.seed ^ 0xc0a7) | 0) < cfg.courtyardChance) {
+        const crng = makeRng(((lot.x0 * 40503) ^ (lot.z0 * 65599) ^ cfg.seed ^ 0xc0a7) >>> 0);
+        // a U needs a lot 21 across (three wings of seven): where one fits, it is usually built
+        const kind = cp.kinds.includes('U') && crng.chance(0.7) ? 'U' : 'L';
+        const cy = makeCourtyard(world, {
+          x0: fx0, z0: fz0, x1: fx1, z1: fz1, face: front.side, kind, mirror: crng.chance(0.5), G: GROUND, flowers: cfg.flowers,
+          building: (p) => makeBuilding(world, {
+            detail: cfg.detail, arcade: true, rustic: !!STYLE.rustic,
+            x0: p.x0, z0: p.z0, x1: p.x1, z1: p.z1,
+            floors: lot.floors, pitch: cfg.pitch, groundY: GROUND,
+            style: 'mid', facing: p.facing, theme,
+            roofAccess: cfg.roofAccess, useStairs: cfg.useStairs, stairStyle: cfg.stairStyle, lights: cfg.lights,
+            setback: false, setbackEvery: 99,
+          }, crng),
+        }, crng);
+        if (cy) {
+          courtyards.push(cy);
+          for (const rec of cy.wings) {
+            buildings.push(rec);
+            if (cfg.furnish) {
+              const f = furnish(world, rec, crng, { useStairs: cfg.useStairs });
+              rec.beds = f.beds; rec.furniture = f;
+              for (const b of f.beds) beds.push(b);
+            } else rec.beds = [];
+          }
+          continue;
+        }
+        // a wing would not go up: clear what did and build the lot the usual way
+        for (let z = fz0; z <= fz1; z++) for (let x = fx0; x <= fx1; x++) {
+          for (let y = GROUND + 1; y <= GROUND + 12 * Math.max(4, cfg.pitch); y++) world.clear(x, y, z);
+          world.set(x, GROUND, z, MAT.SIDEWALK);
+        }
+      }
+    }
     // A twisting tower: decided per lot from a hash, and built from its own
     // random stream, so a chance of 0 leaves every city exactly as it was.
     const twisting = cfg.twistChance > 0 && lot.style === 'tower' && !STYLE.rustic &&
@@ -403,6 +444,7 @@ export function generateCity(cfgIn, onProgress) {
     }
     for (const rch of ranches) for (const a of rch.animals) a.y += elevAt(a.x, a.z);
     for (const p of pandas) p.y += elevAt(p.x, p.z);
+    for (const cy of courtyards) if (cy.lamp) cy.lamp[1] += elevAt(cy.lamp[0], cy.lamp[2]);
     // standing stones ride up with their park
     for (const m of megaliths) {
       const e = elevAt((m.x0 + m.x1) >> 1, (m.z0 + m.z1) >> 1);
@@ -591,8 +633,8 @@ export function generateCity(cfgIn, onProgress) {
   if (cfg.fish) spawns = spawns.concat(fishSpawns(world, makeRng((cfg.seed ^ 0x0f15b0a7) >>> 0)));
 
   const shell = cfg.terrain ? terrainShell(plan, cfg.terrain, GROUND, cfg.cityStyle) : null;
-  const stats = summarise(world, plan, buildings, cfg, { farms, beds, spawns, bell, transit, wall, ranches, landmarks, hills, stairRuns, reach, canal, centre, streets, harbour, skirt, cutFaces, bridges, megaliths, ponds, unsupported: stats_unsupported });
-  return { world, plan, buildings, cfg, stats, shell, bridges, farms, ranches, spawns, bell, transit, wall, landmarks, canal, centre, streets, harbour, harbourPlan, megaliths, ponds,
+  const stats = summarise(world, plan, buildings, cfg, { farms, beds, spawns, bell, transit, wall, ranches, landmarks, hills, stairRuns, reach, canal, centre, streets, harbour, skirt, cutFaces, bridges, megaliths, ponds, courtyards, unsupported: stats_unsupported });
+  return { world, plan, buildings, cfg, stats, shell, bridges, farms, ranches, spawns, bell, transit, wall, landmarks, canal, centre, streets, harbour, harbourPlan, megaliths, ponds, courtyards,
     hills, stairRuns, reach, groundAt: (x, z) => GROUND + elevAt(x, z) };
 }
 
@@ -1509,6 +1551,7 @@ function summarise(world, plan, buildings, cfg, life = {}) {
     fish: (life.spawns || []).filter((p) => p.type === 'cod' || p.type === 'salmon' || p.type === 'tropicalfish').length,
     twisted: buildings.filter((b) => b.twist).length,
     shapes: buildings.filter((b) => b.shape).map((b) => b.shape),
+    courtyards: (life.courtyards || []).map((c) => c.kind),
     pondsDeep: (life.ponds || []).filter((p) => p.deep > 0).length,
     megaliths: (life.megaliths || []).map((m) => m.kind),
     animals: (life.spawns || []).filter((p) => ['cow', 'sheep', 'pig', 'chicken'].includes(p.type)).length,
