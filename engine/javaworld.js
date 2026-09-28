@@ -184,6 +184,7 @@ export function readJavaLevelDat(bytes) {
 export function worldKind(bytes) {
   const zip = readZipEntries(bytes);
   if (zip.entries.some((e) => /(^|\/)region\/r\.-?\d+\.-?\d+\.mca$/.test(e.name))) return 'java';
-  if (zip.entries.some((e) => /(^|\/)db\/.*\.ldb$/.test(e.name))) return 'bedrock';
+  // a LevelDB may hold everything in its log, with no table written yet
+  if (zip.entries.some((e) => /(^|\/)db\/[^/]*\.(ldb|log)$/i.test(e.name))) return 'bedrock';
   return null;
 }

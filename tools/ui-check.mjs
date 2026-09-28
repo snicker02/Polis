@@ -211,8 +211,34 @@ export async function runUiCheck(worldFile) {
   fire('copyTpCentre', 'click');
   const [cornerCopy, centreCopy] = copied;
 
+  // the Chunk Pregen panel: shown for Bedrock only; its buttons copy the
+  // commands and download both builds of the pack
+  const pregen = {
+    shown: elements.get('pregenBox').style.display === 'block',
+    siteLabel: elements.get('pregenSite').textContent,
+    siteShown: elements.get('pregenSite').style.display === 'block',
+    viewLabel: elements.get('pregenView').textContent,
+  };
+  if (pregen.shown) {
+    copied.length = 0;
+    fire('pregenSite', 'click');
+    fire('pregenView', 'click');
+    await new Promise((r) => setTimeout(r, 20));
+    pregen.copied = copied.slice();
+    const dl = [];
+    const prev = globalThis.URL.createObjectURL;
+    globalThis.URL.createObjectURL = (blob) => { dl.push(blob); return 'blob:stub'; };
+    fire('pregenDl', 'click');
+    fire('pregenDlLegacy', 'click', { preventDefault() {} });
+    await new Promise((r) => setTimeout(r, 500));
+    globalThis.URL.createObjectURL = prev;
+    pregen.downloads = [];
+    for (const b of dl) pregen.downloads.push(new Uint8Array(await b.arrayBuffer()));
+    pregen.toast = (elements.get('toast') || {}).textContent || '';
+  }
+
   const result = { problems, status, info, typed, offered, tpLabel, tpCentreLabel, cornerCopy, centreCopy, copied, sizes, zooms, zoomedPick: zoomedPick ? zoomedPick.slice(1).join(',') : null, ids: ids.length, wired: listeners.size,
-    stats: (elements.get('stats') || {}).innerHTML || '' };
+    stats: (elements.get('stats') || {}).innerHTML || '', pregen };
   cleanup();
   return result;
 }

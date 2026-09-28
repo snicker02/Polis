@@ -1,0 +1,50 @@
+{
+  "format_version": 2,
+  "header": {
+    "name": "Chunk Pregen v1.2.0",
+    "description": "Pre-generate chunks for a region (Bedrock 26.10+). Area mode uses the pack's own ticking areas; walk mode fills held maps. /scriptevent pregen:help",
+    "uuid": "501f92cb-2b82-41ea-b84f-ea99dfec3db9",
+    "version": [
+      1,
+      2,
+      0
+    ],
+    "min_engine_version": [
+      1,
+      21,
+      90
+    ]
+  },
+  "modules": [
+    {
+      "type": "data",
+      "uuid": "ff887ddd-ef04-4df7-b6c8-b43c3d4c0512",
+      "version": [
+        1,
+        2,
+        0
+      ]
+    },
+    {
+      "type": "script",
+      "language": "javascript",
+      "uuid": "cb1bbeb1-7bf6-4f01-804f-bae49475e9e7",
+      "version": [
+        1,
+        2,
+        0
+      ],
+      "entry": "scripts/main.js"
+    }
+  ],
+  "dependencies": [
+    {
+      "module_name": "@minecraft/server",
+      "version": "2.6.0"
+    },
+    {
+      "module_name": "@minecraft/server-ui",
+      "version": "2.0.0"
+    }
+  ]
+}

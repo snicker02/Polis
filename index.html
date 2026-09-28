@@ -88,6 +88,14 @@
   #mapWrap { position: relative; margin-top: 4px; }
   #map { width: 100%; display: block; border: 1px solid var(--line); border-radius: 4px; cursor: crosshair; image-rendering: pixelated; background: #0b0d10; }
   .hint { color: var(--dim); font-size: 11px; margin-top: 5px; }
+  .pregen { border: 1px solid #333; border-radius: 6px; padding: 8px; margin-top: 8px; }
+  .pregen.urgent { border-color: #ffd700; }
+  .pregen-title { font-weight: 600; font-size: 12px; }
+  .pregen-steps { margin: 6px 0 0 16px; padding: 0; font-size: 11px; color: var(--dim); }
+  .pregen-steps li { margin-bottom: 7px; }
+  .pregen-steps b { color: var(--text); }
+  .pregen-steps button { width: 100%; margin-top: 3px; }
+  .pregen-steps a { color: var(--dim); }
 
   #stats { font-size: 11.5px; color: var(--dim); }
   #stats b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
@@ -126,12 +134,12 @@
   }
 </style>
 </head>
-<body class="mode-city" data-version="0.17.2">
+<body class="mode-city" data-version="0.18.0">
 <div id="app">
   <div id="panel">
     <div id="panelScroll">
       <h1>PO<span>L</span>IS</h1>
-      <div class="sub">procedural city → Minecraft Bedrock · v0.17.2</div>
+      <div class="sub">procedural city → Minecraft Bedrock · v0.18.0</div>
 
       <fieldset>
         <legend>Mode</legend>
@@ -157,6 +165,20 @@
           <button id="copyTpCentre" style="display:none;width:100%;margin-top:4px">Copy /tp to the centre spot</button>
           <button id="useSite" style="display:none;width:100%;margin-top:4px">Use this site</button>
           <button id="clearSite" style="display:none;width:100%;margin-top:4px">Back to an invented site</button>
+          <div class="pregen" id="pregenBox" style="display:none">
+            <div class="pregen-title">Fill in unexplored ground</div>
+            <div class="hint" style="margin-top:2px">Bedrock only saves ground that has changed, so flying over an area often leaves it out of the save. <b>Chunk Pregen</b> generates an area and makes the game keep it.</div>
+            <ol class="pregen-steps">
+              <li><button id="pregenDl">Download Chunk Pregen</button>
+                Open the downloaded file to add it to Minecraft. Game older than 26.10? Get the <a href="#" id="pregenDlLegacy">legacy version</a> instead.</li>
+              <li>Edit your world: under <b>Behavior Packs</b> activate Chunk Pregen, and turn <b>Cheats</b> on.</li>
+              <li>Open the world, then copy a command and paste it into chat:
+                <button id="pregenSite" style="display:none">Copy command for this site</button>
+                <button id="pregenView">Copy command for the map view</button>
+                Progress shows above the hotbar. Wait for <b>Done</b> in chat.</li>
+              <li>Quit to the title screen, <b>Export World</b> again and load it here.</li>
+            </ol>
+          </div>
         </div>
         <div class="row">
           <label for="seed">Seed</label>
@@ -307,6 +329,6 @@
     <div id="busy">generating…</div>
   </div>
 </div>
-<script type="module" src="./main.js?v=0.17.2"></script>
+<script type="module" src="./main.js?v=0.18.0"></script>
 </body>
 </html>

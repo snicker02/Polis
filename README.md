@@ -1,4 +1,4 @@
-# Polis v0.17.2
+# Polis v0.18.0
 
 *Created with help from Claude AI.*
 
@@ -301,6 +301,23 @@ sector header, with the ground heights packed nine bits at a time into longs
 in `Heightmaps.WORLD_SURFACE`. Both are read here in plain JavaScript —
 LevelDB, Anvil, zip, gzip and DEFLATE all written from scratch — and both come
 out as the same heightmap, so everything after that is shared.
+
+### Filling in unexplored ground (Chunk Pregen)
+
+Bedrock only writes a chunk to the save once something in it has changed, so
+land you have only flown over is often not in the exported world. The panel
+under the map fixes that:
+
+1. **Download Chunk Pregen** and open the file to add it to Minecraft.
+2. Edit the world: activate it under **Behavior Packs**, and turn **Cheats** on.
+3. In the world, paste the copied command into chat, either for the chosen site
+   or for the whole map view, and wait for **Done**.
+4. Quit to the title screen, **Export World** again, and load it here.
+
+The pack generates the area in batches and flips one block at the top of each
+chunk and back, so the game counts the chunk as changed and saves it. Its own
+commands (`/scriptevent pregen:help`, `pregen:status`, `pause`, `resume`,
+`stop`, `walk`, `menu`) are described in `pregen/README.md`.
 
 The Bedrock path in detail: a `.mcworld` is a zip, and inside it `db/` is a
 LevelDB: sorted tables (`*.ldb`) and a write-ahead log (`*.log`) of everything
@@ -737,6 +754,24 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.18.0** — Chunk Pregen comes with Polis.
+
+Bedrock only saves a chunk once it has changed since generation, so ground
+you have flown over is often missing from an export and a site shows as
+unexplored. Polis now carries the Chunk Pregen behaviour pack: a panel under
+the map downloads it (built in the browser from the embedded copy; a legacy
+build for games older than 26.10 is one click away), gives four steps, and
+copies the exact `/scriptevent pregen:area …` command for the chosen site
+(snapped to whole chunks, with a 16-block margin) or for everything the map is
+showing. The panel is outlined when a site is too little explored. The pack's
+source lives in `pregen/`; `node tools/embed-pregen.js` refreshes
+`engine/pregen-pack.js`, and section 2zb fails if the two differ, checks both
+builds, parses every pack script and checks the commands; it also boots the
+app against a stub browser with a Bedrock world (written by the new
+`tools/make-bedrock-world.mjs`, shared with 2za) and presses every pregen
+button, and checks the panel stays hidden for Java worlds. A world whose
+LevelDB is all in the log, with no table yet, is now recognised as Bedrock.
 
 **0.17.2** — A world map that says why a chunk is dark.
 

@@ -36,6 +36,7 @@ export const SECTIONS = [
   { id: '2z', file: '2z-bridges.js',                          group: 'slow' },
   { id: '2y', file: '2y-bedrock-blocks.js',                   group: 'fast' },
   { id: '2za', file: '2za-leveldb-log.js',                    group: 'fast' },
+  { id: '2zb', file: '2zb-chunk-pregen.js',                   group: 'fast' },
   { id: '2v', file: '2v-java-worlds.js',                      group: 'fast' },
   { id: '2w', file: '2w-square-stadium-cemetery-allotments.js', group: 'slow' },
   { id: '2x', file: '2x-village-style.js',                    group: 'fast' },

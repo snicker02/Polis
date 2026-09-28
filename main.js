@@ -12,10 +12,11 @@ import { javaTiles, javaPackFiles } from './engine/export-java.js';
 import { readJavaWorld, readJavaLevelDat, worldKind } from './engine/javaworld.js';
 import { exactGround, rebuildHeights } from './engine/bedrockblocks.js';
 import { makeZip } from './engine/blockcore.js';
+import { buildPregenPack, pregenFileName, siteRegion, viewRegion, pregenCommand, regionChunks } from './engine/pregen.js';
 import { decodeNbt } from './tools/nbt-read.js';
 import { THEMES } from './engine/materials.js';
 
-const VERSION = '0.17.2';
+const VERSION = '0.18.0';
 const $ = (id) => document.getElementById(id);
 const numVal = (id) => Number($(id).value);      // readCfg has its own local num()
 
@@ -118,6 +119,10 @@ function boot() {
     generate();
   });
   $('clearSite').addEventListener('click', () => { if (world) world.site = null; $('clearSite').style.display = 'none'; drawWorldMap(); generate(); });
+  $('pregenDl').addEventListener('click', () => downloadPregen(false));
+  $('pregenDlLegacy').addEventListener('click', (e) => { e.preventDefault(); downloadPregen(true); });
+  $('pregenSite').addEventListener('click', () => copyPregen('site'));
+  $('pregenView').addEventListener('click', () => copyPregen('view'));
   for (const b of ['baseX', 'baseY', 'baseZ', 'fillAir', 'foundation', 'clearAbove'])
     $(b).addEventListener(b === 'foundation' || b === 'clearAbove' ? 'input' : 'change', () => { if (result) { cityNs = nsNow(); refreshCommands(); } });
 
@@ -484,8 +489,64 @@ function drawWorldMap() {
     ctx.strokeRect(((world.site.x0 / 16) - (near[0] - R)) * px, ((world.site.z0 / 16) - (near[1] - R)) * px,
       (size / 16) * px, (size / 16) * px);
   }
+  updatePregen();
   $('mapScale').textContent = `showing ${R * 32} blocks across · scroll to zoom`
     + (world.bare && world.bare.size ? ' · red: chunk has records but no terrain' : '');
+}
+
+// ---- Chunk Pregen ---------------------------------------------------------
+// The pregen panel: shown for Bedrock worlds, with a command for the chosen
+// site (plus a margin) and one for everything the map is showing.
+function pregenTargets() {
+  const { R, near } = mapView();
+  return {
+    site: world.site ? siteRegion(world.site) : null,
+    view: viewRegion(near, R),
+  };
+}
+
+function updatePregen() {
+  const box = $('pregenBox');
+  if (!world || world.kind !== 'bedrock') { box.style.display = 'none'; return; }
+  box.style.display = 'block';
+  const t = pregenTargets();
+  const bs = $('pregenSite');
+  bs.style.display = t.site ? 'block' : 'none';
+  if (t.site) bs.textContent = `Copy command for this site (${regionChunks(t.site).toLocaleString()} chunks)`;
+  $('pregenView').textContent = `Copy command for the map view (${regionChunks(t.view).toLocaleString()} chunks)`;
+  box.classList.toggle('urgent', !!(world.site && world.site.coverage < 0.6));
+}
+
+function copyText(text, msg) {
+  const done = () => toast(msg);
+  const fallback = () => {
+    const t = document.createElement('textarea');
+    t.value = text; t.style.position = 'fixed'; t.style.opacity = '0';
+    document.body.appendChild(t); t.select();
+    let ok = false;
+    try { ok = document.execCommand('copy'); } catch { ok = false; }
+    t.remove();
+    if (ok) done(); else toast('Copy failed: ' + text, true);
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done).catch(fallback);
+  else fallback();
+}
+
+function copyPregen(which) {
+  if (!world) return;
+  const r = pregenTargets()[which];
+  if (!r) { toast('Choose a site first.', true); return; }
+  copyText(pregenCommand(r), `Copied: paste it into chat in your world (${regionChunks(r).toLocaleString()} chunks)`);
+}
+
+async function downloadPregen(legacy) {
+  try {
+    const data = await buildPregenPack(legacy);
+    download(data, pregenFileName(legacy));
+    toast(`${pregenFileName(legacy)}: open it to add it to Minecraft`);
+  } catch (err) {
+    toast('Could not build the pack: ' + err.message, true);
+  }
 }
 
 // "-6926.11 69.00 -10080.98", "-6926, -10080" and the like: the first and
@@ -554,7 +615,9 @@ function showSite(g) {
     + `explored ${(g.coverage * 100).toFixed(0)}% · water ${(g.waterShare * 100).toFixed(0)}% · buildable ${(g.buildableShare * 100).toFixed(0)}%`
     + (ok
       ? '<br>Generate, then use either button below: the corner with <b>build</b>, or the centre with <b>build_centered</b>.'
-      : `<br><b>${g.coverage < 0.6 ? 'Too little of this is explored' : 'Too little of this is buildable'}</b> — fly over it in game, or try nearby.`);
+      : g.coverage < 0.6
+        ? '<br><b>Too little of this is explored</b>: fill it in with Chunk Pregen below, or try nearby.'
+        : '<br><b>Too little of this is buildable</b>: try nearby.');
   $('useSite').style.display = ok ? 'block' : 'none';
   $('copyTp').style.display = 'none';        // both spots depend on the city, so they appear after it is generated
   showCentreSpot();
