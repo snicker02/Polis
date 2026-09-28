@@ -64,6 +64,11 @@ export function javaEntity(spawn, J) {
   if (t === 'cow' || t === 'pig' || t === 'chicken') return { id: 'minecraft:' + t, nbt: { PersistenceRequired: J.byte(1) } };
   if (t === 'sheep') return { id: 'minecraft:sheep', nbt: { Color: J.byte(spawn.coat === 1 ? 8 : 0), PersistenceRequired: J.byte(1) } };
   if (t === 'minecart') return { id: 'minecraft:minecart', nbt: {} };
+  // fish: kept (a wild fish despawns), and tropical fish with the pattern and colours chosen for them
+  if (t === 'cod' || t === 'salmon') return { id: 'minecraft:' + t, nbt: { PersistenceRequired: J.byte(1), FromBucket: J.byte(1) } };
+  if (t === 'tropicalfish') {
+    return { id: 'minecraft:tropical_fish', nbt: { Variant: J.int((spawn.variant | 0)), PersistenceRequired: J.byte(1), FromBucket: J.byte(1) } };
+  }
   if (t === 'boat') return { id: 'minecraft:oak_boat', nbt: {} };
   if (t === 'painting') {
     const variant = PAINTING_VARIANT[spawn.motif];

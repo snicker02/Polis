@@ -2,6 +2,7 @@
 
 import { VoxelWorld } from './blockcore.js';
 import { makeRng, fbm2, clamp } from './rng.js';
+import { fishSpawns } from './fish.js';
 import { generatePlan, frontage, USE } from './plan.js';
 import { MAT, THEMES } from './materials.js';
 import { makeBuilding, OUTWARD } from './building.js';
@@ -65,6 +66,7 @@ export const DEFAULTS = {
   pandaChance: 0.35,         // parks that get a fenced bamboo grove with pandas
   cats: true,
   pondChance: 0.5,
+  fish: true,                // fish in the ponds, the canal and the harbour basin
   furnish: true,
   flowers: true,
   villagers: 60,
@@ -529,6 +531,11 @@ export function generateCity(cfgIn, onProgress) {
     }
     stats_unsupported = swapped + propped;
   }
+
+  // ---- fish: last, once no more water will change ----------------------------
+  // their own random stream, so a city's blocks and other spawns are the same
+  // with fish on or off
+  if (cfg.fish) spawns = spawns.concat(fishSpawns(world, makeRng((cfg.seed ^ 0x0f15b0a7) >>> 0)));
 
   const shell = cfg.terrain ? terrainShell(plan, cfg.terrain, GROUND, cfg.cityStyle) : null;
   const stats = summarise(world, plan, buildings, cfg, { farms, beds, spawns, bell, transit, wall, ranches, landmarks, hills, stairRuns, reach, canal, centre, streets, harbour, skirt, cutFaces, bridges, unsupported: stats_unsupported });
@@ -1358,6 +1365,7 @@ function summarise(world, plan, buildings, cfg, life = {}) {
     reachable: life.reach ? `${life.reach.reached}/${life.reach.total}` : '',
     cats: (life.spawns || []).filter((p) => p.type === 'cat').length,
     pandas: (life.spawns || []).filter((p) => p.type === 'panda').length,
+    fish: (life.spawns || []).filter((p) => p.type === 'cod' || p.type === 'salmon' || p.type === 'tropicalfish').length,
     animals: (life.spawns || []).filter((p) => ['cow', 'sheep', 'pig', 'chicken'].includes(p.type)).length,
     wallHeight: life.wall ? life.wall.height : 0,
     gates: life.wall ? life.wall.gates.length : 0,

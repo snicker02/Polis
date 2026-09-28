@@ -16,7 +16,7 @@ import { buildPregenPack, pregenFileName, siteRegion, viewRegion, pregenCommand,
 import { decodeNbt } from './tools/nbt-read.js';
 import { THEMES } from './engine/materials.js';
 
-const VERSION = '0.18.0';
+const VERSION = '0.19.0';
 const $ = (id) => document.getElementById(id);
 const numVal = (id) => Number($(id).value);      // readCfg has its own local num()
 
@@ -26,7 +26,7 @@ const SLIDERS = {
   maxFloors: 0, pitch: 0, setbackEvery: 0, bw: 0, bd: 0, floors: 0, clip: 0,
   farmChance: 2, pondChance: 2, villagers: 0, wallHeight: 0, foundation: 0, clearAbove: 0, hills: 0, golemsPer10: 0,
 };
-const CHECKS = ['setback', 'roofAccess', 'useStairs', 'lights', 'lamps', 'trees', 'markings', 'landmarks', 'canal', 'harbour', 'bridges', 'detail', 'streetSigns'];
+const CHECKS = ['setback', 'roofAccess', 'useStairs', 'lights', 'lamps', 'trees', 'markings', 'landmarks', 'canal', 'harbour', 'bridges', 'detail', 'streetSigns', 'fish'];
 
 let renderer = null;
 let result = null;       // { world, plan, buildings, cfg, stats }
@@ -377,6 +377,7 @@ function showStats(mesh, times) {
     if (s.paintings) line('paintings', String(s.paintings));
     if (s.ranches !== undefined) line('pens / farm animals', `${s.ranches} / ${s.animals}`);
     if (s.cats !== undefined) line('cats / pandas', `${s.cats} / ${s.pandas}`);
+    if (s.fish) line('fish', String(s.fish));
     if (s.railLines) line('rail lines / bridges / carts', `${s.railLines} / ${s.railBridges} / ${s.carts}` + (s.railLoop ? ' · loop' : ''));
     if (s.wallHeight) line('perimeter wall', `${s.wallHeight} high · ${s.gates} gates`);
   }

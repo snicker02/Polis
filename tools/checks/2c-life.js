@@ -103,6 +103,11 @@ export default async function run(ctx) {
     for (const p of r.spawns) {
       if (p.type === 'minecart') continue;                       // checked with the railways
       if (p.type === 'painting') continue;                        // hung on a wall: checked in 2q
+      if (p.type === 'cod' || p.type === 'salmon' || p.type === 'tropicalfish') {   // in water, with water beside it
+        const isW = (x, y, z) => { const n = w.get(x, y, z); return n >= 0 && MATERIALS.def(n).block === 'minecraft:water'; };
+        if (!isW(p.x, p.y, p.z) || ![[1, 0], [-1, 0], [0, 1], [0, -1]].some(([a, b]) => isW(p.x + a, p.y, p.z + b))) badSpawn++;
+        continue;
+      }
       if (p.type === 'boat') {                                    // on the water, open air above
         const n = w.get(p.x, p.y, p.z), a1 = w.get(p.x, p.y + 1, p.z);
         if (n < 0 || MATERIALS.def(n).block !== 'minecraft:water' || a1 !== -1) badSpawn++;

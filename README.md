@@ -1,4 +1,4 @@
-# Polis v0.18.0
+# Polis v0.19.0
 
 *Created with help from Claude AI.*
 
@@ -754,6 +754,26 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.19.0** — Fish in the ponds, the canal and the harbour.
+
+Fish are placed last, once no more water will change, and found from the
+blocks themselves: the surface of the water, grouped into bodies. Only real
+pools get fish, never a one-wide irrigation channel or a fountain bowl (a body
+needs at least 6 cells and a 2x2 patch of open water). Park ponds get mostly
+tropical fish, some cod, one per 8 cells up to 6; the canal and harbour basin
+get cod and salmon, one per 30 cells up to 48; at most 120 in a city. They keep
+2 blocks apart and swim a block under the surface where the water is deep
+enough. They use their own random stream, so a city's blocks and every other
+spawn are identical with fish on or off (a new "Fish in ponds and canal"
+checkbox under Life, on by default).
+
+Wild fish despawn, so both editions mark them as kept. Bedrock keeps a named
+mob, so populate summons them with a name ("Koi", "Cod", "Salmon", shown only
+when you look right at one), while its ticking areas still hold the whole city
+loaded; fish / fish_centered re-summon any that are missing. Java writes them
+into the structures with PersistenceRequired, and each tropical fish gets its
+own pattern and two colours. New section 2zc; 2c and 6e know about fish.
 
 **0.18.0** — Chunk Pregen comes with Polis.
 

@@ -45,6 +45,7 @@ export default async function run(ctx) {
   // every command in every function is one of the three forms we emit
   const FORMS = [/^structure load [a-z0-9_]+:[a-z0-9_]+ ~-?\d* ~-?\d* ~-?\d*$/,
     /^summon minecraft:(minecart|boat) ~-?\d* ~-?\d* ~-?\d*$/, /^say [^\n]+$/,
+    /^summon minecraft:(cod|salmon|tropicalfish) (Cod|Salmon|Koi) ~-?\d* ~-?\d* ~-?\d*$/,   // named, so they are kept
     /^tickingarea add ~-?\d* ~-?\d* ~-?\d* ~-?\d* ~-?\d* ~-?\d* [a-z0-9_]+$/, /^tickingarea remove [a-z0-9_]+$/];
   let badCmd = null;
   for (const f of out.functions) for (const l of f.text.split('\n')) {

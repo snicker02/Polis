@@ -17,7 +17,7 @@ import { makeRng } from './rng.js';
 // Must match main.js VERSION, package.json and index.html data-version;
 // tools/validate.js fails if they drift. The app refuses to export when the
 // browser has mixed cached copies of old and new files.
-export const POLIS_VERSION = '0.18.0';
+export const POLIS_VERSION = '0.19.0';
 
 export const CHUNK = 64;          // Bedrock structure limit per horizontal axis
 export const GROUND_DROP = 2;     // base layer y=0 sits 2 below feet; surface y=1 replaces the block you stand on
@@ -259,7 +259,12 @@ function rel(v) { return v === 0 ? '~' : `~${v}`; }
 // reference). Only minecarts are still summoned; villagers and golems come
 // from mob structures, where the game's own internal ids are used.
 // Only minecarts are still summoned; every mob travels in mob structures.
-export const SUMMON_IDS = { minecart: 'minecraft:minecart', boat: 'minecraft:boat' };
+export const SUMMON_IDS = { minecart: 'minecraft:minecart', boat: 'minecraft:boat',
+  cod: 'minecraft:cod', salmon: 'minecraft:salmon', tropicalfish: 'minecraft:tropicalfish' };
+// Fish are summoned with a name: Bedrock keeps a named mob, where an unnamed
+// fish despawns like a wild one once the player is away. The name form of
+// /summon is <entity> <name> <position>.
+export const FISH = new Set(['cod', 'salmon', 'tropicalfish']);
 const FARM_ANIMALS = ['cow', 'sheep', 'pig', 'chicken'];
 
 // build     blocks only, safe to rerun; ends by adding ticking areas
@@ -285,8 +290,13 @@ export function functionFiles(tiles, world, opts = {}) {
   // (the harbour) silently failed. The separate function stays as a fallback.
   const boats = spawns.filter((p) => p.type === 'boat');
   const animals = spawns.filter((p) => FARM_ANIMALS.includes(p.type));
-  const summoned = carts.concat(boats);
-  const sumLine = (p, dx, dz) => `summon ${SUMMON_IDS[p.type]} ${rel(p.x - dx)} ${rel(p.y - GROUND_DROP)} ${rel(p.z - dz)}`;
+  const fish = spawns.filter((p) => FISH.has(p.type));
+  const summoned = carts.concat(boats, fish);
+  const sumLine = (p, dx, dz) => FISH.has(p.type)
+    ? `summon ${SUMMON_IDS[p.type]} ${p.name || 'Fish'} ${rel(p.x - dx)} ${rel(p.y - GROUND_DROP)} ${rel(p.z - dz)}`
+    : `summon ${SUMMON_IDS[p.type]} ${rel(p.x - dx)} ${rel(p.y - GROUND_DROP)} ${rel(p.z - dz)}`;
+  const summonedNote = () => [carts.length && `${carts.length} minecarts`, boats.length && `${boats.length} boats`, fish.length && `${fish.length} fish`]
+    .filter(Boolean).join(', ');
   const areas = tickingAreas(world, ns);
   const top = wb.y1 - wb.y0 + 2;
   const load = (t, dx, dz) =>
@@ -304,15 +314,16 @@ export function functionFiles(tiles, world, opts = {}) {
     `# ${title}`,
     `# ${villagers} villagers, ${golems} iron golems, ${cats} cats, ${pandas} pandas and ${animals.length} farm animals ` +
       `arrive inside ${mobs.length} mob structure${mobs.length === 1 ? '' : 's'}` +
-      (summoned.length ? `; ${carts.length} minecarts and ${boats.length} boats are summoned.` : '.'),
+      (summoned.length ? `; ${summonedNote()} are summoned.` : '.'),
     '# Run ONCE, from the same spot you ran build from, after the city has appeared.',
     `say Polis: bringing in ${villagers} villagers, ${golems} golems, ${cats} cats, ${pandas} pandas, ` +
-      `${animals.length} farm animals` + (summoned.length ? `, ${carts.length} minecarts and ${boats.length} boats...` : '...'),
+      `${animals.length} farm animals` + (summoned.length ? `, ${summonedNote()}...` : '...'),
     ...mobs.map((t) => load(t, dx, dz)),
     ...summoned.map((p) => sumLine(p, dx, dz)),
     ...areas.map((a) => `tickingarea remove ${a.name}`),
     'say Polis: done. Villagers take jobs from the workstations and claim beds over the next few minutes.',
     ...(boats.length ? [`say Polis: any boat that did not appear, run /function ${ns}/${dx === wb.x0 ? 'boats' : 'boats_centered'} from beside the water.`] : []),
+    ...(fish.length ? [`say Polis: if the ponds or canal look empty, run /function ${ns}/${dx === wb.x0 ? 'fish' : 'fish_centered'} from beside the water.`] : []),
   ].join('\n') + '\n';
   const files = [
     { name: `functions/${ns}/build.mcfunction`, fn: `${ns}/build`,
@@ -325,7 +336,7 @@ export function functionFiles(tiles, world, opts = {}) {
       text: populate(cx, cz, 'Polis: villagers, golems and minecarts (pairs with build_centered)') },
   ];
   // fallbacks for the summoned kinds: run near any that are missing
-  for (const [group, list, noun] of [['minecarts', carts, 'minecarts'], ['boats', boats, 'boats at the dock and harbour']]) {
+  for (const [group, list, noun] of [['minecarts', carts, 'minecarts'], ['boats', boats, 'boats at the dock and harbour'], ['fish', fish, 'fish in the ponds and canal']]) {
     if (!list.length) continue;
     const only = (dx, dz, title) => [
       `# ${title}`,
@@ -377,7 +388,8 @@ export function placementGuide(tiles, opts = {}) {
   }
   if (opts.centre) L.push('The city centre is a diamond monument with beacons on top: build_centered puts you in its alcove, under the sign.');
   L.push(`Functions in this pack: ${ns}/build, build_centered, populate, populate_centered`);
-  L.push('(plus minecarts / minecarts_centered on railway cities, to re-summon carts near you).');
+  L.push('(plus minecarts / minecarts_centered on railway cities, to re-summon carts near you,');
+  L.push(' boats / boats_centered for the dock, and fish / fish_centered for the ponds and canal).');
   L.push(`Made with Polis v${POLIS_VERSION}. If /function says one is "not found", an older`);
   L.push('Polis pack is probably still active on this world: remove old Polis packs.');
   L.push('');
@@ -399,7 +411,7 @@ export function placementGuide(tiles, opts = {}) {
   L.push('     The city ground replaces the block you are standing on.');
   L.push('  3. Wait until the whole city has finished appearing, then - WITHOUT MOVING - run:');
   L.push(`       /function ${ns}/populate_centered`);
-  L.push('     This summons the villagers and iron golems. Run it once.');
+  L.push('     This brings in the villagers, iron golems, animals and fish. Run it once.');
   L.push('');
   L.push(`  (${ns}/build and ${ns}/populate do the same with the city corner at your feet.)`);
   L.push('');
