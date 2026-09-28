@@ -1,4 +1,4 @@
-# Polis v0.20.0
+# Polis v0.20.1
 
 *Created with help from Claude AI.*
 
@@ -754,6 +754,40 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.20.1** — Terrace steps face straight in; twisting towers furnished; houses dressed.
+
+*Terrace steps.* Flights ran sideways along the kerb, where you step onto the
+side of the first stair; villagers will not climb that. The cause was the
+check that drops a flight which climbs nothing: it measured the ground beside
+the last step, which on a terrace two or three high is still terrace, so every
+straight flight there was thrown out. It now measures the street in front of
+the first step. Where the pavement is too narrow for a whole flight, a stoop
+starts out in the road, still climbing straight in (with a lane left beside
+it). A flight along the kerb is a last resort for a side with nothing else, and
+gets a notch cut to street level at its foot, so it too is entered from its low
+end. Stairs keep off the city's outermost ring (the wall goes up there later),
+and the centre monument keeps off the street in front of every flight. Over 20
+hilly cities: 2,449 of 2,455 flights climb straight in, every one is entered
+head on, every door is reachable.
+
+*Twisting towers furnished.* Furniture follows a ring inside each floor; a
+twisting tower's reference square hugs its stair core, whose surroundings are
+kept clear, so nothing was placed. A tower now gives furnish() its own ring,
+just inside each turned floor's walls, with the way in for each cell and sides
+that change where the wall turns, so beds lie along one stretch of wall.
+
+*Houses* get shutters beside every window (a wood that stands out from both
+the wall and the trim), lintels and sills, window boxes under the upper
+windows, flower beds under the ground-floor ones, a pitched hood over the door,
+and a picket fence along the front with a lantern on each gate post. The hood
+sits at gy + 4: at gy + 3 it took the head room of a step up out of the door on
+real ground and shut a house in. The details draw on their own random streams
+and are laid out after the yard, so a city's buildings, rooms, farms and mobs
+are exactly as they were without them.
+
+New section 2ze (20 checks); 2i now requires 98% of flights straight in and
+every flight entered head on.
 
 **0.20.0** — Twisting towers, a Gothic church, and standing stones.
 

@@ -645,12 +645,15 @@ export function furnish(world, rec, rng, opts = {}) {
         hangPaintings(rm, sy, rng);                         // last, so nothing is hung where a shelf goes
       }
     } else {
+      // A building whose floors are not rectangles (a twisting tower) hands
+      // over its own ring: the cells just inside each floor's walls, in order.
+      const ownRing = rec.furnishRing ? rec.furnishRing(k) : null;
       const ix0 = r.x0 + 1, iz0 = r.z0 + 1, ix1 = r.x1 - 1, iz1 = r.z1 - 1;
-      if (ix1 - ix0 < 2 || iz1 - iz0 < 2) continue;
+      if (!ownRing && (ix1 - ix0 < 2 || iz1 - iz0 < 2)) continue;
       const free = (x, z) => !nearCore(x, z) && !nearDoor(x, z, k) && open(x, z);
       const plan = ROOMS[rec.rooms ? rec.rooms(k) : roomFor(rec.style, k, rec.floors, rng)];   // landmarks choose their own
-      place(ringOf(ix0, iz0, ix1, iz1), plan, free, sy, k);
-      if (plan === ROOMS.library) {
+      place(ownRing || ringOf(ix0, iz0, ix1, iz1), plan, free, sy, k);
+      if (plan === ROOMS.library && !ownRing) {
         // freestanding shelf rows in the middle: three-long stacks, two-wide aisles
         const inner = (x, z) => x >= ix0 + 2 && x <= ix1 - 2 && z >= iz0 + 2 && z <= iz1 - 2;
         // a stack keeps clear of the stairs' ring by a block, and nothing but

@@ -192,6 +192,32 @@ export function makeTwistedTower(world, spec, rng) {
   world.set(dx, gy + 2, dz, doorId(theme.door, DIR[face], true, 0));
   world.set(dx, gy + 3, dz, P >= 5 ? MAT.GLOWSTONE : theme.trim);
 
+  // ---- furnishing ring: the cells just inside each floor's walls --------------
+  // In order round the tower, each with the way into the room (its furniture
+  // faces that way) and a side number that changes wherever the wall turns or
+  // the run breaks, so furniture.js pairs a bed's two halves only side by side
+  // along one straight stretch of wall.
+  const DIRS4 = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+  const furnishRing = (k) => {
+    const cells = plates[k].cells;
+    const wallAt = (x, z) => isWall(cells, x, z);
+    const ring = [];
+    for (const key of cells) {
+      const [x, z] = key.split(',').map(Number);
+      if (wallAt(x, z)) continue;
+      const w = DIRS4.find(([a, b]) => wallAt(x + a, z + b));
+      if (!w) continue;
+      ring.push({ x, z, nx: -w[0], nz: -w[1], ang: Math.atan2(z - cz, x - cx) });
+    }
+    ring.sort((a, b) => a.ang - b.ang);
+    let side = 0;
+    return ring.map((c, i) => {
+      const p = ring[i - 1];
+      if (p && (p.nx !== c.nx || p.nz !== c.nz || Math.abs(p.x - c.x) + Math.abs(p.z - c.z) !== 1)) side++;
+      return [c.x, c.z, c.nx, c.nz, side];
+    });
+  };
+
   // the rects: the axis-aligned square inside the inscribed circle, in every plate
   // (h/√2 is exactly 3 on the smallest lot; the epsilon keeps rounding from
   // making it 2, whose interior would be nothing but the stair shaft)
@@ -209,6 +235,7 @@ export function makeTwistedTower(world, spec, rng) {
     outside: [dx + out[0], gy + 1, dz + out[1]],
     twist: { total, step, h, centre: [cx, cz], hand: Math.sign(total) },
     plates: plates.map((p) => p.cells),
+    furnishRing: (k) => furnishRing(k).map((c) => c),
     rooms: (k) => (k === 0 ? 'hall' : k % 2 ? 'office' : 'bedroom'),   // open plans: no partition walls on a turning floor
   };
 }

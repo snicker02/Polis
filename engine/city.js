@@ -3,6 +3,7 @@
 import { VoxelWorld } from './blockcore.js';
 import { makeRng, fbm2, clamp, hash2 } from './rng.js';
 import { makeTwistedTower, twistFits } from './twist.js';
+import { plantBeds } from './building.js';
 import { megalith } from './megaliths.js';
 import { fishSpawns } from './fish.js';
 import { generatePlan, frontage, USE } from './plan.js';
@@ -322,6 +323,12 @@ export function generateCity(cfgIn, onProgress) {
         }
         if (cfg.trees) yardTrees(world, lot, rec, rng);
         if (cfg.flowers) scatterFlowers(world, lot, 0.05, lifeRng, GROUND);
+        // then the house's own beds and a picket fence along the front, open
+        // where the path runs; last, so the yard above is laid out as before
+        if (cfg.detail !== false) {
+          plantBeds(world, rec);
+          rec.fence = picketFence(world, lot, rec.facing, GROUND);
+        }
       }
     } else {
       garden(world, lot, rng, cfg);
@@ -377,6 +384,7 @@ export function generateCity(cfgIn, onProgress) {
       shiftBuilding(rec, e);
       for (const sf of (rec.furniture && rec.furniture.shops) || []) sf.at[1] += e;   // shop signs ride up too
       for (const pt of (rec.furniture && rec.furniture.paintings) || []) { pt.y += e; pt.pos[1] += e; }
+      for (const l of (rec.fence && rec.fence.lanterns) || []) l[1] += elevAt(l[0], l[2]);   // gate lanterns ride up too
     }
     for (const rch of ranches) for (const a of rch.animals) a.y += elevAt(a.x, a.z);
     for (const p of pandas) p.y += elevAt(p.x, p.z);
@@ -478,7 +486,7 @@ export function generateCity(cfgIn, onProgress) {
   if (transit && cfg.transit !== 'roads') sweepStrandedRails(world, transit, GROUND);
 
   // ---- the centre marker -----------------------------------------------------
-  const centre = cfg.centreMark ? markCentre(world, plan, buildings, GROUND, elevAt, spawns) : null;
+  const centre = cfg.centreMark ? markCentre(world, plan, buildings, GROUND, elevAt, spawns, stairRuns) : null;
   if (centre) world.centre = [centre.block[0], centre.block[2]];   // the export centres on it
 
   // A doorway opens onto the cell in front of it, and that cell's surface has
@@ -986,7 +994,7 @@ function streetNameSigns(world, plan, cfg, G, elevAt, rng) {
 // beams reach the sky (from a structure saved in game). It goes as near the
 // middle of the city as it can while staying outdoors, on level ground, clear
 // of buildings, off the railway and under open sky, entrance to the street.
-function markCentre(world, plan, buildings, G, elevAt, spawns = []) {
+function markCentre(world, plan, buildings, G, elevAt, spawns = [], stairRuns = []) {
   const { W, D, use, mask } = plan;
   const wb = world.box;
   const cx0 = Math.floor((wb.x0 + wb.x1 + 1) / 2), cz0 = Math.floor((wb.z0 + wb.z1 + 1) / 2);
@@ -996,6 +1004,11 @@ function markCentre(world, plan, buildings, G, elevAt, spawns = []) {
   const PENALTY = { [USE.PLAZA]: 0, [USE.PARK]: 0, [USE.SIDEWALK]: 5, [USE.ROAD]: 11 };
   const OUTDOOR = new Set([USE.ROAD, USE.SIDEWALK, USE.PLAZA, USE.PARK]);
   const taken = new Set(spawns.map((p) => p.x + ',' + p.z));
+  // the street in front of every staircase stays open: its foot and the cell beyond
+  for (const run of stairRuns) {
+    const [x0, z0] = run.cells[0];
+    for (let k = 1; k <= 2; k++) taken.add((x0 - run.dir[0] * k) + ',' + (z0 - run.dir[1] * k));
+  }
   const clearCell = (x, z, height) => {
     if (x < 1 || z < 1 || x >= W - 1 || z >= D - 1) return false;
     if (mask && !mask[z * W + x]) return false;
@@ -1217,6 +1230,47 @@ export function generateSingle(cfgIn) {
   const spawns = cfg.villagers > 0 ? bedSpawns(world, beds).slice(0, cfg.villagers) : [];
   return { world, plan, buildings, cfg, spawns, farms: [], bell: null,
     stats: summarise(world, plan, buildings, cfg, { farms: [], beds, spawns, bell: null }) };
+}
+
+// ---- a house's front fence ------------------------------------------------------
+// Fence posts along the street edge of the lot on open grass, with the gap
+// where the front path crosses it (the path cells are never fenced), so the
+// way from the door to the street stays open; a lantern on each gate post.
+const FLOWER_SET = new Set(FLOWERS);
+function picketFence(world, lot, face, G) {
+  const cells = [];
+  if (face === 'south' || face === 'north') {
+    const z = face === 'south' ? lot.z1 : lot.z0;
+    for (let x = lot.x0; x <= lot.x1; x++) cells.push([x, z]);
+  } else {
+    const x = face === 'east' ? lot.x1 : lot.x0;
+    for (let z = lot.z0; z <= lot.z1; z++) cells.push([x, z]);
+  }
+  let posts = 0, gap = 0;
+  const post = new Set();
+  for (const [x, z] of cells) {
+    const ground = world.get(x, G, z);
+    if (ground === MAT.PATH) { gap++; continue; }
+    if (ground !== MAT.GRASS || world.has(x, G + 2, z)) continue;
+    const on = world.get(x, G + 1, z);
+    if (on !== -1 && !FLOWER_SET.has(on)) continue;             // a flower on the line gives way to a post
+    world.set(x, G + 1, z, MAT.FENCE);
+    post.add(x + ',' + z);
+    posts++;
+  }
+  // gate lanterns: on the posts either side of the path. A post is never stood
+  // on, so a lantern there can never take anyone's head room.
+  const lanterns = [];
+  cells.forEach(([x, z], i) => {
+    if (world.get(x, G, z) !== MAT.PATH) return;
+    for (const j of [i - 1, i + 1]) {
+      const c = cells[j];
+      if (!c || !post.has(c.join(',')) || world.has(c[0], G + 2, c[1])) continue;
+      world.set(c[0], G + 2, c[1], MAT.LAMP);
+      lanterns.push([c[0], G + 2, c[1]]);
+    }
+  });
+  return { posts, gap, cells, lanterns };
 }
 
 // ---- open space ------------------------------------------------------------

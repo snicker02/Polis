@@ -34,7 +34,8 @@
 // tools/validate.js walks every building with a player-movement flood fill.
 
 import { perimeter } from './blockcore.js';
-import { MAT, doorId, stairId, DIR, WEIRDO, STAIR_SOLID } from './materials.js';
+import { makeRng } from './rng.js';
+import { MAT, doorId, stairId, DIR, WEIRDO, STAIR_SOLID, FLOWERS } from './materials.js';
 
 export const OUTWARD = { north: [0, -1], south: [0, 1], west: [-1, 0], east: [1, 0] };
 const OPPOSITE = { north: 'south', south: 'north', east: 'west', west: 'east' };
@@ -327,11 +328,17 @@ export function makeBuilding(world, spec, rng) {
     for (const [cx, cz] of doorCells) world.set(cx, gy + 3, cz, MAT.GLOWSTONE);
   }
 
+  let houseInfo = null;
   if (spec.detail !== false) {
-    facadeDetail(world, {
+    const ctx = {
       rects: Array.from({ length: floors }, (_, k) => rect(k)), floorYs, roofY, top, theme, style, face, P,
       doorCells, outv, gy, floors, core, hut, hutDoor, rustic: spec.rustic,
-    }, rng);
+    };
+    facadeDetail(world, ctx, rng);
+    // its own random stream, seeded from where the house stands: the details
+    // never shift the city's main stream, so every other choice in the city is
+    // the same with them as without them
+    if (style === 'house') houseInfo = houseDetail(world, ctx, makeRng(((x0 * 73856093) ^ (z0 * 19349663) ^ 0x40a5e) >>> 0));
   }
 
   return {
@@ -345,7 +352,98 @@ export function makeBuilding(world, spec, rng) {
     door: { x: dx, y: gy + 1, z: dz, out: outv },
     doorCells: doorCells.map((c) => c.slice()),
     outside: [dx + outv[0], gy + 1, dz + outv[1]],
+    houseDetail: houseInfo,
   };
+}
+
+// ---- a house's own details ------------------------------------------------------
+// Shutters beside every window in a wood that goes with the door, a lintel and
+// a sill in the trim, window boxes of flowers under the upper windows and a
+// flower bed under the ground-floor ones, and a little pitched hood over the
+// front door. (The lanterns stand on the gate posts of the picket fence.) Shutters, lintels and sills are
+// set into the wall itself; everything else goes into empty air, above head
+// height or on the grass of the yard, never in the doorway or on the path.
+const SHUTTER_WOOD = { oak: MAT.OAK, spruce: MAT.SPRUCE, dark: MAT.DARK_PLANKS, acacia: MAT.ACACIA,
+  jungle: MAT.JUNGLE, cherry: MAT.CHERRY, bamboo: MAT.BAMBOO_PLANKS,
+  // woods with no plank block of their own here: the nearest in tone
+  birch: MAT.OAK, crimson: MAT.DARK_PLANKS, warped: MAT.DARK_PLANKS, mangrove: MAT.DARK_PLANKS };
+const CLIMB = (dx, dz) => (dx === 1 ? WEIRDO.east : dx === -1 ? WEIRDO.west : dz === 1 ? WEIRDO.south : WEIRDO.north);
+function houseDetail(world, c, rng) {
+  const { rects, floorYs, theme, P, doorCells, outv, gy, floors } = c;
+  const info = { shutters: 0, lintels: 0, sills: 0, boxes: 0, flowers: 0, hood: 0, beds: [] };
+  // shutters stand out from both the wall and the trim round the window: the
+  // door's wood if it does, else the roof's material, else a dark wood
+  const shutter = [SHUTTER_WOOD[theme.door], theme.roof, MAT.DARK_PLANKS, MAT.SPRUCE]
+    .find((m) => m !== undefined && m !== theme.wall && m !== theme.trim);
+  const isDoor = (x, z) => doorCells.some(([a, b]) => a === x && b === z);
+  const empty = (x, y, z) => !world.has(x, y, z);
+  const isGlass = (x, y, z) => world.get(x, y, z) === theme.glass;
+  for (let k = 0; k < floors; k++) {
+    const r = rects[k], sy = floorYs[k];
+    const lo = sy + 2, hi = Math.max(sy + 2, Math.min(sy + 3, sy + P - 2));
+    const outOf = (x, z) => (x === r.x0 ? [-1, 0] : x === r.x1 ? [1, 0] : z === r.z0 ? [0, -1] : [0, 1]);
+    for (const [px, pz, , i, len] of perimeter(r.x0, r.z0, r.x1, r.z1)) {
+      if (i === 0 || i === len - 1 || !isGlass(px, lo, pz)) continue;
+      const [ox, oz] = outOf(px, pz);
+      const along = ox === 0 ? [1, 0] : [0, 1];
+      // shutters: the wall cells either side of a run of glass
+      for (const sgn of [-1, 1]) {
+        const sx = px + along[0] * sgn, sz = pz + along[1] * sgn;
+        if (isGlass(sx, lo, sz) || isDoor(sx, sz)) continue;
+        if (sx < r.x0 || sx > r.x1 || sz < r.z0 || sz > r.z1) continue;
+        if ((sx === r.x0 || sx === r.x1) && (sz === r.z0 || sz === r.z1)) continue;      // the corner post stays
+        for (let y = lo; y <= hi; y++) if (world.get(sx, y, sz) === theme.wall) { world.set(sx, y, sz, shutter); info.shutters++; }
+      }
+      // lintel over the window and sill under it, in the wall
+      if (hi + 1 <= sy + P - 1 && world.get(px, hi + 1, pz) === theme.wall) { world.set(px, hi + 1, pz, theme.trim); info.lintels++; }
+      if (lo - 1 > sy && world.get(px, lo - 1, pz) === theme.wall) { world.set(px, lo - 1, pz, theme.trim); info.sills++; }
+      // flowers: a window box under an upper window, a bed under a ground-floor one
+      const bx = px + ox, bz = pz + oz;
+      if (k > 0) {
+        if (empty(bx, lo - 1, bz) && empty(bx, lo, bz)) {
+          world.set(bx, lo - 1, bz, MAT.PLANTER);
+          world.set(bx, lo, bz, rng.pick(FLOWERS));
+          info.boxes++;
+        }
+      } else {
+        // a flower bed under a ground-floor window: recorded here, planted by
+        // the city once the yard's own trees and flowers are in (plantBeds), so
+        // the yard is laid out exactly as it would be without it
+        info.beds.push([bx, bz]);
+      }
+    }
+  }
+  // the door hood: three stairs a block out over the doorway, sloping away from
+  // the wall, over the door frame. It sits at gy + 4, not gy + 3: on sloping
+  // ground the step out of the door can be a block up, and a step up needs the
+  // cell above the head clear (a hood at gy + 3 shut a house in on real ground).
+  const [dx, dz] = doorCells[0];
+  const lat = outv[0] === 0 ? [1, 0] : [0, 1];
+  const hy = gy + 4;
+  if (hy < c.roofY) {
+    for (const sgn of [-1, 0, 1]) {
+      const x = dx + outv[0] + lat[0] * sgn, z = dz + outv[1] + lat[1] * sgn;
+      if (!empty(x, hy, z)) continue;
+      world.set(x, hy, z, stairId(theme.stair, CLIMB(-outv[0], -outv[1])));
+      info.hood++;
+    }
+  }
+  return info;
+}
+
+// Plant a house's flower beds (after the yard is done): only on open grass,
+// from the house's own random stream.
+export function plantBeds(world, rec) {
+  const hd = rec.houseDetail;
+  if (!hd || !hd.beds) return 0;
+  const rng = makeRng(((rec.x0 * 83492791) ^ (rec.z0 * 2654435761) ^ 0xbed5) >>> 0);
+  const gy = rec.groundY;
+  for (const [x, z] of hd.beds) {
+    if (world.get(x, gy, z) !== MAT.GRASS || world.has(x, gy + 1, z) || world.has(x, gy + 2, z)) continue;
+    world.set(x, gy + 1, z, rng.pick(FLOWERS));
+    hd.flowers++;
+  }
+  return hd.flowers;
 }
 
 // ---- facade detail ----------------------------------------------------------
