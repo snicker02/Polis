@@ -219,6 +219,7 @@ export function generateCity(cfgIn, onProgress) {
   const ranches = [];
   const pandas = [];
   const megaliths = [];
+  const ponds = [];
   const beds = [];
   const themeRng = rng.fork();
   const lifeRng = rng.fork();
@@ -262,7 +263,7 @@ export function generateCity(cfgIn, onProgress) {
         continue;
       }
     }
-    if (lot.kind === USE.PARK) { park(world, lot, rng, cfg, lifeRng, pandas, megaliths); continue; }
+    if (lot.kind === USE.PARK) { park(world, lot, rng, cfg, lifeRng, pandas, megaliths, ponds); continue; }
     if (lot.kind === USE.PLAZA) { plaza(world, lot, rng, cfg); continue; }
 
     if (lot.pen) {
@@ -563,14 +564,21 @@ export function generateCity(cfgIn, onProgress) {
     stats_unsupported = swapped + propped;
   }
 
+  // ---- ponds get a deep middle: after every lift, so each pond's own surface ----
+  // height is known (flat, terraced or rolling ground alike). A pond cell with
+  // pond water on at least three sides takes a second layer of water under it
+  // and clay under that; the rim stays a one-deep shelf. Fish then live in the bottom
+  // layer, under water, where they cannot leap out onto the bank.
+  deepenPonds(world, ponds);
+
   // ---- fish: last, once no more water will change ----------------------------
   // their own random stream, so a city's blocks and other spawns are the same
   // with fish on or off
   if (cfg.fish) spawns = spawns.concat(fishSpawns(world, makeRng((cfg.seed ^ 0x0f15b0a7) >>> 0)));
 
   const shell = cfg.terrain ? terrainShell(plan, cfg.terrain, GROUND, cfg.cityStyle) : null;
-  const stats = summarise(world, plan, buildings, cfg, { farms, beds, spawns, bell, transit, wall, ranches, landmarks, hills, stairRuns, reach, canal, centre, streets, harbour, skirt, cutFaces, bridges, megaliths, unsupported: stats_unsupported });
-  return { world, plan, buildings, cfg, stats, shell, bridges, farms, ranches, spawns, bell, transit, wall, landmarks, canal, centre, streets, harbour, harbourPlan, megaliths,
+  const stats = summarise(world, plan, buildings, cfg, { farms, beds, spawns, bell, transit, wall, ranches, landmarks, hills, stairRuns, reach, canal, centre, streets, harbour, skirt, cutFaces, bridges, megaliths, ponds, unsupported: stats_unsupported });
+  return { world, plan, buildings, cfg, stats, shell, bridges, farms, ranches, spawns, bell, transit, wall, landmarks, canal, centre, streets, harbour, harbourPlan, megaliths, ponds,
     hills, stairRuns, reach, groundAt: (x, z) => GROUND + elevAt(x, z) };
 }
 
@@ -1232,6 +1240,36 @@ export function generateSingle(cfgIn) {
     stats: summarise(world, plan, buildings, cfg, { farms: [], beds, spawns, bell: null }) };
 }
 
+// ---- deep middles for ponds -------------------------------------------------------
+function deepenPonds(world, ponds) {
+  let cells = 0;
+  const W_ = MAT.WATER;
+  for (const pd of ponds) {
+    // the pond's water cells, found at whatever height the pond now sits
+    const surf = new Map();
+    for (let z = pd.z0; z <= pd.z1; z++)
+      for (let x = pd.x0; x <= pd.x1; x++)
+        for (let y = GROUND - 2; y <= GROUND + 40; y++)
+          if (world.get(x, y, z) === W_ && world.get(x, y + 1, z) !== W_) { surf.set(x + ',' + z, y); break; }
+    const deep = [];
+    for (const [key, y] of surf) {
+      const [x, z] = key.split(',').map(Number);
+      // at least three sides pond water: a narrow pond still gets a deep
+      // channel down its middle, not only a round one a deep centre
+      const wet = [[1, 0], [-1, 0], [0, 1], [0, -1]].filter(([a, b]) => surf.get((x + a) + ',' + (z + b)) === y).length;
+      if (wet >= 3) deep.push([x, y, z]);
+    }
+    for (const [x, y, z] of deep) {
+      if (world.get(x, y - 1, z) === W_) continue;
+      world.set(x, y - 1, z, W_);
+      world.set(x, y - 2, z, MAT.CLAY);
+      cells++;
+    }
+    pd.deep = deep.length;
+  }
+  return cells;
+}
+
 // ---- a house's front fence ------------------------------------------------------
 // Fence posts along the street edge of the lot on open grass, with the gap
 // where the front path crosses it (the path cells are never fenced), so the
@@ -1274,7 +1312,7 @@ function picketFence(world, lot, face, G) {
 }
 
 // ---- open space ------------------------------------------------------------
-function park(world, lot, rng, cfg, lifeRng, pandas, megaliths) {
+function park(world, lot, rng, cfg, lifeRng, pandas, megaliths, ponds) {
   for (let z = lot.z0; z <= lot.z1; z++)
     for (let x = lot.x0; x <= lot.x1; x++) world.set(x, GROUND, z, MAT.GRASS);
   // crossing paths
@@ -1282,6 +1320,7 @@ function park(world, lot, rng, cfg, lifeRng, pandas, megaliths) {
   for (let x = lot.x0; x <= lot.x1; x++) world.set(x, GROUND, cz, MAT.PATH);
   for (let z = lot.z0; z <= lot.z1; z++) world.set(cx, GROUND, z, MAT.PATH);
   const pd = (cfg.pondChance > 0 && rng.chance(cfg.pondChance)) ? pond(world, lot, cx, cz, rng, GROUND) : null;
+  if (pd && ponds) ponds.push(pd);
   let grove = null;
   if (lifeRng && cfg.pandaChance > 0 && lifeRng.chance(cfg.pandaChance)) {
     grove = pandaGrove(world, lot, cx, cz, lifeRng, GROUND, pd);
@@ -1455,6 +1494,7 @@ function summarise(world, plan, buildings, cfg, life = {}) {
     pandas: (life.spawns || []).filter((p) => p.type === 'panda').length,
     fish: (life.spawns || []).filter((p) => p.type === 'cod' || p.type === 'salmon' || p.type === 'tropicalfish').length,
     twisted: buildings.filter((b) => b.twist).length,
+    pondsDeep: (life.ponds || []).filter((p) => p.deep > 0).length,
     megaliths: (life.megaliths || []).map((m) => m.kind),
     animals: (life.spawns || []).filter((p) => ['cow', 'sheep', 'pig', 'chicken'].includes(p.type)).length,
     wallHeight: life.wall ? life.wall.height : 0,

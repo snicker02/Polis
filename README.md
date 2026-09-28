@@ -1,4 +1,4 @@
-# Polis v0.20.1
+# Polis v0.20.2
 
 *Created with help from Claude AI.*
 
@@ -754,6 +754,22 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.20.2** — Ponds deep enough for fish.
+
+Park ponds were one block deep, and fish were placed in that one layer, right
+at the surface: in game they leap out onto the bank. Ponds now get a deep
+middle, dug as a last pass after every terrace lift so each pond's own surface
+height is known (flat, terraced or rolling ground alike): every pond cell with
+pond water on at least three sides takes a second layer of water under it and
+clay under that, so a round pond gets a deep centre and a narrow one a deep
+channel, and the rim stays a one-deep shelf. Fish are now only ever placed in
+water at least two deep, in the layer under the surface, with water over them;
+a pond too small to have a middle (a 2x2 puddle) gets none. Across 195 park
+ponds in five city styles, every pond bigger than a puddle has a deep middle
+and fish. 2zc checks it (a one-deep pond gets no fish; a pond with a deep
+middle gets them there, in the bottom layer; every park pond in real cities
+has its deep middle, clay under it, a rim, and fish).
 
 **0.20.1** — Terrace steps face straight in; twisting towers furnished; houses dressed.
 

@@ -7,8 +7,8 @@
 // has to be a real pool, not a one-wide irrigation channel or a fountain bowl,
 // so it needs at least a 2x2 patch of open water. Small bodies are ponds and
 // get mostly tropical fish; large ones are the canal and harbour and get cod
-// and salmon. Fish are spaced apart and sit a block below the surface where
-// the water is deep enough.
+// and salmon. Fish are spaced apart and only placed in water two or more deep,
+// in the layer under the surface (ponds are given a deep middle for them).
 //
 // Fish despawn like wild ones unless something marks them as kept: Java takes
 // PersistenceRequired; Bedrock keeps a named mob, so they are summoned with a
@@ -83,14 +83,16 @@ export function fishSpawns(world, rng, opts = {}) {
     const want = body.kind === 'river'
       ? Math.max(2, Math.min(o.riverMax, Math.round(n / o.riverPer)))
       : Math.max(1, Math.min(o.pondMax, Math.round(n / o.pondPer)));
-    // deeper cells first (fish keep off the very edge), shuffled within depth
-    const cells = rng.shuffle(body.cells.slice()).sort((a, b) => Math.min(b.depth, 3) - Math.min(a.depth, 3));
+    // Only water at least two deep: a fish in the bottom layer has water over
+    // it and cannot leap out onto the bank (in a one-deep pond fish beach
+    // themselves). Deeper cells first, shuffled within depth.
+    const cells = rng.shuffle(body.cells.filter((c) => c.depth >= 2)).sort((a, b) => Math.min(b.depth, 3) - Math.min(a.depth, 3));
     const placed = [];
     for (const c of cells) {
       if (placed.length >= want || out.length >= o.max) break;
       if (placed.some((p) => Math.max(Math.abs(p.x - c.x), Math.abs(p.z - c.z)) < o.spacing)) continue;
       const type = body.kind === 'river' ? (rng.chance(0.6) ? 'cod' : 'salmon') : (rng.chance(0.75) ? 'tropicalfish' : 'cod');
-      const f = { type, x: c.x, y: c.depth >= 2 ? c.y - 1 : c.y, z: c.z, water: body.kind, name: FISH_NAMES[type] };
+      const f = { type, x: c.x, y: c.y - 1, z: c.z, water: body.kind, name: FISH_NAMES[type] };
       if (type === 'tropicalfish') f.variant = tropicalVariant(rng);
       placed.push(f);
       out.push(f);
