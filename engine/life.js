@@ -550,8 +550,10 @@ export function furnish(world, rec, rng, opts = {}) {
     const win = cells.filter(([x, z]) => !isDoor(x, z));
     if (win.length < 3) return;
     const glassCells = win.slice(1, -1).length >= 2 ? win.slice(1, -1) : win;
+    // an arcade is already the shop window: its piers and bays are left as built
+    const arcaded = new Set((rec.arcade && rec.arcade.cells) || []);
     for (const [x, z] of glassCells) {
-      for (let y = sy + 1; y <= sy + 2; y++) world.set(x, y, z, rec.theme.glass);   // a proper shop window
+      if (!arcaded.has(x + ',' + z)) for (let y = sy + 1; y <= sy + 2; y++) world.set(x, y, z, rec.theme.glass);   // a proper shop window
       const ax = x + ox, az = z + oz;
       if (!world.has(ax, sy + 3, az)) put(ax, sy + 3, az, stairId(rec.theme.stair, DIRNAME(-ox, -oz) === 'north' ? WEIRDO.north
         : DIRNAME(-ox, -oz) === 'south' ? WEIRDO.south : DIRNAME(-ox, -oz) === 'east' ? WEIRDO.east : WEIRDO.west, true));  // awning

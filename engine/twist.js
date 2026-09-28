@@ -1,35 +1,38 @@
-// engine/twist.js — a twisting tower: square floor plates, each turned a
-// little further than the one below, so the whole tower corkscrews.
+// engine/twist.js — plate towers: every floor the same shape, a regular
+// polygon or a circle, turned and (optionally) shrunk a little from the floor
+// below. The twisting square of 0.20 is one case of it.
 //
 // GEOMETRY
 // --------
 // The lot's square footprint has half-extent H (cell centres, from the
-// middle). Floor k is a square of half-size h turned by θk = k·Δ about the
-// middle, and a cell belongs to it when its centre (dx, dz) satisfies
-//     |dx cosθ + dz sinθ| <= h   and   |-dx sinθ + dz cosθ| <= h.
-// A square of half-size h turned by θ spans h(|cosθ| + |sinθ|) either way,
-// which is largest (h√2) at 45°. The total turn Θ is 60..90°, so some floor
-// passes 45° and h = H/√2 keeps every plate inside the lot.
+// middle). A plate is described by its circumradius R (centre to a vertex):
+//   * a regular n-gon turned by θ has inradius r = R·cos(π/n), and a cell
+//     centre p belongs to it when p·u_i <= r for every edge normal
+//     u_i = (cos(θ + 2πi/n), sin(θ + 2πi/n));
+//   * a circle (n = 0) is drawn at r = R - 0.35 (no one-block nubs at the
+//     compass points) and p belongs when |p| <= r.
+// Whatever its turn, a plate lies inside its circumscribed circle, so R <= H
+// keeps every plate on the lot. (The square: R = H gives the half-size
+// r = H/√2 of 0.20 exactly, and the same membership test.)
+// A tapering tower shrinks R linearly floor by floor, never so far that the
+// inradius drops below RMIN: every plate still contains the circle of radius
+// RMIN, which holds the stair core and the clear ring round it.
 //
-// Walls are the plate cells with a four-way neighbour outside the plate: on a
-// turned square that is a closed ring (neighbours meet at least corner to
-// corner, and a player cannot squeeze between two blocks that touch only at
-// a corner). The four corners of each plate are solid piers, so the corners
-// trace four helices up the tower; the rest of each wall is glass between a
-// sill and a band at the ceiling.
+// Walls are the plate cells with a four-way neighbour outside the plate: a
+// closed ring on any convex plate. Piers stand at the vertices (for a circle:
+// eight ribs), so on a twisting tower they climb as helices; the rest of each
+// wall is glass between a sill and a band at the ceiling.
 //
 // STAIRS
 // ------
-// Every plate contains the circle of radius h, so a 3x3 spiral core in the
-// middle with a clear ring round it lies inside every floor whatever its
-// turn. The steps follow building.js exactly: step t sits in RING[t % 8] at
-// base + t, rising one block each, and a slab at height Y leaves open the
-// cells of the steps at Y-1, Y-2 and Y-3 (feet, head and one more), so the
-// same player-movement check proves every floor is reached.
+// A 3x3 spiral core in the middle, as in building.js: step t sits in
+// RING[t % 8] at base + t, rising one block each, and a slab at height Y
+// leaves open the cells of the steps at Y-1, Y-2 and Y-3, so the same
+// player-movement check proves every floor is reached.
 //
-// The record it returns has the fields verify.js and furnish() read. Its
-// rects are the axis-aligned square inside the inscribed circle, which lies
-// inside every plate, so "inside the building" is always true there.
+// The record carries rects (the axis-aligned square inside the smallest
+// inradius, inside every plate) for verify.js, and furnishRing(k) for
+// furnish(): the cells just inside floor k's walls, in order round the tower.
 
 import { MAT, doorId, stairId, DIR, WEIRDO, STAIR_SOLID } from './materials.js';
 import { OUTWARD } from './building.js';
@@ -39,40 +42,76 @@ const RING_DIR = [WEIRDO.east, WEIRDO.east, WEIRDO.south, WEIRDO.south,
                   WEIRDO.west, WEIRDO.west, WEIRDO.north, WEIRDO.north];
 
 export const TWIST_MIN_SIDE = 13;       // a smaller square has no room round the core once turned
-export const TWIST_MIN_FLOORS = 6;      // fewer floors barely show the turn
+export const TWIST_MIN_FLOORS = 6;      // fewer floors barely show the shape
+const RMIN = 3 * Math.SQRT2 - 1e-6;      // smallest inradius: an inner square of half-size 3 clears the core ring
 
-// Can this lot footprint take a twisting tower?
+// The shapes a plate tower can take.
+//   sides: 4, 6, 8 for polygons, 0 for a circle
+//   twist: turns 60–90° over the height, either hand
+//   taper: how much of R the top floor loses (capped so RMIN still fits)
+export const SHAPES = {
+  'square-twist':  { sides: 4, twist: true,  taper: 0 },
+  'hexagon-twist': { sides: 6, twist: true,  taper: 0 },
+  'octagon-twist': { sides: 8, twist: true,  taper: 0 },
+  'round':         { sides: 0, twist: false, taper: 0 },
+  'round-helix':   { sides: 0, twist: true,  taper: 0 },
+  'taper-twist':   { sides: 4, twist: true,  taper: 0.3 },
+};
+
+// Can this lot footprint take a plate tower?
 export function twistFits(x0, z0, x1, z1, floors) {
   const w = x1 - x0 + 1, d = z1 - z0 + 1;
   return Math.min(w, d) >= TWIST_MIN_SIDE && Math.max(w, d) <= Math.min(w, d) * 1.6 && floors >= TWIST_MIN_FLOORS;
 }
 
-// The cells of one plate, as a Set of "x,z", plus its corner points.
-export function plateCells(cx, cz, h, theta, x0, z0, x1, z1) {
-  const c = Math.cos(theta), s = Math.sin(theta), eps = 1e-6;
+// A circle is drawn a little inside its radius: cells exactly on R would stand
+// out as one-block nubs at the four compass points.
+const CIRCLE_TRIM = 0.35;
+export const inradius = (sides, R) => (sides ? R * Math.cos(Math.PI / sides) : R - CIRCLE_TRIM);
+
+// The cells of one plate, as a Set of "x,z", plus the points its piers stand on.
+export function plateOf(cx, cz, sides, R, theta, x0, z0, x1, z1) {
+  const eps = 1e-6, r = inradius(sides, R);
+  const normals = [];
+  for (let i = 0; i < sides; i++) normals.push([Math.cos(theta + 2 * Math.PI * i / sides), Math.sin(theta + 2 * Math.PI * i / sides)]);
   const cells = new Set();
   for (let z = z0; z <= z1; z++)
     for (let x = x0; x <= x1; x++) {
       const dx = x - cx, dz = z - cz;
-      const u = dx * c + dz * s, v = -dx * s + dz * c;
-      if (Math.abs(u) <= h + eps && Math.abs(v) <= h + eps) cells.add(x + ',' + z);
+      const inside = sides
+        ? normals.every(([a, b]) => dx * a + dz * b <= r + eps)
+        : Math.hypot(dx, dz) <= r + eps;
+      if (inside) cells.add(x + ',' + z);
     }
-  const corners = [[1, 1], [1, -1], [-1, 1], [-1, -1]].map(([a, b]) =>
-    [cx + (a * h) * c - (b * h) * s, cz + (a * h) * s + (b * h) * c]);
-  return { cells, corners };
+  // piers: at the vertices of a polygon, eight ribs round a circle
+  const n = sides || 8, off = sides ? Math.PI / sides : 0;
+  const piers = [];
+  for (let i = 0; i < n; i++) {
+    const a = theta + off + 2 * Math.PI * i / n;
+    piers.push([cx + R * Math.cos(a), cz + R * Math.sin(a)]);
+  }
+  return { cells, corners: piers, R, r };
+}
+
+// 0.20's square plate, kept for callers of the old name
+export function plateCells(cx, cz, h, theta, x0, z0, x1, z1) {
+  return plateOf(cx, cz, 4, h * Math.SQRT2, theta, x0, z0, x1, z1);
 }
 
 /**
- * spec: {x0,z0,x1,z1, floors, pitch, groundY, facing, theme, useStairs, lights, twist?, turns?}
+ * spec: {x0,z0,x1,z1, floors, pitch, groundY, facing, theme, useStairs, lights, shape?, twist?}
+ *   shape: a key of SHAPES (default 'square-twist')
  *   twist: total turn in radians (default: 60..90°, either hand, from rng)
  * Returns a building record, or null when the footprint cannot take one.
  */
-export function makeTwistedTower(world, spec, rng) {
+export function makeShapedTower(world, spec, rng) {
   const { x0, z0, x1, z1, groundY: gy, theme } = spec;
   const P = spec.pitch;
   const floors = spec.floors | 0;
   if (!twistFits(x0, z0, x1, z1, floors) || P < 4) return null;
   const face = spec.facing || 'south';
+  const shapeName = spec.shape && SHAPES[spec.shape] ? spec.shape : 'square-twist';
+  const shape = SHAPES[shapeName];
 
   // the square part of the lot, centred on its long side
   const w = x1 - x0 + 1, d = z1 - z0 + 1, S = Math.min(w, d);
@@ -80,13 +119,22 @@ export function makeTwistedTower(world, spec, rng) {
   const sx1 = sx0 + S - 1, sz1 = sz0 + S - 1;
   const cx = (sx0 + sx1) / 2, cz = (sz0 + sz1) / 2;
   const H = (S - 1) / 2;
-  const h = H / Math.SQRT2;
+  const R0 = H;                                              // circumradius of the ground floor
+  if (inradius(shape.sides, R0) < RMIN) return null;
 
-  const hand = rng.chance(0.5) ? 1 : -1;
-  const total = spec.twist !== undefined ? spec.twist : hand * (Math.PI / 3 + rng() * Math.PI / 6);
+  // the turn (drawn exactly as 0.20 drew it, so a square twist is unchanged)
+  let total = 0;
+  if (shape.twist) {
+    const hand = rng.chance(0.5) ? 1 : -1;
+    total = spec.twist !== undefined ? spec.twist : hand * (Math.PI / 3 + rng() * Math.PI / 6);
+  }
   const step = floors > 1 ? total / (floors - 1) : 0;
+  // the taper, capped so the top floor still holds the core ring
+  const maxTaper = Math.max(0, 1 - RMIN / inradius(shape.sides, R0));
+  const taper = Math.min(shape.taper || 0, maxTaper);
+  const Rk = (k) => R0 * (1 - (floors > 1 ? taper * k / (floors - 1) : 0));
   const plates = [];
-  for (let k = 0; k < floors; k++) plates.push(plateCells(cx, cz, h, k * step, sx0, sz0, sx1, sz1));
+  for (let k = 0; k < floors; k++) plates.push(plateOf(cx, cz, shape.sides, Rk(k), k * step, sx0, sz0, sx1, sz1));
 
   const roofY = gy + floors * P;
   const topFloorY = gy + (floors - 1) * P;
@@ -115,7 +163,7 @@ export function makeTwistedTower(world, spec, rng) {
     }
   };
 
-  // ---- the door, on the street face of the ground plate (turned 0°) ----------
+  // ---- the door, on the street face of the ground plate ----------------------
   const p0 = plates[0].cells;
   const out = OUTWARD[face];
   let door = null;
@@ -135,7 +183,7 @@ export function makeTwistedTower(world, spec, rng) {
     [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([a, b]) => !cells.has((x + a) + ',' + (z + b)));
   const floorYs = [];
   let windows = 0;
-  const pierR = 1.05;                                          // how close to a corner is still the pier
+  const pierR = 1.05;                                          // how close to a vertex is still the pier
   for (let k = 0; k < floors; k++) {
     const sy = gy + k * P;
     floorYs.push(sy);
@@ -195,7 +243,7 @@ export function makeTwistedTower(world, spec, rng) {
   // ---- furnishing ring: the cells just inside each floor's walls --------------
   // In order round the tower, each with the way into the room (its furniture
   // faces that way) and a side number that changes wherever the wall turns or
-  // the run breaks, so furniture.js pairs a bed's two halves only side by side
+  // the run breaks, so furniture pairs a bed's two halves only side by side
   // along one straight stretch of wall.
   const DIRS4 = [[1, 0], [-1, 0], [0, 1], [0, -1]];
   const furnishRing = (k) => {
@@ -205,9 +253,9 @@ export function makeTwistedTower(world, spec, rng) {
     for (const key of cells) {
       const [x, z] = key.split(',').map(Number);
       if (wallAt(x, z)) continue;
-      const w = DIRS4.find(([a, b]) => wallAt(x + a, z + b));
-      if (!w) continue;
-      ring.push({ x, z, nx: -w[0], nz: -w[1], ang: Math.atan2(z - cz, x - cx) });
+      const wd = DIRS4.find(([a, b]) => wallAt(x + a, z + b));
+      if (!wd) continue;
+      ring.push({ x, z, nx: -wd[0], nz: -wd[1], ang: Math.atan2(z - cz, x - cx) });
     }
     ring.sort((a, b) => a.ang - b.ang);
     let side = 0;
@@ -218,10 +266,11 @@ export function makeTwistedTower(world, spec, rng) {
     });
   };
 
-  // the rects: the axis-aligned square inside the inscribed circle, in every plate
-  // (h/√2 is exactly 3 on the smallest lot; the epsilon keeps rounding from
-  // making it 2, whose interior would be nothing but the stair shaft)
-  const ri = Math.max(3, Math.floor(h / Math.SQRT2 + 1e-9));
+  // the rects: the axis-aligned square inside the smallest inradius, in every plate
+  // (the epsilon keeps rounding from turning an exact 3 into 2, whose interior
+  // would be nothing but the stair shaft)
+  const rMin = Math.min(...plates.map((p) => p.r));
+  const ri = Math.max(3, Math.floor(rMin / Math.SQRT2 + 1e-9));
   const inner = { x0: mx - ri, z0: mz - ri, x1: mx + ri, z1: mz + ri };
   return {
     x0: sx0, z0: sz0, x1: sx1, z1: sz1, w: S, d: S, floors, pitch: P, groundY: gy, style: 'tower',
@@ -233,9 +282,16 @@ export function makeTwistedTower(world, spec, rng) {
     door: { x: dx, y: gy + 1, z: dz, out },
     doorCells: [[dx, dz]],
     outside: [dx + out[0], gy + 1, dz + out[1]],
-    twist: { total, step, h, centre: [cx, cz], hand: Math.sign(total) },
+    shape: shapeName,
+    twist: { total, step, h: plates[0].r, centre: [cx, cz], hand: Math.sign(total), shape: shapeName, sides: shape.sides, taper,
+      R: plates.map((p) => p.R) },
     plates: plates.map((p) => p.cells),
     furnishRing: (k) => furnishRing(k).map((c) => c),
     rooms: (k) => (k === 0 ? 'hall' : k % 2 ? 'office' : 'bedroom'),   // open plans: no partition walls on a turning floor
   };
+}
+
+// 0.20's name: the twisting square
+export function makeTwistedTower(world, spec, rng) {
+  return makeShapedTower(world, { ...spec, shape: spec.shape || 'square-twist' }, rng);
 }

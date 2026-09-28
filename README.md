@@ -1,4 +1,4 @@
-# Polis v0.20.2
+# Polis v0.21.0
 
 *Created with help from Claude AI.*
 
@@ -754,6 +754,42 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.21.0** — Shaped towers, Romanesque arcades, a Flamboyant portal.
+
+*Shaped towers* (engine/twist.js is now a plate-tower engine). Every floor is
+the same shape, a regular polygon or a circle, turned and optionally shrunk a
+little from the one below. A plate is set by its circumradius R: a regular
+n-gon turned by θ has inradius R·cos(π/n) and holds a cell when the cell lies
+inside every edge's half-plane; a circle is drawn at R - 0.35 (no one-block
+nubs). Any plate lies inside its circumscribed circle, so R no more than the
+lot's half-width keeps it on the lot at every turn. Six shapes: twisting
+square (0.20's, cell for cell), twisting octagon, twisting hexagon, tapered
+twist (R shrinks linearly, never so far that the inradius drops below 3√2, the
+room the stair core needs), round, and round with eight helical ribs. Piers
+stand at the vertices, so on a twisting tower they climb as helices. One
+spiral core, the furnishing ring and the walk-through serve them all. Each
+lot draws its shape from a hash; the slider is now "Shaped towers". A shaped
+tower furnishes from its own random stream, so a different shape never moves
+a farm elsewhere in the city.
+
+*Romanesque arcades*, from the plate's "Architecture romane": along the street
+face of a mid-rise ground floor, a pier every fourth cell and between each
+pair a three-wide round-headed opening (bulkhead, glass, a head of upside-down
+stairs with glass at the crown); a bay that touches the doorway is left alone.
+A billet course runs over them at the first floor's slab. A shop behind an
+arcade keeps it as its window. Only ordinary mid-rise lots get one; landmarks
+dress themselves.
+
+*Flamboyant portal*: the church's door gets a pointed gable of stairs with a
+carved apex and a finial, and a pinnacle on either side, all a block out from
+the facade and starting at gy + 4, so the doorstep keeps its head room.
+
+New section 2zf (50 checks): every shape on 48 lots (walk-through, furnished,
+on the lot, the right area within 20%, walls closed, piers at every vertex of
+every floor, taper rules), the square twist identical to 0.20's cell for cell,
+all six shapes in cities with every building verified, the arcades cell by
+cell and never at a door, and the portal on four churches.
 
 **0.20.2** — Ponds deep enough for fish.
 

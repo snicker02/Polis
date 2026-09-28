@@ -16,7 +16,7 @@ import { buildPregenPack, pregenFileName, siteRegion, viewRegion, pregenCommand,
 import { decodeNbt } from './tools/nbt-read.js';
 import { THEMES } from './engine/materials.js';
 
-const VERSION = '0.20.2';
+const VERSION = '0.21.0';
 const $ = (id) => document.getElementById(id);
 const numVal = (id) => Number($(id).value);      // readCfg has its own local num()
 
@@ -379,7 +379,7 @@ function showStats(mesh, times) {
     if (s.ranches !== undefined) line('pens / farm animals', `${s.ranches} / ${s.animals}`);
     if (s.cats !== undefined) line('cats / pandas', `${s.cats} / ${s.pandas}`);
     if (s.fish) line('fish', String(s.fish));
-    if (s.twisted) line('twisting towers', String(s.twisted));
+    if (s.twisted) line('shaped towers', (() => { const c = {}; for (const n of s.shapes || []) c[n] = (c[n] || 0) + 1; return Object.entries(c).map(([k, v]) => `${v} ${k.replace('-', ' ')}`).join(', '); })());
     if (s.megaliths && s.megaliths.length) line('standing stones', s.megaliths.join(', '));
     if (s.railLines) line('rail lines / bridges / carts', `${s.railLines} / ${s.railBridges} / ${s.carts}` + (s.railLoop ? ' · loop' : ''));
     if (s.wallHeight) line('perimeter wall', `${s.wallHeight} high · ${s.gates} gates`);

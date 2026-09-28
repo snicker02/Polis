@@ -328,7 +328,7 @@ export function makeBuilding(world, spec, rng) {
     for (const [cx, cz] of doorCells) world.set(cx, gy + 3, cz, MAT.GLOWSTONE);
   }
 
-  let houseInfo = null;
+  let houseInfo = null, arcadeInfo = null;
   if (spec.detail !== false) {
     const ctx = {
       rects: Array.from({ length: floors }, (_, k) => rect(k)), floorYs, roofY, top, theme, style, face, P,
@@ -339,6 +339,8 @@ export function makeBuilding(world, spec, rng) {
     // never shift the city's main stream, so every other choice in the city is
     // the same with them as without them
     if (style === 'house') houseInfo = houseDetail(world, ctx, makeRng(((x0 * 73856093) ^ (z0 * 19349663) ^ 0x40a5e) >>> 0));
+    // only on an ordinary mid-rise lot (the city asks); a landmark dresses itself
+    if (style === 'mid' && spec.arcade) arcadeInfo = romanesqueArcade(world, ctx);
   }
 
   return {
@@ -353,6 +355,7 @@ export function makeBuilding(world, spec, rng) {
     doorCells: doorCells.map((c) => c.slice()),
     outside: [dx + outv[0], gy + 1, dz + outv[1]],
     houseDetail: houseInfo,
+    arcade: arcadeInfo,
   };
 }
 
@@ -428,6 +431,63 @@ function houseDetail(world, c, rng) {
       info.hood++;
     }
   }
+  return info;
+}
+
+// ---- a Romanesque arcade on a mid-rise ground floor ---------------------------------
+// After the arcades of the plate's "Architecture romane": along the street face
+// of the ground floor, a pier every fourth cell and between each pair a round-
+// headed opening three wide: a bulkhead, glass, and an arch head of upside-down
+// stairs curving in from both piers, glass at the crown, the trim band over it
+// for the keystone course. A bay that touches the doorway is left as it was.
+// Over the arcade, a block out at the height of the first floor's slab (well
+// above anyone's head), a billet course: blocks and upside-down stairs in turn.
+// No random draws: the same building always gets the same arcade.
+function romanesqueArcade(world, c) {
+  const { rects, theme, P, doorCells, gy, face, outv } = c;
+  if (P < 5) return null;
+  const r = rects[0];
+  const cells = perimeter(r.x0, r.z0, r.x1, r.z1).filter((p) => p[2] === face).sort((a, b) => a[3] - b[3]);
+  const len = cells.length;
+  if (len < 9) return null;
+  const along = outv[0] === 0 ? [1, 0] : [0, 1];
+  const nearDoor = (x, z) => doorCells.some(([a, b]) => Math.abs(a - x) + Math.abs(b - z) <= 1);
+  const ours = new Set([theme.wall, theme.glass, theme.trim]);
+  const info = { piers: 0, arches: 0, billets: 0, bays: [] };
+  const archRow = gy + P - 2;
+  for (let b = 0; 4 * b + 4 <= len - 1; b++) {
+    const bay = [1, 2, 3].map((j) => cells[4 * b + j]);
+    const piers = [cells[4 * b], cells[4 * b + 4]];
+    if (bay.some(([x, z]) => nearDoor(x, z)) || piers.some(([x, z]) => nearDoor(x, z))) continue;
+    if (![...bay, ...piers].every(([x, z]) => {
+      for (let y = gy + 1; y <= archRow; y++) if (!ours.has(world.get(x, y, z))) return false;
+      return true;
+    })) continue;
+    for (const [x, z] of piers) for (let y = gy + 1; y <= archRow; y++) world.set(x, y, z, theme.trim);
+    bay.forEach(([x, z], j) => {
+      world.set(x, gy + 1, z, theme.wall);                                    // the bulkhead
+      for (let y = gy + 2; y < archRow; y++) world.set(x, y, z, theme.glass);
+      if (j === 1) world.set(x, archRow, z, theme.glass);                     // the crown of the arch
+      else world.set(x, archRow, z, stairId(theme.stair, CLIMB(along[0] * (j === 0 ? -1 : 1), along[1] * (j === 0 ? -1 : 1)), true));
+    });
+    info.arches++;
+    info.bays.push(bay.map(([x, z]) => [x, z]));
+  }
+  if (!info.arches) return null;
+  const piersSeen = new Set();
+  for (const bay of info.bays) for (const [x, z] of [[bay[0][0] - along[0], bay[0][1] - along[1]], [bay[2][0] + along[0], bay[2][1] + along[1]]]) piersSeen.add(x + ',' + z);
+  info.piers = piersSeen.size;
+  // every cell of the arcade (bays and piers), so a shop window leaves it be
+  info.cells = [...piersSeen, ...info.bays.flat().map(([x, z]) => x + ',' + z)];
+  // the billet course, over the whole facade between its corners
+  const by = gy + P;
+  cells.forEach(([x, z, , i]) => {
+    if (i === 0 || i === len - 1) return;
+    const bx = x + outv[0], bz = z + outv[1];
+    if (world.has(bx, by, bz)) return;
+    world.set(bx, by, bz, i % 2 ? stairId(theme.stair, CLIMB(-outv[0], -outv[1]), true) : theme.trim);
+    info.billets++;
+  });
   return info;
 }
 

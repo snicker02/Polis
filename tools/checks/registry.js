@@ -40,6 +40,7 @@ export const SECTIONS = [
   { id: '2zc', file: '2zc-fish.js',                           group: 'fast' },
   { id: '2zd', file: '2zd-shapes-and-ornament.js',            group: 'fast' },
   { id: '2ze', file: '2ze-furnish-stairs-houses.js',          group: 'fast' },
+  { id: '2zf', file: '2zf-shapes-arcades-portal.js',          group: 'fast' },
   { id: '2v', file: '2v-java-worlds.js',                      group: 'fast' },
   { id: '2w', file: '2w-square-stadium-cemetery-allotments.js', group: 'slow' },
   { id: '2x', file: '2x-village-style.js',                    group: 'fast' },

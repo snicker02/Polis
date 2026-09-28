@@ -2,7 +2,16 @@
 
 import { VoxelWorld } from './blockcore.js';
 import { makeRng, fbm2, clamp, hash2 } from './rng.js';
-import { makeTwistedTower, twistFits } from './twist.js';
+import { makeShapedTower, twistFits } from './twist.js';
+
+// the shapes a shaped tower can take, with their share
+const TOWER_SHAPES = [['square-twist', 0.30], ['octagon-twist', 0.15], ['hexagon-twist', 0.15],
+  ['taper-twist', 0.15], ['round', 0.12], ['round-helix', 0.13]];
+function towerShape(u) {
+  let acc = 0;
+  for (const [name, share] of TOWER_SHAPES) { acc += share; if (u < acc) return name; }
+  return TOWER_SHAPES[0][0];
+}
 import { plantBeds } from './building.js';
 import { megalith } from './megaliths.js';
 import { fishSpawns } from './fish.js';
@@ -70,7 +79,8 @@ export const DEFAULTS = {
   cats: true,
   pondChance: 0.5,
   fish: true,                // fish in the ponds, the canal and the harbour basin
-  twistChance: 0.25,         // share of downtown towers on square-ish lots that twist as they rise
+  twistChance: 0.25,         // share of downtown towers on square-ish lots built as a shaped tower
+                             // (twisting square, octagon or hexagon, tapered twist, round, round with helical ribs)
   megaliths: true,           // Celtic monuments in parks: a menhir, a dolmen or a stone circle
   megalithChance: 0.5,       // share of parks that get one
   furnish: true,
@@ -293,12 +303,13 @@ export function generateCity(cfgIn, onProgress) {
     // random stream, so a chance of 0 leaves every city exactly as it was.
     const twisting = cfg.twistChance > 0 && lot.style === 'tower' && !STYLE.rustic &&
       twistFits(fx0, fz0, fx1, fz1, lot.floors) && hash2(lot.x0, lot.z0, (cfg.seed ^ 0x7157) | 0) < cfg.twistChance;
-    const rec = twisting ? makeTwistedTower(world, {
+    const rec = twisting ? makeShapedTower(world, {
       x0: fx0, z0: fz0, x1: fx1, z1: fz1,
       floors: lot.floors, pitch: cfg.pitch, groundY: GROUND,
       facing: front.side, theme, useStairs: cfg.useStairs, lights: cfg.lights,
+      shape: towerShape(hash2(lot.z0, lot.x0, (cfg.seed ^ 0x5a9e) | 0)),
     }, makeRng(((lot.x0 * 73856093) ^ (lot.z0 * 19349663) ^ cfg.seed ^ 0x7157) >>> 0)) : makeBuilding(world, {
-      detail: cfg.detail,
+      detail: cfg.detail, arcade: true,
       rustic: !!STYLE.rustic,
       x0: fx0, z0: fz0, x1: fx1, z1: fz1,
       floors: lot.floors, pitch: cfg.pitch, groundY: GROUND,
@@ -310,7 +321,10 @@ export function generateCity(cfgIn, onProgress) {
     if (rec) {
       buildings.push(rec);
       if (cfg.furnish) {
-        const f = furnish(world, rec, lifeRng, { useStairs: cfg.useStairs });
+        // a shaped tower furnishes from its own stream: how much it takes depends on
+        // its shape, and the shared stream goes on to decide farms and more
+        const fr = rec.shape ? makeRng(((rec.x0 * 2246822519) ^ (rec.z0 * 3266489917) ^ cfg.seed ^ 0xf0a1) >>> 0) : lifeRng;
+        const f = furnish(world, rec, fr, { useStairs: cfg.useStairs });
         rec.beds = f.beds; rec.furniture = f;
         for (const b of f.beds) beds.push(b);
       } else { rec.beds = []; }
@@ -1494,6 +1508,7 @@ function summarise(world, plan, buildings, cfg, life = {}) {
     pandas: (life.spawns || []).filter((p) => p.type === 'panda').length,
     fish: (life.spawns || []).filter((p) => p.type === 'cod' || p.type === 'salmon' || p.type === 'tropicalfish').length,
     twisted: buildings.filter((b) => b.twist).length,
+    shapes: buildings.filter((b) => b.shape).map((b) => b.shape),
     pondsDeep: (life.ponds || []).filter((p) => p.deep > 0).length,
     megaliths: (life.megaliths || []).map((m) => m.kind),
     animals: (life.spawns || []).filter((p) => ['cow', 'sheep', 'pig', 'chicken'].includes(p.type)).length,

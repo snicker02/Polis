@@ -10,6 +10,7 @@
 //                 weathering and a pinnacle standing above the eaves
 //   corbel table  a row of small brackets under the eaves (modillons)
 //   gargoyles     spouts at the corners of the roof
+//   portal        a Flamboyant door: a pointed gable over it, a pinnacle either side
 //   flèche        an octagonal stone spire with crockets climbing its edges,
 //                 a pinnacle at each corner of the tower below it
 //
@@ -128,6 +129,44 @@ export function gothicChurch(world, rec, face, mats, rng) {
   if (ca - R >= 1 && ca + R <= F.width - 2 && P >= 6 + 2 * R) {
     const glassList = [mats.glass, ...STAINED.filter((g) => g !== mats.glass)].slice(0, 4);
     out.rose = roseWindow(world, F, ca, G + 4 + R, R, { tracery: mats.trim, hub: mats.carve, glassList, replaceable });
+  }
+
+  // ---- a Flamboyant portal: pinnacles either side of the door, a gable over it ----
+  // All a block out from the facade. The gable's lowest course is four above
+  // the ground (gy + 4), so the step out of the door keeps its head room even
+  // where the way out is a block up; the doorstep itself is never touched.
+  {
+    const [ox, oz] = F.out;
+    const cellAt = (a) => { const [x, z] = F.at(a, 0); return [x + ox, z + oz]; };
+    const [ax, az] = F.at(ca, 0), [bx, bz] = F.at(ca + 1, 0);
+    const along = [bx - ax, bz - az];
+    const portal = { pinnacles: 0, gable: 0, finial: 0 };
+    const clear = (x, z, y0, y1) => { for (let y = y0; y <= y1; y++) if (world.has(x, y, z)) return false; return true; };
+    for (const a of [ca - 2, ca + 2]) {
+      if (a < 0 || a >= F.width) continue;
+      const [x, z] = cellAt(a);
+      if (!clear(x, z, G + 1, G + 5)) continue;
+      for (let y = G + 1; y <= G + 3; y++) world.set(x, y, z, mats.trim);
+      world.set(x, G + 4, z, mats.carve);
+      world.set(x, G + 5, z, mats.finial);
+      portal.pinnacles++;
+    }
+    for (const [a, sgn] of [[ca - 1, 1], [ca + 1, -1]]) {
+      const [x, z] = cellAt(a);
+      if (!clear(x, z, G + 4, G + 4)) continue;
+      world.set(x, G + 4, z, stairId(mats.stair, CLIMB(along[0] * sgn, along[1] * sgn)));
+      portal.gable++;
+    }
+    {
+      const [x, z] = cellAt(ca);
+      if (clear(x, z, G + 4, G + 6)) {
+        world.set(x, G + 4, z, mats.trim);
+        world.set(x, G + 5, z, mats.carve);
+        world.set(x, G + 6, z, mats.finial);
+        portal.gable++; portal.finial = 1;
+      }
+    }
+    out.portal = portal;
   }
 
   // ---- side walls: lancets and buttresses in turn --------------------------------
