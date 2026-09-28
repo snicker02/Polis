@@ -22,6 +22,7 @@ import { USE, frontage } from './plan.js';
 import { townSquare, stadium, cemetery, allotments, bandstand } from './landmarks-extra.js';
 import { FLOWERS as FLOWERS_M } from './materials.js';
 import { styleOf } from './styles.js';
+import { gothicChurch, fleche } from './gothic.js';
 
 export const LANDMARKS = ['townhall', 'clocktower', 'library', 'market', 'church', 'mansion', 'school', 'lighthouse', 'castle',
   'townsquare', 'stadium', 'cemetery', 'allotments', 'bandstand'];
@@ -350,7 +351,10 @@ function church(world, lot, face, cfg, rng, G) {
   const LP = styleOf(cfg.cityStyle).landmark;
   pave(world, lot, G, () => LP.hallPave);
   const r = inset(lot, face, 2, 1);
-  const P = Math.max(8, cfg.pitch + 3);
+  // Gothic dress (with Detail on) wants a taller hall: room for a rose window
+  // over the door and lancets up the side walls
+  const gothic = cfg.detail !== false;
+  const P = gothic ? Math.max(12, cfg.pitch + 7) : Math.max(8, cfg.pitch + 3);
   const glass = rng.pick(STAINED);
   const theme = { name: 'church', wall: LP.churchWall || LP.clockWall, trim: LP.churchTrim || LP.clockTrim,
     floor: LP.clockFloor, glass, stair: LP.clockStair, door: LP.clockDoor };
@@ -403,15 +407,29 @@ function church(world, lot, face, cfg, rng, G) {
       const midSide = (x === tc[0] || z === tc[1]) && yy >= y0 + 6 && yy <= y0 + 7;   // belfry arches
       if (midSide) world.clear(x, yy, z); else world.set(x, yy, z, tw);
     }
-  for (let z = T0.z0; z <= T0.z1; z++) for (let x = T0.x0; x <= T0.x1; x++) world.set(x, y0 + 9, z, spire);
-  world.set(tc[0], y0 + 8, tc[1], MAT.BELL_HANG);
-  for (let k = 1; k <= 2; k++) for (let z = -1; z <= 1; z++) for (let x = -1; x <= 1; x++) world.set(tc[0] + x, y0 + 9 + k, tc[1] + z, spire);
-  for (let k = 3; k <= 6; k++) world.set(tc[0], y0 + 9 + k, tc[1], spire);
-  world.set(tc[0], y0 + 16, tc[1], LP.finial);
-  rec.topY = y0 + 16;
+  let dress = null, flecheInfo = null, tipY;
+  if (gothic) {
+    // the walls first (rose window, lancets, buttresses, corbels, gargoyles),
+    // then an octagonal flèche with crockets and corner pinnacles on the tower
+    const carve = LP.hallCapital || MAT.CHISELED_STONE;
+    const stair = LP.clockStair || 'stonebrick';
+    dress = gothicChurch(world, rec, face, { wall: theme.wall, trim: theme.trim, glass, carve, stair, finial: MAT.LIGHT_ROD }, rng);
+    flecheInfo = fleche(world, T0, y0 + 9, { spire, trim: theme.trim, stair, finial: LP.finial, pinTop: MAT.LIGHT_ROD }, 9);
+    world.set(tc[0], y0 + 8, tc[1], MAT.BELL_HANG);
+    tipY = flecheInfo.tipY;
+  } else {
+    for (let z = T0.z0; z <= T0.z1; z++) for (let x = T0.x0; x <= T0.x1; x++) world.set(x, y0 + 9, z, spire);
+    world.set(tc[0], y0 + 8, tc[1], MAT.BELL_HANG);
+    for (let k = 1; k <= 2; k++) for (let z = -1; z <= 1; z++) for (let x = -1; x <= 1; x++) world.set(tc[0] + x, y0 + 9 + k, tc[1] + z, spire);
+    for (let k = 3; k <= 6; k++) world.set(tc[0], y0 + 9 + k, tc[1], spire);
+    world.set(tc[0], y0 + 16, tc[1], LP.finial);
+    tipY = y0 + 16;
+  }
+  rec.topY = tipY;
   rec.rooms = () => 'chapel';
   rec.landmark = 'church';
-  return { kind: 'church', rec, lot, pews, tower: T0, spireTop: [tc[0], y0 + 16, tc[1]], bell: null, belfryBell: [tc[0], y0 + 8, tc[1]] };
+  return { kind: 'church', rec, lot, pews, tower: T0, spireTop: [tc[0], tipY, tc[1]], bell: null, belfryBell: [tc[0], y0 + 8, tc[1]],
+    gothic: dress, fleche: flecheInfo };
 }
 
 // ---- school ------------------------------------------------------------------

@@ -1,4 +1,4 @@
-# Polis v0.19.0
+# Polis v0.20.0
 
 *Created with help from Claude AI.*
 
@@ -754,6 +754,46 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.20.0** — Twisting towers, a Gothic church, and standing stones.
+
+*Twisting towers* (engine/twist.js). A downtown tower on a square-ish lot
+(at least 13 across, 6 floors) may corkscrew: every floor is the same square
+plate turned a little further than the one below, 60–90° in all, either hand.
+A square turned by θ spans h(|cos θ| + |sin θ|), largest at 45°, so plates of
+half-size H/√2 stay on the lot at every turn. The corners are solid piers, so
+four helices climb the facade, with glass between them; a stepped crown and a
+mast top it. Every plate contains the circle of radius h, so one 3x3 spiral
+stair in the middle serves all of them, built to the same rules as every
+other stair (one block per step, three of head room), and the same walk-through
+proves every floor. Each lot is chosen by a hash and built from its own random
+stream; the "Twisting towers" slider sets the share (0 keeps cities as they were).
+
+*Gothic church* (engine/gothic.js), after the plates of the *Tableau
+d'archéologie*: a rose window over the door (a ring of tracery, a carved hub,
+four spokes at radius 3 and eight from 4, a colour to each sector), tall
+lancets with keystones up the side walls and a triple lancet at the east end,
+buttresses a block out with a sloped weathering and a pinnacle above the
+eaves, a corbel table under them, gargoyles at the corners, and in place of
+the old spire an octagonal stone flèche with crockets climbing its faces and a
+pinnacle at each corner of the tower. The hall is taller to make room. It all
+sits in walls or in the air, so the church still passes the walk-through;
+with Detail off the church is exactly the old one.
+
+*Standing stones* (engine/megaliths.js), from the plate's Celtic monuments:
+half of all parks get a menhir, a dolmen (uprights and a capstone, with a
+chamber you can walk into) or a stone circle of eight stones with a taller
+king stone. They take a free quadrant, never a path, the pond or the panda
+grove, trees keep their canopies clear, and they ride up with the terraces.
+A "Standing stones in parks" checkbox under Life.
+
+New section 2zd (61 checks): 160 twisting towers on flat ground across sizes,
+heights, both hands and all four faces, each walked through, with plates on
+the lot and full size, the turn measured at the floor nearest 45° (a square
+turned 90° lands on itself), steps and head room checked block by block,
+walls closed, and piers found at every corner of every floor; twisting towers
+in four cities; the rose, lancets, buttresses, pinnacles and flèche of four
+churches; and 60 monuments checked for footing, capstones, chambers and circles.
 
 **0.19.0** — Fish in the ponds, the canal and the harbour.
 

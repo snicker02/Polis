@@ -1,7 +1,9 @@
 // engine/city.js — turns a plan into blocks.
 
 import { VoxelWorld } from './blockcore.js';
-import { makeRng, fbm2, clamp } from './rng.js';
+import { makeRng, fbm2, clamp, hash2 } from './rng.js';
+import { makeTwistedTower, twistFits } from './twist.js';
+import { megalith } from './megaliths.js';
 import { fishSpawns } from './fish.js';
 import { generatePlan, frontage, USE } from './plan.js';
 import { MAT, THEMES } from './materials.js';
@@ -67,6 +69,9 @@ export const DEFAULTS = {
   cats: true,
   pondChance: 0.5,
   fish: true,                // fish in the ponds, the canal and the harbour basin
+  twistChance: 0.25,         // share of downtown towers on square-ish lots that twist as they rise
+  megaliths: true,           // Celtic monuments in parks: a menhir, a dolmen or a stone circle
+  megalithChance: 0.5,       // share of parks that get one
   furnish: true,
   flowers: true,
   villagers: 60,
@@ -212,6 +217,7 @@ export function generateCity(cfgIn, onProgress) {
   const farms = [];
   const ranches = [];
   const pandas = [];
+  const megaliths = [];
   const beds = [];
   const themeRng = rng.fork();
   const lifeRng = rng.fork();
@@ -255,7 +261,7 @@ export function generateCity(cfgIn, onProgress) {
         continue;
       }
     }
-    if (lot.kind === USE.PARK) { park(world, lot, rng, cfg, lifeRng, pandas); continue; }
+    if (lot.kind === USE.PARK) { park(world, lot, rng, cfg, lifeRng, pandas, megaliths); continue; }
     if (lot.kind === USE.PLAZA) { plaza(world, lot, rng, cfg); continue; }
 
     if (lot.pen) {
@@ -281,7 +287,15 @@ export function generateCity(cfgIn, onProgress) {
 
     const front = frontage(plan, lot);
     const theme = themeRng.pick(STYLE.themes[lot.style] || STYLE.themes.mid);
-    const rec = makeBuilding(world, {
+    // A twisting tower: decided per lot from a hash, and built from its own
+    // random stream, so a chance of 0 leaves every city exactly as it was.
+    const twisting = cfg.twistChance > 0 && lot.style === 'tower' && !STYLE.rustic &&
+      twistFits(fx0, fz0, fx1, fz1, lot.floors) && hash2(lot.x0, lot.z0, (cfg.seed ^ 0x7157) | 0) < cfg.twistChance;
+    const rec = twisting ? makeTwistedTower(world, {
+      x0: fx0, z0: fz0, x1: fx1, z1: fz1,
+      floors: lot.floors, pitch: cfg.pitch, groundY: GROUND,
+      facing: front.side, theme, useStairs: cfg.useStairs, lights: cfg.lights,
+    }, makeRng(((lot.x0 * 73856093) ^ (lot.z0 * 19349663) ^ cfg.seed ^ 0x7157) >>> 0)) : makeBuilding(world, {
       detail: cfg.detail,
       rustic: !!STYLE.rustic,
       x0: fx0, z0: fz0, x1: fx1, z1: fz1,
@@ -366,6 +380,12 @@ export function generateCity(cfgIn, onProgress) {
     }
     for (const rch of ranches) for (const a of rch.animals) a.y += elevAt(a.x, a.z);
     for (const p of pandas) p.y += elevAt(p.x, p.z);
+    // standing stones ride up with their park
+    for (const m of megaliths) {
+      const e = elevAt((m.x0 + m.x1) >> 1, (m.z0 + m.z1) >> 1);
+      for (const st of m.stones) st[1] += e;
+      m.topY += e;
+    }
     for (const L of landmarks) {
       if (L.bell) L.bell[1] += elevAt(L.bell[0], L.bell[2]);
       if (L.belfryBell) L.belfryBell[1] += elevAt(L.belfryBell[0], L.belfryBell[2]);
@@ -375,6 +395,9 @@ export function generateCity(cfgIn, onProgress) {
       // where the block used to be
       const lift = (p) => { if (Array.isArray(p) && p.length === 3 && p.every((n) => typeof n === 'number')) p[1] += elevAt(p[0], p[2]); };
       for (const key of ['spireTop', 'lantern', 'cupolaBell', 'nameSign', 'fountain', 'gate', 'step', 'heap']) if (L[key]) lift(L[key]);
+      // the Gothic church's own records: the rose window's hub and the flèche tip
+      if (L.gothic && L.gothic.rose) lift(L.gothic.rose.centre);
+      if (L.fleche && L.spireTop) L.fleche.tipY = L.spireTop[1];
       for (const key of ['benches', 'stalls', 'lamps', 'goals', 'lights', 'tunnel', 'posts', 'graves', 'path', 'portico']) {
         if (!Array.isArray(L[key])) continue;
         for (const p of L[key]) lift(p);
@@ -538,8 +561,8 @@ export function generateCity(cfgIn, onProgress) {
   if (cfg.fish) spawns = spawns.concat(fishSpawns(world, makeRng((cfg.seed ^ 0x0f15b0a7) >>> 0)));
 
   const shell = cfg.terrain ? terrainShell(plan, cfg.terrain, GROUND, cfg.cityStyle) : null;
-  const stats = summarise(world, plan, buildings, cfg, { farms, beds, spawns, bell, transit, wall, ranches, landmarks, hills, stairRuns, reach, canal, centre, streets, harbour, skirt, cutFaces, bridges, unsupported: stats_unsupported });
-  return { world, plan, buildings, cfg, stats, shell, bridges, farms, ranches, spawns, bell, transit, wall, landmarks, canal, centre, streets, harbour, harbourPlan,
+  const stats = summarise(world, plan, buildings, cfg, { farms, beds, spawns, bell, transit, wall, ranches, landmarks, hills, stairRuns, reach, canal, centre, streets, harbour, skirt, cutFaces, bridges, megaliths, unsupported: stats_unsupported });
+  return { world, plan, buildings, cfg, stats, shell, bridges, farms, ranches, spawns, bell, transit, wall, landmarks, canal, centre, streets, harbour, harbourPlan, megaliths,
     hills, stairRuns, reach, groundAt: (x, z) => GROUND + elevAt(x, z) };
 }
 
@@ -1197,7 +1220,7 @@ export function generateSingle(cfgIn) {
 }
 
 // ---- open space ------------------------------------------------------------
-function park(world, lot, rng, cfg, lifeRng, pandas) {
+function park(world, lot, rng, cfg, lifeRng, pandas, megaliths) {
   for (let z = lot.z0; z <= lot.z1; z++)
     for (let x = lot.x0; x <= lot.x1; x++) world.set(x, GROUND, z, MAT.GRASS);
   // crossing paths
@@ -1210,9 +1233,20 @@ function park(world, lot, rng, cfg, lifeRng, pandas) {
     grove = pandaGrove(world, lot, cx, cz, lifeRng, GROUND, pd);
     if (grove && pandas) for (const p of grove.pandas) pandas.push(p);
   }
+  // a Celtic monument in a free quadrant, from its own random stream so the
+  // rest of the park is the same with it or without it
+  let stones = null;
+  if (cfg.megaliths && cfg.megalithChance > 0) {
+    const mr = makeRng(((lot.x0 * 83492791) ^ (lot.z0 * 2654435761) ^ cfg.seed ^ 0x5a17) >>> 0);
+    if (mr.chance(cfg.megalithChance)) {
+      stones = megalith(world, lot, cx, cz, mr, GROUND, [pd, grove].filter(Boolean));
+      if (stones && megaliths) megaliths.push(stones);
+    }
+  }
   const inGrove = (x, z) => grove && x >= grove.x0 && x <= grove.x1 && z >= grove.z0 && z <= grove.z1;
-  // a canopy spreads two blocks: keep trees that far from the grove too
-  const nearGrove = (x, z) => grove && x >= grove.x0 - 2 && x <= grove.x1 + 2 && z >= grove.z0 - 2 && z <= grove.z1 + 2;
+  // a canopy spreads two blocks: keep trees that far from the grove, and from the stones
+  const nearGrove = (x, z) => (grove && x >= grove.x0 - 2 && x <= grove.x1 + 2 && z >= grove.z0 - 2 && z <= grove.z1 + 2) ||
+    (stones && x >= stones.x0 - 3 && x <= stones.x1 + 3 && z >= stones.z0 - 3 && z <= stones.z1 + 3);
   if (cfg.trees) {
     for (let z = lot.z0 + 1; z <= lot.z1 - 1; z++) {
       for (let x = lot.x0 + 1; x <= lot.x1 - 1; x++) {
@@ -1366,6 +1400,8 @@ function summarise(world, plan, buildings, cfg, life = {}) {
     cats: (life.spawns || []).filter((p) => p.type === 'cat').length,
     pandas: (life.spawns || []).filter((p) => p.type === 'panda').length,
     fish: (life.spawns || []).filter((p) => p.type === 'cod' || p.type === 'salmon' || p.type === 'tropicalfish').length,
+    twisted: buildings.filter((b) => b.twist).length,
+    megaliths: (life.megaliths || []).map((m) => m.kind),
     animals: (life.spawns || []).filter((p) => ['cow', 'sheep', 'pig', 'chicken'].includes(p.type)).length,
     wallHeight: life.wall ? life.wall.height : 0,
     gates: life.wall ? life.wall.gates.length : 0,
