@@ -328,11 +328,11 @@ export function makeBuilding(world, spec, rng) {
     for (const [cx, cz] of doorCells) world.set(cx, gy + 3, cz, MAT.GLOWSTONE);
   }
 
-  let houseInfo = null, arcadeInfo = null;
+  let houseInfo = null, arcadeInfo = null, eavesInfo = null;
   if (spec.detail !== false) {
     const ctx = {
       rects: Array.from({ length: floors }, (_, k) => rect(k)), floorYs, roofY, top, theme, style, face, P,
-      doorCells, outv, gy, floors, core, hut, hutDoor, rustic: spec.rustic,
+      doorCells, outv, gy, floors, core, hut, hutDoor, rustic: spec.rustic, eaves: !!spec.eaves,
     };
     facadeDetail(world, ctx, rng);
     // its own random stream, seeded from where the house stands: the details
@@ -340,7 +340,8 @@ export function makeBuilding(world, spec, rng) {
     // the same with them as without them
     if (style === 'house') houseInfo = houseDetail(world, ctx, makeRng(((x0 * 73856093) ^ (z0 * 19349663) ^ 0x40a5e) >>> 0));
     // only on an ordinary mid-rise lot (the city asks); a landmark dresses itself
-    if (style === 'mid' && spec.arcade) arcadeInfo = romanesqueArcade(world, ctx);
+    if (style === 'mid' && spec.arcade && !spec.eaves) arcadeInfo = romanesqueArcade(world, ctx);
+    if (spec.eaves) eavesInfo = eaveSkirts(world, ctx);
   }
 
   return {
@@ -356,6 +357,7 @@ export function makeBuilding(world, spec, rng) {
     outside: [dx + outv[0], gy + 1, dz + outv[1]],
     houseDetail: houseInfo,
     arcade: arcadeInfo,
+    eaves: eavesInfo,
   };
 }
 
@@ -430,6 +432,38 @@ function houseDetail(world, c, rng) {
       world.set(x, hy, z, stairId(theme.stair, CLIMB(-outv[0], -outv[1])));
       info.hood++;
     }
+  }
+  return info;
+}
+
+// ---- eave skirts (the East Asian style) -----------------------------------------------
+// At every floor above the ground (and at the roofline of a flat-roofed
+// building) a skirt of tile eaves runs one block out all round, the stairs
+// sloping down and away from the wall; at each corner the skirt turns up: the
+// corner cell sits one block higher with its stair rising outward. Every
+// skirt is at least a storey above the ground, so it never takes head room.
+// Only empty cells are used. No random draws.
+function eaveSkirts(world, c) {
+  const { rects, floorYs, roofY, theme, style, floors } = c;
+  const levels = [];
+  for (let k = 1; k < floors; k++) levels.push([floorYs[k], rects[k - 1]]);
+  if (style !== 'house') levels.push([roofY, rects[floors - 1]]);
+  const info = { skirts: 0, cells: 0, corners: 0, levels: levels.map(([y]) => y) };
+  const put = (x, y, z, id) => { if (world.has(x, y, z)) return false; world.set(x, y, z, id); return true; };
+  for (const [y, r] of levels) {
+    let n = 0;
+    for (let x = r.x0; x <= r.x1; x++) {
+      if (put(x, y, r.z0 - 1, stairId(theme.stair, CLIMB(0, 1)))) n++;
+      if (put(x, y, r.z1 + 1, stairId(theme.stair, CLIMB(0, -1)))) n++;
+    }
+    for (let z = r.z0; z <= r.z1; z++) {
+      if (put(r.x0 - 1, y, z, stairId(theme.stair, CLIMB(1, 0)))) n++;
+      if (put(r.x1 + 1, y, z, stairId(theme.stair, CLIMB(-1, 0)))) n++;
+    }
+    // upturned corners: a block higher, rising outward along x
+    for (const [x, z, ox] of [[r.x0 - 1, r.z0 - 1, -1], [r.x1 + 1, r.z0 - 1, 1], [r.x0 - 1, r.z1 + 1, -1], [r.x1 + 1, r.z1 + 1, 1]])
+      if (put(x, y + 1, z, stairId(theme.stair, CLIMB(ox, 0)))) info.corners++;
+    if (n) { info.skirts++; info.cells += n; }
   }
   return info;
 }
@@ -556,8 +590,9 @@ function facadeDetail(world, c, rng) {
     }
   }
 
-  // eave: upside-down stairs one block out all round the roofline
-  {
+  // eave: upside-down stairs one block out all round the roofline (a style
+  // with eave skirts gets those instead: eaveSkirts below)
+  if (!c.eaves) {
     const r = top, y = roofY;
     // the way out is read from the cell itself, not the side index (corners get both)
     for (const [px, pz] of perimeter(r.x0, r.z0, r.x1, r.z1)) {

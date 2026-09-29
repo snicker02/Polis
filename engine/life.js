@@ -662,7 +662,10 @@ export function furnish(world, rec, rng, opts = {}) {
   for (let k = 0; k < rec.floors; k++) {
     const r = rec.rects[k];
     const sy = rec.floorYs[k], y = sy + 1;
-    const open = (x, z) => solidAt(world, x, sy, z) && !world.has(x, y, z) && !world.has(x, y + 1, z);
+    // (a building may name cells to keep clear: the way through to the next
+    // wing of a courtyard block, where the walls between them were opened)
+    const keep = rec.keepClear;
+    const open = (x, z) => solidAt(world, x, sy, z) && !world.has(x, y, z) && !world.has(x, y + 1, z) && !(keep && keep.has(x + ',' + z));
     if (plans[k]) {
       // each room against its own walls, clear of every doorway (inside or out)
       const allDoors = plans[k].doors.map((d) => [d.x, d.z]);

@@ -7,17 +7,17 @@ import { makeShapedTower, twistFits } from './twist.js';
 // the shapes a shaped tower can take, with their share
 const TOWER_SHAPES = [['square-twist', 0.30], ['octagon-twist', 0.15], ['hexagon-twist', 0.15],
   ['taper-twist', 0.15], ['round', 0.12], ['round-helix', 0.13]];
-function towerShape(u) {
+function towerShape(u, shapes = TOWER_SHAPES) {
   let acc = 0;
-  for (const [name, share] of TOWER_SHAPES) { acc += share; if (u < acc) return name; }
-  return TOWER_SHAPES[0][0];
+  for (const [name, share] of shapes) { acc += share; if (u < acc) return name; }
+  return shapes[0][0];
 }
 import { plantBeds } from './building.js';
 import { courtyardPlan, makeCourtyard } from './courtyard.js';
 import { megalith } from './megaliths.js';
 import { fishSpawns } from './fish.js';
 import { generatePlan, frontage, USE } from './plan.js';
-import { MAT, THEMES } from './materials.js';
+import { MAT, THEMES, stairId, WEIRDO } from './materials.js';
 import { makeBuilding, OUTWARD } from './building.js';
 import { doorId, DIR, MATERIALS } from './materials.js';
 import { farm, pond, scatterFlowers, furnish, bedSpawns, placeBell, golemSpawns, ranch, pandaGrove, catSpawns, RANCH_ANIMALS } from './life.js';
@@ -313,7 +313,7 @@ export function generateCity(cfgIn, onProgress) {
         const cy = makeCourtyard(world, {
           x0: fx0, z0: fz0, x1: fx1, z1: fz1, face: front.side, kind, mirror: crng.chance(0.5), G: GROUND, flowers: cfg.flowers,
           building: (p) => makeBuilding(world, {
-            detail: cfg.detail, arcade: true, rustic: !!STYLE.rustic,
+            detail: cfg.detail, arcade: true, eaves: !!STYLE.eaves, rustic: !!STYLE.rustic,
             x0: p.x0, z0: p.z0, x1: p.x1, z1: p.z1,
             floors: lot.floors, pitch: cfg.pitch, groundY: GROUND,
             style: 'mid', facing: p.facing, theme,
@@ -342,15 +342,17 @@ export function generateCity(cfgIn, onProgress) {
     }
     // A twisting tower: decided per lot from a hash, and built from its own
     // random stream, so a chance of 0 leaves every city exactly as it was.
-    const twisting = cfg.twistChance > 0 && lot.style === 'tower' && !STYLE.rustic &&
-      twistFits(fx0, fz0, fx1, fz1, lot.floors) && hash2(lot.x0, lot.z0, (cfg.seed ^ 0x7157) | 0) < cfg.twistChance;
+    // (a style may have its own tower shapes and share: the East Asian style's pagodas)
+    const shapedChance = STYLE.shapedChance !== undefined ? STYLE.shapedChance : cfg.twistChance;
+    const twisting = shapedChance > 0 && lot.style === 'tower' && !STYLE.rustic &&
+      twistFits(fx0, fz0, fx1, fz1, lot.floors) && hash2(lot.x0, lot.z0, (cfg.seed ^ 0x7157) | 0) < shapedChance;
     const rec = twisting ? makeShapedTower(world, {
       x0: fx0, z0: fz0, x1: fx1, z1: fz1,
       floors: lot.floors, pitch: cfg.pitch, groundY: GROUND,
       facing: front.side, theme, useStairs: cfg.useStairs, lights: cfg.lights,
-      shape: towerShape(hash2(lot.z0, lot.x0, (cfg.seed ^ 0x5a9e) | 0)),
+      shape: towerShape(hash2(lot.z0, lot.x0, (cfg.seed ^ 0x5a9e) | 0), STYLE.towerShapes),
     }, makeRng(((lot.x0 * 73856093) ^ (lot.z0 * 19349663) ^ cfg.seed ^ 0x7157) >>> 0)) : makeBuilding(world, {
-      detail: cfg.detail, arcade: true,
+      detail: cfg.detail, arcade: true, eaves: !!STYLE.eaves,
       rustic: !!STYLE.rustic,
       x0: fx0, z0: fz0, x1: fx1, z1: fz1,
       floors: lot.floors, pitch: cfg.pitch, groundY: GROUND,
@@ -445,6 +447,11 @@ export function generateCity(cfgIn, onProgress) {
     for (const rch of ranches) for (const a of rch.animals) a.y += elevAt(a.x, a.z);
     for (const p of pandas) p.y += elevAt(p.x, p.z);
     for (const cy of courtyards) if (cy.lamp) cy.lamp[1] += elevAt(cy.lamp[0], cy.lamp[2]);
+    // torii and stone lanterns in the parks ride up too
+    for (const lot of plan.lots) {
+      for (const g of lot.torii || []) g.at[1] += elevAt(g.at[0], g.at[2]);
+      for (const l of lot.stoneLanterns || []) l[1] += elevAt(l[0], l[2]);
+    }
     // standing stones ride up with their park
     for (const m of megaliths) {
       const e = elevAt((m.x0 + m.x1) >> 1, (m.z0 + m.z1) >> 1);
@@ -1296,6 +1303,52 @@ export function generateSingle(cfgIn) {
     stats: summarise(world, plan, buildings, cfg, { farms: [], beds, spawns, bell: null }) };
 }
 
+// ---- torii and stone lanterns (the East Asian style) --------------------------------
+// A torii straddles a park path one block in from the street: two vermilion
+// posts two either side of the path, four high; a tie beam (nuki) across the
+// top of the posts; over it a black lintel (kasagi) three either side with its
+// ends turned up. The lowest beam over the path is four above the ground, so
+// the step up onto the path keeps its head room. A gate goes up only where
+// every cell it needs is empty. No random draws.
+function parkGates(world, lot, cx, cz, G) {
+  const gates = [];
+  const ends = [[cx, lot.z0 + 1, 1, 0], [cx, lot.z1 - 1, 1, 0], [lot.x0 + 1, cz, 0, 1], [lot.x1 - 1, cz, 0, 1]];
+  for (const [px, pz, ax, az] of ends) {
+    const at = (u, y) => [px + ax * u, y, pz + az * u];
+    const posts = [], beams = [];
+    for (const u of [-2, 2]) for (let y = G + 1; y <= G + 4; y++) posts.push(at(u, y));
+    for (let u = -1; u <= 1; u++) beams.push(at(u, G + 4));
+    const top = [];
+    for (let u = -3; u <= 3; u++) top.push([at(u, G + 5), u]);
+    const cells = [...posts, ...beams, ...top.map((t) => t[0])];
+    if (!cells.every(([x, y, z]) => !world.has(x, y, z))) continue;
+    if (![-2, 2].every((u) => { const [x, , z] = at(u, G); return world.get(x, G, z) === MAT.GRASS; })) continue;   // posts on grass, never in the pond
+    for (const [x, y, z] of posts) world.set(x, y, z, MAT.C_RED);
+    for (const [x, y, z] of beams) world.set(x, y, z, MAT.C_RED);
+    for (const [[x, y, z], u] of top) {
+      if (Math.abs(u) === 3) world.set(x, y, z, stairId('dark', ax ? (u > 0 ? WEIRDO.east : WEIRDO.west) : (u > 0 ? WEIRDO.south : WEIRDO.north)));
+      else world.set(x, y, z, MAT.C_BLACK2);
+    }
+    gates.push({ at: [px, G, pz], across: [ax, az] });
+  }
+  return gates;
+}
+
+// stone lanterns (toro) on the corners of the path crossing: a stone post, the
+// lantern, a carved cap
+function stoneLanterns(world, cx, cz, G) {
+  const placed = [];
+  for (const [dx, dz] of [[2, 2], [-2, -2], [2, -2], [-2, 2]]) {
+    const x = cx + dx, z = cz + dz;
+    if (world.get(x, G, z) !== MAT.GRASS || [1, 2, 3].some((h) => world.has(x, G + h, z))) continue;
+    world.set(x, G + 1, z, MAT.STONEBRICK);
+    world.set(x, G + 2, z, MAT.LAMP);
+    world.set(x, G + 3, z, MAT.CHISELED_STONE);
+    placed.push([x, G + 2, z]);
+  }
+  return placed;
+}
+
 // ---- deep middles for ponds -------------------------------------------------------
 function deepenPonds(world, ponds) {
   let cells = 0;
@@ -1415,6 +1468,11 @@ function park(world, lot, rng, cfg, lifeRng, pandas, megaliths, ponds) {
     }
   }
   if (cfg.flowers) scatterFlowers(world, lot, 0.07, rng, GROUND);
+  // East Asian style: a torii where each path meets the street, stone lanterns by the crossing
+  if (styleOf(cfg.cityStyle).torii) {
+    lot.torii = parkGates(world, lot, cx, cz, GROUND);
+    lot.stoneLanterns = stoneLanterns(world, cx, cz, GROUND);
+  }
 }
 
 function plaza(world, lot, rng, cfg) {
@@ -1552,6 +1610,8 @@ function summarise(world, plan, buildings, cfg, life = {}) {
     twisted: buildings.filter((b) => b.twist).length,
     shapes: buildings.filter((b) => b.shape).map((b) => b.shape),
     courtyards: (life.courtyards || []).map((c) => c.kind),
+    torii: plan.lots.reduce((n, l) => n + ((l.torii && l.torii.length) || 0), 0),
+    stoneLanterns: plan.lots.reduce((n, l) => n + ((l.stoneLanterns && l.stoneLanterns.length) || 0), 0),
     pondsDeep: (life.ponds || []).filter((p) => p.deep > 0).length,
     megaliths: (life.megaliths || []).map((m) => m.kind),
     animals: (life.spawns || []).filter((p) => ['cow', 'sheep', 'pig', 'chicken'].includes(p.type)).length,

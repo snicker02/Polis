@@ -359,6 +359,52 @@ Object.assign(MAT, {
   GRAVEL:    A('GRAVEL', 'minecraft:gravel', '#857c78'),
 });
 
+// ---- the Nether style (0.23) ------------------------------------------------------
+Object.assign(MAT, {
+  BLACKSTONE:        A('BLACKSTONE', 'minecraft:blackstone', '#2a2328'),
+  POL_BLACKSTONE:    A('POL_BLACKSTONE', 'minecraft:polished_blackstone', '#35303a'),
+  PB_BRICKS:         A('PB_BRICKS', 'minecraft:polished_blackstone_bricks', '#302a31'),
+  CHISELED_PB:       A('CHISELED_PB', 'minecraft:chiseled_polished_blackstone', '#353039'),
+  GILDED_BLACKSTONE: A('GILDED_BLACKSTONE', 'minecraft:gilded_blackstone', '#3b2f25'),
+  BASALT:            A('BASALT', 'minecraft:basalt', '#4b4a4f', { pillar_axis: S('y') }),
+  POL_BASALT:        A('POL_BASALT', 'minecraft:polished_basalt', '#5c5b60', { pillar_axis: S('y') }),
+  SMOOTH_BASALT:     A('SMOOTH_BASALT', 'minecraft:smooth_basalt', '#48484e'),
+  NETHER_BRICK:      A('NETHER_BRICK', 'minecraft:nether_brick', '#2d1519'),
+  RED_NETHER_BRICK:  A('RED_NETHER_BRICK', 'minecraft:red_nether_brick', '#46070a'),
+  CHISELED_NB:       A('CHISELED_NB', 'minecraft:chiseled_nether_bricks', '#2f171b'),
+  CRIMSON_PLANKS:    A('CRIMSON_PLANKS', 'minecraft:crimson_planks', '#653147'),
+  WARPED_PLANKS:     A('WARPED_PLANKS', 'minecraft:warped_planks', '#2b6963'),
+  CRIMSON_FRAME:     A('CRIMSON_FRAME', 'minecraft:crimson_stem', '#5c1d2d', { pillar_axis: S('y') }, { role: 'frame' }),
+  WARPED_FRAME:      A('WARPED_FRAME', 'minecraft:warped_stem', '#3a3b4e', { pillar_axis: S('y') }, { role: 'frame' }),
+  CRIMSON_STEM:      A('CRIMSON_STEM', 'minecraft:crimson_stem', '#5c1d2d', { pillar_axis: S('y') }),
+  WARPED_STEM:       A('WARPED_STEM', 'minecraft:warped_stem', '#3a3b4e', { pillar_axis: S('y') }),
+  NETHER_WART:       A('NETHER_WART', 'minecraft:nether_wart_block', '#730303'),
+  WARPED_WART:       A('WARPED_WART', 'minecraft:warped_wart_block', '#167e86'),
+  SHROOMLIGHT:       A('SHROOMLIGHT', 'minecraft:shroomlight', '#f09d4e'),
+  CRYING_OBSIDIAN:   A('CRYING_OBSIDIAN', 'minecraft:crying_obsidian', '#200a3c'),
+  CRIMSON_NYLIUM:    A('CRIMSON_NYLIUM', 'minecraft:crimson_nylium', '#822222'),
+  SOUL_SOIL:         A('SOUL_SOIL', 'minecraft:soul_soil', '#4c3a2e'),
+  CRIMSON_ROOTS:     A('CRIMSON_ROOTS', 'minecraft:crimson_roots', '#7e0b29', {}, PLANT),
+  WARPED_ROOTS:      A('WARPED_ROOTS', 'minecraft:warped_roots', '#14968a', {}, PLANT),
+  NETHER_FENCE:      A('NETHER_FENCE', 'minecraft:nether_brick_fence', '#2d1519'),
+  CRIMSON_FENCE:     A('CRIMSON_FENCE', 'minecraft:crimson_fence', '#653147'),
+  WARPED_FENCE:      A('WARPED_FENCE', 'minecraft:warped_fence', '#2b6963'),
+  SOUL_LAMP:         A('SOUL_LAMP', 'minecraft:soul_lantern', '#76c5c8', { hanging: B(0) }, { passable: false }),
+  SOUL_LAMP_HANG:    A('SOUL_LAMP_HANG', 'minecraft:soul_lantern', '#76c5c8', { hanging: B(1) }, { passable: false }),
+});
+
+// ---- the East Asian style (0.23) --------------------------------------------------
+Object.assign(MAT, {
+  BAMBOO_MOSAIC: A('BAMBOO_MOSAIC', 'minecraft:bamboo_mosaic', '#c9b25a'),
+  SG_WHITE:      A('SG_WHITE', 'minecraft:white_stained_glass', '#e8ecec'),     // paper screens
+  MOSS_BLOCK:    A('MOSS_BLOCK', 'minecraft:moss_block', '#596d2f'),
+  // pines: spruce wood and needles under their own ids, so a style can turn oak
+  // trees into pines while also turning its spruce trees into something else
+  // (a role of their own keeps them apart: the registry merges identical blocks otherwise)
+  PINE_LOG:      A('PINE_LOG', 'minecraft:spruce_log', '#4c3a22', { pillar_axis: S('y') }, { role: 'pine' }),
+  PINE_LEAF:     A('PINE_LEAF', 'minecraft:spruce_leaves', '#3f6b3a', { persistent_bit: B(1), update_bit: B(0) }, { role: 'pine' }),
+});
+
 // ---- doors -----------------------------------------------------------------
 // Bedrock door states: direction (0=east,1=south,2=west,3=north),
 // door_hinge_bit, open_bit, upper_block_bit.
@@ -418,6 +464,13 @@ const STAIR_BLOCKS = {
   cherry: ['minecraft:cherry_stairs', '#e3b1a8'],
   cobble: ['minecraft:stone_stairs', '#7a7a7a'],            // Bedrock's name for cobblestone stairs
   mossy: ['minecraft:mossy_stone_brick_stairs', '#737a66'],
+  blackstone: ['minecraft:blackstone_stairs', '#2a2328'],
+  pbbrick: ['minecraft:polished_blackstone_brick_stairs', '#302a31'],
+  netherbrick: ['minecraft:nether_brick_stairs', '#2d1519'],
+  rednether: ['minecraft:red_nether_brick_stairs', '#46070a'],
+  crimson: ['minecraft:crimson_stairs', '#653147'],
+  warped: ['minecraft:warped_stairs', '#2b6963'],
+  bamboo: ['minecraft:bamboo_stairs', '#c9b25a'],
 };
 export const WEIRDO = { east: 0, west: 1, south: 2, north: 3 };
 
@@ -436,6 +489,8 @@ export const STAIR_SOLID = {
   deepslate: MAT.DEEPSLATE, sandstone: MAT.SANDSTONE,
   smoothsand: MAT.SMOOTH_SAND, redsand: MAT.RED_SAND, acacia: MAT.ACACIA,
   cherry: MAT.CHERRY, cobble: MAT.COBBLE, mossy: MAT.MOSSY_BRICK,
+  blackstone: MAT.BLACKSTONE, pbbrick: MAT.PB_BRICKS, netherbrick: MAT.NETHER_BRICK, rednether: MAT.RED_NETHER_BRICK,
+  crimson: MAT.CRIMSON_PLANKS, warped: MAT.WARPED_PLANKS, bamboo: MAT.BAMBOO_PLANKS,
 };
 
 // ---- building themes -------------------------------------------------------

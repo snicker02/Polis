@@ -25,6 +25,7 @@ export default async function run(ctx) {
   const OUT = { north: [0, -1], south: [0, 1], west: [-1, 0], east: [1, 0] };
 
   // ---- on flat ground ------------------------------------------------------------
+  let joinCount = 0, joinShut = 0, slabGap = 0, endsOpen = 0, parapetLeft = 0;
   let built = 0, verified = 0, partitionBad = 0, overlap = 0, streetBad = 0, sideDoorBad = 0, backDoorBad = 0, pathBad = 0, flowerBad = 0, lampBad = 0, sameBad = 0;
   const kindsSeen = new Set();
   for (const [W, D] of [[16, 16], [19, 17], [22, 20], [26, 24]]) for (const face of ['south', 'north', 'east', 'west']) for (const kind of ['L', 'U']) for (const mirror of [false, true]) {
@@ -69,6 +70,24 @@ export default async function run(ctx) {
     if (!cy.lamp || !/lantern/.test(blk(w, ...cy.lamp)) || !/fence/.test(blk(w, cy.lamp[0], cy.lamp[1] - 1, cy.lamp[2])) || onPath.has(cy.lamp[0] + ',' + cy.lamp[2])) lampBad++;
     // one block: one theme, one height
     if (new Set(cy.wings.map((b) => b.themeName)).size !== 1 || new Set(cy.wings.map((b) => b.roofY)).size !== 1) sameBad++;
+    // one building inside: every join opened on every floor, floor to ceiling,
+    // the two end cells left solid, the slab unbroken under it, the parapet gone
+    if (cy.joins.length !== (kind === 'U' ? 2 : 1)) joinCount++;
+    for (const j of cy.joins) {
+      const a = cy.wings[j.a];
+      for (let k = 0; k < a.floors; k++) {
+        const sy = a.floorYs[k];
+        for (const [[ax, az], [bx, bz]] of j.cells) {
+          for (let y = sy + 1; y <= sy + a.pitch - 1; y++) if (w.has(ax, y, az) || w.has(bx, y, bz)) joinShut++;
+          if (!solid(w, ax, sy, az) || !solid(w, bx, sy, bz)) slabGap++;
+        }
+        // the end cells of the join stay wall
+        const [[ex0, ez0], [ex1, ez1]] = [j.cells[0][0], j.cells[j.cells.length - 1][0]];
+        const step = j.cells.length > 1 ? [Math.sign(ex1 - ex0), Math.sign(ez1 - ez0)] : [0, 0];
+        for (const [x, z] of [[ex0 - step[0], ez0 - step[1]], [ex1 + step[0], ez1 + step[1]]]) if (!solid(w, x, sy + 2, z) && !/glass/.test(blk(w, x, sy + 2, z))) endsOpen++;
+      }
+      for (const [[ax, az], [bx, bz]] of j.cells) for (const [x, z] of [[ax, az], [bx, bz]]) if (w.has(x, a.roofY + 1, z)) parapetLeft++;
+    }
   }
   check('courtyards: L and U built on every lot that fits, all four facings, both hands', built >= 40 && kindsSeen.size === 2, `${built} built`);
   check('courtyards: every wing walks through', verified === built, `${verified}/${built}`);
@@ -78,10 +97,13 @@ export default async function run(ctx) {
   check('courtyards: a path from the back wing\'s door to the street, nothing standing on it', pathBad === 0 && flowerBad === 0, `${pathBad} paths, ${flowerBad} blocked`);
   check('courtyards: a lantern post in the court, off the path', lampBad === 0, `${lampBad}`);
   check('courtyards: one block, one theme and one height', sameBad === 0, `${sameBad}`);
+  check('courtyards: no wall between wings: every join open on every floor, floor to ceiling', joinCount === 0 && joinShut === 0, `${joinCount} missing joins, ${joinShut} cells still shut`);
+  check('courtyards: the floor runs on under every opening, and the join\'s end cells stay solid', slabGap === 0 && endsOpen === 0, `${slabGap} gaps, ${endsOpen} open ends`);
+  check('courtyards: no parapet left over a join', parapetLeft === 0, `${parapetLeft}`);
 
   // ---- in cities ------------------------------------------------------------------------
   const kinds = {};
-  let cityOk = true, courts = 0;
+  let cityOk = true, courts = 0, blockedJoins = 0;
   // (a U needs a lot 21 across the street face, three wings of seven: most
   // mid-rise lots are 10 to 16, so U blocks are rare at the default lot size;
   // two of these cities have bigger lots, and seed 1 has one at the default)
@@ -90,10 +112,26 @@ export default async function run(ctx) {
     const r = generateCity({ ...DEFAULTS, ...c, courtyardChance: 1 });
     const v = verifyAll(r.world, r.buildings);
     if (v.ok !== v.total || v.floorsReached !== v.floorsChecked || r.reach.unreached.length) cityOk = false;
-    for (const cy of r.courtyards) { courts++; kinds[cy.kind] = (kinds[cy.kind] || 0) + 1; }
+    for (const cy of r.courtyards) {
+      courts++; kinds[cy.kind] = (kinds[cy.kind] || 0) + 1;
+      // furnished, the way through every join is still clear on every floor
+      for (const j of cy.joins) {
+        const a = cy.wings[j.a];
+        for (let k = 0; k < a.floors; k++) {
+          const y = a.floorYs[k] + 1;
+          const through = j.cells.some(([[ax, az], [bx, bz]]) => {
+            const dx = Math.sign(bx - ax) || 0, dz = Math.sign(bz - az) || 0;
+            const line = [[ax - dx, az - dz], [ax, az], [bx, bz], [bx + dx, bz + dz]];
+            return line.every(([x, z]) => !solid(r.world, x, y, z) && !solid(r.world, x, y + 1, z) && solid(r.world, x, y - 1, z));
+          });
+          if (!through) blockedJoins++;
+        }
+      }
+    }
     if (JSON.stringify(r.stats.courtyards) !== JSON.stringify(r.courtyards.map((c2) => c2.kind))) cityOk = false;
   }
   check('cities: L and U courtyard blocks both turn up', kinds.L > 0 && kinds.U > 0, JSON.stringify(kinds));
+  check('cities: furnished, you can walk straight through every join on every floor', blockedJoins === 0, `${blockedJoins} floors blocked`);
   check('cities: with courtyards, every building walks through and every door is reached (hills too)', cityOk);
   check('cities: courtyard chance 0 -> none', generateCity({ ...DEFAULTS, seed: 12345, size: 192, courtyardChance: 0 }).courtyards.length === 0);
   const s1 = generateCity({ ...DEFAULTS, seed: 7, size: 192, courtyardChance: 1 }), s2 = generateCity({ ...DEFAULTS, seed: 7, size: 192, courtyardChance: 1 });

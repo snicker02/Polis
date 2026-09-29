@@ -217,6 +217,91 @@ export const STYLES = {
       libPave: MAT.COBBLE, libWall: MAT.C_WHITE, libTrim: MAT.OAK_FRAME, libFloor: MAT.OAK, libStair: 'oak', libDoor: 'oak',
       market: [MAT.GRASS_PATH, MAT.COBBLE], wellRim: MAT.COBBLE, wellRoof: MAT.OAK },
   },
+
+  // The Nether, brought up: crimson and warped wood, nether brick and
+  // blackstone, basalt columns, shroomlight lamps, fungus trees on nylium.
+  // (The canal stays water: lava would take the boats, the fish and anyone who
+  // stepped in, and water only boils away in the Nether itself.)
+  nether: {
+    label: 'Nether',
+    themes: {
+      house: [
+        T('crimson', MAT.CRIMSON_PLANKS, MAT.CRIMSON_FRAME, MAT.WARPED_PLANKS, MAT.SG_RED, 'crimson', 'crimson', MAT.NETHER_WART),
+        T('warped', MAT.WARPED_PLANKS, MAT.WARPED_FRAME, MAT.CRIMSON_PLANKS, MAT.TINTED, 'warped', 'warped', MAT.WARPED_WART),
+        T('blackcot', MAT.PB_BRICKS, MAT.CRIMSON_FRAME, MAT.CRIMSON_PLANKS, MAT.SG_RED, 'pbbrick', 'crimson', MAT.NETHER_BRICK),
+      ],
+      mid: [
+        T('netherbrick', MAT.NETHER_BRICK, MAT.RED_NETHER_BRICK, MAT.CRIMSON_PLANKS, MAT.SG_RED, 'netherbrick', 'crimson'),
+        T('blackstone', MAT.PB_BRICKS, MAT.CHISELED_PB, MAT.WARPED_PLANKS, MAT.TINTED, 'pbbrick', 'warped'),
+        T('basalt', MAT.SMOOTH_BASALT, MAT.POL_BLACKSTONE, MAT.CRIMSON_PLANKS, MAT.SG_RED, 'blackstone', 'crimson'),
+      ],
+      tower: [
+        T('bastion', MAT.PB_BRICKS, MAT.GILDED_BLACKSTONE, MAT.CRIMSON_PLANKS, MAT.TINTED, 'pbbrick', 'crimson'),
+        T('obsidian', MAT.BLACKSTONE, MAT.CRYING_OBSIDIAN, MAT.WARPED_PLANKS, MAT.TINTED, 'blackstone', 'warped'),
+        T('fortress', MAT.NETHER_BRICK, MAT.CHISELED_NB, MAT.CRIMSON_PLANKS, MAT.SG_RED, 'netherbrick', 'crimson'),
+      ],
+    },
+    remap: {
+      GRASS: 'CRIMSON_NYLIUM', PLANTER: 'CRIMSON_NYLIUM', ASPHALT: 'BLACKSTONE', SIDEWALK: 'POL_BLACKSTONE',
+      LINE: 'GILDED_BLACKSTONE', CROSSWALK: 'QUARTZ', PATH: 'SOUL_SOIL',
+      LOG: 'CRIMSON_STEM', LEAVES: 'NETHER_WART', SPRUCE_LOG: 'WARPED_STEM', SPRUCE_LEAF: 'WARPED_WART',
+      FLOWERS: 'CRIMSON_ROOTS', LAMP_POST: 'NETHER_FENCE', STREET_LIGHT: 'SHROOMLIGHT', LANTERN: 'SHROOMLIGHT',
+      WALL_BODY: 'NETHER_BRICK', WALL_CAP: 'POL_BLACKSTONE', RETAIN: 'BLACKSTONE', INTERIOR_WALL: 'POL_BLACKSTONE',
+      CANAL_BED: 'BLACKSTONE', DOCK: 'CRIMSON_PLANKS',
+    },
+    landmark: { ...MODERN_LANDMARK,
+      hallPave: MAT.POL_BLACKSTONE, hallWall: MAT.NETHER_BRICK, hallColumn: MAT.POL_BASALT, hallCapital: MAT.CHISELED_PB,
+      hallFloor: MAT.CRIMSON_PLANKS, hallGlass: MAT.SG_RED, hallStair: 'pbbrick', hallDoor: 'crimson', entablature: MAT.RED_NETHER_BRICK,
+      domeBase: MAT.NETHER_BRICK, domeRing: MAT.POL_BASALT, dome: MAT.NETHER_WART, finial: MAT.GOLD,
+      clockPave: [MAT.POL_BLACKSTONE, MAT.BLACKSTONE], clockWall: MAT.PB_BRICKS, clockTrim: MAT.GILDED_BLACKSTONE, clockFloor: MAT.WARPED_PLANKS,
+      clockStair: 'pbbrick', clockDoor: 'warped', spire: MAT.BLACKSTONE,
+      libPave: MAT.POL_BLACKSTONE, libWall: MAT.NETHER_BRICK, libTrim: MAT.RED_NETHER_BRICK, libFloor: MAT.CRIMSON_PLANKS, libStair: 'netherbrick', libDoor: 'crimson',
+      schoolWall: MAT.NETHER_BRICK, schoolTrim: MAT.POL_BLACKSTONE,
+      market: [MAT.POL_BLACKSTONE, MAT.BLACKSTONE], wellRim: MAT.PB_BRICKS, wellRoof: MAT.CRIMSON_PLANKS },
+  },
+
+  // Japan and its neighbours: white plaster between dark timber, paper screens,
+  // grey tile roofs with a skirt of eaves at every floor turning up at the
+  // corners, pagodas for towers, vermilion torii at the gates of parks and
+  // squares, stone lanterns, gravel roads, pines and cherries.
+  eastasian: {
+    label: 'East Asian',
+    eaves: true,                   // a skirt of tile eaves at every floor (building.js, twist.js)
+    towerShapes: [['pagoda', 0.6], ['pagoda-oct', 0.4]],
+    shapedChance: 0.85,            // most towers are pagodas, whatever the Shaped towers slider says
+    torii: true,                   // gates where paths meet the street, and stone lanterns (city.js)
+    themes: {
+      house: [
+        T('machiya', MAT.C_WHITE, MAT.DARK_FRAME, MAT.BAMBOO_PLANKS, MAT.SG_WHITE, 'deepslate', 'dark', MAT.DEEPSLATE),
+        T('ryokan', MAT.C_WHITE, MAT.SPRUCE_FRAME, MAT.SPRUCE, MAT.SG_WHITE, 'deepslate', 'spruce', MAT.DEEPSLATE),
+        T('teahouse', MAT.BAMBOO_PLANKS, MAT.DARK_FRAME, MAT.BAMBOO_MOSAIC, MAT.SG_WHITE, 'bamboo', 'dark', MAT.DEEPSLATE),
+      ],
+      mid: [
+        T('shoten', MAT.C_WHITE, MAT.DARK_FRAME, MAT.SPRUCE, MAT.SG_WHITE, 'deepslate', 'dark'),
+        T('kura', MAT.C_WHITE, MAT.DEEPSLATE, MAT.DARK_PLANKS, MAT.SG_WHITE, 'deepslate', 'spruce'),
+        T('shrinehall', MAT.C_RED, MAT.DARK_FRAME, MAT.SPRUCE, MAT.SG_WHITE, 'dark', 'dark'),
+      ],
+      tower: [
+        T('pagoda', MAT.DARK_PLANKS, MAT.C_RED, MAT.SPRUCE, MAT.SG_WHITE, 'deepslate', 'dark'),
+        T('tenshu', MAT.C_WHITE, MAT.DARK_FRAME, MAT.SPRUCE, MAT.SG_WHITE, 'deepslate', 'dark'),
+      ],
+    },
+    remap: {
+      ASPHALT: 'GRAVEL', SIDEWALK: 'STONEBRICK', LINE: 'GRAVEL', CROSSWALK: 'STONEBRICK', PATH: 'GRAVEL',
+      LOG: 'PINE_LOG', LEAVES: 'PINE_LEAF', SPRUCE_LOG: 'CHERRY_LOG', SPRUCE_LEAF: 'CHERRY_LEAF',
+      LAMP_POST: 'DARK_FENCE', STREET_LIGHT: 'LAMP',
+      WALL_BODY: 'STONEBRICK', WALL_CAP: 'DEEPSLATE', RETAIN: 'STONEBRICK', INTERIOR_WALL: 'C_WHITE', DOCK: 'DARK_PLANKS',
+    },
+    landmark: { ...MODERN_LANDMARK,
+      hallPave: MAT.STONEBRICK, hallWall: MAT.C_WHITE, hallColumn: MAT.C_RED, hallCapital: MAT.DARK_PLANKS,
+      hallFloor: MAT.SPRUCE, hallGlass: MAT.SG_WHITE, hallStair: 'deepslate', hallDoor: 'dark', entablature: MAT.DARK_PLANKS,
+      domeBase: MAT.C_WHITE, domeRing: MAT.C_RED, dome: MAT.DEEPSLATE, finial: MAT.GOLD,
+      clockPave: [MAT.STONEBRICK, MAT.GRAVEL], clockWall: MAT.C_WHITE, clockTrim: MAT.DARK_FRAME, clockFloor: MAT.SPRUCE,
+      clockStair: 'deepslate', clockDoor: 'dark', spire: MAT.DEEPSLATE,
+      libPave: MAT.STONEBRICK, libWall: MAT.C_WHITE, libTrim: MAT.DARK_FRAME, libFloor: MAT.BAMBOO_PLANKS, libStair: 'deepslate', libDoor: 'dark',
+      schoolWall: MAT.C_WHITE, schoolTrim: MAT.DARK_FRAME,
+      market: [MAT.STONEBRICK, MAT.GRAVEL], wellRim: MAT.STONEBRICK, wellRoof: MAT.DEEPSLATE },
+  },
 };
 export const STYLE_NAMES = Object.keys(STYLES);
 export const styleOf = (name) => STYLES[name] || STYLES.modern;

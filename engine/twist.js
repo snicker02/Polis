@@ -56,6 +56,9 @@ export const SHAPES = {
   'round':         { sides: 0, twist: false, taper: 0 },
   'round-helix':   { sides: 0, twist: true,  taper: 0 },
   'taper-twist':   { sides: 4, twist: true,  taper: 0.3 },
+  // pagodas: tiers that shrink as they rise, a skirt of eaves at every floor
+  'pagoda':        { sides: 4, twist: false, taper: 0.4, eaves: true },
+  'pagoda-oct':    { sides: 8, twist: false, taper: 0.4, eaves: true },
 };
 
 // Can this lot footprint take a plate tower?
@@ -107,11 +110,13 @@ export function plateCells(cx, cz, h, theta, x0, z0, x1, z1) {
 export function makeShapedTower(world, spec, rng) {
   const { x0, z0, x1, z1, groundY: gy, theme } = spec;
   const P = spec.pitch;
-  const floors = spec.floors | 0;
-  if (!twistFits(x0, z0, x1, z1, floors) || P < 4) return null;
+  if (!twistFits(x0, z0, x1, z1, spec.floors | 0) || P < 4) return null;
   const face = spec.facing || 'south';
   const shapeName = spec.shape && SHAPES[spec.shape] ? spec.shape : 'square-twist';
   const shape = SHAPES[shapeName];
+  // a pagoda has an odd number of tiers, three to nine: more is a tower with frills
+  let floors = spec.floors | 0;
+  if (shape.eaves) { floors = Math.min(floors, 9); if (floors % 2 === 0) floors--; }
 
   // the square part of the lot, centred on its long side
   const w = x1 - x0 + 1, d = z1 - z0 + 1, S = Math.min(w, d);
@@ -130,7 +135,10 @@ export function makeShapedTower(world, spec, rng) {
   }
   const step = floors > 1 ? total / (floors - 1) : 0;
   // the taper, capped so the top floor still holds the core ring
-  const maxTaper = Math.max(0, 1 - RMIN / inradius(shape.sides, R0));
+  // (an untilted plate on an even lot has its centre between cells: the cells
+  // either side sit half a block further out, so it needs half a block more)
+  const rminT = RMIN + (!shape.twist && !Number.isInteger(cx) ? 0.5 : 0);
+  const maxTaper = Math.max(0, 1 - rminT / inradius(shape.sides, R0));
   const taper = Math.min(shape.taper || 0, maxTaper);
   const Rk = (k) => R0 * (1 - (floors > 1 ? taper * k / (floors - 1) : 0));
   const plates = [];
@@ -229,7 +237,40 @@ export function makeShapedTower(world, spec, rng) {
   }
   const mastTop = roofY + 4 + Math.min(8, Math.floor(floors / 2));
   for (let y = roofY + 4; y < mastTop; y++) world.set(mx, y, mz, MAT.BARS);
-  world.set(mx, mastTop, mz, MAT.GLOWSTONE);
+  world.set(mx, mastTop, mz, shape.eaves ? MAT.GOLD : MAT.GLOWSTONE);       // a pagoda's sorin ends in gold
+
+  // ---- eaves (pagodas): a skirt round every plate, at each floor and the roof ----
+  // The cells just outside the plate below take tile stairs sloping away from
+  // it; a cell touching the plate only corner to corner is a tip, a block
+  // higher and rising outward. At a floor's height or above, never in anyone's way.
+  let eaveCells = 0, eaveTips = 0;
+  const eaveLevels = [];
+  if (shape.eaves) {
+    const N4 = [[1, 0], [-1, 0], [0, 1], [0, -1]], ND = [[1, 1], [1, -1], [-1, 1], [-1, -1]];
+    for (let k = 1; k <= floors; k++) {
+      const cells = plates[k - 1].cells, y = k < floors ? gy + k * P : roofY;
+      eaveLevels.push(y);
+      const seen = new Set();
+      for (const key of cells) {
+        const [x, z] = key.split(',').map(Number);
+        for (const [a, b] of [...N4, ...ND]) {
+          const nx = x + a, nz = z + b, nk = nx + ',' + nz;
+          if (cells.has(nk) || seen.has(nk)) continue;
+          seen.add(nk);
+          const toward = N4.find(([p, q]) => cells.has((nx + p) + ',' + (nz + q)));
+          if (toward) {
+            if (world.has(nx, y, nz)) continue;
+            world.set(nx, y, nz, stairId(theme.stair, toward[0] === 1 ? WEIRDO.east : toward[0] === -1 ? WEIRDO.west : toward[1] === 1 ? WEIRDO.south : WEIRDO.north));
+            eaveCells++;
+          } else {
+            if (world.has(nx, y + 1, nz)) continue;
+            world.set(nx, y + 1, nz, stairId(theme.stair, a === 1 ? WEIRDO.east : WEIRDO.west));
+            eaveTips++;
+          }
+        }
+      }
+    }
+  }
 
   // ---- stairs (after the slabs, so a step replaces the slab cell it sits in) ---
   const solidStep = STAIR_SOLID[theme.stair] !== undefined ? STAIR_SOLID[theme.stair] : theme.trim;
@@ -283,6 +324,7 @@ export function makeShapedTower(world, spec, rng) {
     doorCells: [[dx, dz]],
     outside: [dx + out[0], gy + 1, dz + out[1]],
     shape: shapeName,
+    eaves: shape.eaves ? { cells: eaveCells, tips: eaveTips, levels: eaveLevels } : null,
     twist: { total, step, h: plates[0].r, centre: [cx, cz], hand: Math.sign(total), shape: shapeName, sides: shape.sides, taper,
       R: plates.map((p) => p.R) },
     plates: plates.map((p) => p.cells),

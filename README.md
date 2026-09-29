@@ -1,4 +1,4 @@
-# Polis v0.22.0
+# Polis v0.23.1
 
 *Created with help from Claude AI.*
 
@@ -754,6 +754,59 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.23.1** — A courtyard block is one building inside.
+
+The wings of an L or U stood side by side, each with its own walls, so where
+two met there was a double wall on every floor. Now, once the wings are up,
+both walls come down along the whole line where they meet, floor to ceiling on
+every floor, keeping only the two end cells, where the line meets the block's
+outer wall and the court's, so those corners stay solid. The parapet over the
+join comes off the roof. The floor and ceiling slabs already ran under and over
+the line (each wing's slab covers its whole footprint), so the opening needs
+nothing added. The cells just inside each wing in front of the opening are kept
+clear of furniture (furnish() honours a building's keepClear cells), so the way
+through stays open. Each wing keeps its own stair.
+
+2zg checks it (22 checks now): every join open on every floor, the floor
+unbroken under it, its end cells solid, no parapet left over it, and, in
+furnished cities, a clear straight walk through every join on every floor.
+
+**0.23.0** — Two new city styles: Nether and East Asian.
+
+*Nether.* Crimson and warped wood houses with wart-block roofs, nether brick
+and polished blackstone mid-rises, blackstone and crying-obsidian towers,
+basalt columns on the town hall; blackstone streets, polished blackstone
+pavements, gilded blackstone road lines, soul-soil paths, crimson nylium for
+grass, crimson and warped fungus trees, crimson roots for flowers, nether-brick
+fence posts with shroomlight lamps, and shroomlight ceiling lights. The canal
+stays water: lava would take the boats, the fish and anyone who stepped in.
+
+*East Asian.* White plaster between dark timber, paper-screen windows (white
+stained glass), grey tile roofs, tea houses in bamboo, vermilion shrine halls;
+gravel roads, stone-brick paving, pines with cherries among them. Its own
+architecture: every building of two floors or more wears a skirt of tile
+eaves at each floor, turned up at the corners, and at least a storey above the
+ground; most towers are pagodas (a new plate-tower shape, square or octagonal,
+tapering, an odd number of tiers from three to nine, an eave ring at every tier,
+the spire ending in gold); a torii stands where each park path meets the
+street (vermilion posts and tie beam, black lintel with upturned ends, the
+lowest beam four up so the path keeps its head room); stone lanterns stand by
+the path crossing.
+
+Behind them: 34 new blocks and seven stair kinds, each checked against
+Bedrock's own state list, with the two Java renames (nether_bricks,
+red_nether_bricks). An untilted plate on an even lot needs half a block more
+room at the top, which a pagoda's taper now allows for, so its top tier is
+furnished. Pines are their own material, so a style can turn oak into pine and
+spruce into cherry in the same city.
+
+New section 2zh (17 checks): every block real, the Java names, Nether cities
+with no grass or oak left and their signature blocks present, East Asian cities
+with pagodas, eave skirts, torii and lanterns all built right and never in
+anyone's way, and every building in both styles verified with every door
+reached. 2zf now allows a cell per unit of perimeter for drawing an untilted
+plate, and leaves the pagodas to 2zh.
 
 **0.22.0** — Courtyard blocks, and a school with lights and books.
 

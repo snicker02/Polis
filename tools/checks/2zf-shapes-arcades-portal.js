@@ -42,9 +42,12 @@ export default async function run(ctx) {
       rec.plates.forEach((cells, k) => {
         const R = rec.twist.R[k], r = inradius(sides, R);
         for (const key of cells) { const [x, z] = key.split(',').map(Number); if (x < rec.x0 || x > rec.x1 || z < rec.z0 || z > rec.z1) t.off++; }
-        // the right area: a regular n-gon n/2·R²·sin(2π/n), a circle π·r²
+        // the right area: a regular n-gon n/2·R²·sin(2π/n), a circle π·r², to
+        // within what drawing it in cells can cost: about one cell per unit of
+        // perimeter (an untilted square snaps to whole rings of cells)
         const ideal = sides ? sides / 2 * R * R * Math.sin(2 * Math.PI / sides) : Math.PI * r * r;
-        if (Math.abs(cells.size - ideal) > 0.2 * ideal) t.area++;
+        const perim = sides ? sides * 2 * r * Math.tan(Math.PI / sides) : 2 * Math.PI * r;
+        if (Math.abs(cells.size - ideal) > Math.max(0.2 * ideal, perim)) t.area++;
         // piers at every vertex (eight ribs on a circle), turned with the floor
         const n = sides || 8, off = sides ? Math.PI / sides : 0, th = k * rec.twist.step;
         for (let i = 0; i < n; i++) {
@@ -93,7 +96,7 @@ export default async function run(ctx) {
   for (const [shape, t] of Object.entries(per)) {
     check(`${shape}: built on every lot from 13 to 23 square`, t.built === 48, String(t.built));
     check(`${shape}: every tower walks through, and still does furnished`, t.ok === t.built && t.furnished === t.built, `${t.ok}/${t.furnished}/${t.built}`);
-    check(`${shape}: on its lot, the right area, walls closed`, t.off === 0 && t.area === 0 && t.leaks === 0, `${t.off} off, ${t.area} wrong area, ${t.leaks} leaks`);
+    check(`${shape}: on its lot, the right area (to within a cell per unit of perimeter), walls closed`, t.off === 0 && t.area === 0 && t.leaks === 0, `${t.off} off, ${t.area} wrong area, ${t.leaks} leaks`);
     check(`${shape}: piers at every vertex of every floor, turning with it`, t.piers === 0, `${t.piers} missing`);
     check(`${shape}: ${SHAPES[shape].taper ? 'tapers floor by floor, never below the core' : 'keeps its size'}`, t.taperBad === 0, `${t.taperBad}`);
     check(`${shape}: every floor furnished`, t.bare === 0, `${t.bare} bare floors`);
@@ -123,7 +126,8 @@ export default async function run(ctx) {
     if (v.ok !== v.total || r.reach.unreached.length) cityOk = false;
     for (const n of r.stats.shapes) seen[n] = (seen[n] || 0) + 1;
   }
-  check('cities: every shape turns up', Object.keys(SHAPES).every((n) => seen[n] > 0), JSON.stringify(seen));
+  // (pagodas belong to the East Asian style; 2zh finds them there)
+  check('cities: every shape turns up', Object.keys(SHAPES).filter((n) => !SHAPES[n].eaves).every((n) => seen[n] > 0), JSON.stringify(seen));
   check('cities: with shaped towers everywhere, every building verifies and every door is reachable', cityOk);
   const a1 = generateCity({ ...DEFAULTS, seed: 7, size: 192, twistChance: 1 }), a2 = generateCity({ ...DEFAULTS, seed: 7, size: 192, twistChance: 1 });
   check('cities: same seed, same shapes in the same places',

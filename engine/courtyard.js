@@ -17,7 +17,8 @@
 //            U                          L
 //
 // Side wings run the full depth with their door on the street end; the back
-// wing has its door on its face to the court. The court is laid as a lawn
+// wing has its door on its face to the court. Inside it is one building: the
+// double wall where two wings meet is opened on every floor (joinWings). The court is laid as a lawn
 // with a path from the street to the back wing's door, flowers along its
 // edges, and a lantern post.
 //
@@ -98,6 +99,8 @@ export function makeCourtyard(world, spec, rng) {
   // one block, one height: a wing that came out lower (too narrow for its
   // floors) means this is not a courtyard lot after all
   if (new Set(wings.map((w) => w.roofY)).size !== 1 || new Set(wings.map((w) => w.floors)).size !== 1) return null;
+  // one block inside too: the walls where two wings meet come down
+  const joins = joinWings(world, wings);
 
   // ---- the court: a lawn, a path to the back wing's door, flowers, a lantern post
   for (let z = court.z0; z <= court.z1; z++)
@@ -143,7 +146,55 @@ export function makeCourtyard(world, spec, rng) {
     lamp = [x, G + 3, z];
     break;
   }
-  return { kind, wings, court, path, flowers, lamp, t };
+  return { kind, wings, court, path, flowers, lamp, t, joins };
+}
+
+// ---- opening the wings into one another ------------------------------------------
+// Two wings side by side each have a wall on the line where they meet: a double
+// wall. On every floor both come down along the whole of that line, floor to
+// ceiling, but for its two end cells, where it meets the block's outer wall and
+// the court's, so those corners stay solid; the parapet over it comes off the
+// roof. The floor slabs and ceilings run under and over the opening already
+// (each wing's slab covers its whole footprint, walls included). The cells just
+// inside each wing in front of the opening are kept clear of furniture, so the
+// way through stays open. Each wing keeps its own stair.
+function joinWings(world, wings) {
+  const joins = [];
+  const keepOf = (w) => (w.keepClear || (w.keepClear = new Set()));
+  for (let i = 0; i < wings.length; i++)
+    for (let j = 0; j < wings.length; j++) {
+      if (i === j) continue;
+      const a = wings[i], b = wings[j];
+      let cells = null;                        // [ax, az, bx, bz, innerA, innerB] per cell along the line
+      if (a.x1 + 1 === b.x0) {                 // b is just east of a
+        const lo = Math.max(a.z0, b.z0), hi = Math.min(a.z1, b.z1);
+        if (hi - lo >= 2) { cells = []; for (let z = lo + 1; z <= hi - 1; z++) cells.push([a.x1, z, b.x0, z, [a.x1 - 1, z], [b.x0 + 1, z]]); }
+      } else if (a.z1 + 1 === b.z0) {          // b is just south of a
+        const lo = Math.max(a.x0, b.x0), hi = Math.min(a.x1, b.x1);
+        if (hi - lo >= 2) { cells = []; for (let x = lo + 1; x <= hi - 1; x++) cells.push([x, a.z1, x, b.z0, [x, a.z1 - 1], [x, b.z0 + 1]]); }
+      }
+      if (!cells) continue;
+      let opened = 0;
+      for (let k = 0; k < a.floors; k++) {
+        const sy = a.floorYs[k];
+        for (const [ax, az, bx, bz] of cells)
+          for (let y = sy + 1; y <= sy + a.pitch - 1; y++) {
+            if (world.has(ax, y, az)) { world.clear(ax, y, az); opened++; }
+            if (world.has(bx, y, bz)) { world.clear(bx, y, bz); opened++; }
+          }
+      }
+      // the parapet over the join
+      for (const [ax, az, bx, bz] of cells)
+        for (let y = a.roofY + 1; y <= a.roofY + 3; y++) {
+          for (const [x, z, w] of [[ax, az, a], [bx, bz, b]]) {
+            const id = world.get(x, y, z);
+            if (id === w.theme.trim || id === w.theme.wall) world.clear(x, y, z);
+          }
+        }
+      for (const [, , , , ia, ib] of cells) { keepOf(a).add(ia.join(',')); keepOf(b).add(ib.join(',')); }
+      joins.push({ a: i, b: j, cells: cells.map(([ax, az, bx, bz]) => [[ax, az], [bx, bz]]), opened });
+    }
+  return joins;
 }
 
 function isWingCell(wings, x, z) {

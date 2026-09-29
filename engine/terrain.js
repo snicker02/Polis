@@ -499,6 +499,7 @@ export function shiftBuilding(rec, e) {
   rec.outside[1] += e;
   if (rec.hutDoor) rec.hutDoor[1] += e;
   for (const b of rec.beds || []) { b.foot[1] += e; b.head[1] += e; }
+  if (rec.eaves && rec.eaves.levels) rec.eaves.levels = rec.eaves.levels.map((y) => y + e);   // eave skirts ride up too
 }
 
 // ---- city-wide reachability -------------------------------------------------

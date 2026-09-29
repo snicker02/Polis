@@ -70,6 +70,8 @@ const RENAME = {
   'minecraft:wooden_button': 'minecraft:oak_button',
   'minecraft:stonecutter_block': 'minecraft:stonecutter',
   'minecraft:grass_path': 'minecraft:dirt_path',
+  'minecraft:nether_brick': 'minecraft:nether_bricks',
+  'minecraft:red_nether_brick': 'minecraft:red_nether_bricks',
   'minecraft:beetroot': 'minecraft:beetroots',
   'minecraft:deadbush': 'minecraft:dead_bush',
   'minecraft:pumpkin': 'minecraft:pumpkin',
