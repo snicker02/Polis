@@ -1,4 +1,4 @@
-# Polis v0.27.0
+# Polis v0.28.0
 
 *Created with help from Claude AI.*
 
@@ -754,6 +754,26 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.28.0** — A city of glass.
+
+A new city style. Walls of stained glass, a colour for each kind of building
+(light blue, pink and yellow houses with cyan, magenta and orange roofs; cyan,
+amethyst, jade and frosted mid-rises; sapphire, emerald, ruby, smoked and clear
+"prism" towers), a rainbow skyline. Clear glass windows framed in quartz, glass
+floors (look up or down through a whole building), glass partitions, birch
+doors. Glass streets and quartz pavements, white glass paths and crossings,
+trees with quartz trunks and green glass canopies, glass-pane lamp posts under
+sea lanterns, glass terrace walls. Mobs do not spawn on glass.
+
+Nothing that needs a solid wall to hang on: a glass city climbs by stairs
+(never ladders) and hangs no paintings. Lanterns stand on furniture or hang
+from the glass ceilings.
+
+Eight more stained glass colours (light blue, cyan, magenta, pink, lime,
+orange, light grey, grey); white stained glass is marked see-through like the
+rest. New section 2zm (10 checks); the style sweeps cover it, and every
+exported block state is Bedrock's own.
 
 **0.27.0** — Interiors that follow the building.
 

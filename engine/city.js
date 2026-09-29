@@ -141,6 +141,8 @@ export function generateCity(cfgIn, onProgress) {
     if (cfg.parkChance === DEFAULTS.parkChance) cfg.parkChance = 0.05;
     cfg.transit = 'roads';
   }
+  // a glass city climbs by stairs
+  if (STYLE.glass) cfg.useStairs = true;
   // an Art Deco city: towers step back often, for the wedding-cake silhouette
   if (STYLE.deco) {
     cfg.setbacks = true;
@@ -303,7 +305,7 @@ export function generateCity(cfgIn, onProgress) {
         for (const wing of L.wings || []) {
           buildings.push(wing);
           if (cfg.furnish) {
-            const fw = furnish(world, wing, furnRng(wing), { useStairs: cfg.useStairs });
+            const fw = furnish(world, wing, furnRng(wing), { useStairs: cfg.useStairs, paintings: !STYLE.glass });
             wing.beds = fw.beds; wing.furniture = fw;
             for (const b of fw.beds) beds.push(b);
           } else wing.beds = [];
@@ -311,7 +313,7 @@ export function generateCity(cfgIn, onProgress) {
         if (L.rec) {
           buildings.push(L.rec);
           if (cfg.furnish) {
-            const f = furnish(world, L.rec, furnRng(L.rec), { useStairs: cfg.useStairs });
+            const f = furnish(world, L.rec, furnRng(L.rec), { useStairs: cfg.useStairs, paintings: !STYLE.glass });
             L.rec.beds = f.beds; L.rec.furniture = f;
             for (const b of f.beds) beds.push(b);
           } else L.rec.beds = [];
@@ -371,7 +373,7 @@ export function generateCity(cfgIn, onProgress) {
           for (const rec of [...cy.wings].sort((a, b) => (b.core ? 1 : 0) - (a.core ? 1 : 0))) {
             buildings.push(rec);
             if (cfg.furnish) {
-              const f = furnish(world, rec, crng, { useStairs: cfg.useStairs });
+              const f = furnish(world, rec, crng, { useStairs: cfg.useStairs, paintings: !STYLE.glass });
               rec.beds = f.beds; rec.furniture = f;
               for (const b of f.beds) beds.push(b);
             } else rec.beds = [];
@@ -409,7 +411,7 @@ export function generateCity(cfgIn, onProgress) {
     if (rec) {
       buildings.push(rec);
       if (cfg.furnish) {
-        const f = furnish(world, rec, furnRng(rec), { useStairs: cfg.useStairs });
+        const f = furnish(world, rec, furnRng(rec), { useStairs: cfg.useStairs, paintings: !STYLE.glass });
         rec.beds = f.beds; rec.furniture = f;
         for (const b of f.beds) beds.push(b);
       } else { rec.beds = []; }
@@ -1563,7 +1565,7 @@ export function generateSingle(cfgIn) {
 
   const buildings = rec ? [rec] : [];
   let beds = [];
-  if (rec && cfg.furnish) { const f = furnish(world, rec, makeRng(cfg.seed ^ 0x51f3), { useStairs: cfg.useStairs }); rec.beds = f.beds; rec.furniture = f; beds = f.beds; }
+  if (rec && cfg.furnish) { const f = furnish(world, rec, makeRng(cfg.seed ^ 0x51f3), { useStairs: cfg.useStairs, paintings: !styleOf(cfg.cityStyle).glass }); rec.beds = f.beds; rec.furniture = f; beds = f.beds; }
   if (rec) {
     const [ox, oz] = OUTWARD[rec.facing];
     let px = rec.door.x + ox, pz = rec.door.z + oz;

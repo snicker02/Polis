@@ -396,8 +396,17 @@ Object.assign(MAT, {
 // ---- the East Asian style (0.23) --------------------------------------------------
 Object.assign(MAT, {
   BAMBOO_MOSAIC: A('BAMBOO_MOSAIC', 'minecraft:bamboo_mosaic', '#c9b25a'),
-  SG_WHITE:      A('SG_WHITE', 'minecraft:white_stained_glass', '#e8ecec'),     // paper screens
+  SG_WHITE:      A('SG_WHITE', 'minecraft:white_stained_glass', '#e8ecec', {}, { transparent: true }),     // paper screens
   MOSS_BLOCK:    A('MOSS_BLOCK', 'minecraft:moss_block', '#596d2f'),
+  // the glass city (0.28): every stained glass colour
+  SG_LIGHT_BLUE: A('SG_LIGHT_BLUE', 'minecraft:light_blue_stained_glass', '#8ec3e0', {}, { transparent: true }),
+  SG_CYAN:       A('SG_CYAN', 'minecraft:cyan_stained_glass', '#4f9aa6', {}, { transparent: true }),
+  SG_MAGENTA:    A('SG_MAGENTA', 'minecraft:magenta_stained_glass', '#b25cbf', {}, { transparent: true }),
+  SG_PINK:       A('SG_PINK', 'minecraft:pink_stained_glass', '#e3a1bd', {}, { transparent: true }),
+  SG_LIME:       A('SG_LIME', 'minecraft:lime_stained_glass', '#8ccc4a', {}, { transparent: true }),
+  SG_ORANGE:     A('SG_ORANGE', 'minecraft:orange_stained_glass', '#d98a3a', {}, { transparent: true }),
+  SG_LIGHT_GRAY: A('SG_LIGHT_GRAY', 'minecraft:light_gray_stained_glass', '#a8aaab', {}, { transparent: true }),
+  SG_GRAY:       A('SG_GRAY', 'minecraft:gray_stained_glass', '#5a5e61', {}, { transparent: true }),
   // interiors (0.27): an anvil in the smithy, cakes in the bakery, a fire in the hearth
   ANVIL:         A('ANVIL', 'minecraft:anvil', '#444448', { 'minecraft:cardinal_direction': S('south') }),
   CAKE:          A('CAKE', 'minecraft:cake', '#f2e5d8', { bite_counter: I(0) }),

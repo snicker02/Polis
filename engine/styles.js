@@ -374,6 +374,52 @@ STYLES.artdeco = {
     libWall: MAT.SMOOTH_SAND, libTrim: MAT.QUARTZ, schoolWall: MAT.SMOOTH_SAND, schoolTrim: MAT.QUARTZ },
 };
 
+// A city of glass: walls of stained glass in every colour (a rainbow skyline),
+// clear glass windows framed in quartz, glass floors to see through the whole
+// building, glass streets and quartz pavements, trees of quartz and green glass,
+// glass-pane lamp posts under sea lanterns. No paintings: a wall of glass is
+// no place to hang one.
+STYLES.glass = {
+  label: 'Glass',
+  glass: true,
+  themes: {
+    house: [
+      T('crystal', MAT.SG_LIGHT_BLUE, MAT.QUARTZ, MAT.SG_WHITE, MAT.GLASS, 'quartz', 'birch', MAT.SG_CYAN),
+      T('rose', MAT.SG_PINK, MAT.QUARTZ, MAT.SG_WHITE, MAT.GLASS, 'quartz', 'birch', MAT.SG_MAGENTA),
+      T('citrine', MAT.SG_YELLOW, MAT.QUARTZ, MAT.SG_WHITE, MAT.GLASS, 'quartz', 'birch', MAT.SG_ORANGE),
+    ],
+    mid: [
+      T('aqua', MAT.SG_CYAN, MAT.QUARTZ, MAT.SG_LIGHT_GRAY, MAT.GLASS, 'quartz', 'birch'),
+      T('amethyst', MAT.SG_PURPLE, MAT.QUARTZ, MAT.SG_WHITE, MAT.GLASS, 'quartz', 'birch'),
+      T('jade', MAT.SG_LIME, MAT.QUARTZ, MAT.SG_WHITE, MAT.GLASS, 'quartz', 'birch'),
+      T('frost', MAT.SG_WHITE, MAT.QUARTZ, MAT.SG_LIGHT_GRAY, MAT.GLASS, 'quartz', 'birch'),
+    ],
+    tower: [
+      T('sapphire', MAT.SG_BLUE, MAT.QUARTZ, MAT.SG_LIGHT_GRAY, MAT.GLASS, 'quartz', 'birch'),
+      T('emerald', MAT.SG_GREEN, MAT.QUARTZ, MAT.SG_WHITE, MAT.GLASS, 'quartz', 'birch'),
+      T('ruby', MAT.SG_RED, MAT.QUARTZ, MAT.SG_WHITE, MAT.GLASS, 'quartz', 'birch'),
+      T('smoke', MAT.TINTED, MAT.QUARTZ, MAT.SG_GRAY, MAT.GLASS, 'quartz', 'birch'),
+      T('prism', MAT.GLASS, MAT.QUARTZ, MAT.SG_WHITE, MAT.SG_LIGHT_BLUE, 'quartz', 'birch'),
+    ],
+  },
+  remap: {
+    ASPHALT: 'SG_LIGHT_GRAY', SIDEWALK: 'QUARTZ', LINE: 'SG_WHITE', CROSSWALK: 'SG_WHITE', PATH: 'SG_WHITE',
+    LOG: 'QUARTZ', LEAVES: 'SG_LIME', SPRUCE_LOG: 'QUARTZ', SPRUCE_LEAF: 'SG_GREEN',
+    LAMP_POST: 'PANE', STREET_LIGHT: 'LANTERN',
+    WALL_BODY: 'SG_LIGHT_BLUE', WALL_CAP: 'QUARTZ', RETAIN: 'SG_WHITE', INTERIOR_WALL: 'SG_WHITE',
+    CANAL_BED: 'QUARTZ', DOCK: 'QUARTZ',
+  },
+  landmark: { ...MODERN_LANDMARK,
+    hallPave: MAT.QUARTZ, hallWall: MAT.SG_WHITE, hallColumn: MAT.QUARTZ, hallCapital: MAT.QUARTZ,
+    hallFloor: MAT.SG_LIGHT_GRAY, hallGlass: MAT.SG_LIGHT_BLUE, hallStair: 'quartz', hallDoor: 'birch', entablature: MAT.QUARTZ,
+    domeBase: MAT.QUARTZ, domeRing: MAT.QUARTZ, dome: MAT.SG_LIGHT_BLUE, finial: MAT.LANTERN,
+    clockPave: [MAT.QUARTZ, MAT.SG_WHITE], clockWall: MAT.SG_CYAN, clockTrim: MAT.QUARTZ, clockFloor: MAT.SG_WHITE,
+    clockStair: 'quartz', clockDoor: 'birch', spire: MAT.SG_LIGHT_BLUE,
+    libPave: MAT.QUARTZ, libWall: MAT.SG_PURPLE, libTrim: MAT.QUARTZ, libFloor: MAT.SG_WHITE, libStair: 'quartz', libDoor: 'birch',
+    schoolWall: MAT.SG_YELLOW, schoolTrim: MAT.QUARTZ,
+    market: [MAT.QUARTZ, MAT.SG_WHITE], wellRim: MAT.QUARTZ, wellRoof: MAT.SG_CYAN },
+};
+
 // A walled fortress town: the medieval palette inside a curtain wall with
 // towers and gatehouses, the castle keep at its heart, narrow streets and small
 // lots (city.js: fortressWall, and the overrides in generateCity).

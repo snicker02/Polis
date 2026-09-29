@@ -386,6 +386,7 @@ export function furnish(world, rec, rng, opts = {}) {
   const DIRS = [['south', 0, 0, 1], ['west', 1, -1, 0], ['north', 2, 0, -1], ['east', 3, 1, 0]];
   const PAINTINGS_PER_BUILDING = 8;
   const hangPaintings = (rm, sy, rng2) => {
+    if (opts.paintings === false) return;             // (a glass city: nothing to hang them on)
     // a painting is an entity, so a city's worth of them adds up: one to a
     // room, two now and then, and only so many to a building
     if (paintings.length >= PAINTINGS_PER_BUILDING || rng2() > 0.6) return;
