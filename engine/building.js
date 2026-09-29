@@ -331,13 +331,14 @@ export function makeBuilding(world, spec, rng) {
     for (const [cx, cz] of doorCells) world.set(cx, gy + 3, cz, MAT.GLOWSTONE);
   }
 
-  let houseInfo = null, arcadeInfo = null, eavesInfo = null, lancetInfo = null, decoInfo = null;
+  let houseInfo = null, arcadeInfo = null, eavesInfo = null, lancetInfo = null, decoInfo = null, chimneyAt = null;
   if (spec.detail !== false) {
     const ctx = {
       rects: Array.from({ length: floors }, (_, k) => rect(k)), floorYs, roofY, top, theme, style, face, P,
       doorCells, outv, gy, floors, core, hut, hutDoor, rustic: spec.rustic, eaves: !!spec.eaves,
     };
     facadeDetail(world, ctx, rng);
+    chimneyAt = ctx.chimney || null;
     // its own random stream, seeded from where the house stands: the details
     // never shift the city's main stream, so every other choice in the city is
     // the same with them as without them
@@ -356,7 +357,7 @@ export function makeBuilding(world, spec, rng) {
     floorYs, roofY, topY: hut ? roofY + 4 : roofY + (style === 'house' ? Math.ceil(Math.min(w, d) / 2) + 1 : 2),
     core: core ? { x0: core.x0, z0: core.z0, x1: core.x1, z1: core.z1 } : null,
     stairKind: core ? core.kind : null,
-    hut, hutDoor, windows: windowCount,
+    hut, hutDoor, windows: windowCount, chimney: chimneyAt,
     door: { x: dx, y: gy + 1, z: dz, out: outv },
     doorCells: doorCells.map((c) => c.slice()),
     outside: [dx + outv[0], gy + 1, dz + outv[1]],
@@ -797,8 +798,10 @@ function facadeDetail(world, c, rng) {
   const r = top, cx = Math.floor((r.x0 + r.x1) / 2), cz = Math.floor((r.z0 + r.z1) / 2);
   if (style === 'house') {
     const chx = rng.chance(0.5) ? r.x0 + 1 : r.x1 - 1, chz = rng.chance(0.5) ? r.z0 + 1 : r.z1 - 1;
-    if (!roofBusy(chx, chz))
+    if (!roofBusy(chx, chz)) {
       for (let y = roofY; y <= roofY + Math.ceil(Math.min(r.x1 - r.x0, r.z1 - r.z0) / 2) + 2; y++) world.set(chx, y, chz, MAT.BRICK);
+      c.chimney = [chx, chz];                    // the fireplace goes under it (life.js)
+    }
   } else if (r.x1 - r.x0 >= 6 && r.z1 - r.z0 >= 6) {
     const tx = r.x0 + 2, tz = r.z0 + 2;
     let free = true;

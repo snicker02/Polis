@@ -398,6 +398,10 @@ Object.assign(MAT, {
   BAMBOO_MOSAIC: A('BAMBOO_MOSAIC', 'minecraft:bamboo_mosaic', '#c9b25a'),
   SG_WHITE:      A('SG_WHITE', 'minecraft:white_stained_glass', '#e8ecec'),     // paper screens
   MOSS_BLOCK:    A('MOSS_BLOCK', 'minecraft:moss_block', '#596d2f'),
+  // interiors (0.27): an anvil in the smithy, cakes in the bakery, a fire in the hearth
+  ANVIL:         A('ANVIL', 'minecraft:anvil', '#444448', { 'minecraft:cardinal_direction': S('south') }),
+  CAKE:          A('CAKE', 'minecraft:cake', '#f2e5d8', { bite_counter: I(0) }),
+  HEARTH:        A('HEARTH', 'minecraft:campfire', '#e0802c', { extinguished: B(0), 'minecraft:cardinal_direction': S('south') }),
   // pines: spruce wood and needles under their own ids, so a style can turn oak
   // trees into pines while also turning its spruce trees into something else
   // (a role of their own keeps them apart: the registry merges identical blocks otherwise)

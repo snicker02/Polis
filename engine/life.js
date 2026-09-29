@@ -198,6 +198,27 @@ const ROOMS = {
 // in rooms (0.3.0) kitchens cook and bedrooms sleep
 ROOMS.kitchen = ['craft', 'furnace', 'smoker', 'barrel', 'chest', 'plant', 'lamp', 'shelf'];
 ROOMS.bedroom = ['bed', 'chest', 'plant', 'bed', 'lamp', 'rug', 'shelf'];
+// A shop is fitted out for what its sign says (0.27): the list is walked round
+// its walls like any room's
+const SHOP_FIT = {
+  'Bakery':       ['smoker', 'cake', 'furnace', 'hay', 'cake', 'barrel', 'hay'],
+  'Butcher':      ['smoker', 'barrel', 'smoker', 'chest', 'barrel'],
+  'Grocer':       ['barrel', 'composter', 'barrel', 'plant', 'chest', 'barrel'],
+  'Florist':      ['plant', 'plant', 'composter', 'plant', 'plant', 'plant'],
+  'Tailor':       ['loom', 'chest', 'loom', 'barrel', 'rug'],
+  'Bookshop':     ['shelf', 'shelf', 'lectern', 'shelf', 'shelf'],
+  'Apothecary':   ['brewing', 'cauldron', 'shelf', 'brewing', 'barrel'],
+  'Cobbler':      ['craft', 'loom', 'chest', 'barrel'],
+  'Tea House':    ['table', 'plant', 'table', 'barrel', 'table'],
+  'Toy Shop':     ['chest', 'barrel', 'chest', 'plant', 'chest'],
+  'Fishmonger':   ['barrel', 'smoker', 'barrel', 'cauldron', 'barrel'],
+  'Barber':       ['cauldron', 'table', 'shelf', 'table'],
+  'Cafe':         ['table', 'plant', 'table', 'barrel', 'table'],
+  'Hardware':     ['grindstone', 'stonecutter', 'chest', 'anvil', 'barrel', 'chest'],
+  'Sweet Shop':   ['cake', 'barrel', 'cake', 'chest', 'plant'],
+  'Cheesemonger': ['barrel', 'barrel', 'chest', 'barrel'],
+  'Smithy':       ['anvil', 'blast', 'smithing', 'grindstone', 'barrel', 'anvil'],
+};
 // every villager profession's workstation appears somewhere
 const STATIONS = ['cartography', 'fletching', 'blast', 'brewing', 'cauldron', 'barrel',
   'smoker', 'lectern', 'stonecutter', 'loom', 'grindstone', 'smithing'];
@@ -298,6 +319,24 @@ export function furnish(world, rec, rng, opts = {}) {
         else if (item === 'lectern') { put(x, y, z, lecternId(DIRNAME(nx, nz))); stations++; }
         else if (item === 'chest') put(x, y, z, chestId(DIRNAME(nx, nz)));
         else if (item === 'lamp') { put(x, y, z, MAT.BARREL); put(x, y + 1, z, MAT.LAMP); }
+        // the trades (0.27)
+        else if (item === 'hay') put(x, y, z, MAT.HAY);
+        else if (item === 'cake') { put(x, y, z, MAT.DESK); if (!world.has(x, y + 1, z)) put(x, y + 1, z, MAT.CAKE); }   // on the counter
+        else if (item === 'composter') put(x, y, z, MAT.COMPOSTER);
+        else if (item === 'loom') { put(x, y, z, loomId(DIRNAME(nx, nz))); stations++; }
+        else if (item === 'brewing') { put(x, y, z, MAT.BREWING); stations++; }
+        else if (item === 'cauldron') { put(x, y, z, MAT.CAULDRON); stations++; }
+        else if (item === 'grindstone') { put(x, y, z, grindstoneId(DIRNAME(nx, nz))); stations++; }
+        else if (item === 'stonecutter') { put(x, y, z, stonecutterId(DIRNAME(nx, nz))); stations++; }
+        else if (item === 'blast') { put(x, y, z, furnaceId('blast', DIRNAME(nx, nz))); stations++; }
+        else if (item === 'smithing') { put(x, y, z, MAT.SMITHING); stations++; }
+        else if (item === 'anvil') put(x, y, z, MAT.ANVIL);
+        else if (item === 'table') {
+          // a table against the wall, a chair drawn up to it on the room side
+          put(x, y, z, MAT.DESK);
+          const cx2 = x + nx, cz2 = z + nz;
+          if (free(cx2, cz2, true) && !world.has(cx2, y, cz2)) put(cx2, y, cz2, stairId(rec.theme.stair, WEIRDO[DIRNAME(nx, nz)]));
+        }
         i += 1;                       // leave a gap after every piece
       }
       if (onlyOne) return true;
@@ -533,7 +572,7 @@ export function furnish(world, rec, rng, opts = {}) {
   // A shop at street level: a glass front between the piers, an awning over
   // the pavement, a counter inside, and a sign on the pier with its name.
   const SHOPS = ['Bakery', 'Butcher', 'Grocer', 'Florist', 'Tailor', 'Bookshop', 'Apothecary', 'Cobbler',
-    'Tea House', 'Toy Shop', 'Fishmonger', 'Barber', 'Cafe', 'Hardware', 'Sweet Shop', 'Cheesemonger'];
+    'Tea House', 'Toy Shop', 'Fishmonger', 'Barber', 'Cafe', 'Hardware', 'Sweet Shop', 'Cheesemonger', 'Smithy'];
   const shopFronts = [];
   const shopFront = (rm, sy, rng2) => {
     const face = rec.facing, [ox, oz] = OUTWARD[face];
@@ -565,8 +604,9 @@ export function furnish(world, rec, rng, opts = {}) {
       if (cxx < rm.x0 || cxx > rm.x1 || czz < rm.z0 || czz > rm.z1) continue;
       if (!world.has(cxx, sy + 1, czz)) put(cxx, sy + 1, czz, MAT.DESK);
     }
-    // the name, on a pier beside the window
-    const name = rng2.pick(SHOPS);
+    // the name, on a pier beside the window (chosen by the caller, so the
+    // fit-out inside can follow it)
+    const name = rm.shopName || rng2.pick(SHOPS);
     for (const [x, z] of [win[0], win[win.length - 1]]) {
       const ax = x + ox, az = z + oz;
       if (world.has(ax, sy + 2, az) || world.has(x, sy + 2, z) === false) {
@@ -577,6 +617,144 @@ export function furnish(world, rec, rng, opts = {}) {
       world.setData(ax, sy + 2, az, { id: 'Sign', tags: signTags(name) });
       shopFronts.push({ name, at: [ax, sy + 2, az], room: rm.type });
       break;
+    }
+  };
+
+  // ---- the hearth (houses): under the chimney, on the ground floor, a lit fire
+  // in the corner with a brick jamb beside it and brick over it; then a brick
+  // chimney breast up that corner through every floor to the stack on the roof.
+  // Only into empty cells: never through a slab, a stair or a door.
+  let fireplace = null;
+  const buildHearth = () => {
+    if (rec.style !== 'house' || !rec.chimney || !rec.floorYs) return;
+    const [hx, hz] = rec.chimney;
+    const r0 = rec.rects[0], sy0 = rec.floorYs[0], P = rec.pitch || 5;
+    const inner = (x, z) => x > r0.x0 && x < r0.x1 && z > r0.z0 && z < r0.z1;
+    if (!inner(hx, hz) || nearCore(hx, hz) || nearDoor(hx, hz, 0)) return;
+    if (world.has(hx, sy0 + 1, hz) || world.has(hx, sy0 + 2, hz) || !solidAt(world, hx, sy0, hz)) return;
+    // the jamb: the next cell along one of the two walls at this corner
+    const along = [[hx === r0.x0 + 1 ? 1 : -1, 0], [0, hz === r0.z0 + 1 ? 1 : -1]];
+    let jamb = null;
+    for (const [dx, dz] of along) {
+      const jx = hx + dx, jz = hz + dz;
+      if (inner(jx, jz) && !nearCore(jx, jz) && !nearDoor(jx, jz, 0) && !world.has(jx, sy0 + 1, jz) && !world.has(jx, sy0 + 2, jz)) { jamb = [jx, jz]; break; }
+    }
+    if (!jamb) return;
+    const facing = DIRNAME(jamb[0] - hx === 0 ? (hx === r0.x0 + 1 ? 1 : -1) : 0, jamb[1] - hz === 0 ? (hz === r0.z0 + 1 ? 1 : -1) : 0);
+    put(hx, sy0 + 1, hz, MAT.HEARTH);
+    put(jamb[0], sy0 + 1, jamb[1], MAT.BRICK);
+    put(jamb[0], sy0 + 2, jamb[1], MAT.BRICK);
+    let breast = 0;
+    for (let k = 0; k < rec.floors; k++) {
+      const sy = rec.floorYs[k];
+      const top = k === rec.floors - 1 ? rec.roofY - 1 : sy + P - 1;
+      for (let y = (k === 0 ? sy + 2 : sy + 1); y <= top; y++) if (!world.has(hx, y, hz)) { put(hx, y, hz, MAT.BRICK); breast++; }
+    }
+    fireplace = { at: [hx, sy0 + 1, hz], jamb: [jamb[0], sy0 + 1, jamb[1]], breast, facing };
+  };
+
+  // tables and counters stand out in the room: if they would cost a room its
+  // way in, they come out before the rooms do
+  const extras = [];
+  // ---- a kitchen counter: an unbroken run along one wall of the room, stove,
+  // worktop, sink, worktop, barrel, on the longest stretch of free wall
+  let counters = 0;
+  const kitchenCounter = (rm, sy, free, ring) => {
+    const y = sy + 1;
+    const pieces = ['smoker', 'desk', 'sink', 'desk', 'barrel'];
+    // runs of consecutive free ring cells on one side
+    let best = null, run = [];
+    const flush = () => { if (run.length > (best ? best.length : 0)) best = run.slice(); run = []; };
+    for (let i = 0; i < ring.length; i++) {
+      const c = ring[i];
+      if (free(c[0], c[1]) && (!run.length || run[run.length - 1][4] === c[4])) run.push(c);
+      else { flush(); if (free(c[0], c[1])) run.push(c); }
+    }
+    flush();
+    if (!best || best.length < 4) return;
+    const n = Math.min(pieces.length, best.length - 1);        // leave the run's last cell clear
+    for (let i = 0; i < n; i++) {
+      const [x, z, nx, nz] = best[i], p = pieces[i];
+      put(x, y, z, p === 'smoker' ? smokerId(DIRNAME(nx, nz)) : p === 'sink' ? MAT.CAULDRON : p === 'barrel' ? MAT.BARREL : MAT.DESK);
+      extras.push([x, y, z]);
+    }
+    counters++;
+  };
+
+  // ---- a dining table where a room has space round one: two cells of table
+  // (or one, in a small room) with a chair at each end facing it, and a clear
+  // cell all round so nobody is walled in. Every spot in the room is tried,
+  // nearest the middle first, both ways round.
+  let tables = 0;
+  const diningTable = (rm, sy, free) => {
+    const y = sy + 1;
+    const w = rm.x1 - rm.x0 + 1, d = rm.z1 - rm.z0 + 1;
+    if (Math.min(w, d) < 3 || Math.max(w, d) < 5) return;
+    const mx = (rm.x0 + rm.x1) / 2, mz = (rm.z0 + rm.z1) / 2;
+    const spots = [];
+    for (let z = rm.z0; z <= rm.z1; z++) for (let x = rm.x0; x <= rm.x1; x++) spots.push([x, z]);
+    spots.sort((p, q) => Math.hypot(p[0] - mx, p[1] - mz) - Math.hypot(q[0] - mx, q[1] - mz));
+    for (const len of [2, 1]) {
+      for (const [ux, uz] of [[1, 0], [0, 1]]) {
+        for (const [x0, z0] of spots) {
+          const t = [];
+          for (let i = 0; i < len; i++) t.push([x0 + ux * i, z0 + uz * i]);
+          const chairs = [[x0 - ux, z0 - uz, ux, uz], [x0 + ux * len, z0 + uz * len, -ux, -uz]];
+          const all = t.concat(chairs.map(([x, z]) => [x, z]));
+          const bx0 = Math.min(...all.map((c) => c[0])) - 1, bx1 = Math.max(...all.map((c) => c[0])) + 1;
+          const bz0 = Math.min(...all.map((c) => c[1])) - 1, bz1 = Math.max(...all.map((c) => c[1])) + 1;
+          let clear = true;
+          for (let z = bz0; z <= bz1 && clear; z++) for (let x = bx0; x <= bx1; x++) if (!free(x, z)) { clear = false; break; }
+          if (!clear) continue;
+          for (const [x, z] of t) { put(x, y, z, MAT.DESK); extras.push([x, y, z]); }
+          // a chair's back faces away from the table
+          for (const [x, z, tx, tz] of chairs) { put(x, y, z, stairId(rec.theme.stair, WEIRDO[DIRNAME(-tx, -tz)])); extras.push([x, y, z]); }
+          tables++;
+          return;
+        }
+      }
+    }
+  };
+
+  // ---- banisters: on each upper floor, a rail along the edge of the stairwell
+  // where the floor meets the opening, never in front of a step (the way on
+  // and off the stairs stays open). A floor that would not walk through with
+  // its rail loses it again.
+  const railFence = () => {
+    const d = rec.theme && rec.theme.door;
+    return d === 'spruce' ? MAT.SPRUCE_FENCE : d === 'dark' ? MAT.DARK_FENCE : MAT.FENCE;
+  };
+  let banisters = 0;
+  const stairAt = (x, y, z) => { const id = world.get(x, y, z); return id >= 0 && /_stairs$/.test(MATERIALS.def(id).block); };
+  const ladderAt = (x, y, z) => { const id = world.get(x, y, z); return id >= 0 && /ladder/.test(MATERIALS.def(id).block); };
+  const buildBanisters = () => {
+    if (!core || rec.floors < 2 || !rec.floorYs) return;
+    const fence = railFence();
+    for (let k = 1; k < rec.floors; k++) {
+      const sy = rec.floorYs[k], y = sy + 1;
+      let ladder = false;
+      for (let z = core.z0 - 1; z <= core.z1 + 1 && !ladder; z++) for (let x = core.x0 - 1; x <= core.x1 + 1; x++) if (ladderAt(x, y, z) || ladderAt(x, sy - 1, z)) { ladder = true; break; }
+      if (ladder) continue;
+      const hole = (x, z) => x >= core.x0 && x <= core.x1 && z >= core.z0 && z <= core.z1 && !solidAt(world, x, sy, z) && !world.has(x, y, z);
+      const here = [];
+      for (let z = core.z0 - 1; z <= core.z1 + 1; z++)
+        for (let x = core.x0 - 1; x <= core.x1 + 1; x++) {
+          if (!solidAt(world, x, sy, z) || world.has(x, y, z) || world.has(x, y + 1, z)) continue;
+          if (stairAt(x, sy, z)) continue;                                   // a step, not floor
+          const nb = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+          if (!nb.some(([dx, dz]) => hole(x + dx, z + dz))) continue;
+          // never in front of a step: the arrival (a step level with the floor) or the way up
+          if (nb.some(([dx, dz]) => stairAt(x + dx, sy, z + dz) || stairAt(x + dx, y, z + dz))) continue;
+          if (rec.keepClear && rec.keepClear.has(x + ',' + z)) continue;
+          put(x, y, z, fence);
+          here.push([x, y, z]);
+        }
+      if (!here.length) continue;
+      if (!verifyBuilding(world, rec).ok || (plans.length && !roomsReachable(world, rec, plans))) {
+        for (const [x, yy, z] of here) world.clear(x, yy, z);
+        const gone = new Set(here.map((c) => c.join()));
+        for (let i = placed.length - 1; i >= 0; i--) if (gone.has(placed[i].join())) placed.splice(i, 1);
+      } else banisters += here.length;
     }
   };
 
@@ -659,6 +837,7 @@ export function furnish(world, rec, rng, opts = {}) {
       desks: halls.reduce((a, h) => a + h.desks, 0), shops: [], paintings: [], halls };
   }
 
+  buildHearth();
   for (let k = 0; k < rec.floors; k++) {
     const r = rec.rects[k];
     const sy = rec.floorYs[k], y = sy + 1;
@@ -687,8 +866,15 @@ export function furnish(world, rec, rng, opts = {}) {
           : rm.type === 'classroom' ? 'lectern' : null;
         if (must && !place(ring, [must], free, sy, k, true) && must === 'bed') rm.type = 'living';   // too cramped for a bed: a sitting room
         if (rm.type === 'classroom') classroomDesks(rm, sy, free, allDoors);
-        if (rm.type === 'shop' && k === 0) shopFront(rm, sy, rng);
-        place(ring, ROOMS[rm.type] || ROOMS.office, free, sy, k);
+        let fit = ROOMS[rm.type] || ROOMS.office;
+        if (rm.type === 'shop' && k === 0) {
+          rm.shopName = rng.pick(SHOPS);
+          shopFront(rm, sy, rng);
+          fit = SHOP_FIT[rm.shopName] || ROOMS.shop;
+        }
+        if (rm.type === 'kitchen' || rm.type === 'apartment') kitchenCounter(rm, sy, free, ring);
+        if (rm.type === 'kitchen' || rm.type === 'living' || rm.type === 'apartment') diningTable(rm, sy, free);
+        place(ring, fit, free, sy, k);
         hangPaintings(rm, sy, rng);                         // last, so nothing is hung where a shelf goes
       }
     } else {
@@ -725,6 +911,7 @@ export function furnish(world, rec, rng, opts = {}) {
     }
   }
 
+  buildBanisters();
   // re-verify: rooms and furniture must never cost a floor, or a room
   let v = verifyBuilding(world, rec);
   let roomsOk = !plans.length || roomsReachable(world, rec, plans);
@@ -734,6 +921,16 @@ export function furnish(world, rec, rng, opts = {}) {
     const gone = new Set(desks.map((c) => c.join()));
     for (let i = placed.length - 1; i >= 0; i--) if (gone.has(placed[i].join())) placed.splice(i, 1);
     desks.length = 0;
+    v = verifyBuilding(world, rec);
+    roomsOk = !plans.length || roomsReachable(world, rec, plans);
+  }
+  if ((!v.ok || !roomsOk) && extras.length) {
+    // then the tables and counters, before giving up on the rooms
+    for (const [x, y, z] of extras) world.clear(x, y, z);
+    const gone = new Set(extras.map((c) => c.join()));
+    for (let i = placed.length - 1; i >= 0; i--) if (gone.has(placed[i].join())) placed.splice(i, 1);
+    extras.length = 0;
+    tables = 0; counters = 0;
     v = verifyBuilding(world, rec);
     roomsOk = !plans.length || roomsReachable(world, rec, plans);
   }
@@ -747,7 +944,7 @@ export function furnish(world, rec, rng, opts = {}) {
   plans.forEach((p, k) => { if (p) for (const rm of p.rooms) rooms.push({ ...rm, floor: k }); });
   rec.roomPlans = plans;
   return { ok: true, beds, placed: placed.length, stations, plants, shelves, rooms, desks: desks.length / 2, shops: shopFronts,
-    paintings: paintings.map(({ cells, ...p }) => p) };
+    paintings: paintings.map(({ cells, ...p }) => p), fireplace, counters, tables, banisters };
 }
 
 // Walk from the front door (up only onto stairs, down up to three, through

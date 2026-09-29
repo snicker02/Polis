@@ -272,6 +272,13 @@ export function generateCity(cfgIn, onProgress) {
   const beds = [];
   const themeRng = rng.fork();
   const lifeRng = rng.fork();
+  // Every building furnishes from its own stream (0.27): how many draws a room
+  // takes depends on what goes in it, and the shared stream goes on to decide
+  // farms, trees, cacti and more, so a change to any interior would otherwise
+  // move things all over the city. A fork costs the shared stream one draw
+  // whatever the building holds, and is well mixed (streams seeded straight
+  // from a lot's coordinates were not: rooms came out worse from them).
+  const furnRng = () => lifeRng.fork();
   const penOrder = lifeRng.shuffle(RANCH_ANIMALS.slice());
   // Animal pens are chosen up front, on the lots furthest from downtown:
   // at least four where the lots exist (one of each kind), more in big cities.
@@ -296,7 +303,7 @@ export function generateCity(cfgIn, onProgress) {
         for (const wing of L.wings || []) {
           buildings.push(wing);
           if (cfg.furnish) {
-            const fw = furnish(world, wing, lifeRng, { useStairs: cfg.useStairs });
+            const fw = furnish(world, wing, furnRng(wing), { useStairs: cfg.useStairs });
             wing.beds = fw.beds; wing.furniture = fw;
             for (const b of fw.beds) beds.push(b);
           } else wing.beds = [];
@@ -304,7 +311,7 @@ export function generateCity(cfgIn, onProgress) {
         if (L.rec) {
           buildings.push(L.rec);
           if (cfg.furnish) {
-            const f = furnish(world, L.rec, lifeRng, { useStairs: cfg.useStairs });
+            const f = furnish(world, L.rec, furnRng(L.rec), { useStairs: cfg.useStairs });
             L.rec.beds = f.beds; L.rec.furniture = f;
             for (const b of f.beds) beds.push(b);
           } else L.rec.beds = [];
@@ -402,10 +409,7 @@ export function generateCity(cfgIn, onProgress) {
     if (rec) {
       buildings.push(rec);
       if (cfg.furnish) {
-        // a shaped tower furnishes from its own stream: how much it takes depends on
-        // its shape, and the shared stream goes on to decide farms and more
-        const fr = rec.shape ? makeRng(((rec.x0 * 2246822519) ^ (rec.z0 * 3266489917) ^ cfg.seed ^ 0xf0a1) >>> 0) : lifeRng;
-        const f = furnish(world, rec, fr, { useStairs: cfg.useStairs });
+        const f = furnish(world, rec, furnRng(rec), { useStairs: cfg.useStairs });
         rec.beds = f.beds; rec.furniture = f;
         for (const b of f.beds) beds.push(b);
       } else { rec.beds = []; }
@@ -480,6 +484,8 @@ export function generateCity(cfgIn, onProgress) {
       shiftBuilding(rec, e);
       for (const sf of (rec.furniture && rec.furniture.shops) || []) sf.at[1] += e;   // shop signs ride up too
       for (const pt of (rec.furniture && rec.furniture.paintings) || []) { pt.y += e; pt.pos[1] += e; }
+      // the hearth rides up with its house
+      if (rec.furniture && rec.furniture.fireplace) { rec.furniture.fireplace.at[1] += e; rec.furniture.fireplace.jamb[1] += e; }
       for (const l of (rec.fence && rec.fence.lanterns) || []) l[1] += elevAt(l[0], l[2]);   // gate lanterns ride up too
     }
     for (const rch of ranches) for (const a of rch.animals) a.y += elevAt(a.x, a.z);
@@ -1206,6 +1212,33 @@ function applyStyle(world, plan, style, groundAt) {
       });
       if (!bad.length) break;
       for (const [x, y, z] of bad) world.clear(x, y, z);
+    }
+    // A desert always has its cacti. They are planted in place of some trees,
+    // by chance, so a small city can draw none; if there are too few, some of
+    // the dead bushes on open sand become cacti, chosen by where they stand (no
+    // random draws, so nothing else in the city moves).
+    let cacti = 0;
+    const bushes = [];
+    world.forEach((x, y, z, id) => {
+      if (id === CAC && world.get(x, y - 1, z) !== CAC) cacti++;
+      else if (id === MAT.DEADBUSH) bushes.push([x, y, z]);
+    });
+    const want = Math.max(4, Math.floor(bushes.length / 30));
+    if (cacti < want) {
+      const open = (x, y, z) => [[1, 0], [-1, 0], [0, 1], [0, -1]].every(([dx, dz]) => { const n = world.get(x + dx, y, z + dz); return n === -1 || (MATERIALS.isPassable(n) && n !== CAC); });
+      bushes.sort((p, q) => hash2(p[0], p[2], 0x5ac7) - hash2(q[0], q[2], 0x5ac7));
+      for (const [x, y, z] of bushes) {
+        if (cacti >= want) break;
+        if (world.get(x, y - 1, z) !== SAND || world.has(x, y + 1, z)) continue;
+        if (!open(x, y, z) || !open(x, y + 1, z)) continue;
+        // no other cactus within a block, so two never touch
+        let near = false;
+        for (let dz = -1; dz <= 1 && !near; dz++) for (let dx = -1; dx <= 1; dx++) if ((dx || dz) && (world.get(x + dx, y, z + dz) === CAC || world.get(x + dx, y + 1, z + dz) === CAC)) { near = true; break; }
+        if (near) continue;
+        world.set(x, y, z, CAC);
+        world.set(x, y + 1, z, CAC);
+        cacti++;
+      }
     }
   }
   if (style.snow) {

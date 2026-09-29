@@ -103,7 +103,8 @@ export default async function run(ctx) {
 
   // ---- house detail ---------------------------------------------------------------------
   let houses = 0, noShutter = 0, lintelBad = 0, hoodBad = 0, lanternBad = 0, gateLanterns = 0, boxLow = 0, bedOff = 0, fenceOnPath = 0, fenced = 0, fencePosts = 0;
-  const cities = [{ seed: 12345, size: 160 }, { seed: 9, size: 160, cityStyle: 'cherry' }, { seed: 31, size: 160, cityStyle: 'medieval' }, { seed: 4, size: 160, cityStyle: 'desert' }];
+  // (a village too: mostly houses, so the sample stays big whatever else the cities draw)
+  const cities = [{ seed: 12345, size: 160 }, { seed: 9, size: 160, cityStyle: 'cherry' }, { seed: 31, size: 160, cityStyle: 'medieval' }, { seed: 4, size: 160, cityStyle: 'desert' }, { seed: 5, size: 160, cityStyle: 'village' }];
   let allOk = true;
   for (const c of cities) {
     const r = generateCity({ ...DEFAULTS, ...c });

@@ -1,4 +1,4 @@
-# Polis v0.26.0
+# Polis v0.27.0
 
 *Created with help from Claude AI.*
 
@@ -754,6 +754,42 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.27.0** — Interiors that follow the building.
+
+*Hearths.* A house records where its chimney stands; under it, on the ground
+floor, a lit fire in the corner with a brick jamb beside it and brick over it,
+and a brick chimney breast up that corner through every floor to the stack on
+the roof (into empty cells only: never through a floor).
+
+*Banisters.* On every upper floor a rail, in the door's wood, runs along the
+edge of the stairwell where the floor meets the opening, never in front of a
+step; a floor that would not walk through with its rail loses it again.
+
+*Kitchens and tables.* A kitchen has an unbroken counter along one wall
+(stove, worktop, sink, worktop, barrel). A room with space for one has a
+dining table, two cells long or one in a small room, with a chair at each end
+facing it and a clear cell all round, tried at every spot nearest the middle
+first. Tables and counters come out before a building gives up its rooms.
+
+*Shops true to their signs.* The name is chosen first and the fit-out follows
+it: a bakery has smokers, hay and cakes on the counter, a butcher smokers, an
+apothecary brewing stands and a cauldron, a tailor looms, a hardware shop a
+grindstone, stonecutter and anvil, a cafe or tea house tables with chairs. New
+shop: the Smithy (anvils, blast furnace, smithing table, grindstone).
+
+*Streams.* Every building furnishes from its own fork of the city's life
+stream, so how many draws a room takes can no longer move farms, trees or
+cacti elsewhere in the city. (A stream seeded straight from a lot's
+coordinates was tried first and made worse rooms.) Measured on an independent
+set of twelve cities, buildings keep their rooms as often as in 0.26.0.
+
+*Deserts always have cacti.* They are planted in place of some trees by
+chance, so a small city could draw none; now if there are too few, some dead
+bushes on open sand become cacti, chosen by position (no random draws).
+
+New section 2zl (8 checks); 2ze checks houses in a village too. New blocks:
+anvil, cake, campfire (its states checked as Bedrock's own types).
 
 **0.26.0** — Two new city styles: Venetian and Art Deco.
 
