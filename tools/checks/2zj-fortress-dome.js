@@ -183,6 +183,56 @@ export default async function run(ctx) {
   check('dome: four doors, each walkable in and out', doorBad === 0, `${doorBad}`);
   check('dome: ribs of quartz and a glowstone crown', ribless === 0 && crown === domes, `${ribless} ribless, ${crown}/${domes} crowns`);
   check('dome: the ground laid under it is the style\'s own', notNylium === 0, `${notNylium}`);
+  // Built in the sea: loaded into water by each game's own rule (Bedrock: a
+  // cell of index -1 leaves the world alone, any other replaces it; Java: only
+  // the listed blocks are placed), the dome is dry inside and the sea outside
+  // it is untouched. Air fill is off, as it was when the water stayed in.
+  {
+    const { buildStructures } = await import('../../engine/export.js');
+    const { javaTiles } = await import('../../engine/export-java.js');
+    const { readJavaNbt } = await import('../../engine/javaworld.js');
+    const { decodeNbt } = await import('../nbt-read.js');
+    const { domeAir } = await import('../../engine/dome.js');
+    const r = generateCity({ ...DEFAULTS, seed: 7, size: 96, dome: true });
+    const d = r.world.dome, inDome = domeAir(d);
+    const X0 = Math.floor(d.cx - d.R) - 3, X1 = Math.ceil(d.cx + d.R) + 3, Z0 = Math.floor(d.cz - d.R) - 3, Z1 = Math.ceil(d.cz + d.R) + 3, Y0 = d.G - 2, Y1 = d.G + d.c + 3;
+    const nX = X1 - X0 + 1, nZ = Z1 - Z0 + 1, nY = Y1 - Y0 + 1;
+    const idx = (x, y, z) => ((y - Y0) * nZ + (z - Z0)) * nX + (x - X0);
+    const inBox = (x, y, z) => x >= X0 && x <= X1 && y >= Y0 && y <= Y1 && z >= Z0 && z <= Z1;
+    const judge = (dry) => {
+      let wet = 0, lost = 0, inside = 0;
+      for (let y = Y0; y <= Y1; y++) for (let z = Z0; z <= Z1; z++) for (let x = X0; x <= X1; x++) {
+        if (r.world.has(x, y, z)) continue;                       // the city's own blocks (fountains, canal)
+        const isDry = dry[idx(x, y, z)] === 1;
+        if (inDome(x, y, z)) { inside++; if (!isDry) wet++; } else if (isDry) lost++;
+      }
+      return { wet, lost, inside };
+    };
+    // Bedrock
+    const dryB = new Uint8Array(nX * nY * nZ);
+    for (const st of buildStructures(r.world, {})) {
+      const root = decodeNbt(st.data).root, bi = root.structure.block_indices[0];
+      const sy = root.size[1], sz = root.size[2], [ox, oy, oz] = st.offset;
+      for (let i = 0; i < bi.length; i++) {
+        if (bi[i] === -1) continue;
+        const z = i % sz, y = Math.floor(i / sz) % sy, x = Math.floor(i / (sy * sz));
+        if (inBox(ox + x, oy + y, oz + z)) dryB[idx(ox + x, oy + y, oz + z)] = 1;
+      }
+    }
+    const b = judge(dryB);
+    check('dome in the sea (Bedrock): dry inside, the sea outside untouched', b.inside > 10000 && b.wet === 0 && b.lost === 0, `${b.wet}/${b.inside} wet inside, ${b.lost} outside lost their water`);
+    // Java (offsets from the world box's corner, y from the ground drop of 2)
+    const dryJ = new Uint8Array(nX * nY * nZ), wb = r.world.box;
+    for (const t of javaTiles(r.world, { prefix: 'city', spawns: r.spawns })) {
+      const root = readJavaNbt(t.nbt);
+      for (const bl of root.blocks) {
+        const x = wb.x0 + t.offset[0] + bl.pos[0], y = 2 + t.offset[1] + bl.pos[1], z = wb.z0 + t.offset[2] + bl.pos[2];
+        if (inBox(x, y, z)) dryJ[idx(x, y, z)] = 1;
+      }
+    }
+    const j = judge(dryJ);
+    check('dome in the sea (Java): dry inside, the sea outside untouched', j.inside > 10000 && j.wet === 0 && j.lost === 0, `${j.wet}/${j.inside} wet inside, ${j.lost} outside lost their water`);
+  }
   const off = generateCity({ ...DEFAULTS, seed: 7, size: 160 });
   check('dome: none unless asked for', off.dome === null);
   const html = readFileSync(join(ROOT, 'index.html'), 'utf8'), main = readFileSync(join(ROOT, 'main.js'), 'utf8');

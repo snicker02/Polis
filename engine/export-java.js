@@ -14,28 +14,40 @@
 import { MATERIALS } from './materials.js';
 import { toJava, javaSignText } from './java-blocks.js';
 import { HOSTILE_KINDS } from './hostiles.js';
+import { domeAir } from './dome.js';
+import { VoxelWorld } from './blockcore.js';
 import { javaEntity, javaEntityPos } from './java-entities.js';
 
 // ---- big-endian NBT ------------------------------------------------------
 const T = { END: 0, BYTE: 1, SHORT: 2, INT: 3, LONG: 4, FLOAT: 5, DOUBLE: 6, BYTE_ARRAY: 7, STRING: 8, LIST: 9, COMPOUND: 10, INT_ARRAY: 11 };
 
+// One growing buffer (doubling as needed) and tag names encoded once: a big
+// city lists a million blocks, and a fresh little array for every byte, as
+// this used to make, left the export waiting on the garbage collector.
+const TEXT = new TextEncoder();
+const NAMES = new Map();
 class Writer {
-  constructor() { this.parts = []; this.len = 0; }
-  bytes(b) { this.parts.push(b); this.len += b.length; }
-  u8(v) { this.bytes(Uint8Array.of(v & 0xff)); }
-  i16(v) { this.bytes(Uint8Array.of((v >> 8) & 0xff, v & 0xff)); }
-  i32(v) { this.bytes(Uint8Array.of((v >>> 24) & 0xff, (v >>> 16) & 0xff, (v >>> 8) & 0xff, v & 0xff)); }
+  constructor() { this.buf = new Uint8Array(1 << 16); this.dv = new DataView(this.buf.buffer); this.len = 0; }
+  room(n) {
+    if (this.len + n <= this.buf.length) return;
+    let cap = this.buf.length * 2;
+    while (cap < this.len + n) cap *= 2;
+    const b = new Uint8Array(cap); b.set(this.buf.subarray(0, this.len));
+    this.buf = b; this.dv = new DataView(b.buffer);
+  }
+  bytes(b) { this.room(b.length); this.buf.set(b, this.len); this.len += b.length; }
+  u8(v) { this.room(1); this.buf[this.len++] = v & 0xff; }
+  i16(v) { this.room(2); this.dv.setInt16(this.len, v, false); this.len += 2; }
+  i32(v) { this.room(4); this.dv.setInt32(this.len, v | 0, false); this.len += 4; }
+  f32(v) { this.room(4); this.dv.setFloat32(this.len, v, false); this.len += 4; }
+  f64(v) { this.room(8); this.dv.setFloat64(this.len, v, false); this.len += 8; }
   str(s) {
-    const b = new TextEncoder().encode(s);
+    let b = NAMES.get(s);
+    if (!b) { b = TEXT.encode(s); if (s.length <= 48 && NAMES.size < 4096) NAMES.set(s, b); }
     this.i16(b.length);
     this.bytes(b);
   }
-  finish() {
-    const out = new Uint8Array(this.len);
-    let o = 0;
-    for (const p of this.parts) { out.set(p, o); o += p.length; }
-    return out;
-  }
+  finish() { return this.buf.slice(0, this.len); }
 }
 
 // A value is [type, payload]; compounds are plain objects of them.
@@ -55,10 +67,11 @@ function writeValue(w, [type, payload]) {
     case T.BYTE: w.u8(payload); break;
     case T.SHORT: w.i16(payload); break;
     case T.INT: w.i32(payload); break;
-    case T.FLOAT: { const b = new Uint8Array(4); new DataView(b.buffer).setFloat32(0, payload, false); w.bytes(b); break; }
-    case T.DOUBLE: { const b = new Uint8Array(8); new DataView(b.buffer).setFloat64(0, payload, false); w.bytes(b); break; }
+    case T.FLOAT: w.f32(payload); break;
+    case T.DOUBLE: w.f64(payload); break;
     case T.STRING: w.str(payload); break;
     case T.LIST:
+      if (payload.raw) { writeRawBlocks(w, payload.raw); break; }
       w.u8(payload.type);
       w.i32(payload.items.length);
       for (const item of payload.items) writeValue(w, [payload.type, item[1] !== undefined && Array.isArray(item) ? item[1] : item]);
@@ -73,6 +86,21 @@ function writeValue(w, [type, payload]) {
       w.u8(T.END);
       break;
     default: throw new Error('cannot write NBT type ' + type);
+  }
+}
+
+// A structure's blocks list written straight from flat arrays, the same bytes
+// as a list of {state, pos, nbt?} compounds, without making one per block.
+function writeRawBlocks(w, raw) {
+  const { state, x, y, z, nbt, n } = raw;
+  w.u8(T.COMPOUND);
+  w.i32(n);
+  for (let i = 0; i < n; i++) {
+    w.u8(T.INT); w.str('state'); w.i32(state[i]);
+    w.u8(T.LIST); w.str('pos'); w.u8(T.INT); w.i32(3); w.i32(x[i]); w.i32(y[i]); w.i32(z[i]);
+    const be = nbt.get(i);
+    if (be) { w.u8(T.COMPOUND); w.str('nbt'); writeValue(w, be); }
+    w.u8(T.END);
   }
 }
 
@@ -119,37 +147,45 @@ function javaEntities(spawns, box) {
 export function writeJavaStructure(cells, box, opts = {}) {
   const palette = [];
   const paletteIndex = new Map();
-  const blocks = [];
+  const cap = cells.length !== undefined ? cells.length : 0;
+  const raw = { state: new Int32Array(cap), x: new Int32Array(cap), y: new Int32Array(cap), z: new Int32Array(cap), nbt: new Map(), n: 0 };
+  const byMaterial = new Map();                        // material id (no block data) -> palette index
   for (const [x, y, z, id, data] of cells) {
-    const def = MATERIALS.def(id);
-    if (!def) continue;
-    const { name, props } = toJava(def.block, def.states, data && data.bytes ? data.bytes : {});
-    const key = name + '|' + Object.entries(props).sort().map(([k, v]) => k + '=' + v).join(',');
-    let index = paletteIndex.get(key);
+    let index = data ? undefined : byMaterial.get(id);
+    let name = null;
     if (index === undefined) {
-      index = palette.length;
-      paletteIndex.set(key, index);
-      const entry = { Name: J.str(name) };
-      if (Object.keys(props).length) entry.Properties = J.comp(Object.fromEntries(Object.entries(props).map(([k, v]) => [k, J.str(String(v))])));
-      palette.push(J.comp(entry));
+      const def = MATERIALS.def(id);
+      if (!def) continue;
+      const jv = toJava(def.block, def.states, data && data.bytes ? data.bytes : {});
+      name = jv.name;
+      const props = jv.props;
+      const key = name + '|' + Object.entries(props).sort().map(([k, v]) => k + '=' + v).join(',');
+      index = paletteIndex.get(key);
+      if (index === undefined) {
+        index = palette.length;
+        paletteIndex.set(key, index);
+        const entry = { Name: J.str(name) };
+        if (Object.keys(props).length) entry.Properties = J.comp(Object.fromEntries(Object.entries(props).map(([k, v]) => [k, J.str(String(v))])));
+        palette.push(J.comp(entry));
+      }
+      if (!data) byMaterial.set(id, index);
     }
-    const be = javaBlockEntity(name, data);
-    const block = {
-      state: J.int(index),
-      pos: J.list(T.INT, [x - box.x0, y - box.y0, z - box.z0]),
-    };
-    if (be) block.nbt = be;
-    blocks.push(J.comp(block));
+    const i = raw.n++;
+    if (i >= raw.state.length) {                      // an iterable without a length: grow
+      for (const k of ['state', 'x', 'y', 'z']) { const b = new Int32Array(Math.max(16, raw[k].length * 2)); b.set(raw[k]); raw[k] = b; }
+    }
+    raw.state[i] = index; raw.x[i] = x - box.x0; raw.y[i] = y - box.y0; raw.z[i] = z - box.z0;
+    if (data) { const be = javaBlockEntity(name || toJava(MATERIALS.def(id).block, MATERIALS.def(id).states, data.bytes || {}).name, data); if (be) raw.nbt.set(i, be); }
   }
   const size = [box.x1 - box.x0 + 1, box.y1 - box.y0 + 1, box.z1 - box.z0 + 1];
   const root = J.comp({
     DataVersion: J.int(opts.dataVersion || 3953),        // 1.21.1
     size: J.list(T.INT, size),
     palette: J.list(T.COMPOUND, palette.map((p) => p[1])),
-    blocks: J.list(T.COMPOUND, blocks.map((b) => b[1])),
+    blocks: [T.LIST, { type: T.COMPOUND, raw }],
     entities: J.list(T.COMPOUND, javaEntities(opts.spawns, box).map((e) => e[1])),
   });
-  return { nbt: encodeJavaNbt(root), size, palette: palette.length, blocks: blocks.length };
+  return { nbt: encodeJavaNbt(root), size, palette: palette.length, blocks: raw.n };
 }
 
 // Java structures are placed a piece at a time, so the city is cut into
@@ -193,9 +229,19 @@ export function javaTiles(world, opts = {}) {
         for (let y = bottom - depth; y < bottom; y++) if (!world.has(x, y, z)) ground.push([x, y, z]);
       }
   }
+  // A dome's inside is always air, air fill or not (Java places only the
+  // blocks listed, so without this the water it was built in would stay)
+  if (world.dome) {
+    const inDome = domeAir(world.dome), d = world.dome;
+    const listed = air.length ? new Set(air.map(([x, y, z]) => VoxelWorld.key(x, y, z))) : null;
+    for (let x = Math.max(box.x0, Math.floor(d.cx - d.R)); x <= Math.min(box.x1, Math.ceil(d.cx + d.R)); x++)
+      for (let z = Math.max(box.z0, Math.floor(d.cz - d.R)); z <= Math.min(box.z1, Math.ceil(d.cz + d.R)); z++)
+        for (let y = d.G + 1; y <= Math.min(box.y1, d.G + d.c); y++)
+          if (inDome(x, y, z) && !world.has(x, y, z) && !(listed && listed.has(VoxelWorld.key(x, y, z)))) air.push([x, y, z]);
+  }
   const AIR = MATERIALS.add(null, 'minecraft:air', '#000000', {}, { passable: true, transparent: true });
   const FILL = MATERIALS.add(null, 'minecraft:stone', '#7d7d7d');
-  for (const [x, y, z, id] of air.map((c) => [...c, AIR]).concat(ground.map((c) => [...c, FILL]))) {
+  const place = (x, y, z, id) => {
     const tx = Math.floor((x - box.x0) / step), ty = Math.floor((y - box.y0) / step), tz = Math.floor((z - box.z0) / step);
     const key = tx + ',' + ty + ',' + tz;
     let t = cells.get(key);
@@ -207,7 +253,9 @@ export function javaTiles(world, opts = {}) {
     const b = t.box;
     b.x0 = Math.min(b.x0, x); b.y0 = Math.min(b.y0, y); b.z0 = Math.min(b.z0, z);
     b.x1 = Math.max(b.x1, x); b.y1 = Math.max(b.y1, y); b.z1 = Math.max(b.z1, z);
-  }
+  };
+  for (const [x, y, z] of air) place(x, y, z, AIR);
+  for (const [x, y, z] of ground) place(x, y, z, FILL);
   world.forEach((x, y, z, id) => {
     const tx = Math.floor((x - box.x0) / step), ty = Math.floor((y - box.y0) / step), tz = Math.floor((z - box.z0) / step);
     const key = tx + ',' + ty + ',' + tz;

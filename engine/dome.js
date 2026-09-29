@@ -64,6 +64,10 @@ export function buildDome(world, G, opts = {}) {
   };
   const x0 = Math.floor(cx - R) - 1, x1 = Math.ceil(cx + R) + 1, z0 = Math.floor(cz - R) - 1, z1 = Math.ceil(cz + R) + 1;
   const info = { cx, cz, R, c, glass: 0, ribs: 0, ground: 0, skipped: 0, doors: [], top: G + c };
+  // the world remembers its dome, so the exports can write air through all of
+  // the inside of it (see domeAir): built under water, loading it then drives
+  // the water out, while outside the shell nothing is touched
+  world.dome = { cx, cz, R, c, G };
   // the ground: whole under the dome
   for (let z = z0; z <= z1; z++)
     for (let x = x0; x <= x1; x++) {
@@ -140,4 +144,12 @@ export function buildDome(world, G, opts = {}) {
     info.doors.push({ face, cells, out: [dx, dz] });
   }
   return info;
+}
+
+// Is (x, y, z) inside the dome's air: above the ground and within the shell?
+// The exports write real air (not "leave alone") into every empty cell for
+// which this holds, so a city domed under water or in a hillside is emptied
+// inside and the world outside the shell is left exactly as it was.
+export function domeAir(d) {
+  return (x, y, z) => y >= d.G + 1 && ((x - d.cx) ** 2 + (z - d.cz) ** 2) / (d.R * d.R) + ((y - d.G) / d.c) ** 2 <= 1;
 }

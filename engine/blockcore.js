@@ -291,6 +291,16 @@ export function writeMcStructure(keys, ids, box, materials, opts = {}) {
         for (let y = box.y0; y <= top; y++) layer0[((x - box.x0) * sy + (y - box.y0)) * sz + (z - box.z0)] = fill;
       }
   }
+  // opts.airAt(x, y, z): cells to make real air whatever else is asked (the
+  // inside of a dome), so loading clears water out of them; any other empty
+  // cell keeps its setting (structure void unless air fill is on)
+  if (opts.airAt && opts.domeAirId !== undefined) {
+    const airSlot = slot(opts.domeAirId);
+    for (let x = box.x0; x <= box.x1; x++)
+      for (let z = box.z0; z <= box.z1; z++)
+        for (let y = box.y0; y <= box.y1; y++)
+          if (opts.airAt(x, y, z)) layer0[((x - box.x0) * sy + (y - box.y0)) * sz + (z - box.z0)] = airSlot;
+  }
   // Generated fill (foundations): opts.fillFn(x, y, z) returns a material id
   // for cells with y < opts.fillBelowY, filled before the world's own cells.
   if (opts.fillFn && opts.fillBelowY !== undefined) {

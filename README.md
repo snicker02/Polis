@@ -1,4 +1,4 @@
-# Polis v0.25.0
+# Polis v0.25.2
 
 *Created with help from Claude AI.*
 
@@ -754,6 +754,43 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.25.2** — A dome built under water is dry inside; Java exports ten times faster.
+
+A structure's empty cells are "leave alone" (structure void), so a dome built
+in the sea kept the sea inside it. The dome now records its shape on the world,
+and both exports write real air into every empty cell inside it, air fill or
+not; outside the glass every empty cell stays "leave alone", so the water (or
+the hillside, or anything else) around the dome is kept. Checked by loading the
+exported structures into a simulated sea by each game's own rule: every empty
+cell inside the dome comes out dry and every cell of sea outside keeps its
+water, in Bedrock and in Java. The placement guide says so, and that running
+build again from the same spot clears any water that got in through a chunk
+not yet loaded.
+
+Writing a dome's air meant listing about a million air blocks in the Java
+structures, and the Java NBT writer made a fresh little array for every byte
+and an object tree for every block: the export spent most of its time in the
+garbage collector (33 s for a domed city). The writer now fills one growing
+buffer, encodes tag names once, and writes a structure's blocks straight from
+flat arrays: a domed city exports in about 3 s, an ordinary one in 0.4 s
+instead of 3.7 s, and the output is byte-for-byte what it was (compared against
+0.25.1 for three cities, with and without air fill).
+
+2zj runs the sea test for both editions (24 checks now).
+
+**0.25.1** — The Life panel lays out properly.
+
+The checkbox grid's columns were plain 1fr, which cannot go narrower than
+their longest word, so the long hostile-mobs label pushed the grid (and with it
+the whole Life panel) wider than the sidebar, and the slider values were cut
+off at the edge; the hostile-mobs count slider also sat inside the grid,
+squeezed into half a column. The grid's columns now shrink to the panel
+(repeat(2, minmax(0, 1fr))), a label wraps beside its box with the box kept
+square, the slider has its own row, and the label is shorter, the /function
+note moving into the hint below. Checked in a real browser (Chromium) at five
+window sizes from 1920 down to 600 wide: no element overflows any panel. 2zi
+now checks the markup for both causes, and fails on 0.25.0's page.
 
 **0.25.0** — A walled fortress town, and a dome over the city.
 

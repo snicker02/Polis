@@ -109,5 +109,12 @@ export default async function run(ctx) {
   check('page: the option is a checkbox, unchecked, with a count slider, both read into the config',
     /<input type="checkbox" id="hostiles">/.test(html) && /id="hostileCount"/.test(html) &&
     /const CHECKS = \[[^\]]*'hostiles'/.test(main) && /cfg\.hostileCount = num\('hostileCount'\)/.test(main) && /hostilesInPopulate: !!result\.cfg\.hostiles/.test(main));
+  // the sidebar's layout: no slider row inside a checkbox grid (it was squeezed
+  // into half a column), and the grid's columns may shrink to the panel (a 1fr
+  // column cannot go narrower than its longest word, which pushed the whole
+  // panel wider and cut off the slider values)
+  const grids = [...html.matchAll(/<div class="checks">([\s\S]*?)<\/div>\s*(?=<div class="(?:row|hint)|<\/fieldset>)/g)].map((m) => m[1]);
+  check('page: no slider row inside a checkbox grid', grids.length >= 2 && grids.every((g) => !/class="row/.test(g)), `${grids.length} grids`);
+  check('page: checkbox grid columns can shrink to the panel', /\.checks \{[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/.test(html));
   note(`hostiles: ${placed} placed across 5 styles · ${JSON.stringify(byStyle.nether)}`);
 }

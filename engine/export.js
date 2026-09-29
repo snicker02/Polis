@@ -17,7 +17,7 @@ import { makeRng } from './rng.js';
 // Must match main.js VERSION, package.json and index.html data-version;
 // tools/validate.js fails if they drift. The app refuses to export when the
 // browser has mixed cached copies of old and new files.
-export const POLIS_VERSION = '0.25.0';
+export const POLIS_VERSION = '0.25.2';
 
 export const CHUNK = 64;          // Bedrock structure limit per horizontal axis
 export const GROUND_DROP = 2;     // base layer y=0 sits 2 below feet; surface y=1 replaces the block you stand on
@@ -184,7 +184,9 @@ export function buildStructures(world, opts = {}) {
   const limits = columnLimits(world, opts);
   return tileList(world, opts).map((t) => {
     const res = writeMcStructure(t.chunk.keys, t.chunk.ids, t.box, MATERIALS,
-      { airId, blockData: world.data, inside: cityInside(world), ...fill, ...limits });
+      { airId, blockData: world.data, inside: cityInside(world), ...fill, ...limits,
+        // a dome's inside is always written as air: water or ground there is driven out
+        ...(world.dome ? { airAt: domeAir(world.dome), domeAirId: MAT.AIR } : {}) });
     return {
       name: t.name, data: res.data, box: t.box,
       size: res.size, cells: res.cells, paletteSize: res.paletteSize, entities: res.entities,
@@ -266,6 +268,7 @@ export const SUMMON_IDS = { minecart: 'minecraft:minecart', boat: 'minecraft:boa
 // /summon is <entity> <name> <position>.
 export const FISH = new Set(['cod', 'salmon', 'tropicalfish']);
 import { HOSTILE_KINDS } from './hostiles.js';
+import { domeAir } from './dome.js';
 const FARM_ANIMALS = ['cow', 'sheep', 'pig', 'chicken'];
 
 // build     blocks only, safe to rerun; ends by adding ticking areas
@@ -437,6 +440,12 @@ export function placementGuide(tiles, opts = {}) {
     ? `Air fill is ON: loading clears terrain, trees and water out of the city volume, up to ${Math.max(0, opts.clearAbove | 0)} blocks above ground or the tallest roof.`
     : 'Air fill is OFF: empty cells keep whatever was already there (best on a flat world).');
   if (opts.foundation | 0) L.push(`Foundation: ${opts.foundation | 0} solid blocks under the city, so it sits into sloping ground.`);
+  if (opts.dome) {
+    L.push('Dome: its whole inside is written as air, air fill or not. Built under water (or into');
+    L.push('  a hillside), loading empties the dome and leaves everything outside the glass alone.');
+    L.push('  If water got in somewhere (a chunk that was not loaded yet), run build again from the');
+    L.push('  same spot: the air inside replaces it.');
+  }
   L.push('');
   L.push('HOW TO BUILD IT:');
   L.push('  1. Import the .mcpack and enable the behaviour pack on your world. Cheats on.');
@@ -482,7 +491,7 @@ export async function exportPack(world, optsIn = {}) {
   const tiles = tileList(world, opts);
   const structures = buildStructures(world, opts);
   const mobStructs = buildMobStructures(opts.spawns, opts);
-  const guide = placementGuide(tiles, opts);
+  const guide = placementGuide(tiles, { ...opts, dome: !!world.dome });
   const fns = functionFiles(tiles, world, { ...opts, mobTiles: mobStructs });
   const data = await buildMcPack(structures.concat(mobStructs), {
     ...opts, guide,
@@ -495,7 +504,7 @@ export async function exportStructuresZip(world, opts = {}) {
   const tiles = tileList(world, opts);
   const structures = buildStructures(world, opts);
   const mobStructs = buildMobStructures(opts.spawns, opts);
-  const guide = placementGuide(tiles, opts);
+  const guide = placementGuide(tiles, { ...opts, dome: !!world.dome });
   const fns = functionFiles(tiles, world, { ...opts, mobTiles: mobStructs });
   const files = structures.concat(mobStructs).map((s) => ({ name: `${s.name}.mcstructure`, data: s.data }));
   for (const f of fns) files.push({ name: f.name, data: new TextEncoder().encode(f.text) });
