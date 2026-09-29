@@ -294,8 +294,9 @@ export function writeMcStructure(keys, ids, box, materials, opts = {}) {
   // opts.airAt(x, y, z): cells to make real air whatever else is asked (the
   // inside of a dome), so loading clears water out of them; any other empty
   // cell keeps its setting (structure void unless air fill is on)
+  let domeAirSlot = -1;
   if (opts.airAt && opts.domeAirId !== undefined) {
-    const airSlot = slot(opts.domeAirId);
+    const airSlot = domeAirSlot = slot(opts.domeAirId);
     for (let x = box.x0; x <= box.x1; x++)
       for (let z = box.z0; z <= box.z1; z++)
         for (let y = box.y0; y <= box.y1; y++)
@@ -323,6 +324,16 @@ export function writeMcStructure(keys, ids, box, materials, opts = {}) {
     layer0[((x - box.x0) * sy + (y - box.y0)) * sz + (z - box.z0)] = slot(ids[i]);
   }
   const layer1 = new Int32Array(n).fill(-1);
+  // Layer 1 is a cell's second block: the water in a waterlogged stair, fence
+  // or lantern. -1 there keeps whatever liquid the cell held, so a stair loaded
+  // into the sea came out full of the sea, and spilled it on the streets. Inside
+  // a dome it is air, every cell, blocks and all: the liquid goes too.
+  if (domeAirSlot !== -1) {
+    for (let x = box.x0; x <= box.x1; x++)
+      for (let z = box.z0; z <= box.z1; z++)
+        for (let y = box.y0; y <= box.y1; y++)
+          if (opts.airAt(x, y, z)) layer1[((x - box.x0) * sy + (y - box.y0)) * sz + (z - box.z0)] = domeAirSlot;
+  }
 
   // block entities (bed colours, sign text): keyed by the flattened layer index
   const posData = {};

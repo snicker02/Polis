@@ -229,16 +229,6 @@ export function javaTiles(world, opts = {}) {
         for (let y = bottom - depth; y < bottom; y++) if (!world.has(x, y, z)) ground.push([x, y, z]);
       }
   }
-  // A dome's inside is always air, air fill or not (Java places only the
-  // blocks listed, so without this the water it was built in would stay)
-  if (world.dome) {
-    const inDome = domeAir(world.dome), d = world.dome;
-    const listed = air.length ? new Set(air.map(([x, y, z]) => VoxelWorld.key(x, y, z))) : null;
-    for (let x = Math.max(box.x0, Math.floor(d.cx - d.R)); x <= Math.min(box.x1, Math.ceil(d.cx + d.R)); x++)
-      for (let z = Math.max(box.z0, Math.floor(d.cz - d.R)); z <= Math.min(box.z1, Math.ceil(d.cz + d.R)); z++)
-        for (let y = d.G + 1; y <= Math.min(box.y1, d.G + d.c); y++)
-          if (inDome(x, y, z) && !world.has(x, y, z) && !(listed && listed.has(VoxelWorld.key(x, y, z)))) air.push([x, y, z]);
-  }
   const AIR = MATERIALS.add(null, 'minecraft:air', '#000000', {}, { passable: true, transparent: true });
   const FILL = MATERIALS.add(null, 'minecraft:stone', '#7d7d7d');
   const place = (x, y, z, id) => {
@@ -289,6 +279,36 @@ export function javaTiles(world, opts = {}) {
       // where it goes, relative to the player standing at the city's corner
       offset: [t.box.x0 - box.x0, t.box.y0 - (opts.groundDrop === undefined ? 2 : opts.groundDrop), t.box.z0 - box.z0],
     });
+  }
+  // A dome built under water is drained first: structures of air through every
+  // cell of its inside, blocks' cells included, placed before the city (build
+  // places pieces in order). Java's /place template waterlogs a block it puts
+  // into water, so every block has to go into air instead.
+  if (world.dome) {
+    const d = world.dome, inDome = domeAir(d), drains = new Map();
+    for (let x = Math.floor(d.cx - d.R); x <= Math.ceil(d.cx + d.R); x++)
+      for (let z = Math.floor(d.cz - d.R); z <= Math.ceil(d.cz + d.R); z++)
+        for (let y = d.G + 1; y <= d.G + d.c; y++) {
+          if (!inDome(x, y, z)) continue;
+          const key = Math.floor((x - box.x0) / step) + ',' + Math.floor((y - box.y0) / step) + ',' + Math.floor((z - box.z0) / step);
+          let t = drains.get(key);
+          if (!t) { t = { cells: [], box: { x0: Infinity, y0: Infinity, z0: Infinity, x1: -Infinity, y1: -Infinity, z1: -Infinity } }; drains.set(key, t); }
+          t.cells.push([x, y, z, AIR, null]);
+          const b = t.box;
+          if (x < b.x0) b.x0 = x; if (y < b.y0) b.y0 = y; if (z < b.z0) b.z0 = z;
+          if (x > b.x1) b.x1 = x; if (y > b.y1) b.y1 = y; if (z > b.z1) b.z1 = z;
+        }
+    const drainOut = [];
+    let m = 0;
+    for (const t of drains.values()) {
+      const s = writeJavaStructure(t.cells, t.box, { ...opts, spawns: [] });
+      drainOut.push({
+        name: `${opts.prefix || 'city'}_d${m++}`, drain: true,
+        nbt: s.nbt, size: s.size, palette: s.palette, blocks: s.blocks, entities: 0,
+        offset: [t.box.x0 - box.x0, t.box.y0 - (opts.groundDrop === undefined ? 2 : opts.groundDrop), t.box.z0 - box.z0],
+      });
+    }
+    return drainOut.concat(out);
   }
   return out;
 }

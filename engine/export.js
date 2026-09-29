@@ -17,7 +17,7 @@ import { makeRng } from './rng.js';
 // Must match main.js VERSION, package.json and index.html data-version;
 // tools/validate.js fails if they drift. The app refuses to export when the
 // browser has mixed cached copies of old and new files.
-export const POLIS_VERSION = '0.25.2';
+export const POLIS_VERSION = '0.25.3';
 
 export const CHUNK = 64;          // Bedrock structure limit per horizontal axis
 export const GROUND_DROP = 2;     // base layer y=0 sits 2 below feet; surface y=1 replaces the block you stand on
@@ -195,6 +195,22 @@ export function buildStructures(world, opts = {}) {
   });
 }
 
+// ---- draining a dome ------------------------------------------------------------
+// Built under water, a dome's inside is drained before the city goes in: one
+// structure per tile, air (in both of a cell's layers) through every cell of
+// the dome's inside, blocks' cells included, "leave alone" everywhere else.
+// build loads these first, so every block of the city is then placed into air:
+// nothing it places can come out waterlogged, whatever the game does with a
+// structure's second layer.
+export function buildDrainStructures(world, opts = {}) {
+  if (!world.dome) return [];
+  const airAt = domeAir(world.dome);
+  return tileList(world, opts).map((t) => {
+    const res = writeMcStructure([], [], t.box, MATERIALS, { airAt, domeAirId: MAT.AIR });
+    return { name: t.name + '_d', data: res.data, box: t.box, size: res.size, cells: 0, offset: t.offset, drain: true };
+  });
+}
+
 // ---- mob structures ------------------------------------------------------------
 // Villagers and golems travel inside entity-only structures (no blocks, every
 // cell structure void), one per 64x64 tile, so they arrive wherever blocks do.
@@ -320,6 +336,7 @@ export function functionFiles(tiles, world, opts = {}) {
     `# ${tiles.length} structure${tiles.length === 1 ? '' : 's'}. Safe to run again: blocks only.`,
     '# Only loaded chunks are filled: stand near the middle and raise render distance.',
     `# When the whole city is standing, run /function ${ns}/${pop} from the SAME spot.`,
+    ...(world.dome ? tiles.map((t) => load({ ...t, name: t.name + '_d' }, dx, dz)) : []),   // drain the dome first
     ...tiles.map((t) => load(t, dx, dz)),
     ...areas.map((a) => `tickingarea add ${rel(a.x0 - dx)} ${rel(-GROUND_DROP)} ${rel(a.z0 - dz)} ${rel(a.x1 - dx)} ${rel(top)} ${rel(a.z1 - dz)} ${a.name}`),
     `say Polis: city placed. When it has finished appearing, run /function ${ns}/${pop} from this same spot.`,
@@ -441,10 +458,11 @@ export function placementGuide(tiles, opts = {}) {
     : 'Air fill is OFF: empty cells keep whatever was already there (best on a flat world).');
   if (opts.foundation | 0) L.push(`Foundation: ${opts.foundation | 0} solid blocks under the city, so it sits into sloping ground.`);
   if (opts.dome) {
-    L.push('Dome: its whole inside is written as air, air fill or not. Built under water (or into');
-    L.push('  a hillside), loading empties the dome and leaves everything outside the glass alone.');
-    L.push('  If water got in somewhere (a chunk that was not loaded yet), run build again from the');
-    L.push('  same spot: the air inside replaces it.');
+    L.push('Dome: build first drains the whole inside of the dome (air through every cell, the');
+    L.push('  liquid layer too), then places the city into the dry space, so nothing comes out');
+    L.push('  waterlogged. Built under water (or into a hillside), the dome is emptied and');
+    L.push('  everything outside the glass is left alone. If water got in somewhere (a chunk that');
+    L.push('  was not loaded yet), run build again from the same spot: it drains again.');
   }
   L.push('');
   L.push('HOW TO BUILD IT:');
@@ -489,7 +507,7 @@ export async function exportPack(world, optsIn = {}) {
   // the city's marked centre unless the caller names one
   const opts = { ...optsIn, centre: optsIn.centre || world.centre };
   const tiles = tileList(world, opts);
-  const structures = buildStructures(world, opts);
+  const structures = buildStructures(world, opts).concat(buildDrainStructures(world, opts));
   const mobStructs = buildMobStructures(opts.spawns, opts);
   const guide = placementGuide(tiles, { ...opts, dome: !!world.dome });
   const fns = functionFiles(tiles, world, { ...opts, mobTiles: mobStructs });
@@ -502,7 +520,7 @@ export async function exportPack(world, optsIn = {}) {
 
 export async function exportStructuresZip(world, opts = {}) {
   const tiles = tileList(world, opts);
-  const structures = buildStructures(world, opts);
+  const structures = buildStructures(world, opts).concat(buildDrainStructures(world, opts));
   const mobStructs = buildMobStructures(opts.spawns, opts);
   const guide = placementGuide(tiles, { ...opts, dome: !!world.dome });
   const fns = functionFiles(tiles, world, { ...opts, mobTiles: mobStructs });

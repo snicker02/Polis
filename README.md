@@ -1,4 +1,4 @@
-# Polis v0.25.2
+# Polis v0.25.3
 
 *Created with help from Claude AI.*
 
@@ -754,6 +754,21 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.25.3** — Nothing in a dome built under water comes out waterlogged.
+
+0.25.2 drained the empty cells inside a dome, but a block placed into a cell
+still full of sea kept the water: in Bedrock a structure's second layer (the
+liquid in a waterlogged block) was -1, "keep what is there", and Java's
+/place template waterlogs a block it puts into water. So stairs, doors,
+fences, lanterns, barrels, leaves and panes came out full of water, and being
+water sources they ran onto the streets. Now build first loads drain
+structures, one per tile: air through every cell of the dome's inside, blocks'
+cells included (in Bedrock in both layers), and only then the city, into dry
+space. Bedrock also writes air in the second layer of every cell inside the
+dome. The sea test (2zj) now loads the structures in build's order and counts a
+block placed into water as waterlogged whatever its second layer says: 0.25.2's
+order put 33,419 blocks into sea water, this one none. 27 checks.
 
 **0.25.2** — A dome built under water is dry inside; Java exports ten times faster.
 

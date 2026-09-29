@@ -183,12 +183,16 @@ export default async function run(ctx) {
   check('dome: four doors, each walkable in and out', doorBad === 0, `${doorBad}`);
   check('dome: ribs of quartz and a glowstone crown', ribless === 0 && crown === domes, `${ribless} ribless, ${crown}/${domes} crowns`);
   check('dome: the ground laid under it is the style\'s own', notNylium === 0, `${notNylium}`);
-  // Built in the sea: loaded into water by each game's own rule (Bedrock: a
-  // cell of index -1 leaves the world alone, any other replaces it; Java: only
-  // the listed blocks are placed), the dome is dry inside and the sea outside
-  // it is untouched. Air fill is off, as it was when the water stayed in.
+  // Built in the sea: the exported structures are loaded into water in build's
+  // order (the dome's drain structures first) by each game's own rule. Bedrock:
+  // a cell of index -1 leaves the world alone, any other replaces it; Java: only
+  // the listed blocks are placed. And, strictly, a block placed into a cell that
+  // still holds water comes out waterlogged (Java's /place template does this,
+  // and Bedrock keeps a cell's liquid unless told otherwise) whatever its second
+  // layer says. The dome must come out dry inside (blocks' cells too) and the
+  // sea outside untouched. Air fill is off, as it was when the water stayed in.
   {
-    const { buildStructures } = await import('../../engine/export.js');
+    const { buildStructures, buildDrainStructures } = await import('../../engine/export.js');
     const { javaTiles } = await import('../../engine/export-java.js');
     const { readJavaNbt } = await import('../../engine/javaworld.js');
     const { decodeNbt } = await import('../nbt-read.js');
@@ -199,39 +203,67 @@ export default async function run(ctx) {
     const nX = X1 - X0 + 1, nZ = Z1 - Z0 + 1, nY = Y1 - Y0 + 1;
     const idx = (x, y, z) => ((y - Y0) * nZ + (z - Z0)) * nX + (x - X0);
     const inBox = (x, y, z) => x >= X0 && x <= X1 && y >= Y0 && y <= Y1 && z >= Z0 && z <= Z1;
-    const judge = (dry) => {
-      let wet = 0, lost = 0, inside = 0;
+    // per cell: 0 = sea water, 1 = air, 2 = a dry block, 3 = a waterlogged block
+    const put = (st, x, y, z, isAir) => { if (!inBox(x, y, z)) return; const k = idx(x, y, z); st[k] = isAir ? 1 : (st[k] === 0 || st[k] === 3 ? 3 : 2); };
+    const judge = (st) => {
+      let wet = 0, logged = 0, lost = 0, inside = 0;
       for (let y = Y0; y <= Y1; y++) for (let z = Z0; z <= Z1; z++) for (let x = X0; x <= X1; x++) {
-        if (r.world.has(x, y, z)) continue;                       // the city's own blocks (fountains, canal)
-        const isDry = dry[idx(x, y, z)] === 1;
-        if (inDome(x, y, z)) { inside++; if (!isDry) wet++; } else if (isDry) lost++;
+        const v = st[idx(x, y, z)];
+        if (inDome(x, y, z)) {
+          inside++;
+          if (r.world.has(x, y, z)) { if (v === 3) logged++; }      // the city's own blocks (its fountains and canal are its own water)
+          else if (v !== 1) wet++;
+        } else if (!r.world.has(x, y, z) && v !== 0) lost++;
       }
-      return { wet, lost, inside };
+      return { wet, logged, lost, inside };
     };
-    // Bedrock
-    const dryB = new Uint8Array(nX * nY * nZ);
-    for (const st of buildStructures(r.world, {})) {
-      const root = decodeNbt(st.data).root, bi = root.structure.block_indices[0];
-      const sy = root.size[1], sz = root.size[2], [ox, oy, oz] = st.offset;
+    // Bedrock, in build's order
+    const stB = new Uint8Array(nX * nY * nZ);
+    for (const s2 of buildDrainStructures(r.world, {}).concat(buildStructures(r.world, {}))) {
+      const root = decodeNbt(s2.data).root, bi = root.structure.block_indices[0], pal = root.structure.palette.default.block_palette;
+      const sy = root.size[1], sz = root.size[2], [ox, oy, oz] = s2.offset;
       for (let i = 0; i < bi.length; i++) {
         if (bi[i] === -1) continue;
         const z = i % sz, y = Math.floor(i / sz) % sy, x = Math.floor(i / (sy * sz));
-        if (inBox(ox + x, oy + y, oz + z)) dryB[idx(ox + x, oy + y, oz + z)] = 1;
+        put(stB, ox + x, oy + y, oz + z, pal[bi[i]].name === 'minecraft:air');
       }
     }
-    const b = judge(dryB);
-    check('dome in the sea (Bedrock): dry inside, the sea outside untouched', b.inside > 10000 && b.wet === 0 && b.lost === 0, `${b.wet}/${b.inside} wet inside, ${b.lost} outside lost their water`);
-    // Java (offsets from the world box's corner, y from the ground drop of 2)
-    const dryJ = new Uint8Array(nX * nY * nZ), wb = r.world.box;
-    for (const t of javaTiles(r.world, { prefix: 'city', spawns: r.spawns })) {
-      const root = readJavaNbt(t.nbt);
-      for (const bl of root.blocks) {
-        const x = wb.x0 + t.offset[0] + bl.pos[0], y = 2 + t.offset[1] + bl.pos[1], z = wb.z0 + t.offset[2] + bl.pos[2];
-        if (inBox(x, y, z)) dryJ[idx(x, y, z)] = 1;
+    const b = judge(stB);
+    check('dome in the sea (Bedrock): dry inside, no block waterlogged, the sea outside untouched',
+      b.inside > 10000 && b.wet === 0 && b.logged === 0 && b.lost === 0, `${b.wet} wet cells, ${b.logged} waterlogged blocks, ${b.lost} outside lost their water`);
+    // Java, in build's order (the drains come first in the list)
+    const stJ = new Uint8Array(nX * nY * nZ), wb = r.world.box;
+    const jt = javaTiles(r.world, { prefix: 'city', spawns: r.spawns });
+    const firstCity = jt.findIndex((t) => !t.drain);
+    check('java: the drain structures come first, so build places them first', firstCity > 0 && jt.slice(0, firstCity).every((t) => t.drain) && jt.slice(firstCity).every((t) => !t.drain));
+    for (const t of jt) {
+      const root = readJavaNbt(t.nbt), pal = root.palette.map((q) => q.Name);
+      for (const bl of root.blocks) put(stJ, wb.x0 + t.offset[0] + bl.pos[0], 2 + t.offset[1] + bl.pos[1], wb.z0 + t.offset[2] + bl.pos[2], pal[bl.state] === 'minecraft:air');
+    }
+    const j = judge(stJ);
+    check('dome in the sea (Java): dry inside, no block waterlogged, the sea outside untouched',
+      j.inside > 10000 && j.wet === 0 && j.logged === 0 && j.lost === 0, `${j.wet} wet cells, ${j.logged} waterlogged blocks, ${j.lost} outside lost their water`);
+    // and Bedrock clears each cell's second layer inside the dome too
+    let layer1 = 0, cellsIn = 0;
+    for (const s2 of buildStructures(r.world, {})) {
+      const root = decodeNbt(s2.data).root, l1 = root.structure.block_indices[1], pal = root.structure.palette.default.block_palette;
+      const sy = root.size[1], sz = root.size[2], [ox, oy, oz] = s2.offset;
+      for (let i = 0; i < l1.length; i++) {
+        const z = i % sz, y = Math.floor(i / sz) % sy, x = Math.floor(i / (sy * sz));
+        if (!inDome(ox + x, oy + y, oz + z)) continue;
+        cellsIn++;
+        if (l1[i] === -1 || pal[l1[i]].name !== 'minecraft:air') layer1++;
       }
     }
-    const j = judge(dryJ);
-    check('dome in the sea (Java): dry inside, the sea outside untouched', j.inside > 10000 && j.wet === 0 && j.lost === 0, `${j.wet}/${j.inside} wet inside, ${j.lost} outside lost their water`);
+    check('bedrock: inside the dome every cell\'s second (liquid) layer is air', cellsIn > 10000 && layer1 === 0, `${layer1}/${cellsIn} keep their liquid`);
+    // the build function loads the drains before the city
+    const { exportPack, cityId } = await import('../../engine/export.js');
+    const zl = await import('node:zlib');
+    const pk = await exportPack(r.world, { namespace: cityId(r.world, 7), spawns: r.spawns, deflateRaw: (x) => new Uint8Array(zl.deflateRawSync(Buffer.from(x))) });
+    const bl = pk.functions.find((f) => f.name.endsWith('/build_centered.mcfunction')).text.split('\n').filter((l) => l.startsWith('structure load'));
+    const lastDrain = bl.map((l, i) => (/_d /.test(l) ? i : -1)).reduce((a, q) => Math.max(a, q), -1);
+    const firstTile = bl.findIndex((l) => !/_d /.test(l));
+    check('bedrock: build loads every drain structure before any piece of the city', lastDrain >= 0 && firstTile > lastDrain, `last drain line ${lastDrain}, first city line ${firstTile}`);
   }
   const off = generateCity({ ...DEFAULTS, seed: 7, size: 160 });
   check('dome: none unless asked for', off.dome === null);
