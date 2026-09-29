@@ -14,6 +14,7 @@ function towerShape(u, shapes = TOWER_SHAPES) {
 }
 import { plantBeds } from './building.js';
 import { courtyardPlan, makeCourtyard } from './courtyard.js';
+import { hostileSpawns } from './hostiles.js';
 import { megalith } from './megaliths.js';
 import { fishSpawns } from './fish.js';
 import { generatePlan, frontage, USE } from './plan.js';
@@ -85,6 +86,8 @@ export const DEFAULTS = {
   megaliths: true,           // Celtic monuments in parks: a menhir, a dolmen or a stone circle
   megalithChance: 0.5,       // share of parks that get one
   courtyardChance: 0.3,      // share of mid-rise lots, where one fits, built as an L or U round a courtyard
+  hostiles: false,           // populate also summons hostile mobs (the hostiles functions are always there)
+  hostileCount: 24,          // how many: daylight-proof kinds, a mix for the city's style
   furnish: true,
   flowers: true,
   villagers: 60,
@@ -314,7 +317,7 @@ export function generateCity(cfgIn, onProgress) {
           x0: fx0, z0: fz0, x1: fx1, z1: fz1, face: front.side, kind, mirror: crng.chance(0.5), G: GROUND, flowers: cfg.flowers,
           building: (p) => makeBuilding(world, {
             detail: cfg.detail, arcade: true, eaves: !!STYLE.eaves, rustic: !!STYLE.rustic,
-            x0: p.x0, z0: p.z0, x1: p.x1, z1: p.z1,
+            x0: p.x0, z0: p.z0, x1: p.x1, z1: p.z1, noStairs: p.noStairs,
             floors: lot.floors, pitch: cfg.pitch, groundY: GROUND,
             style: 'mid', facing: p.facing, theme,
             roofAccess: cfg.roofAccess, useStairs: cfg.useStairs, stairStyle: cfg.stairStyle, lights: cfg.lights,
@@ -323,7 +326,9 @@ export function generateCity(cfgIn, onProgress) {
         }, crng);
         if (cy) {
           courtyards.push(cy);
-          for (const rec of cy.wings) {
+          // the stair wing is furnished first: each other wing's rooms are then
+          // judged reachable (up that stair, through the openings) as it will stand
+          for (const rec of [...cy.wings].sort((a, b) => (b.core ? 1 : 0) - (a.core ? 1 : 0))) {
             buildings.push(rec);
             if (cfg.furnish) {
               const f = furnish(world, rec, crng, { useStairs: cfg.useStairs });
@@ -638,10 +643,13 @@ export function generateCity(cfgIn, onProgress) {
   // their own random stream, so a city's blocks and other spawns are the same
   // with fish on or off
   if (cfg.fish) spawns = spawns.concat(fishSpawns(world, makeRng((cfg.seed ^ 0x0f15b0a7) >>> 0)));
+  // ---- hostile mobs: kept apart from the spawns, so they only come on request ----
+  const hostiles = hostileSpawns(world, plan, buildings, makeRng((cfg.seed ^ 0x40571e) >>> 0),
+    { count: cfg.hostileCount, style: cfg.cityStyle, top: GROUND + 90, bottom: GROUND - 4 });
 
   const shell = cfg.terrain ? terrainShell(plan, cfg.terrain, GROUND, cfg.cityStyle) : null;
-  const stats = summarise(world, plan, buildings, cfg, { farms, beds, spawns, bell, transit, wall, ranches, landmarks, hills, stairRuns, reach, canal, centre, streets, harbour, skirt, cutFaces, bridges, megaliths, ponds, courtyards, unsupported: stats_unsupported });
-  return { world, plan, buildings, cfg, stats, shell, bridges, farms, ranches, spawns, bell, transit, wall, landmarks, canal, centre, streets, harbour, harbourPlan, megaliths, ponds, courtyards,
+  const stats = summarise(world, plan, buildings, cfg, { farms, beds, spawns, bell, transit, wall, ranches, landmarks, hills, stairRuns, reach, canal, centre, streets, harbour, skirt, cutFaces, bridges, megaliths, ponds, courtyards, hostiles, unsupported: stats_unsupported });
+  return { world, plan, buildings, cfg, stats, shell, bridges, farms, ranches, spawns, bell, transit, wall, landmarks, canal, centre, streets, harbour, harbourPlan, megaliths, ponds, courtyards, hostiles,
     hills, stairRuns, reach, groundAt: (x, z) => GROUND + elevAt(x, z) };
 }
 
@@ -1610,6 +1618,7 @@ function summarise(world, plan, buildings, cfg, life = {}) {
     twisted: buildings.filter((b) => b.twist).length,
     shapes: buildings.filter((b) => b.shape).map((b) => b.shape),
     courtyards: (life.courtyards || []).map((c) => c.kind),
+    hostiles: (life.hostiles || []).length,
     torii: plan.lots.reduce((n, l) => n + ((l.torii && l.torii.length) || 0), 0),
     stoneLanterns: plan.lots.reduce((n, l) => n + ((l.stoneLanterns && l.stoneLanterns.length) || 0), 0),
     pondsDeep: (life.ponds || []).filter((p) => p.deep > 0).length,

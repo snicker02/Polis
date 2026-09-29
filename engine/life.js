@@ -755,7 +755,8 @@ export function furnish(world, rec, rng, opts = {}) {
 function roomsReachable(world, rec, plans) {
   const passable = (x, y, z) => { const id = world.get(x, y, z); return id === -1 || MATERIALS.isPassable(id); };
   const stand = (x, y, z) => solidAt(world, x, y - 1, z) && passable(x, y, z) && passable(x, y + 1, z);
-  const r0 = rec.rects[0];
+  // (a wing sharing a stair is walked over its whole block, as verify does)
+  const r0 = rec.verifyBox || rec.rects[0];
   const inB = (x, z) => x >= r0.x0 - 1 && x <= r0.x1 + 1 && z >= r0.z0 - 1 && z <= r0.z1 + 1;
   const key = (x, y, z) => x + ',' + y + ',' + z;
   const seen = new Set([key(...rec.outside)]), q = [rec.outside];

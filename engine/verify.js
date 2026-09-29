@@ -10,9 +10,12 @@ import { MATERIALS } from './materials.js';
 
 export function verifyBuilding(world, rec, opts = {}) {
   const pad = 2;
-  const bx0 = rec.x0 - pad, bx1 = rec.x1 + pad;
-  const bz0 = rec.z0 - pad, bz1 = rec.z1 + pad;
-  const by0 = rec.groundY - 1, by1 = (rec.topY || rec.roofY) + 5;
+  // a wing that shares a stair is walked over the whole block it belongs to
+  // (rec.verifyBox); floors still count only inside the wing's own rects
+  const box = rec.verifyBox || rec;
+  const bx0 = box.x0 - pad, bx1 = box.x1 + pad;
+  const bz0 = box.z0 - pad, bz1 = box.z1 + pad;
+  const by0 = rec.groundY - 1, by1 = Math.max(rec.topY || rec.roofY, (rec.verifyBox && rec.verifyBox.topY) || 0) + 5;
   const limit = opts.limit || 400000;
 
   const solid = (x, y, z) => {

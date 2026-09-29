@@ -13,6 +13,7 @@
 
 import { MATERIALS } from './materials.js';
 import { toJava, javaSignText } from './java-blocks.js';
+import { HOSTILE_KINDS } from './hostiles.js';
 import { javaEntity, javaEntityPos } from './java-entities.js';
 
 // ---- big-endian NBT ------------------------------------------------------
@@ -286,5 +287,25 @@ export function javaPackFiles(structures, opts = {}) {
     'say Polis: done.',
   ];
   files.push({ name: `data/${ns}/function/build.mcfunction`, text: lines.join('\n') + '\n' });
+  // hostile mobs, on demand, from the same corner: the ground forceloaded first
+  // (as build does), each kept (PersistenceRequired) and tagged for clearing
+  const hostiles = opts.hostiles || [];
+  if (hostiles.length && opts.box) {
+    const b = opts.box;
+    files.push({ name: `data/${ns}/function/hostiles.mcfunction`, text: [
+      '# Polis: hostile mobs, all untouched by daylight. Stand where you ran build and run this.',
+      `# Remove them again with /function ${ns}:hostiles_clear.`,
+      `say Polis: summoning ${hostiles.length} hostile mobs...`,
+      ...areas.map(([ax, az, bx, bz]) => `forceload add ~${ax} ~${az} ~${bx} ~${bz}`),
+      ...hostiles.map((p) => `summon ${HOSTILE_KINDS[p.type].java} ~${p.x - b.x0} ~${p.y - b.y0} ~${p.z - b.z0} {PersistenceRequired:1b,Tags:["polis_hostile"]}`),
+      ...areas.map(([ax, az, bx, bz]) => `forceload remove ~${ax} ~${az} ~${bx} ~${bz}`),
+      'say Polis: done. Creepers and endermen can damage blocks: /gamerule mobGriefing false stops that.',
+    ].join('\n') + '\n' });
+    files.push({ name: `data/${ns}/function/hostiles_clear.mcfunction`, text: [
+      '# Polis: removes the hostile mobs Polis summoned.',
+      'kill @e[tag=polis_hostile]',
+      'say Polis: hostile mobs cleared.',
+    ].join('\n') + '\n' });
+  }
   return files;
 }

@@ -16,7 +16,7 @@ import { buildPregenPack, pregenFileName, siteRegion, viewRegion, pregenCommand,
 import { decodeNbt } from './tools/nbt-read.js';
 import { THEMES } from './engine/materials.js';
 
-const VERSION = '0.23.1';
+const VERSION = '0.24.0';
 const $ = (id) => document.getElementById(id);
 const numVal = (id) => Number($(id).value);      // readCfg has its own local num()
 
@@ -24,9 +24,9 @@ const SLIDERS = {
   size: 0, minBlock: 0, blockIrregularity: 2, avenueWidth: 0, streetWidth: 0,
   downtownRadius: 2, zoneNoise: 2, parkChance: 2, lotDowntown: 0, lotSuburb: 0,
   maxFloors: 0, pitch: 0, setbackEvery: 0, bw: 0, bd: 0, floors: 0, clip: 0,
-  farmChance: 2, pondChance: 2, twistChance: 2, courtyardChance: 2, villagers: 0, wallHeight: 0, foundation: 0, clearAbove: 0, hills: 0, golemsPer10: 0,
+  farmChance: 2, pondChance: 2, twistChance: 2, courtyardChance: 2, hostileCount: 0, villagers: 0, wallHeight: 0, foundation: 0, clearAbove: 0, hills: 0, golemsPer10: 0,
 };
-const CHECKS = ['setback', 'roofAccess', 'useStairs', 'lights', 'lamps', 'trees', 'markings', 'landmarks', 'canal', 'harbour', 'bridges', 'detail', 'streetSigns', 'fish', 'megaliths'];
+const CHECKS = ['setback', 'roofAccess', 'useStairs', 'lights', 'lamps', 'trees', 'markings', 'landmarks', 'canal', 'harbour', 'bridges', 'detail', 'streetSigns', 'fish', 'megaliths', 'hostiles'];
 
 let renderer = null;
 let result = null;       // { world, plan, buildings, cfg, stats }
@@ -191,6 +191,7 @@ function readCfg() {
   cfg.pondChance = num('pondChance');
   cfg.twistChance = num('twistChance');
   cfg.courtyardChance = num('courtyardChance');
+  cfg.hostileCount = num('hostileCount');
   for (const c of CHECKS) cfg[c] = $(c).checked;
   if ($('mode').value === 'city') {
     cfg.size = num('size');
@@ -382,6 +383,7 @@ function showStats(mesh, times) {
     if (s.fish) line('fish', String(s.fish));
     if (s.twisted) line('shaped towers', (() => { const c = {}; for (const n of s.shapes || []) c[n] = (c[n] || 0) + 1; return Object.entries(c).map(([k, v]) => `${v} ${k.replace('-', ' ')}`).join(', '); })());
     if (s.courtyards && s.courtyards.length) line('courtyard blocks', s.courtyards.join(', '));
+    if (s.hostiles) line('hostile mobs', `${s.hostiles}${result && result.cfg.hostiles ? ' (summoned by populate)' : ' (via /function …/hostiles)'}`);
     if (s.megaliths && s.megaliths.length) line('standing stones', s.megaliths.join(', '));
     if (s.railLines) line('rail lines / bridges / carts', `${s.railLines} / ${s.railBridges} / ${s.carts}` + (s.railLoop ? ' · loop' : ''));
     if (s.wallHeight) line('perimeter wall', `${s.wallHeight} high · ${s.gates} gates`);
@@ -777,7 +779,8 @@ async function exportJava() {
   });
   for (const t of tiles) t.nbt = await gzip(t.nbt);
   const ns = cityNs.replace(/[^a-z0-9_]/g, '');
-  const files = javaPackFiles(tiles, { namespace: ns, description: summaryLine(), name: cityName() });
+  const files = javaPackFiles(tiles, { namespace: ns, description: summaryLine(), name: cityName(),
+    hostiles: result.hostiles || [], box: result.world.box });
   // a note in the pack, since a datapack has nowhere else to say this
   files.push({
     name: 'polis-readme.txt',
@@ -812,6 +815,7 @@ async function doExport(kind) {
     const opts = {
       base: base(), namespace: cityNs, prefix: 'c', ...exportOpts(),
       seed: result.cfg.seed, spawns: result.spawns || [],
+      hostiles: result.hostiles || [], hostilesInPopulate: !!result.cfg.hostiles,
       summary: summaryLine(),
       packName: `Polis ${cityNs}`,
       description: `/function ${cityNs}/build_centered then populate_centered · Polis v${VERSION}`,

@@ -41,7 +41,8 @@ export default async function run(ctx) {
       const passable = (x, y, z) => { const id = w.get(x, y, z); return id === -1 || MATERIALS.isPassable(id); };
       const solid = (x, y, z) => { const id = w.get(x, y, z); return id !== -1 && !MATERIALS.isPassable(id); };
       const stand = (x, y, z) => solid(x, y - 1, z) && passable(x, y, z) && passable(x, y + 1, z);
-      const r0 = b.rects[0];
+      // (a courtyard wing that shares the block's one stair is walked over the block)
+      const r0 = b.verifyBox || b.rects[0];
       const inB = (x, z) => x >= r0.x0 - 1 && x <= r0.x1 + 1 && z >= r0.z0 - 1 && z <= r0.z1 + 1;
       const key = (x, y, z) => x + ',' + y + ',' + z;
       const seen = new Set([key(...b.outside)]), q = [b.outside];

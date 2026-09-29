@@ -134,12 +134,12 @@
   }
 </style>
 </head>
-<body class="mode-city" data-version="0.23.1">
+<body class="mode-city" data-version="0.24.0">
 <div id="app">
   <div id="panel">
     <div id="panelScroll">
       <h1>PO<span>L</span>IS</h1>
-      <div class="sub">procedural city → Minecraft Bedrock · v0.23.1</div>
+      <div class="sub">procedural city → Minecraft Bedrock · v0.24.0</div>
 
       <fieldset>
         <legend>Mode</legend>
@@ -276,6 +276,8 @@
           <label class="chk"><input type="checkbox" id="flowers" checked>Flowers</label>
           <label class="chk city-only"><input type="checkbox" id="fish" checked>Fish in ponds and canal</label>
           <label class="chk city-only"><input type="checkbox" id="megaliths" checked>Standing stones in parks</label>
+          <label class="chk city-only"><input type="checkbox" id="hostiles">Hostile mobs with populate (off: use /function …/hostiles)</label>
+          <div class="row city-only"><label>Hostile mobs</label><input type="range" id="hostileCount" min="0" max="80" step="1" value="24"><span class="val" id="hostileCount_v"></span></div>
         </div>
         <div class="hint">Beds, workstations, bookshelves and planters indoors. Villagers are summoned next to beds; iron golems patrol the streets, never indoors.</div>
       </fieldset>
@@ -335,6 +337,6 @@
     <div id="busy">generating…</div>
   </div>
 </div>
-<script type="module" src="./main.js?v=0.23.1"></script>
+<script type="module" src="./main.js?v=0.24.0"></script>
 </body>
 </html>

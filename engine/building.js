@@ -97,7 +97,10 @@ export function makeBuilding(world, spec, rng) {
   // Tries each kind in preference order, both orientations, first with open
   // floor all round, then (straight flights only) flush against the back wall.
   let core = null;   // {x0,z0,x1,z1, kind, alongX}
-  if (floors > 1) {
+  // noStairs: a wing of a larger building that shares another wing's stair
+  // (a courtyard block). All its floors are kept, its slabs are whole, it has
+  // no stair and no roof hut; it is reached through the wing it opens into.
+  if (floors > 1 && !spec.noStairs) {
     const prefs = stairPreference(spec.stairStyle || 'mixed', style, rng);
     const fit = (lo, hi, len, margin) => {
       const a = lo + margin, b = hi - margin - (len - 1);

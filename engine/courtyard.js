@@ -18,7 +18,8 @@
 //
 // Side wings run the full depth with their door on the street end; the back
 // wing has its door on its face to the court. Inside it is one building: the
-// double wall where two wings meet is opened on every floor (joinWings). The court is laid as a lawn
+// double wall where two wings meet is opened on every floor (joinWings), and
+// there is one stair, in the back wing; the side wings are reached through it. The court is laid as a lawn
 // with a path from the street to the back wing's door, flowers along its
 // edges, and a lantern post.
 //
@@ -90,8 +91,10 @@ export function makeCourtyard(world, spec, rng) {
   const courtRect = kind === 'U' ? F.rect(0, D - t - 1, t, W - t - 1)
     : !spec.mirror ? F.rect(0, D - t - 1, t, W - 1) : F.rect(0, D - t - 1, 0, W - t - 1);
   const court = courtRect;
+  // one stair for the whole block: the back wing's (in a U it is the middle);
+  // the side wings are built without one and reached through the openings
   for (const p of parts) {
-    const rec = spec.building({ ...p.r, facing: face, role: p.role });
+    const rec = spec.building({ ...p.r, facing: face, role: p.role, noStairs: p.role !== 'back' });
     if (!rec) return null;                            // all wings or none
     rec.courtyard = { kind, role: p.role };
     wings.push(rec);
@@ -101,6 +104,10 @@ export function makeCourtyard(world, spec, rng) {
   if (new Set(wings.map((w) => w.roofY)).size !== 1 || new Set(wings.map((w) => w.floors)).size !== 1) return null;
   // one block inside too: the walls where two wings meet come down
   const joins = joinWings(world, wings);
+  // every wing is walked over the whole block (the stair is in the back wing)
+  const vb = { x0: Math.min(...wings.map((w) => w.x0)), z0: Math.min(...wings.map((w) => w.z0)),
+    x1: Math.max(...wings.map((w) => w.x1)), z1: Math.max(...wings.map((w) => w.z1)), topY: Math.max(...wings.map((w) => w.topY)) };
+  for (const w of wings) { w.verifyBox = vb; w.sharedStair = !w.core; }
 
   // ---- the court: a lawn, a path to the back wing's door, flowers, a lantern post
   for (let z = court.z0; z <= court.z1; z++)

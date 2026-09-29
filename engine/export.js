@@ -17,7 +17,7 @@ import { makeRng } from './rng.js';
 // Must match main.js VERSION, package.json and index.html data-version;
 // tools/validate.js fails if they drift. The app refuses to export when the
 // browser has mixed cached copies of old and new files.
-export const POLIS_VERSION = '0.23.1';
+export const POLIS_VERSION = '0.24.0';
 
 export const CHUNK = 64;          // Bedrock structure limit per horizontal axis
 export const GROUND_DROP = 2;     // base layer y=0 sits 2 below feet; surface y=1 replaces the block you stand on
@@ -265,6 +265,7 @@ export const SUMMON_IDS = { minecart: 'minecraft:minecart', boat: 'minecraft:boa
 // fish despawns like a wild one once the player is away. The name form of
 // /summon is <entity> <name> <position>.
 export const FISH = new Set(['cod', 'salmon', 'tropicalfish']);
+import { HOSTILE_KINDS } from './hostiles.js';
 const FARM_ANIMALS = ['cow', 'sheep', 'pig', 'chicken'];
 
 // build     blocks only, safe to rerun; ends by adding ticking areas
@@ -292,6 +293,16 @@ export function functionFiles(tiles, world, opts = {}) {
   const animals = spawns.filter((p) => FARM_ANIMALS.includes(p.type));
   const fish = spawns.filter((p) => FISH.has(p.type));
   const summoned = carts.concat(boats, fish);
+  // hostile mobs: their own functions always; populate too when asked
+  const hostiles = opts.hostiles || [];
+  const hostLine = (p, dx, dz) => `summon ${HOSTILE_KINDS[p.type].be} ${p.name} ${rel(p.x - dx)} ${rel(p.y - GROUND_DROP)} ${rel(p.z - dz)}`;
+  const inPop = !!opts.hostilesInPopulate && hostiles.length > 0;
+  const kindsIn = [...new Set(hostiles.map((p) => p.type))];
+  const hostileWarnings = [
+    ...(kindsIn.some((k) => k === 'creeper' || k === 'enderman') ? ['say Polis: creepers and endermen can damage blocks. /gamerule mobgriefing false stops that.'] : []),
+    ...(kindsIn.some((k) => ['pillager', 'vindicator', 'evoker', 'witch', 'zoglin'].includes(k)) ? ['say Polis: illagers and zoglins attack villagers; iron golems fight back.'] : []),
+    'say Polis: hostile mobs do not appear on Peaceful.',
+  ];
   const sumLine = (p, dx, dz) => FISH.has(p.type)
     ? `summon ${SUMMON_IDS[p.type]} ${p.name || 'Fish'} ${rel(p.x - dx)} ${rel(p.y - GROUND_DROP)} ${rel(p.z - dz)}`
     : `summon ${SUMMON_IDS[p.type]} ${rel(p.x - dx)} ${rel(p.y - GROUND_DROP)} ${rel(p.z - dz)}`;
@@ -320,6 +331,7 @@ export function functionFiles(tiles, world, opts = {}) {
       `${animals.length} farm animals` + (summoned.length ? `, ${summonedNote()}...` : '...'),
     ...mobs.map((t) => load(t, dx, dz)),
     ...summoned.map((p) => sumLine(p, dx, dz)),
+    ...(inPop ? [`say Polis: and ${hostiles.length} hostile mobs.`, ...hostiles.map((p) => hostLine(p, dx, dz)), ...hostileWarnings] : []),
     ...areas.map((a) => `tickingarea remove ${a.name}`),
     'say Polis: done. Villagers take jobs from the workstations and claim beds over the next few minutes.',
     ...(boats.length ? [`say Polis: any boat that did not appear, run /function ${ns}/${dx === wb.x0 ? 'boats' : 'boats_centered'} from beside the water.`] : []),
@@ -335,6 +347,28 @@ export function functionFiles(tiles, world, opts = {}) {
     { name: `functions/${ns}/populate_centered.mcfunction`, fn: `${ns}/populate_centered`,
       text: populate(cx, cz, 'Polis: villagers, golems and minecarts (pairs with build_centered)') },
   ];
+  // hostile mobs, on demand: summon (from the build spot) and clear
+  if (hostiles.length) {
+    const hostileFn = (dx, dz, title) => [
+      `# ${title}`,
+      `# ${hostiles.length} hostile mobs, all untouched by daylight, named so they stay.`,
+      '# Summons only reach loaded chunks: run from the spot you ran build from, render distance up.',
+      `# Remove them again with /function ${ns}/hostiles_clear.`,
+      `say Polis: summoning ${hostiles.length} hostile mobs...`,
+      ...hostiles.map((p) => hostLine(p, dx, dz)),
+      ...hostileWarnings,
+    ].join('\n') + '\n';
+    files.push({ name: `functions/${ns}/hostiles.mcfunction`, fn: `${ns}/hostiles`,
+      text: hostileFn(wb.x0, wb.z0, 'Polis: hostile mobs (pairs with build)') });
+    files.push({ name: `functions/${ns}/hostiles_centered.mcfunction`, fn: `${ns}/hostiles_centered`,
+      text: hostileFn(cx, cz, 'Polis: hostile mobs (pairs with build_centered)') });
+    files.push({ name: `functions/${ns}/hostiles_clear.mcfunction`, fn: `${ns}/hostiles_clear`,
+      text: [
+        '# Polis: removes the hostile mobs Polis summoned (by kind and name), wherever they are loaded.',
+        ...kindsIn.map((k) => `kill @e[type=${HOSTILE_KINDS[k].be},name=${HOSTILE_KINDS[k].name}]`),
+        'say Polis: hostile mobs cleared.',
+      ].join('\n') + '\n' });
+  }
   // fallbacks for the summoned kinds: run near any that are missing
   for (const [group, list, noun] of [['minecarts', carts, 'minecarts'], ['boats', boats, 'boats at the dock and harbour'], ['fish', fish, 'fish in the ponds and canal']]) {
     if (!list.length) continue;

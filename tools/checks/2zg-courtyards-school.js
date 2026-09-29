@@ -25,7 +25,7 @@ export default async function run(ctx) {
   const OUT = { north: [0, -1], south: [0, 1], west: [-1, 0], east: [1, 0] };
 
   // ---- on flat ground ------------------------------------------------------------
-  let joinCount = 0, joinShut = 0, slabGap = 0, endsOpen = 0, parapetLeft = 0;
+  let joinCount = 0, joinShut = 0, slabGap = 0, endsOpen = 0, parapetLeft = 0, stairBad = 0, slabHole = 0;
   let built = 0, verified = 0, partitionBad = 0, overlap = 0, streetBad = 0, sideDoorBad = 0, backDoorBad = 0, pathBad = 0, flowerBad = 0, lampBad = 0, sameBad = 0;
   const kindsSeen = new Set();
   for (const [W, D] of [[16, 16], [19, 17], [22, 20], [26, 24]]) for (const face of ['south', 'north', 'east', 'west']) for (const kind of ['L', 'U']) for (const mirror of [false, true]) {
@@ -68,6 +68,15 @@ export default async function run(ctx) {
     for (let z = cy.court.z0; z <= cy.court.z1; z++) for (let x = cy.court.x0; x <= cy.court.x1; x++)
       if (onPath.has(x + ',' + z) && w.has(x, G + 1, z)) flowerBad++;
     if (!cy.lamp || !/lantern/.test(blk(w, ...cy.lamp)) || !/fence/.test(blk(w, cy.lamp[0], cy.lamp[1] - 1, cy.lamp[2])) || onPath.has(cy.lamp[0] + ',' + cy.lamp[2])) lampBad++;
+    // one stair for the whole block, in the back wing; the others keep every
+    // floor, with whole slabs (no stairwell cut through them)
+    const withStair = cy.wings.filter((b) => b.core);
+    if (withStair.length !== 1 || withStair[0].courtyard.role !== 'back') stairBad++;
+    for (const b of cy.wings.filter((x) => !x.core)) {
+      if (b.floors !== withStair[0]?.floors) stairBad++;
+      for (let k = 1; k < b.floors; k++)
+        for (let z = b.z0 + 1; z < b.z1; z++) for (let x = b.x0 + 1; x < b.x1; x++) if (!solid(w, x, b.floorYs[k], z)) slabHole++;
+    }
     // one block: one theme, one height
     if (new Set(cy.wings.map((b) => b.themeName)).size !== 1 || new Set(cy.wings.map((b) => b.roofY)).size !== 1) sameBad++;
     // one building inside: every join opened on every floor, floor to ceiling,
@@ -90,7 +99,7 @@ export default async function run(ctx) {
     }
   }
   check('courtyards: L and U built on every lot that fits, all four facings, both hands', built >= 40 && kindsSeen.size === 2, `${built} built`);
-  check('courtyards: every wing walks through', verified === built, `${verified}/${built}`);
+  check('courtyards: every wing walks through (the side wings up the back wing\'s stair)', verified === built, `${verified}/${built}`);
   check('courtyards: wings and court fill the footprint exactly, without overlap', partitionBad === 0 && overlap === 0, `${partitionBad} bad, ${overlap} overlaps`);
   check('courtyards: the court always opens onto the street', streetBad === 0, `${streetBad}`);
   check('courtyards: side wings open onto the street, the back wing onto the court', sideDoorBad === 0 && backDoorBad === 0, `${sideDoorBad} side, ${backDoorBad} back`);
@@ -100,6 +109,8 @@ export default async function run(ctx) {
   check('courtyards: no wall between wings: every join open on every floor, floor to ceiling', joinCount === 0 && joinShut === 0, `${joinCount} missing joins, ${joinShut} cells still shut`);
   check('courtyards: the floor runs on under every opening, and the join\'s end cells stay solid', slabGap === 0 && endsOpen === 0, `${slabGap} gaps, ${endsOpen} open ends`);
   check('courtyards: no parapet left over a join', parapetLeft === 0, `${parapetLeft}`);
+  check('courtyards: one stair for the whole block, in the back wing', stairBad === 0, `${stairBad}`);
+  check('courtyards: the stairless wings keep every floor, their slabs whole', slabHole === 0, `${slabHole} holes`);
 
   // ---- in cities ------------------------------------------------------------------------
   const kinds = {};

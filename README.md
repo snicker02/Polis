@@ -1,4 +1,4 @@
-# Polis v0.23.1
+# Polis v0.24.0
 
 *Created with help from Claude AI.*
 
@@ -754,6 +754,50 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.24.0** — Hostile mobs, on request.
+
+Off by default. Every pack now carries three functions: hostiles and
+hostiles_centered (pair them with build and build_centered, run from the same
+spot) summon the city's hostile mobs, and hostiles_clear removes exactly the
+ones Polis summoned. A "Hostile mobs with populate" checkbox (unchecked) has
+populate bring them in with everything else instead, while its ticking areas
+still hold the whole city loaded, so none is lost to an unloaded chunk; the
+"Hostile mobs" slider sets how many (24).
+
+Only kinds daylight leaves alone, a mix for each style: creepers, spiders,
+endermen, witches, pillagers and vindicators in most cities; an illager raid
+(pillagers, vindicators, evokers, witches) in medieval towns and villages;
+husks in the desert; and for the Nether style its own fauna, wither skeletons,
+blazes, magma cubes, zoglins and zombified piglins. On Bedrock they are summoned
+with a name, which keeps them from despawning; on Java they carry
+PersistenceRequired and a tag for clearing, and the ground is forceloaded
+first, as build does. They stand on streets, squares, parks and pavements with
+three blocks clear over them (an enderman is nearly three tall), at least five
+apart, never within three of a doorstep and never inside a building. Chat warns
+what the mix will do: creepers and endermen damage blocks
+(/gamerule mobgriefing false stops that), illagers and zoglins attack
+villagers, and nothing hostile appears on Peaceful. They come from their own
+random stream, so a city is the same block for block with them or without.
+
+New section 2zi (20 checks); 6e knows the new commands.
+
+**0.23.2** — One staircase per courtyard block.
+
+With the wings opened into one another, each keeping its own stair was two or
+three staircases in one building. Now only the back wing (in a U, the middle
+one) has a stair; the side wings are built with a new makeBuilding option,
+noStairs, which keeps all their floors, lays every slab whole and puts no roof
+hut on them. They are reached up the back wing's stair and through the
+openings. The walk-through (verify.js) and the rooms check (roomsReachable)
+walk a shared-stair wing over its whole block (rec.verifyBox) while still
+counting only the wing's own floors, and the stair wing is furnished first, so
+the other wings' rooms are judged against it as it will stand.
+
+2zg checks it (24 checks now): exactly one stair per block, in the back wing;
+the stairless wings keep every floor with whole slabs; every wing walks
+through, the side wings up the back wing's stair. 2k's room walk knows about
+shared stairs too.
 
 **0.23.1** — A courtyard block is one building inside.
 
