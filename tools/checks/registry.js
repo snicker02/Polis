@@ -44,6 +44,7 @@ export const SECTIONS = [
   { id: '2zg', file: '2zg-courtyards-school.js',              group: 'fast' },
   { id: '2zh', file: '2zh-nether-eastasian.js',               group: 'fast' },
   { id: '2zi', file: '2zi-hostile-mobs.js',                   group: 'fast' },
+  { id: '2zj', file: '2zj-fortress-dome.js',                  group: 'fast' },
   { id: '2v', file: '2v-java-worlds.js',                      group: 'fast' },
   { id: '2w', file: '2w-square-stadium-cemetery-allotments.js', group: 'slow' },
   { id: '2x', file: '2x-village-style.js',                    group: 'fast' },

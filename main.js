@@ -16,7 +16,7 @@ import { buildPregenPack, pregenFileName, siteRegion, viewRegion, pregenCommand,
 import { decodeNbt } from './tools/nbt-read.js';
 import { THEMES } from './engine/materials.js';
 
-const VERSION = '0.24.0';
+const VERSION = '0.25.0';
 const $ = (id) => document.getElementById(id);
 const numVal = (id) => Number($(id).value);      // readCfg has its own local num()
 
@@ -26,7 +26,7 @@ const SLIDERS = {
   maxFloors: 0, pitch: 0, setbackEvery: 0, bw: 0, bd: 0, floors: 0, clip: 0,
   farmChance: 2, pondChance: 2, twistChance: 2, courtyardChance: 2, hostileCount: 0, villagers: 0, wallHeight: 0, foundation: 0, clearAbove: 0, hills: 0, golemsPer10: 0,
 };
-const CHECKS = ['setback', 'roofAccess', 'useStairs', 'lights', 'lamps', 'trees', 'markings', 'landmarks', 'canal', 'harbour', 'bridges', 'detail', 'streetSigns', 'fish', 'megaliths', 'hostiles'];
+const CHECKS = ['setback', 'roofAccess', 'useStairs', 'lights', 'lamps', 'trees', 'markings', 'landmarks', 'canal', 'harbour', 'bridges', 'detail', 'streetSigns', 'fish', 'megaliths', 'hostiles', 'dome'];
 
 let renderer = null;
 let result = null;       // { world, plan, buildings, cfg, stats }
@@ -383,6 +383,7 @@ function showStats(mesh, times) {
     if (s.fish) line('fish', String(s.fish));
     if (s.twisted) line('shaped towers', (() => { const c = {}; for (const n of s.shapes || []) c[n] = (c[n] || 0) + 1; return Object.entries(c).map(([k, v]) => `${v} ${k.replace('-', ' ')}`).join(', '); })());
     if (s.courtyards && s.courtyards.length) line('courtyard blocks', s.courtyards.join(', '));
+    if (s.dome) line('dome', `radius ${s.dome.radius}, ${s.dome.height} high, ${s.dome.cells.toLocaleString()} blocks, ${s.dome.doors} doors`);
     if (s.hostiles) line('hostile mobs', `${s.hostiles}${result && result.cfg.hostiles ? ' (summoned by populate)' : ' (via /function …/hostiles)'}`);
     if (s.megaliths && s.megaliths.length) line('standing stones', s.megaliths.join(', '));
     if (s.railLines) line('rail lines / bridges / carts', `${s.railLines} / ${s.railBridges} / ${s.carts}` + (s.railLoop ? ' · loop' : ''));

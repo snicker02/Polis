@@ -69,7 +69,11 @@ export function chooseLandmarks(plan, cfg, hills = null, canal = null) {
     if (pick) { pick.l.landmark = kind; out.push(pick.l); }
   };
   const downtown = all.filter((c) => c.l.style !== 'house' && c.d <= reach).sort((p, q) => p.d - q.d);
-  for (const kind of ['townhall', 'clocktower', 'library', 'market', 'church']) take(kind, downtown);
+  // a walled fortress town: the keep takes the heart of the town first, the
+  // market square the next nearest lot
+  const fortress = styleOf(cfg.cityStyle).keepAtCentre;
+  if (fortress) { take('castle', all.slice().sort((p, q) => p.d - q.d)); take('market', all.slice().sort((p, q) => p.d - q.d)); }
+  for (const kind of ['townhall', 'clocktower', 'library', 'market', 'church']) if (!(fortress && kind === 'market')) take(kind, downtown);
   const maxD = Math.max(1, ...all.map((c) => c.d));
   // the school wants a big lot (building, porch, yard and a sports field);
   // if the city has none, it makes do with a smaller one
@@ -100,7 +104,8 @@ export function chooseLandmarks(plan, cfg, hills = null, canal = null) {
   }
   if (!out.some((l) => l.landmark === 'lighthouse')) take('lighthouse', all.slice().sort((p, q) => q.d - p.d));
   const elev = (c) => (hills ? hills.elev[Math.round(c.cz) * plan.W + Math.round(c.cx)] : 0);
-  take('castle', all.slice().sort((p, q) => elev(q) - elev(p) || q.a - p.a));
+  // a walled fortress town keeps its castle at the heart; elsewhere it takes the highest hill
+  if (!fortress) take('castle', all.slice().sort((p, q) => elev(q) - elev(p) || q.a - p.a));
 
   // the town square belongs among the shops and offices, near the middle
   take('townsquare', downtown.slice().sort((p, q) => p.d - q.d));

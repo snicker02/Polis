@@ -15,6 +15,7 @@ function towerShape(u, shapes = TOWER_SHAPES) {
 import { plantBeds } from './building.js';
 import { courtyardPlan, makeCourtyard } from './courtyard.js';
 import { hostileSpawns } from './hostiles.js';
+import { buildDome } from './dome.js';
 import { megalith } from './megaliths.js';
 import { fishSpawns } from './fish.js';
 import { generatePlan, frontage, USE } from './plan.js';
@@ -88,6 +89,7 @@ export const DEFAULTS = {
   courtyardChance: 0.3,      // share of mid-rise lots, where one fits, built as an L or U round a courtyard
   hostiles: false,           // populate also summons hostile mobs (the hostiles functions are always there)
   hostileCount: 24,          // how many: daylight-proof kinds, a mix for the city's style
+  dome: false,               // a glass dome over the whole city, sealed all round (invented cities only)
   furnish: true,
   flowers: true,
   villagers: 60,
@@ -126,6 +128,18 @@ export function generateCity(cfgIn, onProgress) {
     // where it started, so a deliberate setting is left alone
     if (cfg.farmChance === DEFAULTS.farmChance) cfg.farmChance = 0.45;
     if (cfg.ranchChance === DEFAULTS.ranchChance) cfg.ranchChance = 0.18;
+  }
+  // a walled fortress town: a curtain wall, narrow streets, small lots, low
+  // buildings, no trams; sliders still at their defaults are set for it
+  if (STYLE.fortress) {
+    cfg.wallHeight = Math.max(cfg.wallHeight | 0, 9);
+    if (cfg.streetWidth === DEFAULTS.streetWidth) cfg.streetWidth = 3;
+    if (cfg.avenueWidth === DEFAULTS.avenueWidth) cfg.avenueWidth = 5;
+    if (cfg.lotDowntown === DEFAULTS.lotDowntown) cfg.lotDowntown = 16;
+    if (cfg.lotSuburb === DEFAULTS.lotSuburb) cfg.lotSuburb = 9;
+    if (cfg.maxFloors === DEFAULTS.maxFloors) cfg.maxFloors = 6;
+    if (cfg.parkChance === DEFAULTS.parkChance) cfg.parkChance = 0.05;
+    cfg.transit = 'roads';
   }
   const rng = makeRng(cfg.seed);
   const plan = generatePlan(cfg, rng);
@@ -497,7 +511,7 @@ export function generateCity(cfgIn, onProgress) {
 
   clearDoorways(world, buildings);
   trimOverRails(world, transit);
-  const wall = perimeterWall(world, plan, cfg);
+  const wall = STYLE.fortress ? fortressWall(world, plan, cfg) : perimeterWall(world, plan, cfg);
 
   // ---- the village ---------------------------------------------------------
   // the town hall's bell is the village bell; otherwise one goes in a plaza or park
@@ -646,10 +660,14 @@ export function generateCity(cfgIn, onProgress) {
   // ---- hostile mobs: kept apart from the spawns, so they only come on request ----
   const hostiles = hostileSpawns(world, plan, buildings, makeRng((cfg.seed ^ 0x40571e) >>> 0),
     { count: cfg.hostileCount, style: cfg.cityStyle, top: GROUND + 90, bottom: GROUND - 4 });
+  // ---- the dome: last of all, over everything (not on real ground) ------------
+  const dome = cfg.dome && !cfg.terrain
+    ? buildDome(world, GROUND, { ground: remapTable(STYLE, FLOWERS).get(MAT.GRASS) ?? MAT.GRASS })
+    : null;
 
   const shell = cfg.terrain ? terrainShell(plan, cfg.terrain, GROUND, cfg.cityStyle) : null;
-  const stats = summarise(world, plan, buildings, cfg, { farms, beds, spawns, bell, transit, wall, ranches, landmarks, hills, stairRuns, reach, canal, centre, streets, harbour, skirt, cutFaces, bridges, megaliths, ponds, courtyards, hostiles, unsupported: stats_unsupported });
-  return { world, plan, buildings, cfg, stats, shell, bridges, farms, ranches, spawns, bell, transit, wall, landmarks, canal, centre, streets, harbour, harbourPlan, megaliths, ponds, courtyards, hostiles,
+  const stats = summarise(world, plan, buildings, cfg, { farms, beds, spawns, bell, transit, wall, ranches, landmarks, hills, stairRuns, reach, canal, centre, streets, harbour, skirt, cutFaces, bridges, megaliths, ponds, courtyards, hostiles, dome, unsupported: stats_unsupported });
+  return { world, plan, buildings, cfg, stats, shell, bridges, farms, ranches, spawns, bell, transit, wall, landmarks, canal, centre, streets, harbour, harbourPlan, megaliths, ponds, courtyards, hostiles, dome,
     hills, stairRuns, reach, groundAt: (x, z) => GROUND + elevAt(x, z) };
 }
 
@@ -1182,6 +1200,181 @@ function applyStyle(world, plan, style, groundAt) {
 // and stone base are already solid, so water has no way in at any height up
 // to the top of the wall. Each side gets a double wooden door in the middle:
 // closed doors block water too, so the gates do not weaken it.
+// ---- the curtain wall of a walled fortress town ---------------------------------------
+// Three thick and at least nine high, on the city's three outermost rings (the
+// ring road inside keeps the rest of its width). The top is a walk along the
+// whole wall, merlons on its outer edge. Towers stand astride the wall every
+// ~22 blocks, projecting two blocks outward: solid to the walk, then a room at
+// walk height with a door onto the walk on either side, arrow slits, and a
+// crenellated roof. Each gate is a passage through the wall's three rings,
+// doors on its outer face, with a gatehouse tower either side; beside each
+// gatehouse a flight of steps is cut into the inner face of the wall up to the
+// walk, entered from the street at its foot.
+function fortressWall(world, plan, cfg) {
+  const h = Math.max(9, Math.min(14, cfg.wallHeight | 0));
+  const T = 3;
+  const { W, D, mask } = plan;
+  const inCity = (x, z) => x >= 0 && z >= 0 && x < W && z < D && mask[z * W + x] === 1;
+  // depth of every city cell from the edge (0 = the ring), up to T
+  const depth = new Map();
+  let frontier = [];
+  for (let z = 0; z < D; z++)
+    for (let x = 0; x < W; x++) {
+      if (!inCity(x, z)) continue;
+      let edge = false;
+      for (let dz = -1; dz <= 1 && !edge; dz++) for (let dx = -1; dx <= 1 && !edge; dx++) if (!inCity(x + dx, z + dz)) edge = true;
+      if (edge) { depth.set(x + ',' + z, 0); frontier.push([x, z]); }
+    }
+  for (let d = 1; d <= T; d++) {
+    const next = [];
+    for (const [x, z] of frontier)
+      for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
+        const nx = x + dx, nz = z + dz, k = nx + ',' + nz;
+        if (!inCity(nx, nz) || depth.has(k)) continue;
+        depth.set(k, d); next.push([nx, nz]);
+      }
+    frontier = next;
+  }
+  const dAt = (x, z) => depth.get(x + ',' + z);
+  const isWall = (x, z) => { const d = dAt(x, z); return d !== undefined && d < T; };
+  const ring = [];
+  for (const [k, d] of depth) if (d === 0) ring.push(k.split(',').map(Number));
+  // the wall itself
+  for (const [k, d] of depth) {
+    if (d >= T) continue;
+    const [x, z] = k.split(',').map(Number);
+    world.set(x, 0, z, MAT.BASE);
+    for (let y = GROUND; y < GROUND + h; y++) world.set(x, y, z, MAT.WALL_BODY);
+    world.set(x, GROUND + h, z, MAT.WALL_CAP);
+    for (let y = GROUND + h + 1; y <= GROUND + h + 3; y++) world.clear(x, y, z);
+    if (d === 0 && (x + z) % 2 === 0) world.set(x, GROUND + h + 1, z, MAT.WALL_BODY);   // merlons on the outer edge
+  }
+  // the way out of a ring cell (a single axis where it can be read)
+  const outOf = (x, z) => {
+    for (const [f, [ox, oz]] of Object.entries(OUTWARD)) {
+      const side = [[oz, ox], [-oz, -ox]];
+      if (!inCity(x + ox, z + oz) && side.every(([a, b]) => dAt(x + a, z + b) === 0)) return { face: f, out: [ox, oz] };
+    }
+    return null;
+  };
+  // ---- gates: a passage through all three rings, doors on the outer face -----
+  const walkIn = (x, z) => {
+    const f1 = world.get(x, GROUND + 1, z), f2 = world.get(x, GROUND + 2, z);
+    return inCity(x, z) && !isWall(x, z) && world.has(x, GROUND, z) && (f1 === -1 || MATERIALS.isPassable(f1)) && f2 === -1;
+  };
+  let sx = 0, sz = 0;
+  for (const [x, z] of ring) { sx += x; sz += z; }
+  const mx = sx / ring.length, mz = sz / ring.length;
+  const CLOCKWISE = { north: 'east', east: 'south', south: 'west', west: 'north' };
+  const gates = [], towers = [], stairs = [];
+  const towerCells = (cx, cz, along, out) => {
+    const cells = [];
+    for (let a = -2; a <= 2; a++) for (let b = -2; b <= 2; b++) cells.push([cx + along[0] * a + out[0] * b, cz + along[1] * a + out[1] * b, a, b]);
+    return cells;
+  };
+  // a tower stands on the wall and beyond it, never on the town inside
+  const towerFits = (cx, cz, along, out) => towerCells(cx, cz, along, out).every(([x, z, , b]) => isWall(x, z) || (b <= -1 && !inCity(x, z)));
+  const tower = (cx, cz, along, out) => {
+    // 5x5 astride the wall, centred on the ring cell: solid to the walk, a room above
+    const cells = towerCells(cx, cz, along, out);
+    if (!towerFits(cx, cz, along, out)) return null;
+    const top = GROUND + h;
+    for (const [x, z, a, b] of cells) {
+      world.set(x, 0, z, MAT.BASE);
+      for (let y = 1; y <= top; y++) world.set(x, y, z, MAT.WALL_BODY);
+      const edge = Math.abs(a) === 2 || Math.abs(b) === 2;
+      if (edge) for (let y = top + 1; y <= top + 4; y++) world.set(x, y, z, MAT.WALL_BODY);
+      world.set(x, top + 5, z, MAT.WALL_CAP);
+      if (edge && (a + b) % 2 === 0) world.set(x, top + 6, z, MAT.WALL_BODY); else world.clear(x, top + 6, z);
+    }
+    for (const [x, z, a, b] of cells) if (!(Math.abs(a) === 2 || Math.abs(b) === 2)) for (let y = top + 1; y <= top + 4; y++) world.clear(x, y, z);
+    // arrow slits on the outer face and the two ends
+    for (const [a, b] of [[0, -2], [-2, 0], [2, 0]]) world.set(cx + along[0] * a + out[0] * b, top + 2, cz + along[1] * a + out[1] * b, MAT.BARS);
+    // doors onto the walk, either side, on the walk's inner row (b = 1)
+    const face = Object.entries(OUTWARD).find(([, v]) => v[0] === along[0] && v[1] === along[1])[0];
+    const back = Object.entries(OUTWARD).find(([, v]) => v[0] === -along[0] && v[1] === -along[1])[0];
+    for (const [a, f] of [[2, face], [-2, back]]) {
+      const x = cx + along[0] * a + out[0], z = cz + along[1] * a + out[1];
+      world.set(x, top + 1, z, doorId('spruce', DIR[f], false, 0));
+      world.set(x, top + 2, z, doorId('spruce', DIR[f], true, 0));
+    }
+    world.set(cx + out[0], top + 4, cz + out[1], MAT.LAMP_HANG);
+    const t = { at: [cx, top + 1, cz], along, out, top: top + 6 };
+    towers.push(t);
+    return t;
+  };
+  for (const face of ['north', 'south', 'west', 'east']) {
+    const [ox, oz] = OUTWARD[face];
+    const along = (face === 'north' || face === 'south') ? [1, 0] : [0, 1];
+    let best = null;
+    for (const [x, z] of ring) {
+      const o = outOf(x, z);
+      if (!o || o.face !== face) continue;
+      const x2 = x + along[0], z2 = z + along[1];
+      if (dAt(x2, z2) !== 0) continue;
+      const pair = [[x, z], [x2, z2]];
+      if (!pair.every(([a, b]) => !inCity(a + ox, b + oz) && [1, 2].every((k) => isWall(a - ox * k, b - oz * k)) && walkIn(a - ox * T, b - oz * T))) continue;
+      // room for a gatehouse tower either side
+      if (![-3, -2, -1, 2, 3, 4].every((k) => dAt(x + along[0] * k, z + along[1] * k) === 0)) continue;
+      const inw = [-ox, -oz];
+      if (!towerFits(x - along[0] * 3, z - along[1] * 3, along, inw) || !towerFits(x2 + along[0] * 3, z2 + along[1] * 3, along, inw)) continue;
+      const off = face === 'north' || face === 'south' ? Math.abs(x + 0.5 - mx) : Math.abs(z + 0.5 - mz);
+      if (!best || off < best.off) best = { pair, off };
+    }
+    if (!best) continue;
+    const [[gx, gz], [gx2, gz2]] = best.pair;
+    // the passage
+    for (const [a, b] of best.pair) for (let k = 0; k < T; k++) for (let y = GROUND + 1; y <= GROUND + 3; y++) world.clear(a - ox * k, y, b - oz * k);
+    const secondIsRight = CLOCKWISE[face] === (along[0] ? 'east' : 'south');
+    best.pair.forEach(([x, z], i) => {
+      const hinge = (i === 1) === secondIsRight ? 1 : 0;
+      world.set(x, GROUND + 1, z, doorId('spruce', DIR[face], false, hinge));
+      world.set(x, GROUND + 2, z, doorId('spruce', DIR[face], true, hinge));
+    });
+    // gatehouse: a tower either side
+    const inward = [-ox, -oz];
+    const tA = tower(gx - along[0] * 3, gz - along[1] * 3, along, inward);
+    const tB = tower(gx2 + along[0] * 3, gz2 + along[1] * 3, along, inward);
+    gates.push({ face, cells: best.pair, inside: best.pair.map(([a, b]) => [a - ox * T, b - oz * T]), towers: [tA, tB].filter(Boolean) });
+    // steps up to the walk, cut into the inner face beyond a gatehouse tower
+    // (whichever side has a straight enough stretch of wall)
+    const streetSide = ([x, z]) => walkIn(x + inward[0], z + inward[1]);
+    let run = null, dirv = null;
+    for (const [bx, bz, dv] of [[gx2, gz2, along], [gx, gz, [-along[0], -along[1]]]]) {
+      const r2 = [];
+      for (let i = 0; i <= h; i++) r2.push([bx + dv[0] * (6 + i) + inward[0] * 2, bz + dv[1] * (6 + i) + inward[1] * 2]);
+      if (r2.every(([x, z]) => dAt(x, z) === 2 && streetSide([x, z]))) { run = r2; dirv = dv; break; }
+    }
+    if (run) {
+      // run[h] is the foot, cut to street level; steps climb from run[h-1] back toward the tower
+      const [fx, fz] = run[h];
+      for (let y = GROUND + 1; y <= GROUND + h; y++) world.clear(fx, y, fz);
+      const up = dirv[0] === 1 ? WEIRDO.west : dirv[0] === -1 ? WEIRDO.east : dirv[1] === 1 ? WEIRDO.north : WEIRDO.south;
+      const steps = [];
+      for (let i = 0; i < h; i++) {
+        const [x, z] = run[h - 1 - i];
+        world.set(x, GROUND + 1 + i, z, stairId('stonebrick', up));
+        for (let y = GROUND + 2 + i; y <= GROUND + h; y++) world.clear(x, y, z);
+        steps.push([x, GROUND + 1 + i, z]);
+      }
+      stairs.push({ gate: face, foot: [fx, GROUND + 1, fz], steps });
+    }
+  }
+  // ---- towers along the wall, every ~22 blocks, clear of the gatehouses ------------
+  const taken = towers.map((t) => t.at);
+  for (const [x, z] of ring) {
+    const o = outOf(x, z);
+    if (!o) continue;
+    if (taken.some(([a, , b]) => Math.max(Math.abs(a - x), Math.abs(b - z)) < 22)) continue;
+    if (gates.some((g) => g.cells.some(([a, b]) => Math.max(Math.abs(a - x), Math.abs(b - z)) < 12))) continue;
+    if (stairs.some((st) => st.steps.concat([st.foot]).some(([a, , b]) => Math.max(Math.abs(a - x), Math.abs(b - z)) < 4))) continue;
+    const along = o.out[0] === 0 ? [1, 0] : [0, 1];
+    const t = tower(x, z, along, [-o.out[0], -o.out[1]]);
+    if (t) taken.push(t.at);
+  }
+  return { height: h, thickness: T, gates, ring, towers, stairs, fortress: true };
+}
+
 function perimeterWall(world, plan, cfg) {
   const h = Math.max(0, Math.min(12, cfg.wallHeight | 0));
   if (!h) return null;
@@ -1619,6 +1812,7 @@ function summarise(world, plan, buildings, cfg, life = {}) {
     shapes: buildings.filter((b) => b.shape).map((b) => b.shape),
     courtyards: (life.courtyards || []).map((c) => c.kind),
     hostiles: (life.hostiles || []).length,
+    dome: life.dome ? { radius: life.dome.R, height: life.dome.c, cells: life.dome.cells, doors: life.dome.doors.length } : null,
     torii: plan.lots.reduce((n, l) => n + ((l.torii && l.torii.length) || 0), 0),
     stoneLanterns: plan.lots.reduce((n, l) => n + ((l.stoneLanterns && l.stoneLanterns.length) || 0), 0),
     pondsDeep: (life.ponds || []).filter((p) => p.deep > 0).length,

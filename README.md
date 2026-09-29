@@ -1,4 +1,4 @@
-# Polis v0.24.0
+# Polis v0.25.0
 
 *Created with help from Claude AI.*
 
@@ -754,6 +754,47 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.25.0** — A walled fortress town, and a dome over the city.
+
+*Walled fortress* (a city style). The medieval palette inside a curtain wall
+three thick and at least nine high, built on the city's three outermost rings
+(the ring road's outer lanes; no building ever stands under it). Its top is a
+walk the whole way round with merlons on the outer edge. Towers stand astride
+the wall every ~22 blocks, projecting two blocks outward: solid to the walk,
+then a room at walk height with a door onto the walk either side, arrow slits,
+a lantern and a crenellated roof. Each gate is a passage right through the
+wall with a gatehouse tower either side (a gate goes only where both fit), and
+beside it a flight of steps cut into the wall's inner face climbs to the walk
+from a foot at street level. The keep (the castle) takes the heart of the town
+first, the market square the next nearest lot; streets and lots are narrower,
+buildings low, and there are no trams (sliders still at their defaults are set
+for it).
+
+*Dome* ("Glass dome over the whole city", off by default; invented cities
+only, since real ground outside a city is not flat). Half an ellipsoid of
+revolution over the whole city: its radius clears every block by four, and its
+height is the least that leaves three blocks of air over every block inside
+(a block at distance r and height h needs c >= (h+3)/√(1-r²/R²)), never flatter
+than 0.45 of the radius. Each column's shell runs from one above the lowest of
+its neighbours' surfaces up to its own and always keeps its surface cell, so
+the shell is sealed: nothing gets from outside to inside block by block. Glass
+between twelve quartz meridians, a quartz ring every sixteen blocks, a
+glowstone crown; the ground under it made whole in the style's own ground
+material; a double door at each compass point, in a column whose shell runs
+unbroken from the ground so the seal holds.
+
+*The voxel store* now keeps blocks west and north of the plan's edge (x and z
+from -512). Up to now anything there was dropped without a word; a dome over a
+city and a fortress tower standing out from its wall both reach there. Keys
+are exactly 32 bits (the export's key array is unsigned now).
+
+New section 2zj (22 checks): the store west and north of the plan; the
+fortress wall solid and three thick with no building under it, its walk,
+merlons, gates, gatehouses, tower rooms and doors, towers standing out, the
+stairs, the keep at the heart; the dome sealed (a flood of the air from
+outside), clear of every block by three, never over a block, on whole ground,
+its doors walkable, ribs, crown and the style's ground.
 
 **0.24.0** — Hostile mobs, on request.
 

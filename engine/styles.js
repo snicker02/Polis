@@ -303,6 +303,16 @@ export const STYLES = {
       market: [MAT.STONEBRICK, MAT.GRAVEL], wellRim: MAT.STONEBRICK, wellRoof: MAT.DEEPSLATE },
   },
 };
+// A walled fortress town: the medieval palette inside a curtain wall with
+// towers and gatehouses, the castle keep at its heart, narrow streets and small
+// lots (city.js: fortressWall, and the overrides in generateCity).
+STYLES.fortress = {
+  ...STYLES.medieval,
+  label: 'Walled fortress',
+  fortress: true,
+  keepAtCentre: true,
+  remap: { ...STYLES.medieval.remap, WALL_BODY: 'STONEBRICK', WALL_CAP: 'STONEBRICK' },
+};
 export const STYLE_NAMES = Object.keys(STYLES);
 export const styleOf = (name) => STYLES[name] || STYLES.modern;
 

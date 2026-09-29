@@ -7,8 +7,13 @@
 
 export const EMPTY = -1;
 
-// Key packing: x,z in [0,1023], y in [-64,959]  ->  fits in 30 bits.
-const KX = 1024, KZ = 1024, YOFF = 64;
+// Key packing: x,z in [-512,1535], y in [-64,959]  ->  fits in 32 bits.
+// (Up to 0.24 x and z had to be 0 or more, and anything west or north of the
+// plan was dropped without a word: a dome over a whole city, or a fortress
+// tower standing out from the wall, reaches past the plan's edge.)
+const XOFF = 512, ZOFF = 512;
+const KX = 2048, KZ = 2048, YOFF = 64;
+const K = (x, y, z) => ((y + YOFF) * KZ + (z + ZOFF)) * KX + (x + XOFF);
 
 export class VoxelWorld {
   constructor(opts = {}) {
@@ -20,21 +25,21 @@ export class VoxelWorld {
     this.maxX = -Infinity; this.maxY = -Infinity; this.maxZ = -Infinity;
   }
 
-  static key(x, y, z) { return ((y + YOFF) * KZ + z) * KX + x; }
+  static key(x, y, z) { return K(x, y, z); }
   static unkey(k) {
-    const x = k % KX; const r = (k - x) / KX;
-    const z = r % KZ; const y = (r - z) / KZ - YOFF;
-    return [x, y, z];
+    const xs = k % KX; const r = (k - xs) / KX;
+    const zs = r % KZ; const y = (r - zs) / KZ - YOFF;
+    return [xs - XOFF, y, zs - ZOFF];
   }
 
   inRange(x, y, z) {
-    return x >= 0 && x < KX && z >= 0 && z < KZ && y >= -YOFF && y < 960;
+    return x >= -XOFF && x < KX - XOFF && z >= -ZOFF && z < KZ - ZOFF && y >= -YOFF && y < 960;
   }
 
   set(x, y, z, id) {
     if (id === EMPTY || id === undefined || id === null) return this.clear(x, y, z);
     if (!this.inRange(x, y, z)) return false;
-    const k = ((y + YOFF) * KZ + z) * KX + x;
+    const k = K(x, y, z);
     if (!this.cells.has(k)) {
       if (this.cells.size >= this.budget) { this.overflow++; return false; }
     }
@@ -48,7 +53,7 @@ export class VoxelWorld {
 
   get(x, y, z) {
     if (!this.inRange(x, y, z)) return EMPTY;
-    const v = this.cells.get(((y + YOFF) * KZ + z) * KX + x);
+    const v = this.cells.get(K(x, y, z));
     return v === undefined ? EMPTY : v;
   }
 
@@ -56,7 +61,7 @@ export class VoxelWorld {
 
   clear(x, y, z) {
     if (!this.inRange(x, y, z)) return false;
-    const k = ((y + YOFF) * KZ + z) * KX + x;
+    const k = K(x, y, z);
     this.data.delete(k);
     return this.cells.delete(k);
   }
@@ -65,10 +70,10 @@ export class VoxelWorld {
   // Written into the structure's block_position_data on export.
   setData(x, y, z, d) {
     if (!this.inRange(x, y, z)) return;
-    this.data.set(((y + YOFF) * KZ + z) * KX + x, d);
+    this.data.set(K(x, y, z), d);
   }
   getData(x, y, z) {
-    return this.data.get(((y + YOFF) * KZ + z) * KX + x);
+    return this.data.get(K(x, y, z));
   }
 
   get size() { return this.cells.size; }
@@ -83,8 +88,7 @@ export class VoxelWorld {
 
   forEach(cb) {
     for (const [k, id] of this.cells) {
-      const x = k % KX; const r = (k - x) / KX;
-      const z = r % KZ; const y = (r - z) / KZ - YOFF;
+      const [x, y, z] = VoxelWorld.unkey(k);
       cb(x, y, z, id);
     }
   }
@@ -305,8 +309,7 @@ export function writeMcStructure(keys, ids, box, materials, opts = {}) {
 
   for (let i = 0; i < keys.length; i++) {
     const k = keys[i];
-    const x = k % KX; const r = (k - x) / KX;
-    const z = r % KZ; const y = (r - z) / KZ - YOFF;
+    const [x, y, z] = VoxelWorld.unkey(k);
     layer0[((x - box.x0) * sy + (y - box.y0)) * sz + (z - box.z0)] = slot(ids[i]);
   }
   const layer1 = new Int32Array(n).fill(-1);
@@ -319,8 +322,7 @@ export function writeMcStructure(keys, ids, box, materials, opts = {}) {
       const d = opts.blockData.get(keys[i]);
       if (!d) continue;
       const k = keys[i];
-      const x = k % KX; const r = (k - x) / KX;
-      const z = r % KZ; const y = (r - z) / KZ - YOFF;
+      const [x, y, z] = VoxelWorld.unkey(k);
       const idx = ((x - box.x0) * sy + (y - box.y0)) * sz + (z - box.z0);
       const ent = { id: N.str(d.id), isMovable: N.byte(1), x: N.int(x), y: N.int(y), z: N.int(z) };
       for (const [bk, bv] of Object.entries(d.bytes || {})) ent[bk] = N.byte(bv);
@@ -383,11 +385,10 @@ export function splitWorld(world, size = 64) {
   });
   const chunks = new Map();
   for (const [ck, c] of counts) {
-    chunks.set(ck, { ...boxes.get(ck), keys: new Int32Array(c), ids: new Int32Array(c), n: 0 });
+    chunks.set(ck, { ...boxes.get(ck), keys: new Uint32Array(c), ids: new Int32Array(c), n: 0 });
   }
   for (const [k, id] of world.cells) {
-    const x = k % KX; const r = (k - x) / KX;
-    const z = r % KZ;
+    const [x, , z] = VoxelWorld.unkey(k);
     const ck = Math.floor(x / size) * 100000 + Math.floor(z / size);
     const c = chunks.get(ck);
     c.keys[c.n] = k; c.ids[c.n] = id; c.n++;
