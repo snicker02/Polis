@@ -500,6 +500,10 @@ export function shiftBuilding(rec, e) {
   if (rec.hutDoor) rec.hutDoor[1] += e;
   for (const b of rec.beds || []) { b.foot[1] += e; b.head[1] += e; }
   if (rec.eaves && rec.eaves.levels) rec.eaves.levels = rec.eaves.levels.map((y) => y + e);   // eave skirts ride up too
+  if (rec.deco) {                                                                              // and an Art Deco crown and fins
+    if (rec.deco.finLow !== undefined) rec.deco.finLow += e;
+    if (rec.deco.crown) { rec.deco.crown.top += e; for (const t of rec.deco.crown.tiers) t.y0 += e; }
+  }
 }
 
 // ---- city-wide reachability -------------------------------------------------

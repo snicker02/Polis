@@ -331,7 +331,7 @@ export function makeBuilding(world, spec, rng) {
     for (const [cx, cz] of doorCells) world.set(cx, gy + 3, cz, MAT.GLOWSTONE);
   }
 
-  let houseInfo = null, arcadeInfo = null, eavesInfo = null;
+  let houseInfo = null, arcadeInfo = null, eavesInfo = null, lancetInfo = null, decoInfo = null;
   if (spec.detail !== false) {
     const ctx = {
       rects: Array.from({ length: floors }, (_, k) => rect(k)), floorYs, roofY, top, theme, style, face, P,
@@ -345,6 +345,8 @@ export function makeBuilding(world, spec, rng) {
     // only on an ordinary mid-rise lot (the city asks); a landmark dresses itself
     if (style === 'mid' && spec.arcade && !spec.eaves) arcadeInfo = romanesqueArcade(world, ctx);
     if (spec.eaves) eavesInfo = eaveSkirts(world, ctx);
+    if (spec.lancets && style !== 'tower') lancetInfo = gothicWindows(world, ctx);
+    if (spec.deco && style !== 'house') decoInfo = artDeco(world, ctx);
   }
 
   return {
@@ -361,6 +363,8 @@ export function makeBuilding(world, spec, rng) {
     houseDetail: houseInfo,
     arcade: arcadeInfo,
     eaves: eavesInfo,
+    lancets: lancetInfo,
+    deco: decoInfo,
   };
 }
 
@@ -434,6 +438,134 @@ function houseDetail(world, c, rng) {
       if (!empty(x, hy, z)) continue;
       world.set(x, hy, z, stairId(theme.stair, CLIMB(-outv[0], -outv[1])));
       info.hood++;
+    }
+  }
+  return info;
+}
+
+// ---- Art Deco: fins, gold finials, a sunburst crown -----------------------------------------
+// Fins: from the first floor up, a vertical fin of trim stands one block out
+// from the wall between each pair of window bays (every third cell), running
+// the full height of each floor, so the fins rise unbroken and stop where the
+// building steps back. The top of each fin on the top floor carries a gold
+// finial at parapet height. Nothing is at street level: the first floor is
+// the lowest a fin comes.
+// Crown (towers): three tiers stepping inward over the roof, three blocks high
+// each, their faces in trim with gold chevrons (the sunburst's rays), then a
+// spire of bars with a gold tip. The first tier leaves the roof hut's door and
+// the step in front of it clear; every tier fills only empty cells.
+function artDeco(world, c) {
+  const { rects, floorYs, roofY, theme, style, floors, P, hutDoor } = c;
+  const info = { fins: 0, finials: 0, crown: null };
+  const put = (x, y, z, id) => { if (world.has(x, y, z)) return false; world.set(x, y, z, id); return true; };
+  // ---- fins
+  for (let k = 1; k < floors; k++) {
+    const r = rects[k], sy = floorYs[k];
+    const top = k === floors - 1 ? roofY : sy + P - 1;
+    const sides = [];
+    { const a = []; for (let x = r.x0 + 1; x < r.x1; x++) a.push([x, r.z0 - 1]); sides.push(a); }
+    { const a = []; for (let x = r.x0 + 1; x < r.x1; x++) a.push([x, r.z1 + 1]); sides.push(a); }
+    { const a = []; for (let z = r.z0 + 1; z < r.z1; z++) a.push([r.x0 - 1, z]); sides.push(a); }
+    { const a = []; for (let z = r.z0 + 1; z < r.z1; z++) a.push([r.x1 + 1, z]); sides.push(a); }
+    for (const cells of sides)
+      cells.forEach(([x, z], i) => {
+        if (i % 3 !== 1 || i === cells.length - 1) return;
+        let n = 0;
+        for (let y = sy; y <= top; y++) if (put(x, y, z, theme.trim)) { n++; if (info.finLow === undefined || y < info.finLow) info.finLow = y; }
+        if (n) info.fins++;
+        if (k === floors - 1 && put(x, roofY + 1, z, MAT.GOLD)) info.finials++;
+      });
+  }
+  // ---- crown (towers only)
+  if (style === 'tower') {
+    const t = rects[floors - 1];
+    const door = hutDoor ? [hutDoor[0], hutDoor[2]] : null;
+    const nearDoor = (x, z) => door && Math.abs(x - door[0]) <= 1 && z >= door[1] && z <= door[1] + 2;
+    const tiers = [];
+    for (let i = 0; i < 3; i++) {
+      const inset = 1 + 2 * i, y0 = roofY + 1 + 3 * i;
+      const r = { x0: t.x0 + inset, z0: t.z0 + inset, x1: t.x1 - inset, z1: t.z1 - inset };
+      if (r.x1 - r.x0 < 2 || r.z1 - r.z0 < 2) break;
+      let cells = 0;
+      const ring = [];
+      for (let x = r.x0; x <= r.x1; x++) { ring.push([x, r.z0]); ring.push([x, r.z1]); }
+      for (let z = r.z0 + 1; z < r.z1; z++) { ring.push([r.x0, z]); ring.push([r.x1, z]); }
+      for (const [x, z] of ring) {
+        if (i === 0 && nearDoor(x, z)) continue;
+        const along = (x - r.x0) + (z - r.z0);
+        for (let h = 0; h < 3; h++) {
+          // chevrons: gold where the rays run, rising toward the middle of each face
+          const ray = (along + h) % 4 === 0 || (along - h + 400) % 4 === 0;
+          if (put(x, y0 + h, z, ray ? MAT.GOLD : theme.trim)) cells++;
+        }
+      }
+      tiers.push({ inset, y0, cells });
+    }
+    if (tiers.length) {
+      const mx = Math.round((t.x0 + t.x1) / 2), mz = Math.round((t.z0 + t.z1) / 2);
+      const base = roofY + 1 + 3 * tiers.length;
+      let spire = 0;
+      for (let y = base; y < base + 7; y++) if (put(mx, y, mz, MAT.BARS)) spire++;
+      put(mx, base + 7, mz, MAT.GOLD);
+      info.crown = { tiers, spire, top: base + 7 };
+      c.decoTop = base + 7;
+    }
+  }
+  return info;
+}
+
+// ---- pointed Gothic windows (the Venetian style) ------------------------------------------
+// Each run of window glass along a wall becomes pairs of lights between stone
+// piers (glass, glass, pier, ...). Over each pair, where the floor leaves a row
+// free under the trim band, two upside-down stairs lean toward one another:
+// the pointed head of the window. A light left without a partner gets a
+// keystone instead. Only glass and the wall around it change. No random draws.
+function gothicWindows(world, c) {
+  const { rects, floorYs, theme, floors, P } = c;
+  const info = { pairs: 0, singles: 0, heads: 0 };
+  const glassAt = (x, y, z) => world.get(x, y, z) === theme.glass;
+  for (let k = 0; k < floors; k++) {
+    const r = rects[k], sy = floorYs[k];
+    // the four sides as lines of wall cells (corners left alone)
+    const sides = [];
+    const line = (cells, along) => sides.push({ cells, along });
+    { const a = []; for (let x = r.x0 + 1; x < r.x1; x++) a.push([x, r.z0]); line(a, [1, 0]); }
+    { const a = []; for (let x = r.x0 + 1; x < r.x1; x++) a.push([x, r.z1]); line(a, [1, 0]); }
+    { const a = []; for (let z = r.z0 + 1; z < r.z1; z++) a.push([r.x0, z]); line(a, [0, 1]); }
+    { const a = []; for (let z = r.z0 + 1; z < r.z1; z++) a.push([r.x1, z]); line(a, [0, 1]); }
+    for (const { cells, along } of sides) {
+      // the glass rows of this side: the lowest and highest glass found on it
+      let lo = Infinity, hi = -Infinity;
+      for (const [x, z] of cells) for (let y = sy + 1; y < sy + P; y++) if (glassAt(x, y, z)) { lo = Math.min(lo, y); hi = Math.max(hi, y); }
+      if (lo === Infinity) continue;
+      // runs of columns with glass at the lowest row
+      const runs = [];
+      let run = [];
+      for (const cell of cells.concat([null])) {
+        if (cell && glassAt(cell[0], lo, cell[1])) run.push(cell);
+        else { if (run.length) runs.push(run); run = []; }
+      }
+      const head = hi + 1;
+      const headRoom = head <= sy + P - 2;
+      for (const rn of runs) {
+        rn.forEach(([x, z], i) => {
+          const p = i % 3;
+          if (p === 2) { for (let y = lo; y <= hi; y++) world.set(x, y, z, theme.wall); return; }   // a pier
+          for (let y = lo; y <= hi; y++) world.set(x, y, z, theme.glass);
+          if (!headRoom || world.get(x, head, z) !== theme.wall) return;
+          const partner = p === 0 ? i + 1 < rn.length && (i + 1) % 3 === 1 : true;
+          if (partner) {
+            // lean toward the partner: the first rises toward +along, the second toward -along
+            const s = p === 0 ? 1 : -1;
+            world.set(x, head, z, stairId(theme.stair, CLIMB(along[0] * s, along[1] * s), true));
+            info.heads++;
+            if (p === 0) info.pairs++;
+          } else {
+            world.set(x, head, z, theme.trim);
+            info.singles++;
+          }
+        });
+      }
     }
   }
   return info;

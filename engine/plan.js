@@ -149,7 +149,8 @@ export function generatePlan(cfg, rng) {
     const zc = zoneAt((ix0 + ix1) / 2, (iz0 + iz1) / 2);
 
     if (rng.chance(cfg.parkChance * (zc > 0.55 ? 0.5 : 1.4))) {
-      const kind = zc > 0.55 ? USE.PLAZA : USE.PARK;
+      // (a city of piazzas, the Venetian style, paves every open space)
+      const kind = cfg.piazzas || zc > 0.55 ? USE.PLAZA : USE.PARK;
       for (let z = iz0; z <= iz1; z++) for (let x = ix0; x <= ix1; x++) use[at(x, z)] = kind;
       rawLots.push({ x0: ix0, z0: iz0, x1: ix1, z1: iz1, kind, zone: zc });
       continue;

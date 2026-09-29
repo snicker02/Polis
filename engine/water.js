@@ -25,13 +25,20 @@ export const BED = -4, WATER_LO = -3, WATER_HI = -2;
 
 // Choose the canal's street (before surfaces and railways are laid): the
 // longest straight street at least 5 wide that stays well inside the city.
-export function planCanal(plan, cfg, edgeDist) {
+// opts (for a city of canals, planCanals):
+//   exclude     corridors already taken by another canal
+//   allowCanal  a canal may run straight through another's water (a junction)
+//   minRun      the shortest straight run worth a canal
+//   footbridges a railed footbridge across the channel every ~18 blocks with no street
+export function planCanal(plan, cfg, edgeDist, opts = {}) {
   if (!cfg.canal) return null;
   const { W, D, use, roadAxis } = plan;
   const inner = (x, z) => x >= 0 && z >= 0 && x < W && z < D && edgeDist[z * W + x] >= 4;
+  const passable = (u) => u === USE.ROAD || (opts.allowCanal && u === USE_CANAL);
   let best = null;
   for (const c of plan.corridors) {
     if (c.w < 5) continue;
+    if (opts.exclude && opts.exclude.has(c)) continue;
     // the corridor's cells that are still road, inside the city
     const along = c.axis === 'x' ? [Math.max(0, c.x0), Math.min(W - 1, c.x1)] : [Math.max(0, c.z0), Math.min(D - 1, c.z1)];
     const a0 = c.axis === 'x' ? c.z0 : c.x0, a1 = c.axis === 'x' ? c.z1 : c.x1;   // across
@@ -40,17 +47,17 @@ export function planCanal(plan, cfg, edgeDist) {
       let ok = u <= along[1];
       for (let a = a0; a <= a1 && ok; a++) {
         const x = c.axis === 'x' ? u : a, z = c.axis === 'x' ? a : u;
-        if (!inner(x, z) || use[z * W + x] !== USE.ROAD) ok = false;
+        if (!inner(x, z) || !passable(use[z * W + x])) ok = false;
       }
       if (ok) run.push(u); else { if (run.length > bestRun.length) bestRun = run; run = []; }
     }
     // A city cut to real ground is rarely straight for a third of its width,
     // and a short canal is better than none, so the run needed is shorter on
     // a fitted site than it was.
-    const need = cfg.terrain ? Math.max(16, Math.min(W, D) * 0.2) : Math.max(24, Math.min(W, D) * 0.35);
+    const need = opts.minRun || (cfg.terrain ? Math.max(16, Math.min(W, D) * 0.2) : Math.max(24, Math.min(W, D) * 0.35));
     if (bestRun.length < need) continue;
     const score = bestRun.length * 10 + c.w;
-    if (!best || score > best.score) best = { score, axis: c.axis, u0: bestRun[0], u1: bestRun[bestRun.length - 1], a0, a1, w: a1 - a0 + 1 };
+    if (!best || score > best.score) best = { score, axis: c.axis, u0: bestRun[0], u1: bestRun[bestRun.length - 1], a0, a1, w: a1 - a0 + 1, corridor: c };
   }
   if (!best) return null;
   // channel: the middle three across; railings on the next row out if wide enough
@@ -71,19 +78,50 @@ export function planCanal(plan, cfg, edgeDist) {
     return isRoad(lx, lz) || isRoad(rx, rz);
   };
   best.bridgeSpans = [];
-  let spanStart = null;
+  best.footbridges = [];
+  // a junction: where this canal runs through another's water
+  const junction = (u) => { for (let a = best.ch0; a <= best.ch1; a++) { const [x, z] = cell(u, a); if (use[z * W + x] === USE_CANAL) return true; } return false; };
+  let spanStart = null, lastCross = best.u0;
   for (let u = best.u0; u <= best.u1 + 1; u++) {
-    const br = u <= best.u1 && bridgeAt(u);
+    const br = u <= best.u1 && bridgeAt(u) && !junction(u);
     if (br && spanStart === null) spanStart = u;
-    if (!br && spanStart !== null) { best.bridgeSpans.push([spanStart, u - 1]); spanStart = null; }
+    if (!br && spanStart !== null) { best.bridgeSpans.push([spanStart, u - 1]); lastCross = u - 1; spanStart = null; }
     if (br || u > best.u1) continue;
+    // a footbridge: three across the channel, walked on the middle, railed on
+    // the outer two; every ~18 blocks with no street crossing, clear of junctions
+    if (opts.footbridges && u - lastCross >= 18 && u + 2 <= best.u1 - 4 &&
+        ![u, u + 1, u + 2].some((q) => junction(q) || bridgeAt(q))) {
+      for (let q = u; q <= u + 2; q++)
+        for (let a = best.a0; a <= best.a1; a++) { const [x, z] = cell(q, a); use[z * W + x] = USE.SIDEWALK; }
+      best.footbridges.push([u, u + 2]);
+      lastCross = u + 2;
+      u += 2;
+      continue;
+    }
     for (let a = best.a0; a <= best.a1; a++) {
       const [x, z] = cell(u, a);
+      if (use[z * W + x] === USE_CANAL) continue;              // another canal's water stays water
       use[z * W + x] = a >= best.ch0 && a <= best.ch1 ? USE_CANAL : USE.SIDEWALK;
     }
   }
-  best.bridges = best.bridgeSpans.length;
+  best.bridges = best.bridgeSpans.length + best.footbridges.length;
   return best;
+}
+
+// A city of canals (the Venetian style): the best canal, then the next best on
+// another street, and so on, up to `max`. Later canals may cross earlier ones
+// (open water at the junction); streets cross them on their decks, and
+// footbridges carry the walkways across between streets.
+export function planCanals(plan, cfg, edgeDist, max = 6) {
+  const out = [], exclude = new Set();
+  const minRun = Math.max(16, Math.min(plan.W, plan.D) * 0.18);
+  for (let i = 0; i < max; i++) {
+    const c = planCanal(plan, cfg, edgeDist, { exclude, allowCanal: true, minRun, footbridges: true });
+    if (!c) break;
+    exclude.add(c.corridor);
+    out.push(c);
+  }
+  return out;
 }
 
 // Carve it (after the ground is laid): extend the stone base under the whole
@@ -91,10 +129,15 @@ export function planCanal(plan, cfg, edgeDist) {
 export function buildCanal(world, plan, canal, G, rng) {
   const { W, D, mask } = plan;
   // the city's base goes down to the canal bed everywhere, so the channel is
-  // walled in by solid stone on every side
-  for (let z = 0; z < D; z++)
-    for (let x = 0; x < W; x++)
-      if (!mask || mask[z * W + x]) for (let y = BED; y <= 0; y++) world.set(x, y, z, MAT.BASE);
+  // walled in by solid stone on every side. Once only: with several canals, a
+  // second pass would fill the first canal's channel (and the air under its
+  // bridges) back in with stone.
+  if (!world.canalBaseLaid) {
+    for (let z = 0; z < D; z++)
+      for (let x = 0; x < W; x++)
+        if (!mask || mask[z * W + x]) for (let y = BED; y <= 0; y++) world.set(x, y, z, MAT.BASE);
+    world.canalBaseLaid = true;
+  }
   const { cell } = canal;
   let water = 0;
   const lanes = [];
@@ -118,6 +161,15 @@ export function buildCanal(world, plan, canal, G, rng) {
         const [x, z] = cell(u, a);
         if (plan.use[z * W + x] !== USE.SIDEWALK) continue;
         if (!world.has(x, G + 1, z)) world.set(x, G + 1, z, MAT.FENCE);
+      }
+  }
+  // footbridges: railed along both edges over the water, a lantern at each rail's ends
+  for (const [f0, f2] of canal.footbridges || []) {
+    for (const u of [f0, f2])
+      for (let a = canal.ch0; a <= canal.ch1; a++) {
+        const [x, z] = cell(u, a);
+        if (!world.has(x, G + 1, z)) world.set(x, G + 1, z, MAT.FENCE);
+        if (a === canal.ch0 || a === canal.ch1) world.set(x, G + 2, z, MAT.LAMP);
       }
   }
   // bridge railings: along both edges of each bridge, over the water only

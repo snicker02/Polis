@@ -24,7 +24,7 @@ import { makeBuilding, OUTWARD } from './building.js';
 import { doorId, DIR, MATERIALS } from './materials.js';
 import { farm, pond, scatterFlowers, furnish, bedSpawns, placeBell, golemSpawns, ranch, pandaGrove, catSpawns, RANCH_ANIMALS } from './life.js';
 import { layTransit, trimOverRails, sweepStrandedRails, edgeDistance } from './transit.js';
-import { planCanal, buildCanal, USE_CANAL } from './water.js';
+import { planCanal, planCanals, buildCanal, USE_CANAL } from './water.js';
 import { planHarbour, buildHarbour, harbourSidings } from './harbour.js';
 import { planBridges, buildBridges, bridgeRails } from './bridges.js';
 import { chooseLandmarks, buildLandmark } from './landmarks.js';
@@ -141,14 +141,33 @@ export function generateCity(cfgIn, onProgress) {
     if (cfg.parkChance === DEFAULTS.parkChance) cfg.parkChance = 0.05;
     cfg.transit = 'roads';
   }
+  // an Art Deco city: towers step back often, for the wedding-cake silhouette
+  if (STYLE.deco) {
+    cfg.setbacks = true;
+    if (cfg.setbackEvery === DEFAULTS.setbackEvery) cfg.setbackEvery = 4;
+  }
+  // a Venetian city: canals for main streets, piazzas for open spaces, a flat
+  // lagoon, tall floors (room for the pointed windows), no trams
+  if (STYLE.venetian) {
+    cfg.canal = true;
+    cfg.piazzas = true;
+    cfg.transit = 'roads';
+    if (cfg.hills === DEFAULTS.hills) cfg.hills = 0;
+    if (cfg.pitch === DEFAULTS.pitch) cfg.pitch = 6;
+    if (cfg.parkChance === DEFAULTS.parkChance) cfg.parkChance = 0.16;
+    if (cfg.maxFloors === DEFAULTS.maxFloors) cfg.maxFloors = 6;
+  }
   const rng = makeRng(cfg.seed);
   const plan = generatePlan(cfg, rng);
   const world = new VoxelWorld({ budget: cfg.budget });
   const W = plan.W, D = plan.D;
   // organic cities carry their outline, so the export leaves the land outside it alone
   if (cfg.outline === 'organic' || cfg.terrain) world.cityMask = { W, D, data: plan.mask };
-  // the canal takes over one long street before anything is laid on it
-  const canal = planCanal(plan, cfg, edgeDistance(plan));
+  // the canal takes over one long street before anything is laid on it; a
+  // Venetian city makes canals of all its main streets
+  const canals = STYLE.venetian && cfg.canal ? planCanals(plan, cfg, edgeDistance(plan), 6)
+    : [planCanal(plan, cfg, edgeDistance(plan))].filter(Boolean);
+  const canal = canals[0] || null;
   const harbourPlan = planHarbour(plan, canal, cfg);
   // districts the outline kept but could not join up: give them viaducts
   const bridgeSpans = planBridges(plan, cfg, plan.districts || []);
@@ -200,7 +219,7 @@ export function generateCity(cfgIn, onProgress) {
   }
 
   // ---- canal -----------------------------------------------------------------
-  if (canal) buildCanal(world, plan, canal, GROUND);
+  for (const c of canals) buildCanal(world, plan, c, GROUND);
 
   const buildings = [];
 
@@ -214,11 +233,11 @@ export function generateCity(cfgIn, onProgress) {
   // terrain they are levelled as a unit instead of being pinned to the base.
   if (cfg.terrain) {
     plan.flatGroups = [];
-    if (canal) {
+    for (const cn of canals) {
       const cells = [];
-      for (let u = canal.u0; u <= canal.u1; u++)
-        for (let a = canal.a0; a <= canal.a1; a++) {
-          const [x, z] = canal.cell(u, a);
+      for (let u = cn.u0; u <= cn.u1; u++)
+        for (let a = cn.a0; a <= cn.a1; a++) {
+          const [x, z] = cn.cell(u, a);
           if (x >= 0 && z >= 0 && x < W && z < D) cells.push(z * W + x);
         }
       plan.flatGroups.push(cells);
@@ -330,7 +349,7 @@ export function generateCity(cfgIn, onProgress) {
         const cy = makeCourtyard(world, {
           x0: fx0, z0: fz0, x1: fx1, z1: fz1, face: front.side, kind, mirror: crng.chance(0.5), G: GROUND, flowers: cfg.flowers,
           building: (p) => makeBuilding(world, {
-            detail: cfg.detail, arcade: true, eaves: !!STYLE.eaves, rustic: !!STYLE.rustic,
+            detail: cfg.detail, arcade: !STYLE.venetian, eaves: !!STYLE.eaves, lancets: !!STYLE.lancets, deco: !!STYLE.deco, rustic: !!STYLE.rustic,
             x0: p.x0, z0: p.z0, x1: p.x1, z1: p.z1, noStairs: p.noStairs,
             floors: lot.floors, pitch: cfg.pitch, groundY: GROUND,
             style: 'mid', facing: p.facing, theme,
@@ -371,7 +390,7 @@ export function generateCity(cfgIn, onProgress) {
       facing: front.side, theme, useStairs: cfg.useStairs, lights: cfg.lights,
       shape: towerShape(hash2(lot.z0, lot.x0, (cfg.seed ^ 0x5a9e) | 0), STYLE.towerShapes),
     }, makeRng(((lot.x0 * 73856093) ^ (lot.z0 * 19349663) ^ cfg.seed ^ 0x7157) >>> 0)) : makeBuilding(world, {
-      detail: cfg.detail, arcade: true, eaves: !!STYLE.eaves,
+      detail: cfg.detail, arcade: !STYLE.venetian, eaves: !!STYLE.eaves, lancets: !!STYLE.lancets, deco: !!STYLE.deco,
       rustic: !!STYLE.rustic,
       x0: fx0, z0: fz0, x1: fx1, z1: fz1,
       floors: lot.floors, pitch: cfg.pitch, groundY: GROUND,
@@ -543,7 +562,7 @@ export function generateCity(cfgIn, onProgress) {
   for (const rch of ranches) for (const a of rch.animals) spawns.push(a);
 
   if (transit) spawns = spawns.concat(transit.carts);
-  if (canal && canal.dock) spawns = spawns.concat(canal.dock.boats);
+  for (const cn of canals) if (cn.dock) spawns = spawns.concat(cn.dock.boats);
   if (harbour) spawns = spawns.concat(harbour.boats);
   for (const rec of buildings) for (const p of (rec.furniture && rec.furniture.paintings) || []) spawns.push(p);
 
@@ -666,8 +685,8 @@ export function generateCity(cfgIn, onProgress) {
     : null;
 
   const shell = cfg.terrain ? terrainShell(plan, cfg.terrain, GROUND, cfg.cityStyle) : null;
-  const stats = summarise(world, plan, buildings, cfg, { farms, beds, spawns, bell, transit, wall, ranches, landmarks, hills, stairRuns, reach, canal, centre, streets, harbour, skirt, cutFaces, bridges, megaliths, ponds, courtyards, hostiles, dome, unsupported: stats_unsupported });
-  return { world, plan, buildings, cfg, stats, shell, bridges, farms, ranches, spawns, bell, transit, wall, landmarks, canal, centre, streets, harbour, harbourPlan, megaliths, ponds, courtyards, hostiles, dome,
+  const stats = summarise(world, plan, buildings, cfg, { farms, beds, spawns, bell, transit, wall, ranches, landmarks, hills, stairRuns, reach, canal, centre, streets, harbour, skirt, cutFaces, bridges, megaliths, ponds, courtyards, hostiles, dome, canals, unsupported: stats_unsupported });
+  return { world, plan, buildings, cfg, stats, shell, bridges, farms, ranches, spawns, bell, transit, wall, landmarks, canal, centre, streets, harbour, harbourPlan, megaliths, ponds, courtyards, hostiles, dome, canals,
     hills, stairRuns, reach, groundAt: (x, z) => GROUND + elevAt(x, z) };
 }
 
@@ -1112,6 +1131,11 @@ function markCentre(world, plan, buildings, G, elevAt, spawns = [], stairRuns = 
     if (!OUTDOOR.has(use[z * W + x]) || elevAt(x, z) !== 0) return false;
     if (inBuilding(x, z) || taken.has(x + ',' + z)) return false;
     if (!world.has(x, G, z) || world.get(x, G, z) === MAT.WATER) return false;
+    // never on a canal's walkway: a bank is only two wide, and the mark would close it
+    for (let dz = -2; dz <= 2; dz++) for (let dx = -2; dx <= 2; dx++) {
+      const nx = x + dx, nz = z + dz;
+      if (nx >= 0 && nz >= 0 && nx < W && nz < D && use[nz * W + nx] === USE_CANAL) return false;
+    }
     for (let y = G + 1; y <= G + height + 12; y++) if (world.has(x, y, z)) return false;   // room, and open sky for the beams
     return true;
   };
@@ -1290,16 +1314,31 @@ function fortressWall(world, plan, cfg) {
     for (const [x, z, a, b] of cells) if (!(Math.abs(a) === 2 || Math.abs(b) === 2)) for (let y = top + 1; y <= top + 4; y++) world.clear(x, y, z);
     // arrow slits on the outer face and the two ends
     for (const [a, b] of [[0, -2], [-2, 0], [2, 0]]) world.set(cx + along[0] * a + out[0] * b, top + 2, cz + along[1] * a + out[1] * b, MAT.BARS);
-    // doors onto the walk, either side, on the walk's inner row (b = 1)
+    // Doors onto the walk, one each side, where the walk really meets the
+    // tower: the wall may bend near a tower, so each row of the side face is
+    // tried (the walk's inner row first) and a door goes only where the cell
+    // outside it is walk to stand on. A side the walk does not reach gets an
+    // arrow slit, never a door onto air.
     const face = Object.entries(OUTWARD).find(([, v]) => v[0] === along[0] && v[1] === along[1])[0];
     const back = Object.entries(OUTWARD).find(([, v]) => v[0] === -along[0] && v[1] === -along[1])[0];
+    const walkable = (x, z) => world.has(x, top, z) && !world.has(x, top + 1, z) && !world.has(x, top + 2, z);
+    const doors = [];
     for (const [a, f] of [[2, face], [-2, back]]) {
-      const x = cx + along[0] * a + out[0], z = cz + along[1] * a + out[1];
-      world.set(x, top + 1, z, doorId('spruce', DIR[f], false, 0));
-      world.set(x, top + 2, z, doorId('spruce', DIR[f], true, 0));
+      const sgn = Math.sign(a);
+      let placed = false;
+      for (const b of [1, 0, -1]) {
+        const x = cx + along[0] * a + out[0] * b, z = cz + along[1] * a + out[1] * b;
+        if (!walkable(x + along[0] * sgn, z + along[1] * sgn)) continue;
+        world.set(x, top + 1, z, doorId('spruce', DIR[f], false, 0));
+        world.set(x, top + 2, z, doorId('spruce', DIR[f], true, 0));
+        doors.push({ at: [x, top + 1, z], outside: [x + along[0] * sgn, top + 1, z + along[1] * sgn] });
+        placed = true;
+        break;
+      }
+      if (!placed) world.set(cx + along[0] * a + out[0], top + 2, cz + along[1] * a + out[1], MAT.BARS);
     }
     world.set(cx + out[0], top + 4, cz + out[1], MAT.LAMP_HANG);
-    const t = { at: [cx, top + 1, cz], along, out, top: top + 6 };
+    const t = { at: [cx, top + 1, cz], along, out, top: top + 6, doors };
     towers.push(t);
     return t;
   };
@@ -1811,6 +1850,8 @@ function summarise(world, plan, buildings, cfg, life = {}) {
     twisted: buildings.filter((b) => b.twist).length,
     shapes: buildings.filter((b) => b.shape).map((b) => b.shape),
     courtyards: (life.courtyards || []).map((c) => c.kind),
+    canals: (life.canals || []).length,
+    footbridges: (life.canals || []).reduce((n, c) => n + (c.footbridges || []).length, 0),
     hostiles: (life.hostiles || []).length,
     dome: life.dome ? { radius: life.dome.R, height: life.dome.c, cells: life.dome.cells, doors: life.dome.doors.length } : null,
     torii: plan.lots.reduce((n, l) => n + ((l.torii && l.torii.length) || 0), 0),

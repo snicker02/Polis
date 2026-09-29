@@ -39,7 +39,7 @@ export default async function run(ctx) {
   // ---- the fortress ---------------------------------------------------------------------
   check('fortress: a style of its own, offered in the page', STYLE_NAMES.includes('fortress') && /value="fortress"/.test(readFileSync(join(ROOT, 'index.html'), 'utf8')));
   let cities = 0, cityOk = true, thin = 0, buried = 0, walkGap = 0, merlons = 0, gates = 0, passBad = 0, gatehouseBad = 0;
-  let towers = 0, towerBad = 0, outward = 0, flights = 0, flightBad = 0, keepFar = 0, marketFar = 0, oversize = 0;
+  let towers = 0, towerBad = 0, towerDoors = 0, outward = 0, flights = 0, flightBad = 0, keepFar = 0, marketFar = 0, oversize = 0;
   for (const [seed, size] of [[7, 160], [12345, 224], [99, 160]]) {
     const r = generateCity({ ...DEFAULTS, seed, size, cityStyle: 'fortress' });
     cities++;
@@ -90,9 +90,14 @@ export default async function run(ctx) {
         const x = cx + t.along[0] * a + t.out[0] * b, z = cz + t.along[1] * a + t.out[1] * b;
         if (solid(w, x, y, z) && !/lantern|iron_bars/.test(blk(w, x, y, z))) towerBad++;
       }
-      for (const a of [2, -2]) {
-        const x = cx + t.along[0] * a + t.out[0], z = cz + t.along[1] * a + t.out[1];
-        if (!/door/.test(blk(w, x, top + 1, z))) towerBad++;
+      // every door opens onto the walk (floor under the cell outside it, room to
+      // stand), and every tower has at least one: where the wall bends away
+      // from a side, that side has an arrow slit instead of a door onto air
+      if (!t.doors || t.doors.length < 1) towerBad++;
+      for (const d of t.doors || []) {
+        const [ox2, oy2, oz2] = d.outside;
+        if (!/door/.test(blk(w, ...d.at)) || !solid(w, ox2, oy2 - 1, oz2) || solid(w, ox2, oy2, oz2) || solid(w, ox2, oy2 + 1, oz2)) towerBad++;
+        towerDoors++;
       }
       const ox = cx - t.out[0] * 2, oz = cz - t.out[1] * 2;         // the outermost row, beyond the wall's face
       if (solid(w, ox, top, oz) && solid(w, ox, G + 1, oz)) outward++;
@@ -120,7 +125,7 @@ export default async function run(ctx) {
   check('fortress: a walk along the whole top, merlons on its outer edge', walkGap === 0 && merlons > 100, `${walkGap} gaps, ${merlons} merlons`);
   check('fortress: a gate on each side, a passage right through, doors on the outer face', gates === 4 * cities && passBad === 0, `${gates} gates, ${passBad} bad`);
   check('fortress: a gatehouse tower either side of every gate', gatehouseBad === 0, `${gatehouseBad}`);
-  check('fortress: towers along the wall, each a room with doors onto the walk', towers >= 15 * cities && towerBad === 0, `${towers} towers, ${towerBad} bad`);
+  check('fortress: towers along the wall, each a room with doors that open onto the walk', towers >= 15 * cities && towerBad === 0 && towerDoors >= towers, `${towers} towers, ${towerDoors} doors, ${towerBad} bad`);
   check('fortress: towers stand out from the wall\'s face (their outer part is really built)', outward === towers, `${outward}/${towers}`);
   check('fortress: steps up to the walk, a block a step, head room, from a foot at street level', flights >= cities && flightBad === 0, `${flights} flights, ${flightBad} bad`);
   check('fortress: the keep at the heart of the town, the market square near it', keepFar === 0 && marketFar === 0, `${keepFar} keeps far, ${marketFar} markets far`);

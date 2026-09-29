@@ -1,4 +1,4 @@
-# Polis v0.25.3
+# Polis v0.26.0
 
 *Created with help from Claude AI.*
 
@@ -754,6 +754,47 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.26.0** — Two new city styles: Venetian and Art Deco.
+
+*Venetian.* Canals are the main streets: up to six in a city, each a stone
+channel with a walkway along both banks, chosen from the widest streets
+(planCanals); a later canal may run straight through an earlier one's water,
+an open junction. Every crossing street is carried over on its deck, and
+between streets a railed footbridge crosses every ~18 blocks, lanterns at its
+rails' ends, a boat still passing under. Open spaces are piazzas, the ground is
+a flat lagoon, there are no trams, and floors are a block taller. Houses and
+palazzi in pink and orange terracotta, brick and calcite have pointed Gothic
+windows: each run of glass becomes pairs of lights between stone piers, with
+two upside-down stairs leaning together over each pair for the pointed head.
+The clock tower is a brick campanile with a green copper spire, eight floors
+whatever the height limit, standing over the city and named Campanile.
+
+*Art Deco.* Towers step back every four floors; from the first floor up,
+vertical fins of trim stand out between the bays, unbroken to each setback,
+with gold finials at the top; every tower wears a crown of three tiers
+stepping inward, their faces in trim with gold chevrons, and a spire with a
+gold tip, leaving the roof hut's door clear. White, black and limestone with
+quartz and gold; no twisting towers.
+
+Fixed on the way: laying the canal's stone base again for a second canal filled
+the first canal's channel (and the air under its bridges) back in; the base is
+laid once now. The centre mark no longer lands on a canal walkway. An Art Deco
+crown's recorded heights ride up with the terraces.
+
+New section 2zk (14 checks); the style sweeps cover both new styles, and every
+exported block state is Bedrock's own.
+
+**0.25.4** — Fortress tower doors open onto the wall walk.
+
+A tower's two doors were put where the walk would meet it if the wall ran
+straight for three blocks either side; where the town's outline bends near a
+tower, a door could open onto air, or onto a solid block (20 of 220 doors
+across five fortress towns). Now each side's rows are tried, the walk's inner
+row first, and a door goes only where the cell outside it is walk to stand on;
+a side the walk does not reach gets an arrow slit instead. Every door opens
+onto the walk (202 of 202), and every tower keeps at least one (18 have one).
+2zj now checks the cell outside every door, not only that a door is there.
 
 **0.25.3** — Nothing in a dome built under water comes out waterlogged.
 

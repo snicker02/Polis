@@ -223,7 +223,8 @@ function clockTower(world, lot, face, cfg, rng, G) {
   pave(world, lot, G, (x, z) => LP.clockPave[(x + z) & 1]);
   const cx = Math.floor((lot.x0 + lot.x1) / 2), cz = Math.floor((lot.z0 + lot.z1) / 2);
   const r = { x0: cx - 3, z0: cz - 3, x1: cx + 3, z1: cz + 3 };
-  const floors = Math.max(4, Math.min(8, cfg.maxFloors | 0 || 8));
+  // (a Venetian campanile stands above the palazzi whatever the height limit)
+  const floors = styleOf(cfg.cityStyle).campanile ? 8 : Math.max(4, Math.min(8, cfg.maxFloors | 0 || 8));
   const theme = { name: 'clock tower', wall: LP.clockWall, trim: LP.clockTrim, floor: LP.clockFloor,
     glass: MAT.GLASS, stair: LP.clockStair, door: LP.clockDoor };
   const rec = makeBuilding(world, { ...r, floors, pitch: cfg.pitch, groundY: G, style: 'mid', facing: face, theme,
@@ -265,7 +266,8 @@ function clockTower(world, lot, face, cfg, rng, G) {
   rec.topY = y0 + 16;
   rec.rooms = (k) => (k === 0 ? 'hall' : (k % 2 ? 'office' : 'library'));
   rec.landmark = 'clocktower';
-  return { kind: 'clocktower', rec, faces, belfryBell: [cx, y0 + 11, cz], lot };
+  return { kind: 'clocktower', rec, faces, belfryBell: [cx, y0 + 11, cz], lot,
+    ...(styleOf(cfg.cityStyle).campanile ? { name: 'Campanile' } : {}) };
 }
 
 // ---- library ---------------------------------------------------------------
@@ -773,7 +775,7 @@ export function signTags(text) {
   return { BackText: side(''), BlockEntityVersion: N.int(0), FrontText: side(text), IsWaxed: N.byte(0) };
 }
 function nameSign(world, L, face, G) {
-  const text = LANDMARK_NAMES[L.kind];
+  const text = L.name || LANDMARK_NAMES[L.kind];      // (a landmark may carry its own name: the campanile)
   const [Fx, Fz] = OUTWARD[face], [Rx, Rz] = right(face);
   const lot = L.lot;
   // where to stand it: out from the front door, two or three blocks to one side

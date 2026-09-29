@@ -303,6 +303,77 @@ export const STYLES = {
       market: [MAT.STONEBRICK, MAT.GRAVEL], wellRim: MAT.STONEBRICK, wellRoof: MAT.DEEPSLATE },
   },
 };
+// Venice: canals for the main streets (walkways along both banks, bridges and
+// footbridges), piazzas, palazzi in pink, white and brick with pointed Gothic
+// windows, terracotta roofs, and a brick campanile with a green copper spire.
+STYLES.venetian = {
+  label: 'Venetian',
+  venetian: true,
+  lancets: true,                   // pointed Gothic windows (building.js)
+  campanile: true,                 // the clock tower is a brick campanile
+  themes: {
+    house: [
+      T('casa', MAT.T_PINK, MAT.CALCITE, MAT.SPRUCE, MAT.GLASS, 'brick', 'dark', MAT.T_ORANGE),
+      T('casetta', MAT.T_ORANGE, MAT.CALCITE, MAT.OAK, MAT.GLASS, 'brick', 'spruce', MAT.TERRACOTTA),
+      T('mattone', MAT.BRICK, MAT.CALCITE, MAT.SPRUCE, MAT.GLASS, 'brick', 'dark', MAT.T_ORANGE),
+    ],
+    mid: [
+      T('palazzo', MAT.T_PINK, MAT.CALCITE, MAT.DARK_PLANKS, MAT.GLASS, 'quartz', 'dark'),
+      T('biancopalazzo', MAT.CALCITE, MAT.BRICK, MAT.SPRUCE, MAT.GLASS, 'brick', 'dark'),
+      T('ca', MAT.BRICK, MAT.CALCITE, MAT.OAK, MAT.GLASS, 'quartz', 'spruce'),
+    ],
+    tower: [
+      T('torre', MAT.BRICK, MAT.CALCITE, MAT.SPRUCE, MAT.GLASS, 'brick', 'dark'),
+      T('torrebianca', MAT.CALCITE, MAT.T_PINK, MAT.DARK_PLANKS, MAT.GLASS, 'quartz', 'dark'),
+    ],
+  },
+  remap: {
+    ASPHALT: 'STONEBRICK', SIDEWALK: 'STONEBRICK', LINE: 'STONEBRICK', CROSSWALK: 'CALCITE', PATH: 'STONEBRICK',
+    LAMP_POST: 'DARK_FENCE', STREET_LIGHT: 'LAMP', RETAIN: 'BRICK', INTERIOR_WALL: 'CALCITE',
+    CANAL_BED: 'STONEBRICK', DOCK: 'DARK_PLANKS', WALL_BODY: 'BRICK', WALL_CAP: 'CALCITE',
+  },
+  landmark: { ...MODERN_LANDMARK,
+    hallPave: MAT.STONEBRICK, hallWall: MAT.T_PINK, hallColumn: MAT.CALCITE, hallCapital: MAT.QUARTZ,
+    hallFloor: MAT.DARK_PLANKS, hallGlass: MAT.GLASS, hallStair: 'quartz', hallDoor: 'dark', entablature: MAT.CALCITE,
+    domeBase: MAT.CALCITE, domeRing: MAT.QUARTZ, dome: MAT.COPPER_ROOF, finial: MAT.GOLD,
+    clockPave: [MAT.STONEBRICK, MAT.CALCITE], clockWall: MAT.BRICK, clockTrim: MAT.CALCITE, clockFloor: MAT.SPRUCE,
+    clockStair: 'brick', clockDoor: 'dark', spire: MAT.COPPER_ROOF,
+    libPave: MAT.STONEBRICK, libWall: MAT.CALCITE, libTrim: MAT.BRICK, libFloor: MAT.DARK_PLANKS, libStair: 'quartz', libDoor: 'dark',
+    schoolWall: MAT.T_PINK, schoolTrim: MAT.CALCITE,
+    market: [MAT.STONEBRICK, MAT.CALCITE], wellRim: MAT.CALCITE, wellRoof: MAT.T_ORANGE },
+};
+
+// Art Deco: stepped towers (setbacks every four floors), vertical fins of
+// trim between the bays, gold finials and a sunburst crown with a spire;
+// white, black and limestone, with quartz and gold (building.js: artDeco).
+STYLES.artdeco = {
+  label: 'Art Deco',
+  deco: true,
+  shapedChance: 0,                 // no twisting towers: the setbacks are the shape
+  themes: {
+    house: [
+      T('villa', MAT.C_WHITE, MAT.C_BLACK2, MAT.DARK_PLANKS, MAT.GLASS, 'quartz', 'dark', MAT.QUARTZ),
+      T('creamvilla', MAT.SMOOTH_SAND, MAT.QUARTZ, MAT.OAK, MAT.GLASS, 'quartz', 'oak', MAT.SMOOTH_SAND),
+    ],
+    mid: [
+      T('deco', MAT.C_WHITE, MAT.QUARTZ, MAT.DARK_PLANKS, MAT.TINTED, 'quartz', 'dark'),
+      T('limestone', MAT.SMOOTH_SAND, MAT.QUARTZ, MAT.OAK, MAT.GLASS, 'quartz', 'oak'),
+      T('noir', MAT.C_BLACK2, MAT.QUARTZ, MAT.DARK_PLANKS, MAT.TINTED, 'blackstone', 'dark'),
+    ],
+    tower: [
+      T('chrysler', MAT.IRON, MAT.QUARTZ, MAT.DARK_PLANKS, MAT.TINTED, 'quartz', 'dark'),
+      T('empire', MAT.SMOOTH_SAND, MAT.QUARTZ, MAT.OAK, MAT.TINTED, 'quartz', 'dark'),
+      T('noirgold', MAT.C_BLACK2, MAT.QUARTZ, MAT.DARK_PLANKS, MAT.TINTED, 'blackstone', 'dark'),
+    ],
+  },
+  remap: { SIDEWALK: 'SMOOTH', CROSSWALK: 'QUARTZ', LAMP_POST: 'BARS', WALL_CAP: 'QUARTZ' },
+  landmark: { ...MODERN_LANDMARK,
+    hallWall: MAT.SMOOTH_SAND, hallColumn: MAT.QUARTZ, hallCapital: MAT.GOLD, entablature: MAT.QUARTZ,
+    domeBase: MAT.QUARTZ, domeRing: MAT.GOLD, finial: MAT.GOLD,
+    clockWall: MAT.SMOOTH_SAND, clockTrim: MAT.QUARTZ, spire: MAT.GOLD,
+    libWall: MAT.SMOOTH_SAND, libTrim: MAT.QUARTZ, schoolWall: MAT.SMOOTH_SAND, schoolTrim: MAT.QUARTZ },
+};
+
 // A walled fortress town: the medieval palette inside a curtain wall with
 // towers and gatehouses, the castle keep at its heart, narrow streets and small
 // lots (city.js: fortressWall, and the overrides in generateCity).
