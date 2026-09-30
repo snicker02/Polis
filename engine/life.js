@@ -141,10 +141,13 @@ export function pond(world, lot, cx, cz, rng, G) {
     { x0: cx + 2, z0: lot.z0 + 1, x1: lot.x1 - 1, z1: cz - 2 },
     { x0: lot.x0 + 1, z0: cz + 2, x1: cx - 2, z1: lot.z1 - 1 },
     { x0: cx + 2, z0: cz + 2, x1: lot.x1 - 1, z1: lot.z1 - 1 },
-  ].filter((q) => q.x1 - q.x0 + 1 >= 4 && q.z1 - q.z0 + 1 >= 4);
+  // (a pond needs room to be a pond: at least four by four of water inside its
+  // bank, so fish have open water; it takes the biggest quarter of the park)
+  ].filter((q) => q.x1 - q.x0 + 1 >= 6 && q.z1 - q.z0 + 1 >= 6);
   if (!quads.length) return null;
   quads.sort((a, b) => (b.x1 - b.x0) * (b.z1 - b.z0) - (a.x1 - a.x0) * (a.z1 - a.z0));
-  const q = quads[rng.int(0, Math.min(1, quads.length - 1))];
+  rng.int(0, Math.min(1, quads.length - 1));                // (the draw the old choice took, so the park's other draws stay put)
+  const q = quads[0];
   const mx = (q.x0 + q.x1) / 2, mz = (q.z0 + q.z1) / 2;
   const rx = (q.x1 - q.x0) / 2 - 0.3, rz = (q.z1 - q.z0) / 2 - 0.3;
   let cells = 0;

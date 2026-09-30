@@ -86,7 +86,11 @@ export function fishSpawns(world, rng, opts = {}) {
     // Only water at least two deep: a fish in the bottom layer has water over
     // it and cannot leap out onto the bank (in a one-deep pond fish beach
     // themselves). Deeper cells first, shuffled within depth.
-    const cells = rng.shuffle(body.cells.filter((c) => c.depth >= 2)).sort((a, b) => Math.min(b.depth, 3) - Math.min(a.depth, 3));
+    // And in open deep water: the four cells round it deep too at the fish's
+    // layer, so it starts in the pool, not a pocket.
+    const deepAt = new Set(body.cells.filter((c) => c.depth >= 2).map((c) => c.x + ',' + c.z));
+    const open = (c) => [[1, 0], [-1, 0], [0, 1], [0, -1]].every(([a, b]) => deepAt.has((c.x + a) + ',' + (c.z + b)));
+    const cells = rng.shuffle(body.cells.filter((c) => c.depth >= 2 && (body.kind === 'river' || open(c)))).sort((a, b) => Math.min(b.depth, 3) - Math.min(a.depth, 3));
     const placed = [];
     for (const c of cells) {
       if (placed.length >= want || out.length >= o.max) break;

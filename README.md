@@ -1,4 +1,4 @@
-# Polis v0.30.1
+# Polis v0.30.2
 
 *Created with help from Claude AI.*
 
@@ -754,6 +754,27 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.30.2** — Park ponds deep enough to keep their fish.
+
+Generation did put fish in park ponds, but a pond was only deep in its middle
+(cells with water on three sides), with a one-deep margin all round and, in
+small ponds, a deep patch of one to four cells or none: fish drifted into the
+shallows and leapt out onto the grass. Now every pond cell is at least two deep,
+edges too, the banks going straight down, and a cell with water all round goes
+three deep; clay lines the bottom. A pond needs a park quarter six wide (four by
+four of water at the least) and always takes the biggest quarter. Pond fish
+start in open deep water, the four cells round them deep too, never in a
+pocket. (A big lake counts as open water, like the canal, and gets cod and
+salmon.)
+
+2zc checks the new ponds: deep throughout, three deep where water is all round,
+clay under them, no shallow margin, no fish in a deep pocket of a shallow pond
+(36 checks). Two checks were made fairer: the share of buildings with rooms is
+measured over eight cities (at least 55%; it measures 62-64%, and a real fault
+took it to about 50%), and a village cottage's footing is checked all round its
+ground course (every plain wall cell turned to stone) instead of at one cell
+that could be a doorway.
 
 **0.30.1** — The centre mark's beacons shine through a dome.
 

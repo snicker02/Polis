@@ -57,8 +57,16 @@ export default async function run(ctx) {
     for (const b of r.buildings) {
       if (b.style !== 'house' || b.landmark) continue;
       cottages++;
-      const foot = w.get(b.x0 + 1, b.groundY + 1, b.z0);
-      if (foot >= 0 && MATERIALS.def(foot).block === 'minecraft:cobblestone') footings++;
+      // the footing course all round: every cell of plain wall has become stone
+      // (a doorway is skipped, and a timber-framed theme keeps its posts and logs)
+      let stone = 0, plainLeft = 0;
+      for (let x = b.x0; x <= b.x1; x++) for (let z = b.z0; z <= b.z1; z++) {
+        if (x !== b.x0 && x !== b.x1 && z !== b.z0 && z !== b.z1) continue;
+        const id = w.get(x, b.groundY + 1, z);
+        if (id >= 0 && MATERIALS.def(id).block === 'minecraft:cobblestone') stone++;
+        if (b.theme && id === b.theme.wall && MATERIALS.def(id).block !== 'minecraft:cobblestone') plainLeft++;
+      }
+      if (stone > 0 && plainLeft === 0) footings++;
       const post = w.get(b.x0, b.groundY + 2, b.z0);
       if (post >= 0 && /log|frame|planks/.test(MATERIALS.def(post).block)) posts++;
       let over = 0;

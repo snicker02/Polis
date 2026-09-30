@@ -1686,7 +1686,12 @@ function stoneLanterns(world, cx, cz, G) {
   return placed;
 }
 
-// ---- deep middles for ponds -------------------------------------------------------
+// ---- deep ponds -------------------------------------------------------------------
+// Every pond cell is at least two deep, the edges too, so the banks go straight
+// down and there is no shallow margin for a fish to drift into and leap out of
+// onto the grass; a cell with pond water on all four sides goes three deep.
+// Clay lines the bottom. After every lift, so each pond's own surface height is
+// known (flat, terraced or rolling ground alike).
 function deepenPonds(world, ponds) {
   let cells = 0;
   const W_ = MAT.WATER;
@@ -1697,21 +1702,18 @@ function deepenPonds(world, ponds) {
       for (let x = pd.x0; x <= pd.x1; x++)
         for (let y = GROUND - 2; y <= GROUND + 40; y++)
           if (world.get(x, y, z) === W_ && world.get(x, y + 1, z) !== W_) { surf.set(x + ',' + z, y); break; }
-    const deep = [];
+    let deep = 0, deeper = 0;
     for (const [key, y] of surf) {
       const [x, z] = key.split(',').map(Number);
-      // at least three sides pond water: a narrow pond still gets a deep
-      // channel down its middle, not only a round one a deep centre
       const wet = [[1, 0], [-1, 0], [0, 1], [0, -1]].filter(([a, b]) => surf.get((x + a) + ',' + (z + b)) === y).length;
-      if (wet >= 3) deep.push([x, y, z]);
-    }
-    for (const [x, y, z] of deep) {
-      if (world.get(x, y - 1, z) === W_) continue;
-      world.set(x, y - 1, z, W_);
-      world.set(x, y - 2, z, MAT.CLAY);
+      const depth = wet === 4 ? 3 : 2;
+      for (let d = 1; d < depth; d++) world.set(x, y - d, z, W_);
+      world.set(x, y - depth, z, MAT.CLAY);
+      deep++; if (depth === 3) deeper++;
       cells++;
     }
-    pd.deep = deep.length;
+    pd.deep = deep;
+    pd.deeper = deeper;
   }
   return cells;
 }

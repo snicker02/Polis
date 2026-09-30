@@ -29,18 +29,21 @@ export default async function run(ctx) {
   for (let x = 0; x < 20; x++) w.set(x, G, 0, W);                                  // irrigation channel, 1 wide
   for (let x = 30; x < 32; x++) for (let z = 0; z < 2; z++) w.set(x, G, z, W);     // fountain bowl, 4 cells
   for (let x = 40; x < 44; x++) for (let z = 0; z < 4; z++) w.set(x, G, z, W);     // pond 4x4, 1 deep: a puddle to a fish
-  for (let x = 70; x < 76; x++) for (let z = 0; z < 6; z++) w.set(x, G, z, W);     // pond 6x6 ...
-  for (let x = 71; x < 75; x++) for (let z = 1; z < 5; z++) w.set(x, G - 1, z, W); // ... with a 2-deep 4x4 middle
+  for (let x = 70; x < 76; x++) for (let z = 0; z < 6; z++) { w.set(x, G, z, W); w.set(x, G - 1, z, W); }   // pond 6x6, two deep throughout
+  for (let x = 50; x < 56; x++) for (let z = 0; z < 6; z++) w.set(x, G, z, W);     // pond 6x6, one deep ...
+  for (let x = 52; x < 54; x++) for (let z = 2; z < 4; z++) w.set(x, G - 1, z, W); // ... with a 2x2 deep pocket: not open water
   for (let x = 0; x < 60; x++) for (let z = 20; z < 25; z++) for (let y = G - 2; y <= G; y++) w.set(x, y, z, W);   // canal, 3 deep, 300 cells
   const bodies = waterBodies(w);
-  check('water bodies: the channel and the fountain are not pools', bodies.length === 3, bodies.map((b) => b.kind + b.cells.length).join(' '));
+  check('water bodies: the channel and the fountain are not pools', bodies.length === 4, bodies.map((b) => b.kind + b.cells.length).join(' '));
   check('water bodies: the 4x4 pond is a pond, the 60x5 canal is a river',
     bodies.some((b) => b.kind === 'pond' && b.cells.length === 16) && bodies.some((b) => b.kind === 'river' && b.cells.length === 300));
   const f = fishSpawns(w, makeRng(1));
   const inPuddle = f.filter((p) => p.x >= 40 && p.x < 44), inPond = f.filter((p) => p.x >= 70 && p.x < 76 && p.z < 6), inCanal = f.filter((p) => p.z >= 20);
-  check('fish: none in the channel or the fountain', f.every((p) => (p.x >= 70 && p.x < 76 && p.z < 6) || p.z >= 20 || (p.x >= 40 && p.x < 44)), JSON.stringify(f.filter((p) => p.z < 20 && !(p.x >= 70 && p.x < 76))));
+  const inPocket = f.filter((p) => p.x >= 50 && p.x < 56 && p.z < 6);
+  check('fish: none in the channel or the fountain', f.every((p) => (p.x >= 70 && p.x < 76 && p.z < 6) || p.z >= 20 || (p.x >= 40 && p.x < 44) || (p.x >= 50 && p.x < 56)), JSON.stringify(f.filter((p) => p.z < 20 && !(p.x >= 70 && p.x < 76))));
   check('fish: none in a one-deep pond (they would leap out onto the bank)', inPuddle.length === 0, String(inPuddle.length));
-  check('fish: a pond with a deep middle gets them there, spaced 2 apart (4x4 deep -> 4)', inPond.length === 4 && inPond.every((p) => p.x >= 71 && p.x < 75 && p.z >= 1 && p.z < 5), JSON.stringify(inPond.map((p) => [p.x, p.z])));
+  check('fish: none in a deep pocket of a shallow pond (it would swim out into the shallows)', inPocket.length === 0, String(inPocket.length));
+  check('fish: a pond deep throughout gets them in its open middle, spaced 2 apart (6x6 -> 4)', inPond.length === 4 && inPond.every((p) => p.x >= 71 && p.x < 75 && p.z >= 1 && p.z < 5), JSON.stringify(inPond.map((p) => [p.x, p.z])));
   check('fish: canal gets one per 30 cells (300 cells -> 10)', inCanal.length === 10, String(inCanal.length));
   check('fish: in deep water they swim a block under the surface', inCanal.every((p) => p.y === G - 1));
   check('fish: in a pond they swim in the bottom layer, under water', inPond.every((p) => p.y === G - 1 && w.get(p.x, G, p.z) === W));
@@ -89,30 +92,37 @@ export default async function run(ctx) {
       check('bedrock: populate says how to bring back missing fish', /function [^ ]+\/fish from beside the water/.test(pop.text));
     }
   }
-  // park ponds: a deep middle under water, clay under that, a one-deep rim
+  // park ponds: deep throughout (edges too, no shallow margin to leap out of), a
+  // cell with water all round three deep, clay under the lot
   {
-    let ponds = 0, deepOk = 0, rimOk = 0, fishedDeep = 0;
+    let ponds = 0, deepOk = 0, rimOk = 0, fishedDeep = 0, threeDeep = 0;
     for (const st of ['modern', 'medieval', 'desert']) for (const seed of [3, 31, 99]) {
-      const r = generateCity({ ...DEFAULTS, size: 128, seed, cityStyle: st, parkChance: 0.35, pondChance: 1 });
+      // (160 across: a pond wants a park quarter six wide, which small cities rarely have)
+      const r = generateCity({ ...DEFAULTS, size: 160, seed, cityStyle: st, parkChance: 0.35, pondChance: 1 });
       const fishes = r.spawns.filter(isFish);
       for (const pd of r.ponds) {
-        if (pd.cells < 6) continue;                               // a 2x2 puddle has no middle
         ponds++;
-        let deep = 0, shelf = 0, bad = 0;
-        for (let z = pd.z0; z <= pd.z1; z++) for (let x = pd.x0; x <= pd.x1; x++) {
-          let top = null;
-          for (let y = 60; y >= -3; y--) if (r.world.get(x, y, z) === MAT.WATER) { top = y; break; }
-          if (top === null) continue;
-          if (r.world.get(x, top - 1, z) === MAT.WATER) { deep++; if (r.world.get(x, top - 2, z) !== MAT.CLAY) bad++; }
-          else shelf++;
+        let deep = 0, shelf = 0, bad = 0, three = 0;
+        const topAt = new Map();
+        for (let z = pd.z0; z <= pd.z1; z++) for (let x = pd.x0; x <= pd.x1; x++)
+          for (let y = 60; y >= -3; y--) if (r.world.get(x, y, z) === MAT.WATER) { topAt.set(x + ',' + z, y); break; }
+        for (const [k, top] of topAt) {
+          const [x, z] = k.split(',').map(Number);
+          if (r.world.get(x, top - 1, z) !== MAT.WATER) { shelf++; continue; }
+          deep++;
+          const all = [[1, 0], [-1, 0], [0, 1], [0, -1]].every(([a, b]) => topAt.get((x + a) + ',' + (z + b)) === top);
+          const bottom = all ? top - 3 : top - 2;
+          if (all) { if (r.world.get(x, top - 2, z) !== MAT.WATER) bad++; else three++; }
+          if (r.world.get(x, bottom, z) !== MAT.CLAY) bad++;
         }
         if (deep > 0 && bad === 0) deepOk++;
-        if (shelf > 0) rimOk++;
+        if (shelf === 0) rimOk++;
+        threeDeep += three;
         if (fishes.some((p) => p.x >= pd.x0 && p.x <= pd.x1 && p.z >= pd.z0 && p.z <= pd.z1)) fishedDeep++;
       }
     }
-    check('ponds: every park pond has a deep middle, clay under it', ponds > 5 && deepOk === ponds, `${deepOk}/${ponds}`);
-    check('ponds: and keeps a one-deep rim', rimOk === ponds, `${rimOk}/${ponds}`);
+    check('ponds: every park pond deep throughout, three deep where water is all round, clay under it', ponds >= 4 && deepOk === ponds && threeDeep > 0, `${deepOk}/${ponds}, ${threeDeep} cells three deep`);
+    check('ponds: no shallow margin (nowhere one deep for a fish to leap out of)', rimOk === ponds, `${rimOk}/${ponds}`);
     check('ponds: every park pond has fish', fishedDeep === ponds, `${fishedDeep}/${ponds}`);
   }
   check('cities: fish are generated', total > 0, String(total));
