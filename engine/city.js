@@ -705,7 +705,8 @@ export function generateCity(cfgIn, onProgress) {
     { count: cfg.hostileCount, style: cfg.cityStyle, top: GROUND + 90, bottom: GROUND - 4 });
   // ---- the dome: last of all, over everything (not on real ground) ------------
   const dome = cfg.dome && !cfg.terrain
-    ? buildDome(world, GROUND, { ground: remapTable(STYLE, FLOWERS).get(MAT.GRASS) ?? MAT.GRASS })
+    ? buildDome(world, GROUND, { ground: remapTable(STYLE, FLOWERS).get(MAT.GRASS) ?? MAT.GRASS,
+      beams: centre ? centre.beacons.map(([x, , z]) => x + ',' + z) : [] })       // the beacons shine up through it
     : null;
   // ---- no dark corners: light every spot a hostile mob could spawn -----------
   // (last of all, over everything, dome included: see lighting.js)

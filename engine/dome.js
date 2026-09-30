@@ -92,9 +92,15 @@ export function buildDome(world, G, opts = {}) {
       const yLo = Math.max(G + 1, Math.min(Math.floor(low) + 1, yHi));
       for (let y = yLo; y <= yHi; y++) shell.push([x, y, z]);
     }
+  // The centre mark's beacons shine up through the dome: where a beacon's column
+  // meets the shell it is plain glass (a beam passes through glass), never a
+  // quartz rib or the glowstone crown. Glass seals as well as quartz does.
+  const beams = new Set(opts.beams || []);
+  info.beamCells = 0;
   let topCell = null;
   for (const [x, y, z] of shell) {
     if (world.has(x, y, z)) { info.skipped++; continue; }
+    if (beams.has(x + ',' + z)) { world.set(x, y, z, MAT.GLASS); info.glass++; info.beamCells++; continue; }
     const rx = Math.hypot(x - cx, z - cz);
     const ang = Math.atan2(z - cz, x - cx);
     const k = Math.round(ang / (2 * Math.PI / RIBS));

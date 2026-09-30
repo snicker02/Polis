@@ -271,6 +271,20 @@ export default async function run(ctx) {
     const firstTile = bl.findIndex((l) => !/_d /.test(l));
     check('bedrock: build loads every drain structure before any piece of the city', lastDrain >= 0 && firstTile > lastDrain, `last drain line ${lastDrain}, first city line ${firstTile}`);
   }
+  // the centre mark's beacons shine up through the dome: nothing but glass over
+  // any of them, all the way up (a quartz rib or the glowstone crown stopped the beam)
+  {
+    let beams = 0, blocked = 0;
+    for (const [base, seed, mix] of [['modern', 7, false], ['fortress', 12345, false], ['artdeco', 3, true], ['glass', 99, true]]) {
+      const r = generateCity({ ...DEFAULTS, size: 192, seed, cityStyle: base, dome: true, mixStyles: mix, mixList: [base, 'medieval', 'eastasian'] });
+      const w = r.world;
+      for (const [x, y, z] of (r.centre && r.centre.beacons) || []) {
+        beams++;
+        for (let yy = y + 1; yy <= w.box.y1; yy++) { const id = w.get(x, yy, z); if (id !== -1 && !/glass/.test(MATERIALS.def(id).block)) { blocked++; break; } }
+      }
+    }
+    check('dome: the centre mark\'s beacons shine up through it (only glass over them)', beams >= 12 && blocked === 0, `${blocked} of ${beams} beams blocked`);
+  }
   const off = generateCity({ ...DEFAULTS, seed: 7, size: 160 });
   check('dome: none unless asked for', off.dome === null);
   const html = readFileSync(join(ROOT, 'index.html'), 'utf8'), main = readFileSync(join(ROOT, 'main.js'), 'utf8');

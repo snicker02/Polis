@@ -1,4 +1,4 @@
-# Polis v0.30.0
+# Polis v0.30.1
 
 *Created with help from Claude AI.*
 
@@ -754,6 +754,17 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.30.1** — The centre mark's beacons shine through a dome.
+
+Under a dome the beacons' beams were stopped by the shell: its twelve quartz
+meridians meet at the crown, right over the city's middle where the centre
+mark stands, so a beam almost always ran into a rib (37 of 48 domed test
+cities, mixed or not; mixing styles had nothing to do with it). Now where a
+beacon's column meets the shell it is plain glass, which a beam passes
+through, and the glowstone crown goes on the nearest cell off the beam; glass
+seals as well as quartz, so the dome stays watertight. 2zj checks that nothing
+but glass stands over any of the beacons, all the way up (28 checks).
 
 **0.30.0** — A city of many styles.
 
