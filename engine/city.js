@@ -16,6 +16,9 @@ import { plantBeds } from './building.js';
 import { courtyardPlan, makeCourtyard } from './courtyard.js';
 import { hostileSpawns } from './hostiles.js';
 import { buildDome } from './dome.js';
+import { lightUp, TARGET, TARGET_OUT } from './lighting.js';
+import { verifyBuilding } from './verify.js';
+import { planStyleDistricts } from './districts.js';
 import { megalith } from './megaliths.js';
 import { fishSpawns } from './fish.js';
 import { generatePlan, frontage, USE } from './plan.js';
@@ -29,7 +32,7 @@ import { planHarbour, buildHarbour, harbourSidings } from './harbour.js';
 import { planBridges, buildBridges, bridgeRails } from './bridges.js';
 import { chooseLandmarks, buildLandmark } from './landmarks.js';
 import { planHills, liftBlocks, cutStairs, shiftBuilding, walkCity } from './terrain.js';
-import { styleOf, remapTable } from './styles.js';
+import { styleOf, remapTable, STYLES } from './styles.js';
 import { signTags } from './landmarks.js';
 import { signId, SIGN_FACING, railId, RAIL } from './materials.js';
 import { buildCentre, centreCells, footprint } from './centre.js';
@@ -90,6 +93,9 @@ export const DEFAULTS = {
   hostiles: false,           // populate also summons hostile mobs (the hostiles functions are always there)
   hostileCount: 24,          // how many: daylight-proof kinds, a mix for the city's style
   dome: false,               // a glass dome over the whole city, sealed all round (invented cities only)
+  lightAll: true,            // light every spot a hostile mob could spawn (lighting.js)
+  mixStyles: false,          // several styles, one to a district (districts.js)
+  mixList: ['modern', 'medieval', 'eastasian', 'artdeco'],   // the styles ticked for mixing
   furnish: true,
   flowers: true,
   villagers: 60,
@@ -107,6 +113,7 @@ const GROUND = 1;   // surface layer; players walk at GROUND+1
 
 // the style in force while a city is being generated (trees read it)
 let STYLE = styleOf('modern');
+let STYLE_AT = null;          // (x, z) -> the style there, when a city mixes styles
 
 let stats_terrain = null;
 let stats_unsupported = 0;
@@ -170,6 +177,13 @@ export function generateCity(cfgIn, onProgress) {
   const canals = STYLE.venetian && cfg.canal ? planCanals(plan, cfg, edgeDistance(plan), 6)
     : [planCanal(plan, cfg, edgeDistance(plan))].filter(Boolean);
   const canal = canals[0] || null;
+  // ---- styles by district: the ticked styles shared out among districts ------
+  const mixNames = cfg.mixStyles ? [...new Set((cfg.mixList || []).filter((n) => STYLES[n]))] : [];
+  const SD = mixNames.length >= 2 ? planStyleDistricts(plan, cfg, mixNames, cfg.cityStyle) : null;
+  STYLE_AT = SD ? (x, z) => styleOf(SD.at(x, z)) : null;
+  const lotStyleOf = (lot) => (SD ? styleOf(SD.lotStyle(lot)) : STYLE);
+  // (landmarks and parks look it up through cfg; kept out of the config's own fields)
+  Object.defineProperty(cfg, 'styleAt', { value: STYLE_AT, enumerable: false, configurable: true, writable: true });
   const harbourPlan = planHarbour(plan, canal, cfg);
   // districts the outline kept but could not join up: give them viaducts
   const bridgeSpans = planBridges(plan, cfg, plan.districts || []);
@@ -305,7 +319,7 @@ export function generateCity(cfgIn, onProgress) {
         for (const wing of L.wings || []) {
           buildings.push(wing);
           if (cfg.furnish) {
-            const fw = furnish(world, wing, furnRng(wing), { useStairs: cfg.useStairs, paintings: !STYLE.glass });
+            const fw = furnish(world, wing, furnRng(wing), { useStairs: cfg.useStairs, paintings: !lotStyleOf(lot).glass });
             wing.beds = fw.beds; wing.furniture = fw;
             for (const b of fw.beds) beds.push(b);
           } else wing.beds = [];
@@ -313,7 +327,7 @@ export function generateCity(cfgIn, onProgress) {
         if (L.rec) {
           buildings.push(L.rec);
           if (cfg.furnish) {
-            const f = furnish(world, L.rec, furnRng(L.rec), { useStairs: cfg.useStairs, paintings: !STYLE.glass });
+            const f = furnish(world, L.rec, furnRng(L.rec), { useStairs: cfg.useStairs, paintings: !lotStyleOf(lot).glass });
             L.rec.beds = f.beds; L.rec.furniture = f;
             for (const b of f.beds) beds.push(b);
           } else L.rec.beds = [];
@@ -346,7 +360,8 @@ export function generateCity(cfgIn, onProgress) {
     }
 
     const front = frontage(plan, lot);
-    const theme = themeRng.pick(STYLE.themes[lot.style] || STYLE.themes.mid);
+    const LS = lotStyleOf(lot);                          // the lot's own style (its district's, when mixed)
+    const theme = themeRng.pick(LS.themes[lot.style] || LS.themes.mid);
     // An L or U round a courtyard: decided per lot from a hash, and built (and
     // furnished) from its own random stream. Every wing is a whole building.
     if (cfg.courtyardChance > 0 && lot.style === 'mid') {
@@ -358,7 +373,7 @@ export function generateCity(cfgIn, onProgress) {
         const cy = makeCourtyard(world, {
           x0: fx0, z0: fz0, x1: fx1, z1: fz1, face: front.side, kind, mirror: crng.chance(0.5), G: GROUND, flowers: cfg.flowers,
           building: (p) => makeBuilding(world, {
-            detail: cfg.detail, arcade: !STYLE.venetian, eaves: !!STYLE.eaves, lancets: !!STYLE.lancets, deco: !!STYLE.deco, rustic: !!STYLE.rustic,
+            detail: cfg.detail, arcade: !LS.venetian, eaves: !!LS.eaves, lancets: !!LS.lancets, deco: !!LS.deco, rustic: !!LS.rustic,
             x0: p.x0, z0: p.z0, x1: p.x1, z1: p.z1, noStairs: p.noStairs,
             floors: lot.floors, pitch: cfg.pitch, groundY: GROUND,
             style: 'mid', facing: p.facing, theme,
@@ -373,7 +388,7 @@ export function generateCity(cfgIn, onProgress) {
           for (const rec of [...cy.wings].sort((a, b) => (b.core ? 1 : 0) - (a.core ? 1 : 0))) {
             buildings.push(rec);
             if (cfg.furnish) {
-              const f = furnish(world, rec, crng, { useStairs: cfg.useStairs, paintings: !STYLE.glass });
+              const f = furnish(world, rec, crng, { useStairs: cfg.useStairs, paintings: !LS.glass });
               rec.beds = f.beds; rec.furniture = f;
               for (const b of f.beds) beds.push(b);
             } else rec.beds = [];
@@ -390,17 +405,17 @@ export function generateCity(cfgIn, onProgress) {
     // A twisting tower: decided per lot from a hash, and built from its own
     // random stream, so a chance of 0 leaves every city exactly as it was.
     // (a style may have its own tower shapes and share: the East Asian style's pagodas)
-    const shapedChance = STYLE.shapedChance !== undefined ? STYLE.shapedChance : cfg.twistChance;
-    const twisting = shapedChance > 0 && lot.style === 'tower' && !STYLE.rustic &&
+    const shapedChance = LS.shapedChance !== undefined ? LS.shapedChance : cfg.twistChance;
+    const twisting = shapedChance > 0 && lot.style === 'tower' && !LS.rustic &&
       twistFits(fx0, fz0, fx1, fz1, lot.floors) && hash2(lot.x0, lot.z0, (cfg.seed ^ 0x7157) | 0) < shapedChance;
     const rec = twisting ? makeShapedTower(world, {
       x0: fx0, z0: fz0, x1: fx1, z1: fz1,
       floors: lot.floors, pitch: cfg.pitch, groundY: GROUND,
       facing: front.side, theme, useStairs: cfg.useStairs, lights: cfg.lights,
-      shape: towerShape(hash2(lot.z0, lot.x0, (cfg.seed ^ 0x5a9e) | 0), STYLE.towerShapes),
+      shape: towerShape(hash2(lot.z0, lot.x0, (cfg.seed ^ 0x5a9e) | 0), LS.towerShapes),
     }, makeRng(((lot.x0 * 73856093) ^ (lot.z0 * 19349663) ^ cfg.seed ^ 0x7157) >>> 0)) : makeBuilding(world, {
-      detail: cfg.detail, arcade: !STYLE.venetian, eaves: !!STYLE.eaves, lancets: !!STYLE.lancets, deco: !!STYLE.deco,
-      rustic: !!STYLE.rustic,
+      detail: cfg.detail, arcade: !LS.venetian, eaves: !!LS.eaves, lancets: !!LS.lancets, deco: !!LS.deco,
+      rustic: !!LS.rustic,
       x0: fx0, z0: fz0, x1: fx1, z1: fz1,
       floors: lot.floors, pitch: cfg.pitch, groundY: GROUND,
       style: lot.style, facing: front.side, theme,
@@ -411,7 +426,7 @@ export function generateCity(cfgIn, onProgress) {
     if (rec) {
       buildings.push(rec);
       if (cfg.furnish) {
-        const f = furnish(world, rec, furnRng(rec), { useStairs: cfg.useStairs, paintings: !STYLE.glass });
+        const f = furnish(world, rec, furnRng(rec), { useStairs: cfg.useStairs, paintings: !LS.glass });
         rec.beds = f.beds; rec.furniture = f;
         for (const b of f.beds) beds.push(b);
       } else { rec.beds = []; }
@@ -575,7 +590,8 @@ export function generateCity(cfgIn, onProgress) {
   for (const rec of buildings) for (const p of (rec.furniture && rec.furniture.paintings) || []) spawns.push(p);
 
   // ---- city style: restyle the role materials, then snow -----------------------
-  applyStyle(world, plan, STYLE, (x, z) => GROUND + elevAt(x, z));
+  if (SD) for (const name of SD.names) applyStyle(world, plan, styleOf(name), (x, z) => GROUND + elevAt(x, z), (x, z) => SD.at(x, z) === name);
+  else applyStyle(world, plan, STYLE, (x, z) => GROUND + elevAt(x, z));
 
   // ---- the bridges between districts -----------------------------------------
   const bridges = bridgeSpans.length ? buildBridges(world, plan, bridgeSpans, hills, GROUND, cfg.terrain, buildings, cfg.transit !== 'roads' ? transit : null) : [];
@@ -691,10 +707,51 @@ export function generateCity(cfgIn, onProgress) {
   const dome = cfg.dome && !cfg.terrain
     ? buildDome(world, GROUND, { ground: remapTable(STYLE, FLOWERS).get(MAT.GRASS) ?? MAT.GRASS })
     : null;
+  // ---- no dark corners: light every spot a hostile mob could spawn -----------
+  // (last of all, over everything, dome included: see lighting.js)
+  let lighting = null;
+  if (cfg.lightAll) {
+    const { W, D, mask } = plan;
+    const inPlan = (x, z) => x >= 0 && z >= 0 && x < W && z < D && (!mask || mask[z * W + x]);
+    // (a fitted city's cuts graded up into the hillside stay the natural slope
+    // they were graded to be: the wild land round them is the hillside's own)
+    const graded = world.cutFaces || null;
+    const inCity = (x, z) => inPlan(x, z) && !(graded && graded.has(x + ',' + z));
+    const inside = dome ? (x, z) => (x - dome.cx) ** 2 + (z - dome.cz) ** 2 < dome.R * dome.R : inCity;
+    const keep = dome ? (x, y, z) => ((x - dome.cx) ** 2 + (z - dome.cz) ** 2) / dome.R ** 2 + ((y - GROUND) / dome.c) ** 2 < 1 : () => true;
+    // inside a building (below its roof) a spot wants a properly lit room; outside, any light at all
+    const indoor = (x, y, z) => buildings.some((b) => x >= b.x0 && x <= b.x1 && z >= b.z0 && z <= b.z1 && y > b.groundY && y <= b.roofY);
+    const nearStairs = (x, z) => buildings.some((b) => b.core && x >= b.core.x0 - 1 && x <= b.core.x1 + 1 && z >= b.core.z0 - 1 && z <= b.core.z1 + 1);
+    lighting = lightUp(world, inside, {
+      keep, target: (x, y, z) => (indoor(x, y, z) ? TARGET : TARGET_OUT), noHang: nearStairs,
+      groundAt: (x, z) => (inPlan(x, z) ? GROUND + elevAt(x, z) : GROUND),
+      // a building's floors and roof are floor, whatever is beside a block
+      floorLevel: (x, y, z) => buildings.some((b) => x >= b.x0 && x <= b.x1 && z >= b.z0 && z <= b.z1 && (b.floorYs.includes(y) || y === b.roofY)),
+      // the safety net: every building touched must still walk through
+      check: (changes) => {
+        const undone = [];
+        for (const b of buildings) {
+          const mine = [];
+          changes.forEach(([x, , z], i) => { if (x >= b.x0 - 2 && x <= b.x1 + 2 && z >= b.z0 - 2 && z <= b.z1 + 2) mine.push(i); });
+          if (!mine.length) continue;
+          if (!verifyBuilding(world, b).ok) {
+            // take them out and look again
+            for (const i of mine) { const [x, y, z, old] = changes[i]; if (old === -1) world.clear(x, y, z); else world.set(x, y, z, old); }
+            if (verifyBuilding(world, b).ok) { for (const i of mine) { const [x, y, z, , id] = changes[i]; world.set(x, y, z, id); } undone.push(...mine); }
+            else for (const i of mine) { const [x, y, z, , id] = changes[i]; world.set(x, y, z, id); }
+          }
+        }
+        return undone;
+      },
+      floorLight: (x, z) => { const S = STYLE_AT ? STYLE_AT(x, z) : STYLE; return S.lightBlock !== undefined ? S.lightBlock : MAT.LANTERN; },
+      hang: MAT.LAMP_HANG,
+    });
+    delete lighting.map; delete lighting.changes;
+  }
 
   const shell = cfg.terrain ? terrainShell(plan, cfg.terrain, GROUND, cfg.cityStyle) : null;
-  const stats = summarise(world, plan, buildings, cfg, { farms, beds, spawns, bell, transit, wall, ranches, landmarks, hills, stairRuns, reach, canal, centre, streets, harbour, skirt, cutFaces, bridges, megaliths, ponds, courtyards, hostiles, dome, canals, unsupported: stats_unsupported });
-  return { world, plan, buildings, cfg, stats, shell, bridges, farms, ranches, spawns, bell, transit, wall, landmarks, canal, centre, streets, harbour, harbourPlan, megaliths, ponds, courtyards, hostiles, dome, canals,
+  const stats = summarise(world, plan, buildings, cfg, { farms, beds, spawns, bell, transit, wall, ranches, landmarks, hills, stairRuns, reach, canal, centre, streets, harbour, skirt, cutFaces, bridges, megaliths, ponds, courtyards, hostiles, dome, canals, lighting, styleDistricts: SD, unsupported: stats_unsupported });
+  return { world, plan, buildings, cfg, stats, shell, bridges, farms, ranches, spawns, bell, transit, wall, landmarks, canal, centre, streets, harbour, harbourPlan, megaliths, ponds, courtyards, hostiles, dome, canals, lighting, styleDistricts: SD,
     hills, stairRuns, reach, groundAt: (x, z) => GROUND + elevAt(x, z) };
 }
 
@@ -1185,11 +1242,13 @@ function markCentre(world, plan, buildings, G, elevAt, spawns = [], stairRuns = 
 // ---- city style ----------------------------------------------------------------
 // Swap every role material for the style's own (roads, ground, trees, flowers,
 // lamps, wall...), then lay snow on open ground for snowy cities.
-function applyStyle(world, plan, style, groundAt) {
+// (where(x, z): only these cells, for a city of several styles)
+function applyStyle(world, plan, style, groundAt, where = null) {
   const table = remapTable(style, FLOWERS);
+  const mine = where || (() => true);
   if (table.size) {
     const changes = [];
-    world.forEach((x, y, z, id) => { if (table.has(id)) changes.push([x, y, z, table.get(id)]); });
+    world.forEach((x, y, z, id) => { if (table.has(id) && mine(x, z)) changes.push([x, y, z, table.get(id)]); });
     for (const [x, y, z, to] of changes) {
       if (to === null) world.clear(x, y, z);
       else { const d = world.getData(x, y, z); world.set(x, y, z, to); if (d) world.setData(x, y, z, d); }
@@ -1222,6 +1281,7 @@ function applyStyle(world, plan, style, groundAt) {
     let cacti = 0;
     const bushes = [];
     world.forEach((x, y, z, id) => {
+      if (!mine(x, z)) return;
       if (id === CAC && world.get(x, y - 1, z) !== CAC) cacti++;
       else if (id === MAT.DEADBUSH) bushes.push([x, y, z]);
     });
@@ -1247,6 +1307,7 @@ function applyStyle(world, plan, style, groundAt) {
     const { W, D } = plan;
     for (let z = 0; z < D; z++)
       for (let x = 0; x < W; x++) {
+        if (!mine(x, z)) continue;
         const g = groundAt(x, z);
         if (world.get(x, g, z) === MAT.GRASS && !world.has(x, g + 1, z)) world.set(x, g + 1, z, MAT.SNOW_LAYER);
       }
@@ -1744,7 +1805,7 @@ function park(world, lot, rng, cfg, lifeRng, pandas, megaliths, ponds) {
   }
   if (cfg.flowers) scatterFlowers(world, lot, 0.07, rng, GROUND);
   // East Asian style: a torii where each path meets the street, stone lanterns by the crossing
-  if (styleOf(cfg.cityStyle).torii) {
+  if ((cfg.styleAt ? cfg.styleAt((lot.x0 + lot.x1) / 2, (lot.z0 + lot.z1) / 2) : styleOf(cfg.cityStyle)).torii) {
     lot.torii = parkGates(world, lot, cx, cz, GROUND);
     lot.stoneLanterns = stoneLanterns(world, cx, cz, GROUND);
   }
@@ -1812,7 +1873,8 @@ function cactus(world, x, z, rng) {
 }
 
 function tree(world, x, z, rng) {
-  if (STYLE.cactus && rng.chance(STYLE.cactus)) return cactus(world, x, z, rng);
+  const HERE = STYLE_AT ? STYLE_AT(x, z) : STYLE;
+  if (HERE.cactus && rng.chance(HERE.cactus)) return cactus(world, x, z, rng);
   const h = rng.int(4, 6);
   const spruce = rng.chance(0.3);
   const log = spruce ? MAT.SPRUCE_LOG : MAT.LOG;
@@ -1888,6 +1950,8 @@ function summarise(world, plan, buildings, cfg, life = {}) {
     canals: (life.canals || []).length,
     footbridges: (life.canals || []).reduce((n, c) => n + (c.footbridges || []).length, 0),
     hostiles: (life.hostiles || []).length,
+    styleDistricts: life.styleDistricts ? life.styleDistricts.counts : null,
+    lighting: life.lighting ? { added: life.lighting.hung + life.lighting.flush + life.lighting.standing, hung: life.lighting.hung, flush: life.lighting.flush, standing: life.lighting.standing, darkBefore: life.lighting.before, darkAfter: life.lighting.after } : null,
     dome: life.dome ? { radius: life.dome.R, height: life.dome.c, cells: life.dome.cells, doors: life.dome.doors.length } : null,
     torii: plan.lots.reduce((n, l) => n + ((l.torii && l.torii.length) || 0), 0),
     stoneLanterns: plan.lots.reduce((n, l) => n + ((l.stoneLanterns && l.stoneLanterns.length) || 0), 0),

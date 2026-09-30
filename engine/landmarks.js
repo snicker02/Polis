@@ -22,6 +22,10 @@ import { USE, frontage } from './plan.js';
 import { townSquare, stadium, cemetery, allotments, bandstand } from './landmarks-extra.js';
 import { FLOWERS as FLOWERS_M } from './materials.js';
 import { styleOf } from './styles.js';
+
+// The style a landmark is built in: its own district's, when the city mixes
+// styles (cfg.styleAt, set by generateCity), otherwise the city's.
+const styleHere = (cfg, lot) => (cfg.styleAt ? cfg.styleAt((lot.x0 + lot.x1) / 2, (lot.z0 + lot.z1) / 2) : styleOf(cfg.cityStyle));
 import { gothicChurch, fleche } from './gothic.js';
 
 export const LANDMARKS = ['townhall', 'clocktower', 'library', 'market', 'church', 'mansion', 'school', 'lighthouse', 'castle',
@@ -155,7 +159,7 @@ const inLot = (lot, x, z) => x >= lot.x0 && x <= lot.x1 && z >= lot.z0 && z <= l
 
 // ---- town hall -------------------------------------------------------------
 function townHall(world, lot, face, cfg, rng, G) {
-  const LP = styleOf(cfg.cityStyle).landmark;
+  const LP = styleHere(cfg, lot).landmark;
   pave(world, lot, G, () => LP.hallPave);
   const r = inset(lot, face, 3, 1);
   const P = cfg.pitch;
@@ -219,12 +223,12 @@ function townHall(world, lot, face, cfg, rng, G) {
 export const CLOCK_FACE = ['QQBQQ', 'QQBQQ', 'BQGBB', 'QQQQQ', 'QQBQQ'];
 
 function clockTower(world, lot, face, cfg, rng, G) {
-  const LP = styleOf(cfg.cityStyle).landmark;
+  const LP = styleHere(cfg, lot).landmark;
   pave(world, lot, G, (x, z) => LP.clockPave[(x + z) & 1]);
   const cx = Math.floor((lot.x0 + lot.x1) / 2), cz = Math.floor((lot.z0 + lot.z1) / 2);
   const r = { x0: cx - 3, z0: cz - 3, x1: cx + 3, z1: cz + 3 };
   // (a Venetian campanile stands above the palazzi whatever the height limit)
-  const floors = styleOf(cfg.cityStyle).campanile ? 8 : Math.max(4, Math.min(8, cfg.maxFloors | 0 || 8));
+  const floors = styleHere(cfg, lot).campanile ? 8 : Math.max(4, Math.min(8, cfg.maxFloors | 0 || 8));
   const theme = { name: 'clock tower', wall: LP.clockWall, trim: LP.clockTrim, floor: LP.clockFloor,
     glass: MAT.GLASS, stair: LP.clockStair, door: LP.clockDoor };
   const rec = makeBuilding(world, { ...r, floors, pitch: cfg.pitch, groundY: G, style: 'mid', facing: face, theme,
@@ -267,12 +271,12 @@ function clockTower(world, lot, face, cfg, rng, G) {
   rec.rooms = (k) => (k === 0 ? 'hall' : (k % 2 ? 'office' : 'library'));
   rec.landmark = 'clocktower';
   return { kind: 'clocktower', rec, faces, belfryBell: [cx, y0 + 11, cz], lot,
-    ...(styleOf(cfg.cityStyle).campanile ? { name: 'Campanile' } : {}) };
+    ...(styleHere(cfg, lot).campanile ? { name: 'Campanile' } : {}) };
 }
 
 // ---- library ---------------------------------------------------------------
 function library(world, lot, face, cfg, rng, G) {
-  const LP = styleOf(cfg.cityStyle).landmark;
+  const LP = styleHere(cfg, lot).landmark;
   pave(world, lot, G, () => LP.libPave);
   const r = inset(lot, face, 2, 1);
   const floors = Math.min(r.x1 - r.x0, r.z1 - r.z0) >= 14 ? 3 : 2;
@@ -296,7 +300,7 @@ function library(world, lot, face, cfg, rng, G) {
 
 // ---- market square ---------------------------------------------------------
 function market(world, lot, face, cfg, rng, G) {
-  const LP = styleOf(cfg.cityStyle).landmark;
+  const LP = styleHere(cfg, lot).landmark;
   pave(world, lot, G, (x, z) => LP.market[(x + z) & 1]);
   const I = { x0: lot.x0 + 1, z0: lot.z0 + 1, x1: lot.x1 - 1, z1: lot.z1 - 1 };
   const Lx = I.x1 - I.x0 + 1, Lz = I.z1 - I.z0 + 1;
@@ -355,7 +359,7 @@ function market(world, lot, face, cfg, rng, G) {
 // A tall nave with stained glass, pews facing the altar, and a bell tower with
 // a spire rising over the entrance.
 function church(world, lot, face, cfg, rng, G) {
-  const LP = styleOf(cfg.cityStyle).landmark;
+  const LP = styleHere(cfg, lot).landmark;
   pave(world, lot, G, () => LP.hallPave);
   const r = inset(lot, face, 2, 1);
   // Gothic dress (with Detail on) wants a taller hall: room for a rose window
@@ -447,7 +451,7 @@ function church(world, lot, face, cfg, rng, G) {
 export const SCHOOL_FIELD_DEPTH = 4 + 9 + 1 + 5;   // yard, hall, path, field
 
 function school(world, lot, face, cfg, rng, G) {
-  const LP = styleOf(cfg.cityStyle).landmark;
+  const LP = styleHere(cfg, lot).landmark;
   pave(world, lot, G, () => LP.libPave);
   const alongFace = face === 'north' || face === 'south';
   const lotDepth = alongFace ? lot.z1 - lot.z0 + 1 : lot.x1 - lot.x0 + 1;
@@ -561,7 +565,7 @@ const OPPOSITE_FACE = { north: 'south', south: 'north', east: 'west', west: 'eas
 // ---- lighthouse ----------------------------------------------------------------
 // A slender tower banded red and white, with a glass lantern room on top.
 function lighthouse(world, lot, face, cfg, rng, G) {
-  const LP = styleOf(cfg.cityStyle).landmark;
+  const LP = styleHere(cfg, lot).landmark;
   pave(world, lot, G, (x, z) => LP.clockPave[(x + z) & 1]);
   const cx = Math.floor((lot.x0 + lot.x1) / 2), cz = Math.floor((lot.z0 + lot.z1) / 2);
   const r = { x0: cx - 3, z0: cz - 3, x1: cx + 3, z1: cz + 3 };
@@ -641,7 +645,7 @@ function castle(world, lot, face, cfg, rng, G) {
 // the grounds with gate piers, a driveway up to the door, and a formal garden
 // behind with paths, a fountain, flower beds and benches.
 function mansion(world, lot, face, cfg, rng, G) {
-  const LP = styleOf(cfg.cityStyle).landmark;
+  const LP = styleHere(cfg, lot).landmark;
   const alongFace = face === 'north' || face === 'south';
   const lotDepth = alongFace ? lot.z1 - lot.z0 + 1 : lot.x1 - lot.x0 + 1;
   const lotWidth = alongFace ? lot.x1 - lot.x0 + 1 : lot.z1 - lot.z0 + 1;

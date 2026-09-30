@@ -53,7 +53,8 @@ export default async function run(ctx) {
           for (let a = strip[0]; a <= strip[1]; a++) { const [x, z] = c.cell(u, a); if (r.plan.use[z * r.plan.W + x] === USE.SIDEWALK) cells.push([x, z]); }
           if (!cells.length) continue;
           const stands = ([x, z]) => solid(w, x, G, z) && !solid(w, x, G + 1, z) && !solid(w, x, G + 2, z);
-          const dockStep = ([x, z]) => { for (let y = WATER_HI; y <= G; y++) if (/stairs|planks/.test(blk(w, x, y, z))) return true; return false; };
+          // (a dock's steps and landing, the landing perhaps lit: a sea lantern or shroomlight among its planks)
+          const dockStep = ([x, z]) => { for (let y = WATER_HI; y <= G; y++) if (/stairs|planks|sea_lantern|shroomlight/.test(blk(w, x, y, z))) return true; return false; };
           if (!cells.some((q) => stands(q) || dockStep(q))) walkBad++;
         }
       }

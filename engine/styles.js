@@ -224,6 +224,7 @@ export const STYLES = {
   // stepped in, and water only boils away in the Nether itself.)
   nether: {
     label: 'Nether',
+    lightBlock: MAT.SHROOMLIGHT,     // the flush lights set into the ground
     themes: {
       house: [
         T('crimson', MAT.CRIMSON_PLANKS, MAT.CRIMSON_FRAME, MAT.WARPED_PLANKS, MAT.SG_RED, 'crimson', 'crimson', MAT.NETHER_WART),

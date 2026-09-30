@@ -1,4 +1,4 @@
-# Polis v0.28.0
+# Polis v0.30.0
 
 *Created with help from Claude AI.*
 
@@ -754,6 +754,64 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.30.0** — A city of many styles.
+
+Tick "Mix styles by district" and the styles wanted (a box for each of the
+twelve, under the Style menu), and the city is shared out among districts,
+each built in one of them (districts.js). Seed points are spread evenly over
+the city and every place belongs to the nearest, measured through a gentle
+noise warp so the borders wander like old quarters. A bigger city has more
+districts (about one to every 72 x 72 blocks), and there is at least one for
+every ticked style; the districts with the most lots are handed out first, one
+to each style, so every ticked style gets buildings. The district at the heart
+takes the base style (the Style menu) when it is ticked.
+
+A lot takes its district's style whole, so no building is split at a border:
+its theme, and its dress (pointed windows, eave skirts, Art Deco fins and
+crowns, pagodas, cottages, no paintings in glass). Landmarks are built in
+their own district's palette (a campanile in a Venetian quarter). Streets and
+ground are restyled district by district (glass streets, nylium, gravel,
+snow), and so are the lights set into the floor, the torii in parks and the
+cacti in the desert. What shapes the whole city stays with the base style:
+canals for streets, a fortress wall, floor height, setbacks, a village's low
+buildings, the dome's ground.
+
+New section 2zo (10 checks): every ticked style gets buildings, each built from
+its own district's themes and dressed its style's way, none split, ground
+restyled by district, no dark spot, and with mixing off (or one style ticked)
+the city is the one-style city block for block. An eight-style city's export
+is all Bedrock's own block states.
+
+**0.29.0** — No dark corners: nowhere in a city for a hostile mob to spawn.
+
+Since 1.18, in both editions, an Overworld hostile mob spawns only where block
+light is 0, on an opaque surface with two cells of room above. When a city is
+finished (dome and all), its block light is worked out the way the game does
+(lighting.js: each light spreads a level weaker per block, stopped by opaque
+blocks, passing through glass, fences, doors, stairs and the like), and every
+spot a mob could spawn on is lit: at least 1 outside, and 8 inside buildings so
+rooms are properly lit (and safe even under the old 7-or-less rule).
+
+A dark spot gets, in order: a lantern hung from the ceiling (only three clear
+over the floor, never over the stairs); a light set flush into the floor under
+it (a sea lantern, or shroomlight in the Nether; streets, pavements, walkways
+and every building floor count as floor); outside, a flush light in the nearest
+floor that reaches it; or a small lantern standing on it (a bookshelf, a roof
+ridge, a merlon), the block under it kept. Nether fungus canopies take
+shroomlights among the wart. Never touched: furniture, workstations, gold,
+doors, stairs, decoration that stands proud (a torii lintel, a spire's tip, a
+stall counter), the soil under a flower, a fitted city's graded hillside. And a
+safety net: a building that would not walk through with its new lights gets
+them taken out again.
+
+Across seven styles, a few hundred lights take every city from thousands of
+dark spots to none; the glass dome's lawn, the darkest of all, is lit too. A
+line in the stats says what was added. On by default (cfg.lightAll).
+
+New section 2zn (7 checks): the light worked out afresh on the finished city,
+no spot left at 0, every room at 8, lanterns in nobody's way. 2zj and 2zk accept
+a lantern on a merlon and a lit dock landing.
 
 **0.28.0** — A city of glass.
 

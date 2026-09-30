@@ -65,7 +65,8 @@ export default async function run(ctx) {
       const [x, z] = k.split(',').map(Number);
       if (gateCells.has(k) || stairCells.has(k) || towerCells.has(k)) continue;
       for (let y = G; y < G + h; y++) if (!solid(w, x, y, z)) { thin++; break; }
-      if (!solid(w, x, G + h, z) || solid(w, x, G + h + 2, z)) walkGap++;
+      // (a lantern standing on a merlon lights the walk and is in nobody's way)
+      if (!solid(w, x, G + h, z) || (solid(w, x, G + h + 2, z) && !/lantern/.test(blk(w, x, G + h + 2, z)))) walkGap++;
       if (d === 0 && solid(w, x, G + h + 1, z)) merlons++;
     }
     for (const b of r.buildings) for (let z = b.z0; z <= b.z1; z++) for (let x = b.x0; x <= b.x1; x++) { const d = depth.get(x + ',' + z); if (d !== undefined && d < 3) buried++; }

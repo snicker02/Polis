@@ -138,12 +138,12 @@
   }
 </style>
 </head>
-<body class="mode-city" data-version="0.28.0">
+<body class="mode-city" data-version="0.30.0">
 <div id="app">
   <div id="panel">
     <div id="panelScroll">
       <h1>PO<span>L</span>IS</h1>
-      <div class="sub">procedural city → Minecraft Bedrock · v0.28.0</div>
+      <div class="sub">procedural city → Minecraft Bedrock · v0.30.0</div>
 
       <fieldset>
         <legend>Mode</legend>
@@ -208,6 +208,24 @@
           <option value="artdeco">Art Deco</option>
           <option value="glass">Glass</option>
         </select></div>
+        <label class="chk city-only" style="margin-top:4px"><input type="checkbox" id="mixStyles">Mix styles by district</label>
+        <div class="city-only">
+        <div class="checks" id="mixList">
+          <label class="chk"><input type="checkbox" class="mixStyle" value="modern" checked>Modern</label>
+          <label class="chk"><input type="checkbox" class="mixStyle" value="desert">Desert</label>
+          <label class="chk"><input type="checkbox" class="mixStyle" value="snowy">Snowy</label>
+          <label class="chk"><input type="checkbox" class="mixStyle" value="cherry">Cherry</label>
+          <label class="chk"><input type="checkbox" class="mixStyle" value="medieval" checked>Medieval</label>
+          <label class="chk"><input type="checkbox" class="mixStyle" value="village">Village</label>
+          <label class="chk"><input type="checkbox" class="mixStyle" value="nether">Nether</label>
+          <label class="chk"><input type="checkbox" class="mixStyle" value="eastasian" checked>East Asian</label>
+          <label class="chk"><input type="checkbox" class="mixStyle" value="fortress">Walled fortress</label>
+          <label class="chk"><input type="checkbox" class="mixStyle" value="venetian">Venetian</label>
+          <label class="chk"><input type="checkbox" class="mixStyle" value="artdeco" checked>Art Deco</label>
+          <label class="chk"><input type="checkbox" class="mixStyle" value="glass">Glass</label>
+        </div>
+        </div>
+        <div class="hint city-only">With two or more ticked, the city is shared out among districts, more in a bigger city, each built in one of them. The style above shapes the whole city (canals, walls, floor height) and takes the heart of it when ticked.</div>
         <div class="row"><label>Streets</label><select id="transit" style="width:150px">
           <option value="roads" selected>Roads</option>
           <option value="rails">Railways (no roads)</option>
@@ -346,6 +364,6 @@
     <div id="busy">generating…</div>
   </div>
 </div>
-<script type="module" src="./main.js?v=0.28.0"></script>
+<script type="module" src="./main.js?v=0.30.0"></script>
 </body>
 </html>

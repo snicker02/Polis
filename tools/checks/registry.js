@@ -48,6 +48,8 @@ export const SECTIONS = [
   { id: '2zk', file: '2zk-venetian-artdeco.js',                group: 'fast' },
   { id: '2zl', file: '2zl-interiors.js',                       group: 'fast' },
   { id: '2zm', file: '2zm-glass.js',                           group: 'fast' },
+  { id: '2zn', file: '2zn-lighting.js',                        group: 'fast' },
+  { id: '2zo', file: '2zo-style-districts.js',                 group: 'fast' },
   { id: '2v', file: '2v-java-worlds.js',                      group: 'fast' },
   { id: '2w', file: '2w-square-stadium-cemetery-allotments.js', group: 'slow' },
   { id: '2x', file: '2x-village-style.js',                    group: 'fast' },
