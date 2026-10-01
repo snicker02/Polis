@@ -17,7 +17,7 @@ import { makeRng } from './rng.js';
 // Must match main.js VERSION, package.json and index.html data-version;
 // tools/validate.js fails if they drift. The app refuses to export when the
 // browser has mixed cached copies of old and new files.
-export const POLIS_VERSION = '0.30.4';
+export const POLIS_VERSION = '0.30.5';
 
 export const CHUNK = 64;          // Bedrock structure limit per horizontal axis
 export const GROUND_DROP = 2;     // base layer y=0 sits 2 below feet; surface y=1 replaces the block you stand on
@@ -367,9 +367,8 @@ export function functionFiles(tiles, world, opts = {}) {
     // the centred version marks this spot (an armor stand in the centre mark's
     // alcove), and the other centred functions run from it wherever you stand
     ...(pop === 'populate_centered' ? [`kill @e[type=armor_stand,name=${anchor}]`, `summon armor_stand ${anchor} ~ ~ ~`] : []),
-    pop === 'populate_centered'
-      ? `say Polis: city placed, and this spot marked. When it has finished appearing, run /function ${ns}/${pop} (from anywhere: it finds the mark).`
-      : `say Polis: city placed. When it has finished appearing, run /function ${ns}/${pop} from this same spot.`,
+    `say Polis: city placed. When it has finished appearing, run /function ${ns}/${pop} from this same spot.`,
+    ...(pop === 'populate_centered' ? [`say Polis: this spot is marked by an armor stand. To come back to it: /tp @s @e[type=armor_stand,name=${anchor},c=1]`] : []),
   ].join('\n') + '\n';
   const populate = (dx, dz, title) => [
     `# ${title}`,
@@ -432,19 +431,19 @@ export function functionFiles(tiles, world, opts = {}) {
       { name: `functions/${ns}/${group}.mcfunction`, fn: `${ns}/${group}`, text: only(wb.x0, wb.z0, `Polis: ${noun} only (pairs with build)`) },
       { name: `functions/${ns}/${group}_centered.mcfunction`, fn: `${ns}/${group}_centered`, text: only(cx, cz, `Polis: ${noun} only (pairs with build_centered)`) });
   }
-  // Every centred function but build_centered runs from the spot build_centered
-  // marked, wherever the player stands: its body becomes <name>_at_mark, and
-  // <name> runs that at the armor stand (saying so if there is none).
-  const out = [];
+  // The centred functions run from where the player stands, as they always
+  // have. build_centered leaves an armor stand on its spot, to come back to
+  // (/tp @s @e[type=armor_stand,name=<city id>_centre,c=1]), and each centred
+  // function has an optional <name>_from_mark that runs it from the marker
+  // without moving: if that ever fails, the ordinary function is untouched.
+  const out = files.slice();
   for (const f of files) {
-    if (!f.fn.endsWith('_centered') || f.fn === `${ns}/build_centered`) { out.push(f); continue; }
+    if (!f.fn.endsWith('_centered') || f.fn === `${ns}/build_centered`) continue;
     const base = f.fn.slice(ns.length + 1, -'_centered'.length);
-    out.push({ ...f, name: `functions/${ns}/${base}_at_mark.mcfunction`, fn: `${ns}/${base}_at_mark` });
-    out.push({ name: f.name, fn: f.fn, text: [
-      `# Polis: ${base}, from the spot build_centered marked (an armor stand named ${anchor}), wherever you stand.`,
-      `# Lost the spot? /tp @s @e[type=armor_stand,name=${anchor},c=1]`,
-      `execute at @e[type=armor_stand,name=${anchor},c=1] run function ${ns}/${base}_at_mark`,
-      `execute unless entity @e[type=armor_stand,name=${anchor}] run say Polis: no centre marker. Run /function ${ns}/build_centered first, or stand where you ran it and use /function ${ns}/${base}_at_mark.`,
+    out.push({ name: `functions/${ns}/${base}_from_mark.mcfunction`, fn: `${ns}/${base}_from_mark`, text: [
+      `# Polis: ${base}_centered, run from the spot build_centered marked (an armor stand named ${anchor}), wherever you stand.`,
+      `# Or go back to the spot yourself and run ${base}_centered: /tp @s @e[type=armor_stand,name=${anchor},c=1]`,
+      `execute at @e[type=armor_stand,name=${anchor},c=1] run function ${ns}/${base}_centered`,
     ].join('\n') + '\n' });
   }
   return out;
@@ -489,9 +488,10 @@ export function placementGuide(tiles, opts = {}) {
     L.push('');
   }
   if (opts.centre) L.push('The city centre is a diamond monument with beacons on top: build_centered puts you in its alcove, under the sign.');
-  L.push(`build_centered also leaves an armor stand on its spot (named ${centreAnchor(ns)}); populate_centered and the other`);
-  L.push('  centred functions run from it wherever you are. To go back to it:');
+  L.push(`build_centered also leaves an armor stand on its spot (named ${centreAnchor(ns)}). Run populate_centered`);
+  L.push('  from that spot; if you have moved, go back to it first:');
   L.push(`    /tp @s @e[type=armor_stand,name=${centreAnchor(ns)},c=1]`);
+  L.push(`  (or try /function ${ns}/populate_from_mark, which runs populate_centered from the marker for you)`);
   L.push(`Functions in this pack: ${ns}/build, build_centered, populate, populate_centered`);
   L.push('(plus minecarts / minecarts_centered on railway cities, to re-summon carts near you,');
   L.push(' boats / boats_centered for the dock, and fish / fish_centered for the ponds and canal).');

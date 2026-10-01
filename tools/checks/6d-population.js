@@ -39,9 +39,8 @@ refreshWalkThrough();
   };
   const text = (name) => { const b = raw(name); return b ? new TextDecoder().decode(b) : null; };
   const build = text(`functions/${ns}/build_centered.mcfunction`);
-  // (populate_centered runs populate_at_mark from the centre marker: the work is in that one)
-  const popul = text(`functions/${ns}/populate_at_mark.mcfunction`);
-  const populWrap = text(`functions/${ns}/populate_centered.mcfunction`);
+  const popul = text(`functions/${ns}/populate_centered.mcfunction`);
+  const populWrap = popul;
   check('functions: build, build_centered, populate, populate_centered present',
     !!build && !!popul && !!populWrap && !!text(`functions/${ns}/build.mcfunction`) && !!text(`functions/${ns}/populate.mcfunction`));
   const lines = (t) => (t || '').split('\n').filter((l) => l && !l.startsWith('#'));

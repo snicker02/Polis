@@ -82,7 +82,7 @@ export default async function run(ctx) {
       // Bedrock: named summons in populate, and a fallback function
       const out = await exportPack(r.world, { namespace: cityId(r.world, 12345), spawns: r.spawns, deflateRaw });
       const fn = (n) => out.functions.find((x) => x.name.endsWith('/' + n + '.mcfunction'));
-      const pop = fn('populate'), fb = fn('fish'), fbc = fn('fish_at_mark');   // (fish_centered runs fish_at_mark from the centre marker)
+      const pop = fn('populate'), fb = fn('fish'), fbc = fn('fish_centered');
       const lines = (t) => t.text.split('\n').filter((l) => /^summon minecraft:(cod|salmon|tropicalfish) /.test(l));
       check('bedrock: populate summons every fish', pop && lines(pop).length === fish.length, `${pop && lines(pop).length} of ${fish.length}`);
       // A Bedrock fish despawns 32-40 blocks from the player, named or not: every

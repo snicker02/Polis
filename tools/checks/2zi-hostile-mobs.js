@@ -75,12 +75,11 @@ export default async function run(ctx) {
   const summonRe = /^summon minecraft:[a-z_]+ [A-Za-z]+ ~-?\d* ~-?\d* ~-?\d*$/;
   const hostileLines = (t) => t.split('\n').filter((l) => /^summon /.test(l) && Object.values(HOSTILE_KINDS).some((k) => l.startsWith(`summon ${k.be} ${k.name} `)));
   const offPack = await pack(false), onPack = await pack(true);
-  check('bedrock: by default populate summons no hostile mob', hostileLines(fn(offPack, 'populate').text).length === 0 && hostileLines(fn(offPack, 'populate_at_mark').text).length === 0);
+  check('bedrock: by default populate summons no hostile mob', hostileLines(fn(offPack, 'populate').text).length === 0 && hostileLines(fn(offPack, 'populate_centered').text).length === 0);
   check('bedrock: with the option on, populate summons every one (while its ticking areas hold the city)',
-    hostileLines(fn(onPack, 'populate_at_mark').text).length === r.hostiles.length &&
-    fn(onPack, 'populate_at_mark').text.indexOf('summon ') < fn(onPack, 'populate_at_mark').text.indexOf('tickingarea remove'));
-  // (hostiles_centered runs hostiles_at_mark from the centre marker; the work is in that one)
-  const hc = fn(offPack, 'hostiles_at_mark'), hh = fn(offPack, 'hostiles'), clr = fn(offPack, 'hostiles_clear');
+    hostileLines(fn(onPack, 'populate_centered').text).length === r.hostiles.length &&
+    fn(onPack, 'populate_centered').text.indexOf('summon ') < fn(onPack, 'populate_centered').text.indexOf('tickingarea remove'));
+  const hc = fn(offPack, 'hostiles_centered'), hh = fn(offPack, 'hostiles'), clr = fn(offPack, 'hostiles_clear');
   check('bedrock: hostiles and hostiles_centered are in the pack either way, each summoning every mob by name',
     hc && hh && fn(offPack, 'hostiles_centered') && hostileLines(hc.text).length === r.hostiles.length && hostileLines(hh.text).length === r.hostiles.length &&
     hostileLines(hc.text).every((l) => summonRe.test(l)));

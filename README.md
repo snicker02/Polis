@@ -1,4 +1,4 @@
-# Polis v0.30.4
+# Polis v0.30.5
 
 *Created with help from Claude AI.*
 
@@ -754,6 +754,24 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.30.5** — populate_centered is back to what worked.
+
+0.30.4 turned populate_centered (and the other centred functions) into a
+wrapper that ran its work from the armor stand build_centered leaves; in game it
+did nothing at all (a city built by an earlier pack has no marker, and an
+untested command that Bedrock refuses drops the whole function). The centred
+functions are now exactly 0.30.3's again, run from where the player stands:
+compared function by function for the same city, every one but build_centered
+is byte-for-byte 0.30.3's, and build_centered only adds the marker (the lines
+that already ran in 0.30.4) and a line saying how to come back to it:
+/tp @s @e[type=armor_stand,name=<city id>_centre,c=1]. The marker is a help to
+find the spot, not something populate depends on. Beside each centred function
+there is an optional <name>_from_mark that runs it from the marker; if that
+does not work in a game, nothing else is touched.
+
+The centre mark is still always placed (0.30.4's wider search stays). 2zp and
+the function checks read the centred functions where their work is again.
 
 **0.30.4** — The centre is always marked, and populate always lands where build did.
 

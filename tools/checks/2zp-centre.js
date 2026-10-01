@@ -39,17 +39,18 @@ export default async function run(ctx) {
   const lastLoad = bc.map((l, i) => (l.startsWith('structure load') ? i : -1)).reduce((a, b) => Math.max(a, b), -1);
   check('build_centered: marks its spot last (the old marker taken away, a new one at your feet, after the city)', killAt > lastLoad && sumAt === killAt + 1);
   check('build (the corner version): no marker', !/armor_stand/.test(fn('build').text));
+  // the centred functions run from where you stand, as they always did (their
+  // work in them, untouched); each has an optional <name>_from_mark beside it
   const centred = out.functions.filter((f) => f.fn.endsWith('_centered') && f.fn !== `${ns}/build_centered`);
-  let wrapOk = true, bodyOk = true;
+  let workOk = true, extraOk = true;
   for (const f of centred) {
     const base = f.fn.slice(ns.length + 1, -'_centered'.length);
-    const body = fn(`${base}_at_mark`);
-    if (!f.text.includes(`execute at @e[type=armor_stand,name=${anchor},c=1] run function ${ns}/${base}_at_mark`) ||
-        !f.text.includes(`execute unless entity @e[type=armor_stand,name=${anchor}] run say`)) wrapOk = false;
-    if (!body || !/^(structure load|summon) /m.test(body.text)) bodyOk = false;
+    if (!/^(structure load|summon) /m.test(f.text) || /execute at/.test(f.text)) workOk = false;
+    const fm = fn(`${base}_from_mark`);
+    if (!fm || !fm.text.includes(`execute at @e[type=armor_stand,name=${anchor},c=1] run function ${ns}/${base}_centered`)) extraOk = false;
   }
-  check('centred functions: each runs from the marker, wherever you stand (and says so if there is none)', centred.length >= 3 && wrapOk, `${centred.length} wrapped`);
-  check('centred functions: each one\'s work is kept whole in <name>_at_mark', bodyOk);
+  check('centred functions: run from where you stand, their work in them as before', centred.length >= 3 && workOk, `${centred.length} functions`);
+  check('centred functions: each has an optional _from_mark that runs it from the marker', extraOk);
   check('guide: how to go back to the marker', out.guide.includes(`/tp @s @e[type=armor_stand,name=${anchor},c=1]`));
-  note(`centre mark drifts ${drifts.join(', ')} in ${cities} big cities; ${centred.length} centred functions run from the marker`);
+  note(`centre mark drifts ${drifts.join(', ')} in ${cities} big cities; ${centred.length} centred functions, each with a _from_mark`);
 }

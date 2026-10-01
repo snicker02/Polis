@@ -51,8 +51,7 @@ export default async function run(ctx) {
     // the centre marker: build_centered places it, the other centred functions run from it
     /^kill @e\[type=armor_stand,name=[a-z0-9_]+_centre\]$/,
     /^summon armor_stand [a-z0-9_]+_centre ~ ~ ~$/,
-    /^execute at @e\[type=armor_stand,name=[a-z0-9_]+_centre,c=1\] run function [a-z0-9_]+\/[a-z_]+_at_mark$/,
-    /^execute unless entity @e\[type=armor_stand,name=[a-z0-9_]+_centre\] run say Polis: .+$/,
+    /^execute at @e\[type=armor_stand,name=[a-z0-9_]+_centre,c=1\] run function [a-z0-9_]+\/[a-z_]+_centered$/,
     /^tickingarea add ~-?\d* ~-?\d* ~-?\d* ~-?\d* ~-?\d* ~-?\d* [a-z0-9_]+$/, /^tickingarea remove [a-z0-9_]+$/];
   let badCmd = null;
   for (const f of out.functions) for (const l of f.text.split('\n')) {
