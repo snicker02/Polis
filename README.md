@@ -1,4 +1,4 @@
-# Polis v0.30.2
+# Polis v0.30.3
 
 *Created with help from Claude AI.*
 
@@ -754,6 +754,27 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.30.3** — Fish that stay where they are put.
+
+The pond fish were summoned, into water, in the right places (checked on a
+pack built in game: all 67 summons of a mixed city land in water, the tropical
+fish mid-pond with water above and below), and then vanished: in Bedrock a fish
+despawns once the player is 32 to 40 blocks away, and a name does not keep it
+(the game's own tropical fish definition has no exception for one; only a fish
+let out of a bucket is kept). So by the time anyone walked to a park pond, its
+fish were gone; the canal, passed more often, kept some.
+
+The pack now carries the game's own three fish (engine/fish-entities.js:
+Mojang's bedrock-samples tropicalfish, fish (cod) and salmon, format 1.26.0),
+each with one thing added: an event, polis:keep, that gives the fish a
+persistent component (and takes it off distance despawning). Every fish Polis
+summons fires it: summon minecraft:tropicalfish ~x ~y ~z 0 0 polis:keep Koi. A
+wild fish never gets the event and despawns as it always has.
+
+2zc checks that every fish is summoned with the event and that the pack's three
+fish are the game's own with only the event and its group added (39 checks);
+6e knows the new command.
 
 **0.30.2** — Park ponds deep enough to keep their fish.
 

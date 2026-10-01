@@ -85,8 +85,40 @@ export default async function run(ctx) {
       const pop = fn('populate'), fb = fn('fish'), fbc = fn('fish_centered');
       const lines = (t) => t.text.split('\n').filter((l) => /^summon minecraft:(cod|salmon|tropicalfish) /.test(l));
       check('bedrock: populate summons every fish', pop && lines(pop).length === fish.length, `${pop && lines(pop).length} of ${fish.length}`);
-      check('bedrock: every fish summon uses the named form (named mobs are kept)',
-        lines(pop).every((l) => /^summon minecraft:(cod|salmon|tropicalfish) (Cod|Salmon|Koi) ~-?\d* ~-?\d* ~-?\d*$/.test(l)));
+      // A Bedrock fish despawns 32-40 blocks from the player, named or not: every
+      // fish is summoned with the pack's polis:keep event, which makes it persistent
+      check('bedrock: every fish is summoned with polis:keep (a Bedrock fish is not kept by its name)',
+        lines(pop).every((l) => /^summon minecraft:(cod|salmon|tropicalfish) ~-?\d* ~-?\d* ~-?\d* 0 0 polis:keep (Cod|Salmon|Koi)$/.test(l)));
+      // the pack carries the game's three fish, each with only that event and its group added
+      {
+        const { fishEntityFiles } = await import('../../engine/export.js');
+        const { VANILLA_FISH } = await import('../../engine/fish-entities.js');
+        const files = fishEntityFiles();
+        const want = { 'entities/tropicalfish.json': 'tropicalfish', 'entities/fish.json': 'cod', 'entities/salmon.json': 'salmon' };
+        let fine = files.length === 3;
+        for (const f of files) {
+          const d = JSON.parse(f.data), v = VANILLA_FISH[want[f.name]];
+          if (!v) { fine = false; continue; }
+          const e = d['minecraft:entity'], ve = v['minecraft:entity'];
+          const kept = e.component_groups['polis:kept'];
+          if (!kept || !('minecraft:persistent' in kept) || JSON.stringify(e.events['polis:keep']) !== JSON.stringify({ add: { component_groups: ['polis:kept'] } })) fine = false;
+          // everything else exactly the game's own
+          // (a section the game's file did not have, and only ours in it, goes too)
+          const strip = (x) => {
+            const c = JSON.parse(JSON.stringify(x)); const ce = c['minecraft:entity'];
+            delete ce.component_groups['polis:kept']; delete ce.events['polis:keep'];
+            // (the game's cod has "events": null: what it had goes back)
+            for (const k of ['events', 'component_groups'])
+              if (!Object.keys(ce[k]).length && !ve[k]) { if (k in ve) ce[k] = ve[k]; else delete ce[k]; }
+            return JSON.stringify(c);
+          };
+          if (strip(d) !== JSON.stringify(v)) fine = false;
+        }
+        check('bedrock: the pack carries the game\'s own three fish, with only the keep event added', fine);
+        const { readZip } = await import('../nbt-read.js');
+        const names = readZip(out.data).entries.map((q) => q.name);
+        check('bedrock: those entity files are in the pack', ['entities/tropicalfish.json', 'entities/fish.json', 'entities/salmon.json'].every((n) => names.includes(n)));
+      }
       check('bedrock: fish and fish_centered fallbacks exist and summon them all',
         fb && fbc && lines(fb).length === fish.length && lines(fbc).length === fish.length);
       check('bedrock: populate says how to bring back missing fish', /function [^ ]+\/fish from beside the water/.test(pop.text));

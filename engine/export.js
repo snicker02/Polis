@@ -17,7 +17,7 @@ import { makeRng } from './rng.js';
 // Must match main.js VERSION, package.json and index.html data-version;
 // tools/validate.js fails if they drift. The app refuses to export when the
 // browser has mixed cached copies of old and new files.
-export const POLIS_VERSION = '0.30.2';
+export const POLIS_VERSION = '0.30.3';
 
 export const CHUNK = 64;          // Bedrock structure limit per horizontal axis
 export const GROUND_DROP = 2;     // base layer y=0 sits 2 below feet; surface y=1 replaces the block you stand on
@@ -195,6 +195,25 @@ export function buildStructures(world, opts = {}) {
   });
 }
 
+// ---- fish that stay ------------------------------------------------------------
+// The game's own three fish (fish-entities.js), each with one thing added: a
+// component group that makes the fish persistent (and, to be sure, takes it off
+// distance despawning), and an event, polis:keep, that adds it. Polis summons its
+// fish with that event; a wild fish never gets it and despawns as it always has.
+export function fishEntityFiles() {
+  const KEPT = {
+    'minecraft:persistent': {},
+    'minecraft:despawn': { despawn_from_distance: { max_distance: 40, min_distance: 32 }, filters: { test: 'is_persistent', value: false } },
+  };
+  return Object.entries(VANILLA_FISH).map(([kind, def]) => {
+    const d = JSON.parse(JSON.stringify(def));
+    const e = d['minecraft:entity'];
+    e.component_groups = { ...(e.component_groups || {}), 'polis:kept': KEPT };
+    e.events = { ...(e.events || {}), 'polis:keep': { add: { component_groups: ['polis:kept'] } } };
+    return { name: `entities/${kind === 'cod' ? 'fish' : kind}.json`, data: JSON.stringify(d, null, 2) };
+  });
+}
+
 // ---- draining a dome ------------------------------------------------------------
 // Built under water, a dome's inside is drained before the city goes in: one
 // structure per tile, air (in both of a cell's layers) through every cell of
@@ -285,6 +304,7 @@ export const SUMMON_IDS = { minecart: 'minecraft:minecart', boat: 'minecraft:boa
 export const FISH = new Set(['cod', 'salmon', 'tropicalfish']);
 import { HOSTILE_KINDS } from './hostiles.js';
 import { domeAir } from './dome.js';
+import { VANILLA_FISH } from './fish-entities.js';
 const FARM_ANIMALS = ['cow', 'sheep', 'pig', 'chicken'];
 
 // build     blocks only, safe to rerun; ends by adding ticking areas
@@ -322,8 +342,11 @@ export function functionFiles(tiles, world, opts = {}) {
     ...(kindsIn.some((k) => ['pillager', 'vindicator', 'evoker', 'witch', 'zoglin'].includes(k)) ? ['say Polis: illagers and zoglins attack villagers; iron golems fight back.'] : []),
     'say Polis: hostile mobs do not appear on Peaceful.',
   ];
+  // a fish is summoned with the pack's polis:keep event, which makes it
+  // persistent (a Bedrock fish despawns 32-40 blocks from the player, named or
+  // not): see fish-entities.js and fishEntityFiles
   const sumLine = (p, dx, dz) => FISH.has(p.type)
-    ? `summon ${SUMMON_IDS[p.type]} ${p.name || 'Fish'} ${rel(p.x - dx)} ${rel(p.y - GROUND_DROP)} ${rel(p.z - dz)}`
+    ? `summon ${SUMMON_IDS[p.type]} ${rel(p.x - dx)} ${rel(p.y - GROUND_DROP)} ${rel(p.z - dz)} 0 0 polis:keep ${p.name || 'Fish'}`
     : `summon ${SUMMON_IDS[p.type]} ${rel(p.x - dx)} ${rel(p.y - GROUND_DROP)} ${rel(p.z - dz)}`;
   const summonedNote = () => [carts.length && `${carts.length} minecarts`, boats.length && `${boats.length} boats`, fish.length && `${fish.length} fish`]
     .filter(Boolean).join(', ');
@@ -511,9 +534,10 @@ export async function exportPack(world, optsIn = {}) {
   const mobStructs = buildMobStructures(opts.spawns, opts);
   const guide = placementGuide(tiles, { ...opts, dome: !!world.dome });
   const fns = functionFiles(tiles, world, { ...opts, mobTiles: mobStructs });
+  const hasFish = (opts.spawns || []).some((p) => FISH.has(p.type));
   const data = await buildMcPack(structures.concat(mobStructs), {
     ...opts, guide,
-    files: fns.map((f) => ({ name: f.name, data: f.text })),
+    files: fns.map((f) => ({ name: f.name, data: f.text })).concat(hasFish ? fishEntityFiles() : []),
   });
   return { data, structures, mobStructures: mobStructs, guide, functions: fns };
 }

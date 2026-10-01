@@ -45,7 +45,7 @@ export default async function run(ctx) {
   // every command in every function is one of the three forms we emit
   const FORMS = [/^structure load [a-z0-9_]+:[a-z0-9_]+ ~-?\d* ~-?\d* ~-?\d*$/,
     /^summon minecraft:(minecart|boat) ~-?\d* ~-?\d* ~-?\d*$/, /^say [^\n]+$/,
-    /^summon minecraft:(cod|salmon|tropicalfish) (Cod|Salmon|Koi) ~-?\d* ~-?\d* ~-?\d*$/,   // named, so they are kept
+    /^summon minecraft:(cod|salmon|tropicalfish) ~-?\d* ~-?\d* ~-?\d* 0 0 polis:keep (Cod|Salmon|Koi)$/,   // kept by the pack's polis:keep event
     /^summon minecraft:(creeper|spider|enderman|witch|pillager|vindicator|evocation_illager|husk|blaze|magma_cube|wither_skeleton|zoglin|zombie_pigman) [A-Za-z]+ ~-?\d* ~-?\d* ~-?\d*$/,   // hostiles, named
     /^kill @e\[type=minecraft:[a-z_]+,name=[A-Za-z]+\]$/,
     /^tickingarea add ~-?\d* ~-?\d* ~-?\d* ~-?\d* ~-?\d* ~-?\d* [a-z0-9_]+$/, /^tickingarea remove [a-z0-9_]+$/];
