@@ -1,4 +1,4 @@
-# Polis v0.30.3
+# Polis v0.30.4
 
 *Created with help from Claude AI.*
 
@@ -754,6 +754,33 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.30.4** — The centre is always marked, and populate always lands where build did.
+
+A big hilly city could come without its centre mark: the search for a spot went
+only 40 blocks from the middle, on ground at the base level, and in the dense,
+terraced middle of a 512 city it found nothing. With no beacon to come back to,
+populate_centered was run from another spot, and every villager, animal and
+fish landed shifted (fish a few blocks off their pond land in the ground or on
+the grass, and die). Now the search goes out as far as it takes (streets stay
+level across a terraced city, so there is always somewhere), looking the
+buildings up in a grid so a big city stays quick, and as a last resort the mark
+may stand beside a building; in the test cities, 512 across included, it lands
+within six blocks of the middle.
+
+And build_centered now marks its spot with an armor stand (named <city id>_centre,
+in the mark's alcove). populate_centered, fish_centered, boats_centered,
+hostiles_centered and minecarts_centered run from that marker wherever the
+player stands (execute at the armor stand: their work is in <name>_at_mark, and
+they say so if there is no marker). The guide says how to go back to it:
+/tp @s @e[type=armor_stand,name=<city id>_centre,c=1].
+
+New section 2zp (7 checks, slow group): the mark placed in big, hilly, mixed
+cities and near the middle, the marker set last in build_centered, every
+centred function run from it with its work kept whole, the guide's way back.
+6b, 6d, 6e, 2zc and 2zi read the centred functions' work where it now lives.
+(Rebuilding a v0.30.3 city from its pack: all 120 of its fish summons land in
+water when populate runs from build's spot.)
 
 **0.30.3** — Fish that stay where they are put.
 

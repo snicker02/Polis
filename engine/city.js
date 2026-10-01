@@ -1180,7 +1180,16 @@ function markCentre(world, plan, buildings, G, elevAt, spawns = [], stairRuns = 
   const { W, D, use, mask } = plan;
   const wb = world.box;
   const cx0 = Math.floor((wb.x0 + wb.x1 + 1) / 2), cz0 = Math.floor((wb.z0 + wb.z1 + 1) / 2);
-  const inBuilding = (x, z) => buildings.some((b) => x >= b.x0 - 1 && x <= b.x1 + 1 && z >= b.z0 - 1 && z <= b.z1 + 1);
+  // buildings, and the cell round each, as a grid (a big city's search looks at
+  // many cells; asking every building about each one was too slow). margin 1
+  // keeps a cell clear between the mark and any building; the last resort is 0.
+  const near = [new Uint8Array(W * D), new Uint8Array(W * D)];
+  for (const b of buildings)
+    for (const [m, g] of [[1, near[0]], [0, near[1]]])
+      for (let z = Math.max(0, b.z0 - m); z <= Math.min(D - 1, b.z1 + m); z++)
+        for (let x = Math.max(0, b.x0 - m); x <= Math.min(W - 1, b.x1 + m); x++) g[z * W + x] = 1;
+  let nearGrid = near[0];
+  const inBuilding = (x, z) => nearGrid[z * W + x] === 1;
   // a plaza or park is the nicest spot, a pavement next, the roadway last —
   // but being near the middle matters more, so both are weighed together
   const PENALTY = { [USE.PLAZA]: 0, [USE.PARK]: 0, [USE.SIDEWALK]: 5, [USE.ROAD]: 11 };
@@ -1209,7 +1218,12 @@ function markCentre(world, plan, buildings, G, elevAt, spawns = [], stairRuns = 
   // the cell just outside the entrance, for a corner and a rotation
   const probeOf = (r, ox, oz, fw, fd) => (r === 0 ? [ox + 1, oz - 1] : r === 1 ? [ox + fw, oz + 1]
     : r === 2 ? [ox + 1, oz + fd] : [ox - 1, oz + 1]);
-  const best = search();
+  // Out as far as it takes: streets stay level across a terraced city, so there
+  // is always somewhere; the 40 blocks searched up to 0.30 found nothing in the
+  // middle of a big hilly city, which then had no mark to come back to. Failing
+  // a cell clear all round, the mark may stand beside a building.
+  let best = search();
+  if (!best) { nearGrid = near[1]; best = search(); }
   if (!best) return null;
   const out = buildCentre(world, best.ox, best.oz, G + 1, best.r);
   return { block: [out.stand[0], G, out.stand[2]], stand: out.stand, sign: out.sign, beacons: out.beacons,
@@ -1217,7 +1231,8 @@ function markCentre(world, plan, buildings, G, elevAt, spawns = [], stairRuns = 
 
   function search() {
   let best = null, bestScore = Infinity;
-  for (let rad = 0; rad <= 40; rad++) {
+  const reach = Math.ceil(Math.max(W, D) / 2) + 2;
+  for (let rad = 0; rad <= reach; rad++) {
     if (best && rad > bestScore) break;                       // nothing further out can score better
     for (let dz = -rad; dz <= rad; dz++)
       for (let dx = -rad; dx <= rad; dx++) {

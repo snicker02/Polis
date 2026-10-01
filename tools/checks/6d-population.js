@@ -39,9 +39,11 @@ refreshWalkThrough();
   };
   const text = (name) => { const b = raw(name); return b ? new TextDecoder().decode(b) : null; };
   const build = text(`functions/${ns}/build_centered.mcfunction`);
-  const popul = text(`functions/${ns}/populate_centered.mcfunction`);
+  // (populate_centered runs populate_at_mark from the centre marker: the work is in that one)
+  const popul = text(`functions/${ns}/populate_at_mark.mcfunction`);
+  const populWrap = text(`functions/${ns}/populate_centered.mcfunction`);
   check('functions: build, build_centered, populate, populate_centered present',
-    !!build && !!popul && !!text(`functions/${ns}/build.mcfunction`) && !!text(`functions/${ns}/populate.mcfunction`));
+    !!build && !!popul && !!populWrap && !!text(`functions/${ns}/build.mcfunction`) && !!text(`functions/${ns}/populate.mcfunction`));
   const lines = (t) => (t || '').split('\n').filter((l) => l && !l.startsWith('#'));
   const wantV = r.spawns.filter((p) => p.type === 'villager').length;
   const wantG = r.spawns.filter((p) => p.type === 'golem').length;
@@ -49,8 +51,9 @@ refreshWalkThrough();
   check('population: this city has villagers, golems and carts to place', wantV > 0 && wantG > 0 && wantC > 0);
   check('functions: only minecarts and boats are summoned (every mob travels in structures)',
     !/summon minecraft:(villager|iron_golem|cat|panda|cow|sheep|pig|chicken)/.test(build + popul));
-  check('functions: build summons nothing and loads no mob structures',
-    !build.includes('summon') && !lines(build).some((l) => / \S+:m_x/.test(l)));
+  // (nothing but the centre marker, an armor stand on build_centered's spot)
+  check('functions: build summons nothing (but the centre marker) and loads no mob structures',
+    !lines(build).some((l) => l.startsWith('summon') && !/^summon armor_stand [a-z0-9_]+_centre ~ ~ ~$/.test(l)) && !lines(build).some((l) => / \S+:m_x/.test(l)));
   const mobLoads = lines(popul).filter((l) => /^structure load \S+:m_x-?\d+_z-?\d+ /.test(l));
   check('populate: one structure load per mob structure', mobLoads.length === out.mobStructures.length && mobLoads.length > 0,
     `${mobLoads.length} vs ${out.mobStructures.length}`);

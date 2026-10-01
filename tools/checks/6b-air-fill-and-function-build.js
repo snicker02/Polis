@@ -43,8 +43,10 @@ refreshWalkThrough();
 
   // parse a function into [name, dx, dy, dz]
   const parseFn = (e) => {
+    // (build_centered ends by marking its spot: exactly these two lines, checked here)
+    const marker = (l) => /^kill @e\[type=armor_stand,name=[a-z0-9_]+_centre\]$/.test(l) || /^summon armor_stand [a-z0-9_]+_centre ~ ~ ~$/.test(l);
     const lines = new TextDecoder().decode(inflate(e)).split('\n')
-      .filter((l) => l && !l.startsWith('#') && !l.startsWith('say ') && !l.startsWith('tickingarea '));
+      .filter((l) => l && !l.startsWith('#') && !l.startsWith('say ') && !l.startsWith('tickingarea ') && !marker(l));
     return lines.map((l) => {
       const m = l.match(/^structure load polis:(\S+) (~-?\d*) (~-?\d*) (~-?\d*)$/);
       if (!m) return { bad: l };

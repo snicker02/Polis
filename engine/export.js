@@ -17,7 +17,7 @@ import { makeRng } from './rng.js';
 // Must match main.js VERSION, package.json and index.html data-version;
 // tools/validate.js fails if they drift. The app refuses to export when the
 // browser has mixed cached copies of old and new files.
-export const POLIS_VERSION = '0.30.3';
+export const POLIS_VERSION = '0.30.4';
 
 export const CHUNK = 64;          // Bedrock structure limit per horizontal axis
 export const GROUND_DROP = 2;     // base layer y=0 sits 2 below feet; surface y=1 replaces the block you stand on
@@ -354,6 +354,8 @@ export function functionFiles(tiles, world, opts = {}) {
   const top = wb.y1 - wb.y0 + 2;
   const load = (t, dx, dz) =>
     `structure load ${ns}:${t.name} ${rel(t.offset[0] - dx)} ${rel(t.offset[1] - GROUND_DROP)} ${rel(t.offset[2] - dz)}`;
+  // the armor stand build_centered leaves on its spot: this city's own name
+  const anchor = centreAnchor(ns);
   const build = (dx, dz, title, pop) => [
     `# ${title}`,
     `# ${tiles.length} structure${tiles.length === 1 ? '' : 's'}. Safe to run again: blocks only.`,
@@ -362,7 +364,12 @@ export function functionFiles(tiles, world, opts = {}) {
     ...(world.dome ? tiles.map((t) => load({ ...t, name: t.name + '_d' }, dx, dz)) : []),   // drain the dome first
     ...tiles.map((t) => load(t, dx, dz)),
     ...areas.map((a) => `tickingarea add ${rel(a.x0 - dx)} ${rel(-GROUND_DROP)} ${rel(a.z0 - dz)} ${rel(a.x1 - dx)} ${rel(top)} ${rel(a.z1 - dz)} ${a.name}`),
-    `say Polis: city placed. When it has finished appearing, run /function ${ns}/${pop} from this same spot.`,
+    // the centred version marks this spot (an armor stand in the centre mark's
+    // alcove), and the other centred functions run from it wherever you stand
+    ...(pop === 'populate_centered' ? [`kill @e[type=armor_stand,name=${anchor}]`, `summon armor_stand ${anchor} ~ ~ ~`] : []),
+    pop === 'populate_centered'
+      ? `say Polis: city placed, and this spot marked. When it has finished appearing, run /function ${ns}/${pop} (from anywhere: it finds the mark).`
+      : `say Polis: city placed. When it has finished appearing, run /function ${ns}/${pop} from this same spot.`,
   ].join('\n') + '\n';
   const populate = (dx, dz, title) => [
     `# ${title}`,
@@ -425,8 +432,26 @@ export function functionFiles(tiles, world, opts = {}) {
       { name: `functions/${ns}/${group}.mcfunction`, fn: `${ns}/${group}`, text: only(wb.x0, wb.z0, `Polis: ${noun} only (pairs with build)`) },
       { name: `functions/${ns}/${group}_centered.mcfunction`, fn: `${ns}/${group}_centered`, text: only(cx, cz, `Polis: ${noun} only (pairs with build_centered)`) });
   }
-  return files;
+  // Every centred function but build_centered runs from the spot build_centered
+  // marked, wherever the player stands: its body becomes <name>_at_mark, and
+  // <name> runs that at the armor stand (saying so if there is none).
+  const out = [];
+  for (const f of files) {
+    if (!f.fn.endsWith('_centered') || f.fn === `${ns}/build_centered`) { out.push(f); continue; }
+    const base = f.fn.slice(ns.length + 1, -'_centered'.length);
+    out.push({ ...f, name: `functions/${ns}/${base}_at_mark.mcfunction`, fn: `${ns}/${base}_at_mark` });
+    out.push({ name: f.name, fn: f.fn, text: [
+      `# Polis: ${base}, from the spot build_centered marked (an armor stand named ${anchor}), wherever you stand.`,
+      `# Lost the spot? /tp @s @e[type=armor_stand,name=${anchor},c=1]`,
+      `execute at @e[type=armor_stand,name=${anchor},c=1] run function ${ns}/${base}_at_mark`,
+      `execute unless entity @e[type=armor_stand,name=${anchor}] run say Polis: no centre marker. Run /function ${ns}/build_centered first, or stand where you ran it and use /function ${ns}/${base}_at_mark.`,
+    ].join('\n') + '\n' });
+  }
+  return out;
 }
+
+// the name of the armor stand build_centered leaves on its spot
+export const centreAnchor = (ns) => `${ns}_centre`;
 
 // ---- guide --------------------------------------------------------------------
 export function placementGuide(tiles, opts = {}) {
@@ -464,6 +489,9 @@ export function placementGuide(tiles, opts = {}) {
     L.push('');
   }
   if (opts.centre) L.push('The city centre is a diamond monument with beacons on top: build_centered puts you in its alcove, under the sign.');
+  L.push(`build_centered also leaves an armor stand on its spot (named ${centreAnchor(ns)}); populate_centered and the other`);
+  L.push('  centred functions run from it wherever you are. To go back to it:');
+  L.push(`    /tp @s @e[type=armor_stand,name=${centreAnchor(ns)},c=1]`);
   L.push(`Functions in this pack: ${ns}/build, build_centered, populate, populate_centered`);
   L.push('(plus minecarts / minecarts_centered on railway cities, to re-summon carts near you,');
   L.push(' boats / boats_centered for the dock, and fish / fish_centered for the ponds and canal).');
