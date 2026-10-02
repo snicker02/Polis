@@ -95,6 +95,7 @@ export const DEFAULTS = {
   dome: false,               // a glass dome over the whole city, sealed all round (invented cities only)
   lightAll: true,            // light every spot a hostile mob could spawn (lighting.js)
   stilts: false,             // the city on stilts over open water (invented cities only)
+  floating: false,           // the city on islands floating in the sky, chasms between them (invented cities only)
   mixStyles: false,          // several styles, one to a district (districts.js)
   mixList: ['modern', 'medieval', 'eastasian', 'artdeco'],   // the styles ticked for mixing
   furnish: true,
@@ -153,6 +154,8 @@ export function generateCity(cfgIn, onProgress) {
   if (STYLE.glass) cfg.useStairs = true;
   // a city on stilts stands over flat water
   if (cfg.stilts && !cfg.terrain) cfg.hills = 0;
+  // a floating city: its main streets are chasms between islands; no stilts, no dome
+  if (cfg.floating && !cfg.terrain) { cfg.canal = true; cfg.stilts = false; cfg.dome = false; cfg.harbour = false; }
   // an Art Deco city: towers step back often, for the wedding-cake silhouette
   if (STYLE.deco) {
     cfg.setbacks = true;
@@ -177,8 +180,25 @@ export function generateCity(cfgIn, onProgress) {
   if (cfg.outline === 'organic' || cfg.terrain) world.cityMask = { W, D, data: plan.mask };
   // the canal takes over one long street before anything is laid on it; a
   // Venetian city makes canals of all its main streets
-  const canals = STYLE.venetian && cfg.canal ? planCanals(plan, cfg, edgeDistance(plan), 6)
+  const floating = !!(cfg.floating && !cfg.terrain);
+  const canals = (STYLE.venetian || floating) && cfg.canal ? planCanals(plan, cfg, edgeDistance(plan), 6)
     : [planCanal(plan, cfg, edgeDistance(plan))].filter(Boolean);
+  // over a chasm: no dock, and both banks railed whatever the street's width
+  // (in a narrow street the chasm is a one-block crack, so each bank keeps a
+  // walkway two wide: a railing on its inner row, the outer row to walk)
+  if (floating) for (const c of canals) {
+    c.noDock = true; c.railed = true; c.chasm = true;
+    if (c.w < 7) {
+      const mid = Math.floor((c.ch0 + c.ch1) / 2);
+      for (let u = c.u0; u <= c.u1; u++)
+        for (const a of [c.ch0, c.ch1]) {
+          if (a === mid) continue;
+          const [x, z] = c.cell(u, a);
+          if (plan.use[z * plan.W + x] === USE_CANAL) plan.use[z * plan.W + x] = USE.SIDEWALK;
+        }
+      c.ch0 = c.ch1 = mid;
+    }
+  }
   const canal = canals[0] || null;
   // ---- styles by district: the ticked styles shared out among districts ------
   const mixNames = cfg.mixStyles ? [...new Set((cfg.mixList || []).filter((n) => STYLES[n]))] : [];
@@ -595,6 +615,8 @@ export function generateCity(cfgIn, onProgress) {
   // ---- city style: restyle the role materials, then snow -----------------------
   // ---- on stilts: open water under the streets and buildings ----------------
   const stilts = cfg.stilts && !cfg.terrain ? stiltCity(world, plan, buildings, GROUND) : null;
+  // ---- floating: chasms through, a rocky underside under every island -------
+  const islands = floating ? floatCity(world, plan, canals, GROUND, cfg) : null;
   if (SD) for (const name of SD.names) applyStyle(world, plan, styleOf(name), (x, z) => GROUND + elevAt(x, z), (x, z) => SD.at(x, z) === name);
   else applyStyle(world, plan, STYLE, (x, z) => GROUND + elevAt(x, z));
 
@@ -757,8 +779,8 @@ export function generateCity(cfgIn, onProgress) {
   }
 
   const shell = cfg.terrain ? terrainShell(plan, cfg.terrain, GROUND, cfg.cityStyle) : null;
-  const stats = summarise(world, plan, buildings, cfg, { farms, beds, spawns, bell, transit, wall, ranches, landmarks, hills, stairRuns, reach, canal, centre, streets, harbour, skirt, cutFaces, bridges, megaliths, ponds, courtyards, hostiles, dome, canals, lighting, styleDistricts: SD, spawners, stilts, unsupported: stats_unsupported });
-  return { world, plan, buildings, cfg, stats, shell, bridges, farms, ranches, spawns, bell, transit, wall, landmarks, canal, centre, streets, harbour, harbourPlan, megaliths, ponds, courtyards, hostiles, dome, canals, lighting, styleDistricts: SD, spawners, stilts,
+  const stats = summarise(world, plan, buildings, cfg, { farms, beds, spawns, bell, transit, wall, ranches, landmarks, hills, stairRuns, reach, canal, centre, streets, harbour, skirt, cutFaces, bridges, megaliths, ponds, courtyards, hostiles, dome, canals, lighting, styleDistricts: SD, spawners, stilts, islands, unsupported: stats_unsupported });
+  return { world, plan, buildings, cfg, stats, shell, bridges, farms, ranches, spawns, bell, transit, wall, landmarks, canal, centre, streets, harbour, harbourPlan, megaliths, ponds, courtyards, hostiles, dome, canals, lighting, styleDistricts: SD, spawners, stilts, islands,
     hills, stairRuns, reach, groundAt: (x, z) => GROUND + elevAt(x, z) };
 }
 
@@ -1707,6 +1729,135 @@ function stoneLanterns(world, cx, cz, G) {
   return placed;
 }
 
+// ---- a city of floating islands ------------------------------------------------------
+// The main streets were planned as canals (planCanals); in a floating city their
+// channels are chasms instead: open down to the sky below. What the canal
+// machinery built stays (walkways railed on both banks, every crossing street
+// on its deck, footbridges between), and the decks are bridges now, a single
+// layer with air under it. Every piece of city the chasms leave is an island,
+// and hangs on a rocky underside like a mountain turned over: deepest in the
+// middle, tapering to its rim (depth 3 at the rim, growing with the distance
+// in, a little noise, at most 28), soil at the top and stone below with patches
+// of cobble and andesite. A column is always taken deeper than the lowest thing
+// standing in it (a pond, a spawner), so nothing hangs over the drop.
+function floatCity(world, plan, canals, G, cfg) {
+  const { W, D, use, mask } = plan;
+  const inCity = (x, z) => x >= 0 && z >= 0 && x < W && z < D && (!mask || mask[z * W + x]);
+  // the chasm bands: every channel cell, decks (bridges) included
+  const band = new Uint8Array(W * D);
+  for (const c of canals)
+    for (let u = c.u0; u <= c.u1; u++)
+      for (let a = c.ch0; a <= c.ch1; a++) { const [x, z] = c.cell(u, a); if (inCity(x, z)) band[z * W + x] = 1; }
+  // A canal stops four short of the city's edge, so the land would wrap round
+  // its ends and the city stay one piece: each chasm carries on along its street
+  // to the edge both ways. Only through street (never a lot); a crossing street,
+  // or track, stays as a deck (a bridge); the banks are railed.
+  const isStreet = (x, z) => inCity(x, z) && (use[z * W + x] === USE.ROAD || use[z * W + x] === USE.SIDEWALK);
+  const hasRail = (x, z) => { const id = world.get(x, G + 1, z); return id >= 0 && /rail/.test(MATERIALS.def(id).block); };
+  for (const c of canals) {
+    c.ext = [];
+    const mid = Math.floor((c.ch0 + c.ch1) / 2);
+    for (const [start, step] of [[c.u0 - 1, -1], [c.u1 + 1, 1]]) {
+      for (let u = start; ; u += step) {
+        let cells = [];
+        for (let a = c.a0; a <= c.a1; a++) cells.push(c.cell(u, a));
+        if (!cells.some(([x, z]) => inCity(x, z))) break;                 // past the edge
+        if (!cells.every(([x, z]) => !inCity(x, z) || isStreet(x, z))) break;   // a lot: stop
+        const [mx, mz] = c.cell(u, mid);
+        const [lx, lz] = c.cell(u, c.a0 - 1), [rx, rz] = c.cell(u, c.a1 + 1);
+        const crossing = (inCity(mx, mz) && plan.roadAxis[mz * W + mx] === 3) || isStreet(lx, lz) || isStreet(rx, rz);
+        let deck = crossing;
+        for (let a = c.ch0; a <= c.ch1; a++) { const [x, z] = c.cell(u, a); if (inCity(x, z) && hasRail(x, z)) deck = true; }
+        c.ext.push({ u, deck });
+        for (let a = c.ch0; a <= c.ch1; a++) {
+          const [x, z] = c.cell(u, a);
+          if (!inCity(x, z)) continue;
+          band[z * W + x] = 1;
+          if (!deck) { use[z * W + x] = USE_CANAL; for (let y = G; y <= G + 5; y++) world.clear(x, y, z); }
+        }
+        if (!deck) for (const a of [c.ch0 - 1, c.ch1 + 1]) {
+          const [x, z] = c.cell(u, a);
+          if (isStreet(x, z) && !world.has(x, G + 1, z) && world.has(x, G, z)) world.set(x, G + 1, z, MAT.FENCE);
+        }
+      }
+    }
+  }
+  const SOFT = new Set([MAT.BASE, MAT.CANAL_BED, MAT.DIRT, MAT.CLAY, MAT.WATER, MAT.GRAVEL]);
+  const lowY = world.box.y0;
+  // the chasms: everything under street level goes (a deck stays, alone)
+  for (let z = 0; z < D; z++)
+    for (let x = 0; x < W; x++) {
+      if (!band[z * W + x]) continue;
+      for (let y = lowY; y < G; y++) world.clear(x, y, z);
+      if (use[z * W + x] === USE_CANAL) for (let y = G; y <= G + 3; y++) { const id = world.get(x, y, z); if (id === MAT.WATER) world.clear(x, y, z); }
+    }
+  // the islands: what is left, piece by piece
+  const comp = new Int32Array(W * D).fill(-1);
+  const islands = [];
+  for (let z = 0; z < D; z++)
+    for (let x = 0; x < W; x++) {
+      const i0 = z * W + x;
+      if (!inCity(x, z) || band[i0] || comp[i0] >= 0) continue;
+      const id = islands.length, cells = [];
+      const q = [i0]; comp[i0] = id;
+      while (q.length) {
+        const i = q.pop(); cells.push(i);
+        const cx = i % W, cz = (i - cx) / W;
+        for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const nx = cx + dx, nz = cz + dz, j = nz * W + nx;
+          if (!inCity(nx, nz) || band[j] || comp[j] >= 0) continue;
+          comp[j] = id; q.push(j);
+        }
+      }
+      islands.push({ id, cells, deepest: 0 });
+    }
+  // distance in from each island's rim
+  const edge = new Int32Array(W * D).fill(-1);
+  let frontier = [];
+  for (const isl of islands) for (const i of isl.cells) {
+    const x = i % W, z = (i - x) / W;
+    if ([[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dz]) => { const nx = x + dx, nz = z + dz; return !inCity(nx, nz) || comp[nz * W + nx] !== isl.id; })) { edge[i] = 0; frontier.push(i); }
+  }
+  for (let d = 1; frontier.length; d++) {
+    const next = [];
+    for (const i of frontier) {
+      const x = i % W, z = (i - x) / W;
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = x + dx, nz = z + dz, j = nz * W + nx;
+        if (!inCity(nx, nz) || comp[j] < 0 || edge[j] >= 0) continue;
+        edge[j] = d; next.push(j);
+      }
+    }
+    frontier = next;
+  }
+  // the undersides
+  let rock = 0;
+  for (const isl of islands)
+    for (const i of isl.cells) {
+      const x = i % W, z = (i - x) / W;
+      const noise = Math.floor(hash2(x, z, (cfg.seed ^ 0x15a7d) | 0) * 3);
+      let depth = Math.min(28, 3 + Math.floor(edge[i] * 0.7) + noise);
+      // never shallower than what stands in the column (a pond, a spawner): two under it
+      let lowest = G;
+      for (let y = lowY; y < G; y++) { const id = world.get(x, y, z); if (id !== -1 && !SOFT.has(id)) { lowest = Math.min(lowest, y); break; } }
+      for (let y = lowY; y < G; y++) if (world.get(x, y, z) === MAT.WATER) { lowest = Math.min(lowest, y); break; }
+      depth = Math.max(depth, G - lowest + 2);
+      const bottom = G - depth;
+      for (let y = lowY; y < bottom; y++) world.clear(x, y, z);
+      for (let y = bottom; y < G; y++) {
+        const id = world.get(x, y, z);
+        if (id !== -1 && !SOFT.has(id)) continue;          // keep what was built
+        if (id === MAT.WATER) continue;                     // a pond's water stays
+        const h = hash2(x * 3 + y, z * 5 - y, (cfg.seed ^ 0x2b6f) | 0);
+        world.set(x, y, z, y >= G - 2 ? MAT.DIRT : h < 0.12 ? MAT.COBBLE : h < 0.2 ? MAT.ANDESITE : MAT.BASE);
+        rock++;
+      }
+      isl.deepest = Math.max(isl.deepest, depth);
+    }
+  world.floating = true;
+  return { count: islands.length, rock, sizes: islands.map((s) => s.cells.length).sort((a, b) => b - a), deepest: Math.max(0, ...islands.map((s) => s.deepest)), comp, band };
+}
+
 // ---- a city on stilts over open water ------------------------------------------------
 // Under the streets, squares and buildings the stone gives way to open water:
 // a gravel seabed seven down, water up to the canal's own level, then two blocks
@@ -2095,6 +2246,7 @@ function summarise(world, plan, buildings, cfg, life = {}) {
     footbridges: (life.canals || []).reduce((n, c) => n + (c.footbridges || []).length, 0),
     hostiles: (life.hostiles || []).length,
     fishSpawners: (life.spawners || []).length,
+    islands: life.islands ? { count: life.islands.count, deepest: life.islands.deepest, biggest: life.islands.sizes.slice(0, 5) } : null,
     stilts: life.stilts ? { piles: life.stilts.piles, lanterns: life.stilts.lanterns, islands: life.stilts.island, open: life.stilts.open } : null,
     styleDistricts: life.styleDistricts ? life.styleDistricts.counts : null,
     lighting: life.lighting ? { added: life.lighting.hung + life.lighting.flush + life.lighting.standing, hung: life.lighting.hung, flush: life.lighting.flush, standing: life.lighting.standing, darkBefore: life.lighting.before, darkAfter: life.lighting.after } : null,

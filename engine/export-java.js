@@ -240,7 +240,7 @@ export function javaTiles(world, opts = {}) {
         for (let y = bottom; y <= ceiling; y++) if (!world.has(x, y, z)) air.push([x, y, z]);
         // (on stilts: a pile goes on down, islands and seawall are founded, open water is left alone)
         const sk = world.stiltGrid && x >= 0 && z >= 0 && x < world.stiltGrid.W && z < world.stiltGrid.D ? world.stiltGrid.kind[z * world.stiltGrid.W + x] : 0;
-        if (sk === 1) continue;
+        if (sk === 1 || world.floating) continue;          // (a floating city has no ground to found it on)
         for (let y = bottom - depth; y < bottom; y++) if (!world.has(x, y, z)) (sk === 2 ? piles : ground).push([x, y, z]);
       }
   }

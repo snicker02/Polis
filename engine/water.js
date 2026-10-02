@@ -182,7 +182,7 @@ export function buildCanal(world, plan, canal, G, rng) {
       }
   }
   canal.water = water;
-  canal.dock = buildDock(world, plan, canal, G);
+  canal.dock = canal.noDock ? null : buildDock(world, plan, canal, G);      // (no dock over a chasm)
   canal.landmarkBridge = dressBridge(world, plan, canal, G);
   return canal;
 }

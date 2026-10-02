@@ -1,4 +1,4 @@
-# Polis v0.31.1
+# Polis v0.32.0
 
 *Created with help from Claude AI.*
 
@@ -754,6 +754,27 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.32.0** — A city of floating islands.
+
+A new option, "Floating islands in the sky" (invented cities). The main streets
+are planned as canals would be (planCanals) and become chasms instead, open to
+the sky below; each is carried along its street right across to the city's edge
+(only through street, never a lot), so the land cannot wrap round its ends and
+the city falls into islands, six or seven in a city of 200. What the canal
+machinery builds stays: walkways railed on both banks (in a narrow street the
+chasm is a one-block crack, so each bank keeps a walkway two wide), every
+crossing street and every line of track on a deck, footbridges between. The
+decks are bridges now, one layer with air under it. Every island hangs on a
+rocky underside like a mountain turned over: three deep at the rim, deeper
+going in, up to 28, soil over stone with patches of cobble and andesite, and
+never shallower than what stands in it (a pond, a fish spawner), so no water
+spills into the void. No harbour and no boats; no stilts and no dome; the
+foundation setting does nothing, and the guide says to build it high.
+
+New section 2zr (10 checks): islands, undersides deeper in the middle, chasms
+open all the way down, one-deck bridges, railed banks, no water spilling, no
+boats, nothing founded below, every building walking through, nothing dark.
 
 **0.31.1** — On stilts, the piles are the foundation.
 

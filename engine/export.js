@@ -17,7 +17,7 @@ import { makeRng } from './rng.js';
 // Must match main.js VERSION, package.json and index.html data-version;
 // tools/validate.js fails if they drift. The app refuses to export when the
 // browser has mixed cached copies of old and new files.
-export const POLIS_VERSION = '0.31.1';
+export const POLIS_VERSION = '0.32.0';
 
 export const CHUNK = 64;          // Bedrock structure limit per horizontal axis
 export const GROUND_DROP = 2;     // base layer y=0 sits 2 below feet; surface y=1 replaces the block you stand on
@@ -107,6 +107,8 @@ export function foundationFill(world) {
   // On stilts the piles are the foundation: each goes on down into the ground
   // below; islands and the seawall stand on solid ground; under open water
   // nothing is put, so the seabed (or water, or land) beneath is left as it is.
+  // a floating city is built in the sky: there is no ground to found it on
+  if (world.floating) return () => -1;
   if (world.stiltGrid) {
     const { W, D, kind } = world.stiltGrid;
     return (x, y, z) => {
@@ -518,6 +520,7 @@ export function placementGuide(tiles, opts = {}) {
   L.push(opts.fillAir
     ? `Air fill is ON: loading clears terrain, trees and water out of the city volume, up to ${Math.max(0, opts.clearAbove | 0)} blocks above ground or the tallest roof.`
     : 'Air fill is OFF: empty cells keep whatever was already there (best on a flat world).');
+  if (opts.floating) L.push('Floating islands: build it high in the sky (stand well above the ground, with room below for the islands\' undersides). The foundation setting does nothing here.');
   if ((opts.foundation | 0) && opts.stilts) L.push(`Foundation (on stilts): the piles go on ${opts.foundation | 0} blocks further down into the ground below; islands and the seawall stand on solid ground, and under open water nothing is put.`);
   else if (opts.foundation | 0) L.push(`Foundation: ${opts.foundation | 0} solid blocks under the city, so it sits into sloping ground.`);
   if (opts.dome) {
@@ -572,7 +575,7 @@ export async function exportPack(world, optsIn = {}) {
   const tiles = tileList(world, opts);
   const structures = buildStructures(world, opts).concat(buildDrainStructures(world, opts));
   const mobStructs = buildMobStructures(opts.spawns, opts);
-  const guide = placementGuide(tiles, { ...opts, dome: !!world.dome, stilts: !!world.stiltGrid });
+  const guide = placementGuide(tiles, { ...opts, dome: !!world.dome, stilts: !!world.stiltGrid, floating: !!world.floating });
   const fns = functionFiles(tiles, world, { ...opts, mobTiles: mobStructs });
   const hasFish = (opts.spawns || []).some((p) => FISH.has(p.type));
   const data = await buildMcPack(structures.concat(mobStructs), {
@@ -586,7 +589,7 @@ export async function exportStructuresZip(world, opts = {}) {
   const tiles = tileList(world, opts);
   const structures = buildStructures(world, opts).concat(buildDrainStructures(world, opts));
   const mobStructs = buildMobStructures(opts.spawns, opts);
-  const guide = placementGuide(tiles, { ...opts, dome: !!world.dome, stilts: !!world.stiltGrid });
+  const guide = placementGuide(tiles, { ...opts, dome: !!world.dome, stilts: !!world.stiltGrid, floating: !!world.floating });
   const fns = functionFiles(tiles, world, { ...opts, mobTiles: mobStructs });
   const files = structures.concat(mobStructs).map((s) => ({ name: `${s.name}.mcstructure`, data: s.data }));
   for (const f of fns) files.push({ name: f.name, data: new TextEncoder().encode(f.text) });
