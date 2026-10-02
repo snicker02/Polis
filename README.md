@@ -1,4 +1,4 @@
-# Polis v0.30.5
+# Polis v0.30.6
 
 *Created with help from Claude AI.*
 
@@ -754,6 +754,23 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.30.6** — A fish spawner in every park pond.
+
+Summoned fish still were not showing in park ponds, so each pond now makes its
+own: a tropical fish spawner set into its floor (one to a pond, two in a pond
+of more than sixty cells, on the deepest cells nearest the middle, in place of
+the clay, water right over it). Whenever a player is within 16 blocks it lets
+out fish, up to four at a time within four blocks of it, none while six are
+already near, every 10 to 40 seconds: the settings (and their NBT types) of a
+fish spawner saved in the game. On Java it is a minecraft:spawner whose spawn
+data is a tropical fish, with the same rhythm and reach. The summoned fish stay
+too, and the stats count the spawners.
+
+2zc checks the spawners: every park pond has one on its floor with water over
+it, the saved spawner's settings and tag types, the block entity in the Bedrock
+structures and the tropical fish spawner on Java, none with fish off (43
+checks). 6d accounts for spawner block entities like signs and beacons.
 
 **0.30.5** — populate_centered is back to what worked.
 

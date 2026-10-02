@@ -1,6 +1,6 @@
 // engine/city.js — turns a plan into blocks.
 
-import { VoxelWorld } from './blockcore.js';
+import { VoxelWorld, N } from './blockcore.js';
 import { makeRng, fbm2, clamp, hash2 } from './rng.js';
 import { makeShapedTower, twistFits } from './twist.js';
 
@@ -695,6 +695,7 @@ export function generateCity(cfgIn, onProgress) {
   // and clay under that; the rim stays a one-deep shelf. Fish then live in the bottom
   // layer, under water, where they cannot leap out onto the bank.
   deepenPonds(world, ponds);
+  const spawners = cfg.fish ? pondSpawners(world, ponds) : [];
 
   // ---- fish: last, once no more water will change ----------------------------
   // their own random stream, so a city's blocks and other spawns are the same
@@ -751,8 +752,8 @@ export function generateCity(cfgIn, onProgress) {
   }
 
   const shell = cfg.terrain ? terrainShell(plan, cfg.terrain, GROUND, cfg.cityStyle) : null;
-  const stats = summarise(world, plan, buildings, cfg, { farms, beds, spawns, bell, transit, wall, ranches, landmarks, hills, stairRuns, reach, canal, centre, streets, harbour, skirt, cutFaces, bridges, megaliths, ponds, courtyards, hostiles, dome, canals, lighting, styleDistricts: SD, unsupported: stats_unsupported });
-  return { world, plan, buildings, cfg, stats, shell, bridges, farms, ranches, spawns, bell, transit, wall, landmarks, canal, centre, streets, harbour, harbourPlan, megaliths, ponds, courtyards, hostiles, dome, canals, lighting, styleDistricts: SD,
+  const stats = summarise(world, plan, buildings, cfg, { farms, beds, spawns, bell, transit, wall, ranches, landmarks, hills, stairRuns, reach, canal, centre, streets, harbour, skirt, cutFaces, bridges, megaliths, ponds, courtyards, hostiles, dome, canals, lighting, styleDistricts: SD, spawners, unsupported: stats_unsupported });
+  return { world, plan, buildings, cfg, stats, shell, bridges, farms, ranches, spawns, bell, transit, wall, landmarks, canal, centre, streets, harbour, harbourPlan, megaliths, ponds, courtyards, hostiles, dome, canals, lighting, styleDistricts: SD, spawners,
     hills, stairRuns, reach, groundAt: (x, z) => GROUND + elevAt(x, z) };
 }
 
@@ -1701,6 +1702,54 @@ function stoneLanterns(world, cx, cz, G) {
   return placed;
 }
 
+// ---- a fish spawner on every pond's floor ---------------------------------------------
+// Fish summoned once do not last in Bedrock (they despawn when the player is
+// away), so each park pond also has a tropical fish spawner set into its floor:
+// whenever a player is within 16 blocks it lets out fish (up to four at a time,
+// within four blocks of it, none while six are already near). The settings are
+// the ones a spawner saved in the game carries (SPAWNER_TAGS). One to a pond,
+// two in a big one, on its deepest cells nearest the middle, in place of the
+// clay under the water: water stands right over it for the fish to come out into.
+export const SPAWNER_TAGS = {
+  BlockEntityVersion: N.int(0), Delay: N.short(200),
+  DisplayEntityHeight: N.float(1.7999999523162842), DisplayEntityScale: N.float(1), DisplayEntityWidth: N.float(0.800000011920929),
+  EntityIdentifier: N.str('minecraft:tropicalfish'),
+  MaxNearbyEntities: N.short(6), MaxSpawnDelay: N.short(800), MinSpawnDelay: N.short(200),
+  RequiredPlayerRange: N.short(16), SpawnCount: N.short(4), SpawnRange: N.short(4),
+};
+function pondSpawners(world, ponds) {
+  const placed = [];
+  for (const pd of ponds) {
+    // the pond's surface and depth, cell by cell (as deepenPonds left it)
+    const cells = [];
+    for (let z = pd.z0; z <= pd.z1; z++)
+      for (let x = pd.x0; x <= pd.x1; x++)
+        for (let y = GROUND + 40; y >= GROUND - 4; y--) {
+          if (world.get(x, y, z) !== MAT.WATER) continue;
+          let d = 0;
+          while (world.get(x, y - d, z) === MAT.WATER) d++;
+          if (world.get(x, y - d, z) === MAT.CLAY) cells.push({ x, z, top: y, floor: y - d, depth: d });
+          break;
+        }
+    if (!cells.length) continue;
+    const mx = (pd.x0 + pd.x1) / 2, mz = (pd.z0 + pd.z1) / 2;
+    cells.sort((a, b) => b.depth - a.depth || Math.hypot(a.x - mx, a.z - mz) - Math.hypot(b.x - mx, b.z - mz));
+    const want = cells.length > 60 ? 2 : 1;
+    const mine = [];
+    for (const c of cells) {
+      if (mine.length >= want) break;
+      if (c.depth < 2) continue;
+      if (mine.some((m) => Math.max(Math.abs(m.x - c.x), Math.abs(m.z - c.z)) < 6)) continue;
+      world.set(c.x, c.floor, c.z, MAT.SPAWNER);
+      world.setData(c.x, c.floor, c.z, { id: 'MobSpawner', tags: { ...SPAWNER_TAGS } });
+      mine.push(c);
+      placed.push([c.x, c.floor, c.z]);
+    }
+    pd.spawners = mine.map((c) => [c.x, c.floor, c.z]);
+  }
+  return placed;
+}
+
 // ---- deep ponds -------------------------------------------------------------------
 // Every pond cell is at least two deep, the edges too, so the banks go straight
 // down and there is no shallow margin for a fish to drift into and leap out of
@@ -1968,6 +2017,7 @@ function summarise(world, plan, buildings, cfg, life = {}) {
     canals: (life.canals || []).length,
     footbridges: (life.canals || []).reduce((n, c) => n + (c.footbridges || []).length, 0),
     hostiles: (life.hostiles || []).length,
+    fishSpawners: (life.spawners || []).length,
     styleDistricts: life.styleDistricts ? life.styleDistricts.counts : null,
     lighting: life.lighting ? { added: life.lighting.hung + life.lighting.flush + life.lighting.standing, hung: life.lighting.hung, flush: life.lighting.flush, standing: life.lighting.standing, darkBefore: life.lighting.before, darkAfter: life.lighting.after } : null,
     dome: life.dome ? { radius: life.dome.R, height: life.dome.c, cells: life.dome.cells, doors: life.dome.doors.length } : null,

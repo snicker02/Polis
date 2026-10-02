@@ -122,6 +122,18 @@ function javaBlockEntity(name, data) {
     return J.comp({ id: J.str(name), is_waxed: J.byte(0), front_text: side(javaSignText(text)), back_text: side(javaSignText('')) });
   }
   if (data.id === 'Beacon') return J.comp({ id: J.str('minecraft:beacon') });
+  if (data.id === 'MobSpawner') {
+    // the same spawner on Java: what it spawns, and the same rhythm and reach
+    const t = data.tags || {}, v = (k, d) => (t[k] ? t[k].v : d);
+    const ident = v('EntityIdentifier', 'minecraft:tropicalfish') === 'minecraft:tropicalfish' ? 'minecraft:tropical_fish' : v('EntityIdentifier', 'minecraft:tropicalfish');
+    return J.comp({
+      id: J.str('minecraft:mob_spawner'),
+      SpawnData: J.comp({ entity: J.comp({ id: J.str(ident) }) }),
+      Delay: J.short(v('Delay', 200)), MinSpawnDelay: J.short(v('MinSpawnDelay', 200)), MaxSpawnDelay: J.short(v('MaxSpawnDelay', 800)),
+      SpawnCount: J.short(v('SpawnCount', 4)), MaxNearbyEntities: J.short(v('MaxNearbyEntities', 6)),
+      RequiredPlayerRange: J.short(v('RequiredPlayerRange', 16)), SpawnRange: J.short(v('SpawnRange', 4)),
+    });
+  }
   if (data.id === 'Bed') return null;                    // Java carries the colour in the block name
   return null;
 }

@@ -16,7 +16,7 @@ import { buildPregenPack, pregenFileName, siteRegion, viewRegion, pregenCommand,
 import { decodeNbt } from './tools/nbt-read.js';
 import { THEMES } from './engine/materials.js';
 
-const VERSION = '0.30.5';
+const VERSION = '0.30.6';
 const $ = (id) => document.getElementById(id);
 const numVal = (id) => Number($(id).value);      // readCfg has its own local num()
 
@@ -386,6 +386,7 @@ function showStats(mesh, times) {
     if (s.twisted) line('shaped towers', (() => { const c = {}; for (const n of s.shapes || []) c[n] = (c[n] || 0) + 1; return Object.entries(c).map(([k, v]) => `${v} ${k.replace('-', ' ')}`).join(', '); })());
     if (s.courtyards && s.courtyards.length) line('courtyard blocks', s.courtyards.join(', '));
     if (s.styleDistricts) line('districts', Object.entries(s.styleDistricts).map(([k, v]) => `${k} ${v}`).join(', '));
+    if (s.fishSpawners) line('fish spawners', `${s.fishSpawners} in the park ponds`);
     if (s.lighting) line('lighting', `${s.lighting.added} lights (${s.lighting.hung} hung, ${s.lighting.flush} in the floor, ${s.lighting.standing} standing) · ${s.lighting.darkAfter} dark spots left of ${s.lighting.darkBefore}`);
     if (s.dome) line('dome', `radius ${s.dome.radius}, ${s.dome.height} high, ${s.dome.cells.toLocaleString()} blocks, ${s.dome.doors} doors`);
     if (s.hostiles) line('hostile mobs', `${s.hostiles}${result && result.cfg.hostiles ? ' (summoned by populate)' : ' (via /function …/hostiles)'}`);

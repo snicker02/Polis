@@ -411,6 +411,8 @@ Object.assign(MAT, {
   ANVIL:         A('ANVIL', 'minecraft:anvil', '#444448', { 'minecraft:cardinal_direction': S('south') }),
   CAKE:          A('CAKE', 'minecraft:cake', '#f2e5d8', { bite_counter: I(0) }),
   HEARTH:        A('HEARTH', 'minecraft:campfire', '#e0802c', { extinguished: B(0), 'minecraft:cardinal_direction': S('south') }),
+  // a fish spawner on a pond's floor (0.30.6)
+  SPAWNER:       A('SPAWNER', 'minecraft:mob_spawner', '#28343c'),
   // pines: spruce wood and needles under their own ids, so a style can turn oak
   // trees into pines while also turning its spruce trees into something else
   // (a role of their own keeps them apart: the registry merges identical blocks otherwise)

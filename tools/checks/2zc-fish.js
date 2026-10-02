@@ -34,6 +34,31 @@ export default async function run(ctx) {
   for (let x = 52; x < 54; x++) for (let z = 2; z < 4; z++) w.set(x, G - 1, z, W); // ... with a 2x2 deep pocket: not open water
   for (let x = 0; x < 60; x++) for (let z = 20; z < 25; z++) for (let y = G - 2; y <= G; y++) w.set(x, y, z, W);   // canal, 3 deep, 300 cells
   const bodies = waterBodies(w);
+  // a pond's spawner carries the settings of a fish spawner saved in the game
+  // (its tags and their types), and both editions carry it
+  {
+    const { SPAWNER_TAGS } = await import('../../engine/city.js');
+    const { TAG } = await import('../../engine/blockcore.js');
+    const want = { Delay: [TAG.SHORT, 200], MinSpawnDelay: [TAG.SHORT, 200], MaxSpawnDelay: [TAG.SHORT, 800], SpawnCount: [TAG.SHORT, 4],
+      MaxNearbyEntities: [TAG.SHORT, 6], RequiredPlayerRange: [TAG.SHORT, 16], SpawnRange: [TAG.SHORT, 4], EntityIdentifier: [TAG.STRING, 'minecraft:tropicalfish'],
+      BlockEntityVersion: [TAG.INT, 0], DisplayEntityScale: [TAG.FLOAT, 1] };
+    check('spawner: the settings and tag types of a fish spawner saved in the game', Object.entries(want).every(([k, [t, v]]) => SPAWNER_TAGS[k] && SPAWNER_TAGS[k].t === t && SPAWNER_TAGS[k].v === v));
+    const rr = generateCity({ ...DEFAULTS, seed: 12345, size: 224, pondChance: 1 });
+    const { buildStructures } = await import('../../engine/export.js');
+    const { javaTiles } = await import('../../engine/export-java.js');
+    const { readJavaNbt } = await import('../../engine/javaworld.js');
+    const { decodeNbt } = await import('../nbt-read.js');
+    let be = 0, jav = 0;
+    for (const st of buildStructures(rr.world, {})) for (const v of Object.values(decodeNbt(st.data).root.structure.palette.default.block_position_data || {}))
+      if (v.block_entity_data && v.block_entity_data.id === 'MobSpawner' && v.block_entity_data.EntityIdentifier === 'minecraft:tropicalfish') be++;
+    for (const t of javaTiles(rr.world, { prefix: 'city', spawns: rr.spawns })) {
+      const root = readJavaNbt(t.nbt), pal = root.palette.map((q) => q.Name);
+      for (const b of root.blocks) if (pal[b.state] === 'minecraft:spawner' && b.nbt && b.nbt.SpawnData && b.nbt.SpawnData.entity.id === 'minecraft:tropical_fish') jav++;
+    }
+    check('spawner: in the Bedrock structures with its block entity, and on Java as a tropical fish spawner', rr.spawners.length > 0 && be === rr.spawners.length && jav === rr.spawners.length, `${rr.spawners.length} spawners, ${be} Bedrock, ${jav} Java`);
+    const noFish = generateCity({ ...DEFAULTS, seed: 12345, size: 224, pondChance: 1, fish: false });
+    check('spawner: none when fish are off', noFish.spawners.length === 0);
+  }
   check('water bodies: the channel and the fountain are not pools', bodies.length === 4, bodies.map((b) => b.kind + b.cells.length).join(' '));
   check('water bodies: the 4x4 pond is a pond, the 60x5 canal is a river',
     bodies.some((b) => b.kind === 'pond' && b.cells.length === 16) && bodies.some((b) => b.kind === 'river' && b.cells.length === 300));
@@ -127,7 +152,7 @@ export default async function run(ctx) {
   // park ponds: deep throughout (edges too, no shallow margin to leap out of), a
   // cell with water all round three deep, clay under the lot
   {
-    let ponds = 0, deepOk = 0, rimOk = 0, fishedDeep = 0, threeDeep = 0;
+    let ponds = 0, deepOk = 0, rimOk = 0, fishedDeep = 0, threeDeep = 0, spawnOk = 0;
     for (const st of ['modern', 'medieval', 'desert']) for (const seed of [3, 31, 99]) {
       // (160 across: a pond wants a park quarter six wide, which small cities rarely have)
       const r = generateCity({ ...DEFAULTS, size: 160, seed, cityStyle: st, parkChance: 0.35, pondChance: 1 });
@@ -145,9 +170,12 @@ export default async function run(ctx) {
           const all = [[1, 0], [-1, 0], [0, 1], [0, -1]].every(([a, b]) => topAt.get((x + a) + ',' + (z + b)) === top);
           const bottom = all ? top - 3 : top - 2;
           if (all) { if (r.world.get(x, top - 2, z) !== MAT.WATER) bad++; else three++; }
-          if (r.world.get(x, bottom, z) !== MAT.CLAY) bad++;
+          if (r.world.get(x, bottom, z) !== MAT.CLAY && r.world.get(x, bottom, z) !== MAT.SPAWNER) bad++;   // (the fish spawner takes one cell of the floor)
         }
         if (deep > 0 && bad === 0) deepOk++;
+        // the spawner: on the floor, water over it, the game's own settings
+        if ((pd.spawners || []).length >= 1 && pd.spawners.every(([x, y, z]) => r.world.get(x, y, z) === MAT.SPAWNER && r.world.get(x, y + 1, z) === MAT.WATER &&
+            (r.world.getData(x, y, z) || {}).id === 'MobSpawner')) spawnOk++;
         if (shelf === 0) rimOk++;
         threeDeep += three;
         if (fishes.some((p) => p.x >= pd.x0 && p.x <= pd.x1 && p.z >= pd.z0 && p.z <= pd.z1)) fishedDeep++;
@@ -155,6 +183,7 @@ export default async function run(ctx) {
     }
     check('ponds: every park pond deep throughout, three deep where water is all round, clay under it', ponds >= 4 && deepOk === ponds && threeDeep > 0, `${deepOk}/${ponds}, ${threeDeep} cells three deep`);
     check('ponds: no shallow margin (nowhere one deep for a fish to leap out of)', rimOk === ponds, `${rimOk}/${ponds}`);
+    check('ponds: every park pond has a fish spawner on its floor, water over it', ponds > 0 && spawnOk === ponds, `${spawnOk}/${ponds}`);
     check('ponds: every park pond has fish', fishedDeep === ponds, `${fishedDeep}/${ponds}`);
   }
   check('cities: fish are generated', total > 0, String(total));

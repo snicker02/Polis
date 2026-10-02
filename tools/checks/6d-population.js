@@ -199,11 +199,12 @@ refreshWalkThrough();
       const block = pal[l0[Number(idx)].v].v.name.v;
       if (be.id.v === 'Sign') { if (!/(standing|wall)_sign$/.test(block)) badBE++; continue; }   // name, street and shop signs: checked in 2m
       if (be.id.v === 'Beacon') { if (block !== 'minecraft:beacon') badBE++; continue; }          // the centre monument's beacons
+      if (be.id.v === 'MobSpawner') { if (block !== 'minecraft:mob_spawner' || be.EntityIdentifier.v !== 'minecraft:tropicalfish') badBE++; continue; }   // a pond's fish spawner
       entities++;
       if (be.id.v !== 'Bed' || be.color.t !== 1 || block !== 'minecraft:bed') badBE++;
     }
   }
-  check('nbt: one bed entity per bed half, each on a bed with a colour (signs sit on sign blocks)', entities === bedHalves && bedHalves > 0 && badBE === 0,
+  check('nbt: one bed entity per bed half, each on a bed with a colour (signs, beacons and spawners on their own blocks)', entities === bedHalves && bedHalves > 0 && badBE === 0,
     `${entities} vs ${bedHalves}, ${badBE} bad`);
   note(`${wantV} villagers + ${wantG} golems in ${out.mobStructures.length} mob structures · ${wantC} minecart summons · ${adds.length} ticking areas`);
 }
