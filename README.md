@@ -1,4 +1,4 @@
-# Polis v0.32.1
+# Polis v0.33.0
 
 *Created with help from Claude AI.*
 
@@ -754,6 +754,38 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.33.0** — A city in tiers up a cliff.
+
+A new option, "A cliff city in tiers" (invented cities). The city climbs
+northward in tiers, each eight blocks above the last (terrain.js:
+cliffElevation). A tier's edge always runs down the middle of a street that
+truly crosses the city: both rows either side of it street everywhere the city
+reaches, the row at least half the city's widest, twenty rows in from where the
+city actually starts and ends (on an organic outline the plan's first rows are
+only spurs of street), edges forty apart. So no lot is split. The heights are a
+rolling plan, every cell its own, so the existing lift raises streets, lots and
+all and fills beneath them: the faces between tiers are retaining stone.
+
+At every edge, flights of stairs climb along the foot of the face from the
+lower street to the upper (cliffStairs): two wide, a block a step, filled
+under, a landing level with the upper street and a parapet past it so no one
+walks off the end; street furniture in the way (lamp posts, signs, flowers)
+gives way, and if nowhere else will do, track too, so every edge has a way up.
+The top of each face is railed but where the flights come up. No canal or
+harbour (water cannot lie across tiers), and for now no perimeter wall: built
+on the base level it sat buried in the upper tiers with its gates under their
+streets; a wall that climbs the tiers is still to come.
+
+Floating islands: the arches dressing a canal's widest bridge had their piers
+on the canal's walls and bed, which a floating city cuts away, so they hung over
+the chasm; a floating city leaves them out, and 2zr checks that nothing hangs
+over a chasm (13 checks).
+
+New section 2zs (9 checks): tiers, a way up at every edge, flights a block a
+step, landings and parapets, railed tops, solid faces, no lot split, every
+building and door reached from the bottom tier, nothing dark. A cliff city's
+export is all Bedrock's own block states.
 
 **0.32.1** — Wider gaps between the islands; the railway whatever the style.
 

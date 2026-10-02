@@ -183,7 +183,9 @@ export function buildCanal(world, plan, canal, G, rng) {
   }
   canal.water = water;
   canal.dock = canal.noDock ? null : buildDock(world, plan, canal, G);      // (no dock over a chasm)
-  canal.landmarkBridge = dressBridge(world, plan, canal, G);
+  // (no arches over a chasm: their piers stood on the canal's walls and bed,
+  // which a floating city cuts away)
+  canal.landmarkBridge = canal.chasm ? null : dressBridge(world, plan, canal, G);
   return canal;
 }
 

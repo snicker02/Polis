@@ -69,6 +69,18 @@ export default async function run(ctx) {
   check('floating: the banks are railed', banks > 50 && railed >= banks * 0.9, `${railed}/${banks}`);
   check('floating: no water spills into the void', leaks === 0, `${leaks}`);
   check('floating: no boats, no harbour', boats === 0, `${boats}`);
+  // nothing over a chasm hangs: every block above street level there stands on
+  // something (a deck's rail on the deck); no arches, whose piers stood on the canal's walls
+  {
+    let hanging = 0, arches = 0;
+    for (const [seed, size] of [[7, 192], [3, 224]]) {
+      const r = generateCity({ ...DEFAULTS, seed, size, floating: true });
+      const w = r.world, { W, D } = r.plan, band = r.islands.band;
+      arches += r.canals.filter((c) => c.landmarkBridge).length;
+      w.forEach((x, y, z) => { if (x >= 0 && z >= 0 && x < W && z < D && band[z * W + x] && y > G && !w.has(x, y - 1, z)) hanging++; });
+    }
+    check('floating: nothing hangs over a chasm (no bridge arches standing on air)', hanging === 0 && arches === 0, `${hanging} hanging, ${arches} arches`);
+  }
   // nothing founded on ground that is not there
   {
     const { foundationFill } = await import('../../engine/export.js');

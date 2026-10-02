@@ -96,6 +96,7 @@ export const DEFAULTS = {
   lightAll: true,            // light every spot a hostile mob could spawn (lighting.js)
   stilts: false,             // the city on stilts over open water (invented cities only)
   floating: false,           // the city on islands floating in the sky, chasms between them (invented cities only)
+  cliff: false,              // the city in tiers up a cliff, stairs between them (invented cities only)
   mixStyles: false,          // several styles, one to a district (districts.js)
   mixList: ['modern', 'medieval', 'eastasian', 'artdeco'],   // the styles ticked for mixing
   furnish: true,
@@ -155,6 +156,9 @@ export function generateCity(cfgIn, onProgress) {
   if (STYLE.glass) cfg.useStairs = true;
   // a city on stilts stands over flat water
   if (cfg.stilts && !cfg.terrain) cfg.hills = 0;
+  // a cliff city: tiers, so no water across them (canal, harbour), and on the ground
+  if (cfg.cliff && !cfg.terrain) { cfg.canal = false; cfg.harbour = false; cfg.stilts = false; cfg.floating = false; }
+  if (cfg.terrain) cfg.cliff = false;
   // a floating city: its main streets are chasms between islands; no stilts, no dome
   if (cfg.floating && !cfg.terrain) {
     cfg.canal = true; cfg.stilts = false; cfg.dome = false; cfg.harbour = false;
@@ -535,6 +539,7 @@ export function generateCity(cfgIn, onProgress) {
   // ---- hills: lift the blocks onto their terraces, then cut the steps -------
   const elevAt = (x, z) => (x >= 0 && z >= 0 && x < W && z < D ? hills.elev[z * W + x] : 0);
   let stairRuns = [];
+  let cliffWays = null;
   if (hills.H) {
     liftBlocks(world, plan, hills, GROUND);
     // The railway was laid on the flat and rode up with the ground, so its
@@ -558,6 +563,8 @@ export function generateCity(cfgIn, onProgress) {
       for (const g of lot.torii || []) g.at[1] += elevAt(g.at[0], g.at[2]);
       for (const l of lot.stoneLanterns || []) l[1] += elevAt(l[0], l[2]);
     }
+    // a cliff city: the ways up from each tier to the next
+    if (hills.cliff) cliffWays = cliffStairs(world, plan, hills, GROUND);
     // standing stones ride up with their park
     for (const m of megaliths) {
       const e = elevAt((m.x0 + m.x1) >> 1, (m.z0 + m.z1) >> 1);
@@ -598,7 +605,9 @@ export function generateCity(cfgIn, onProgress) {
 
   clearDoorways(world, buildings);
   trimOverRails(world, transit);
-  const wall = STYLE.fortress ? fortressWall(world, plan, cfg) : perimeterWall(world, plan, cfg);
+  // (a cliff city has no wall yet: built on the base level it would sit buried in
+  // the upper tiers, its gates under their streets)
+  const wall = hills.cliff ? null : STYLE.fortress ? fortressWall(world, plan, cfg) : perimeterWall(world, plan, cfg);
 
   // ---- the village ---------------------------------------------------------
   // the town hall's bell is the village bell; otherwise one goes in a plaza or park
@@ -801,8 +810,8 @@ export function generateCity(cfgIn, onProgress) {
   }
 
   const shell = cfg.terrain ? terrainShell(plan, cfg.terrain, GROUND, cfg.cityStyle) : null;
-  const stats = summarise(world, plan, buildings, cfg, { farms, beds, spawns, bell, transit, wall, ranches, landmarks, hills, stairRuns, reach, canal, centre, streets, harbour, skirt, cutFaces, bridges, megaliths, ponds, courtyards, hostiles, dome, canals, lighting, styleDistricts: SD, spawners, stilts, islands, unsupported: stats_unsupported });
-  return { world, plan, buildings, cfg, stats, shell, bridges, farms, ranches, spawns, bell, transit, wall, landmarks, canal, centre, streets, harbour, harbourPlan, megaliths, ponds, courtyards, hostiles, dome, canals, lighting, styleDistricts: SD, spawners, stilts, islands,
+  const stats = summarise(world, plan, buildings, cfg, { farms, beds, spawns, bell, transit, wall, ranches, landmarks, hills, stairRuns, reach, canal, centre, streets, harbour, skirt, cutFaces, bridges, megaliths, ponds, courtyards, hostiles, dome, canals, lighting, styleDistricts: SD, spawners, stilts, islands, cliffWays, unsupported: stats_unsupported });
+  return { world, plan, buildings, cfg, stats, shell, bridges, farms, ranches, spawns, bell, transit, wall, landmarks, canal, centre, streets, harbour, harbourPlan, megaliths, ponds, courtyards, hostiles, dome, canals, lighting, styleDistricts: SD, spawners, stilts, islands, cliffWays,
     hills, stairRuns, reach, groundAt: (x, z) => GROUND + elevAt(x, z) };
 }
 
@@ -1751,6 +1760,84 @@ function stoneLanterns(world, cx, cz, G) {
   return placed;
 }
 
+// ---- the ways up a cliff city ---------------------------------------------------------
+// At every tier's edge (in the middle of a street that crosses the city), flights
+// of stairs climb from the lower street to the upper one along the foot of the
+// face: two wide, a step a block, the tier's height in steps, filled under; a
+// landing at the top level with the upper street, and a parapet past it so no
+// one walks off the end. At least two to an edge, about every 40 blocks where
+// the street is clear for the whole run. Along the top of every face a railing,
+// but where the flights come up.
+function cliffStairs(world, plan, hills, G) {
+  const { W, D, use, mask } = plan;
+  const { tier, edges } = hills.cliff;
+  const inCity = (x, z) => x >= 0 && z >= 0 && x < W && z < D && (!mask || mask[z * W + x]);
+  const street = (x, z) => inCity(x, z) && (use[z * W + x] === USE.ROAD || use[z * W + x] === USE.SIDEWALK);
+  const flights = [];
+  for (const zb of edges) {
+    const yl = G + hills.elev[(zb - 1) * W + Math.floor(W / 2)], yu = yl + tier;
+    // where a flight fits: steps and landing and parapet on the two rows below the
+    // edge, the row the upper street starts on above it
+    // (street furniture gives way to a flight: a lamp post, a sign, a flower;
+    // track does too, but only if nowhere else will do: every edge has a way up)
+    const FURNITURE = /fence|lantern|sign|flower|tulip|poppy|dandelion|allium|orchid|bluet|daisy|cornflower|lily|grass|fern|bush|roots|carpet|torch/;
+    const blocks = (x, y, z, allowRail) => {
+      const id = world.get(x, y, z);
+      if (id === -1) return false;
+      const n = MATERIALS.def(id).block;
+      if (FURNITURE.test(n) || n === 'minecraft:sea_lantern' || n === 'minecraft:shroomlight') return false;
+      if (allowRail && /rail|redstone_block/.test(n)) return false;
+      return true;
+    };
+    const fits = (x0, allowRail) => {
+      for (let i = -1; i <= tier + 1; i++) {
+        const x = x0 + i;
+        if (!street(x, zb - 1) || !street(x, zb - 2) || !street(x, zb)) return false;
+        for (const z of [zb - 1, zb - 2]) for (let y = yl + 1; y <= yu + 3; y++) if (blocks(x, y, z, allowRail)) return false;
+      }
+      return true;
+    };
+    let here = [];
+    for (const allowRail of [false, true]) {
+      for (let x0 = 2; x0 < W - tier - 4; x0++) {
+        if (here.some((h) => Math.abs(x0 - h) < 40)) continue;
+        if (fits(x0, allowRail)) here.push(x0);
+      }
+      if (here.length === 1) { for (let x0 = W - tier - 5; x0 > here[0] + tier + 4; x0--) if (fits(x0, allowRail)) { here.push(x0); break; } }
+      if (here.length) break;
+    }
+    for (const x0 of here) {
+      // clear the street furniture out of the flight's way
+      for (let x = x0 - 1; x <= x0 + tier + 1; x++) for (const z of [zb - 1, zb - 2]) for (let y = yl + 1; y <= yu + 3; y++) world.clear(x, y, z);
+      const steps = [];
+      for (let i = 0; i < tier; i++) {
+        const x = x0 + i;
+        for (const z of [zb - 1, zb - 2]) {
+          for (let y = yl + 1; y < yl + 1 + i; y++) world.set(x, y, z, MAT.RETAIN);
+          world.set(x, yl + 1 + i, z, stairId('stonebrick', WEIRDO.east));
+          steps.push([x, yl + 1 + i, z]);
+        }
+      }
+      // the landing, level with the upper street, and the parapet past it
+      for (const z of [zb - 1, zb - 2]) {
+        for (let y = yl + 1; y <= yu; y++) world.set(x0 + tier, y, z, MAT.RETAIN);
+        for (let y = yl + 1; y <= yu + 1; y++) world.set(x0 + tier + 1, y, z, MAT.RETAIN);
+      }
+      flights.push({ edge: zb, x0, foot: [x0 - 1, yl + 1, zb - 1], top: [x0 + tier, yu + 1, zb - 1], steps, yl, yu });
+    }
+    // the railing along the top of the face, but where a flight comes up
+    const open = new Set();
+    for (const f of flights) if (f.edge === zb) for (let x = f.x0 + tier - 1; x <= f.x0 + tier; x++) open.add(x);
+    for (let x = 0; x < W; x++) {
+      if (!street(x, zb) || open.has(x)) continue;
+      if (!world.has(x, yu, zb) || world.has(x, yu + 1, zb)) continue;
+      world.set(x, yu + 1, zb, MAT.FENCE);
+    }
+  }
+  const unlinked = edges.filter((zb) => !flights.some((f) => f.edge === zb));
+  return { flights, edges, tier, unlinked };
+}
+
 // ---- a city of floating islands ------------------------------------------------------
 // The main streets were planned as canals (planCanals); in a floating city their
 // channels are chasms instead: open down to the sky below. What the canal
@@ -2268,6 +2355,7 @@ function summarise(world, plan, buildings, cfg, life = {}) {
     footbridges: (life.canals || []).reduce((n, c) => n + (c.footbridges || []).length, 0),
     hostiles: (life.hostiles || []).length,
     fishSpawners: (life.spawners || []).length,
+    cliff: life.cliffWays ? { tiers: life.cliffWays.edges.length + 1, flights: life.cliffWays.flights.length } : null,
     islands: life.islands ? { count: life.islands.count, deepest: life.islands.deepest, biggest: life.islands.sizes.slice(0, 5) } : null,
     stilts: life.stilts ? { piles: life.stilts.piles, lanterns: life.stilts.lanterns, islands: life.stilts.island, open: life.stilts.open } : null,
     styleDistricts: life.styleDistricts ? life.styleDistricts.counts : null,

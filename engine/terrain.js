@@ -30,6 +30,7 @@ export function planHills(plan, cfg) {
   // median height of the ground under it, measured from the city's base
   // level, so the city steps up and down with the terrain.
   if (cfg.terrain) return terrainElevation(plan, cfg, elev);
+  if (cfg.cliff) return cliffElevation(plan, cfg, elev);
   const H = Math.max(0, Math.min(3, cfg.hills | 0));
   const blocks = [];
   if (!H) return { elev, blocks, H };
@@ -340,6 +341,57 @@ function terrainElevation(plan, cfg, elev) {
     return { ...b, e, rolling: true };
   });
   return { elev, blocks, H, rolling: true };
+}
+
+// ---- a city in tiers up a cliff ----------------------------------------------------
+// The city climbs northward in tiers, each TIER blocks above the last. A tier's
+// edge always runs through the middle of a street that crosses the whole city
+// (both rows either side of it street, everywhere the city reaches), so no lot
+// is ever split; edges stand at least 40 apart and 20 from the city's own. The
+// heights are a rolling plan (every cell its own), so the lift raises streets,
+// lots and all, and fills under them: the faces between tiers are retaining
+// stone. cliffStairs (city.js) builds the ways up.
+export const TIER = 8;
+function cliffElevation(plan, cfg, elev) {
+  const { W, D, use, mask } = plan;
+  const street = (x, z) => use[z * W + x] === USE.ROAD || use[z * W + x] === USE.SIDEWALK;
+  const inCity = (x, z) => !mask || mask[z * W + x];
+  // rows z where the edge could go: between rows z-1 and z, both street right
+  // across, and a real crossing of the city (half its widest row at least, 20
+  // rows in from where the city actually starts and ends: on an organic outline
+  // the plan's first rows are only a few spurs of street)
+  const across = (z) => { let n = 0; for (let x = 0; x < W; x++) if (inCity(x, z)) n++; return n; };
+  let widest = 0, zMin = D, zMax = -1;
+  for (let z = 0; z < D; z++) { const n = across(z); if (n) { widest = Math.max(widest, n); zMin = Math.min(zMin, z); zMax = Math.max(zMax, z); } }
+  const ok = [];
+  for (let z = Math.max(21, zMin + 20); z < Math.min(D - 20, zMax - 19); z++) {
+    if (across(z) < widest * 0.5 || across(z - 1) < widest * 0.5) continue;
+    let all = true;
+    for (let x = 0; x < W && all; x++) {
+      if (!inCity(x, z) && !inCity(x, z - 1)) continue;
+      if (!street(x, z) || !street(x, z - 1)) all = false;
+    }
+    if (all) ok.push(z);
+  }
+  // the middle of each run of such rows (the middle of its street), at least 40 apart
+  const mids = [];
+  for (let i = 0; i < ok.length;) {
+    let j = i; while (j + 1 < ok.length && ok[j + 1] === ok[j] + 1) j++;
+    mids.push(ok[Math.floor((i + j) / 2)]);
+    i = j + 1;
+  }
+  const edges = [];
+  for (const z of mids) if (!edges.length || z - edges[edges.length - 1] >= 40) edges.push(z);
+  for (let z = 0; z < D; z++) {
+    const tier = edges.filter((e) => z >= e).length;
+    for (let x = 0; x < W; x++) elev[z * W + x] = tier * TIER;
+  }
+  const blocks = plan.cityBlocks.map((b) => {
+    let e = 0;
+    for (let z = b.z0; z <= b.z1; z++) for (let x = b.x0; x <= b.x1; x++) e = Math.max(e, elev[z * W + x]);
+    return { ...b, e, rolling: true };
+  });
+  return { elev, blocks, H: edges.length * TIER, rolling: true, cliff: { tier: TIER, edges } };
 }
 
 // ---- staircases ------------------------------------------------------------
