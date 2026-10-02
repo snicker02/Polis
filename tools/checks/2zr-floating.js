@@ -76,5 +76,19 @@ export default async function run(ctx) {
     const f = foundationFill(r.world);
     check('floating: the foundation puts nothing under it', [[10, -20, 10], [60, -30, 60], [100, -9, 40]].every(([x, y, z]) => f(x, y, z) === -1));
   }
+  // the gaps: wide main streets give wide chasms (more than a crack, one of them wide);
+  // and the Streets setting is the player's: a railway, whatever the style
+  {
+    const { MATERIALS } = await import('../../engine/materials.js');
+    let narrow = 0, widest = 0, railsBad = 0;
+    for (const [seed, style] of [[7, 'modern'], [21, 'venetian'], [8, 'fortress']]) {
+      const r = generateCity({ ...DEFAULTS, seed, size: 192, cityStyle: style, floating: true, transit: 'rails' });
+      for (const c of r.canals) { const wdt = c.ch1 - c.ch0 + 1; if (wdt < 3) narrow++; widest = Math.max(widest, wdt); }
+      let rails = 0; r.world.forEach((x, y, z, id) => { if (/rail/.test(MATERIALS.def(id).block)) rails++; });
+      if (r.cfg.transit !== 'rails' || rails < 100) railsBad++;
+    }
+    check('floating: the chasms are gaps, not cracks (three or more across, the widest nine)', narrow === 0 && widest >= 9, `${narrow} narrow, widest ${widest}`);
+    check('floating: a railway when asked for, whatever the style (Venetian and fortress too)', railsBad === 0, `${railsBad} without`);
+  }
   note(`floating: ${isl} islands over two cities`);
 }

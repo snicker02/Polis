@@ -142,20 +142,26 @@ export function generateCity(cfgIn, onProgress) {
   // buildings, no trams; sliders still at their defaults are set for it
   if (STYLE.fortress) {
     cfg.wallHeight = Math.max(cfg.wallHeight | 0, 9);
-    if (cfg.streetWidth === DEFAULTS.streetWidth) cfg.streetWidth = 3;
-    if (cfg.avenueWidth === DEFAULTS.avenueWidth) cfg.avenueWidth = 5;
+    // (narrow streets, unless the town floats: then the chasms want them wide)
+    if (cfg.streetWidth === DEFAULTS.streetWidth && !cfg.floating) cfg.streetWidth = 3;
+    if (cfg.avenueWidth === DEFAULTS.avenueWidth && !cfg.floating) cfg.avenueWidth = 5;
     if (cfg.lotDowntown === DEFAULTS.lotDowntown) cfg.lotDowntown = 16;
     if (cfg.lotSuburb === DEFAULTS.lotSuburb) cfg.lotSuburb = 9;
     if (cfg.maxFloors === DEFAULTS.maxFloors) cfg.maxFloors = 6;
     if (cfg.parkChance === DEFAULTS.parkChance) cfg.parkChance = 0.05;
-    cfg.transit = 'roads';
+    // (the Streets setting is the player's: Roads is already the default)
   }
   // a glass city climbs by stairs
   if (STYLE.glass) cfg.useStairs = true;
   // a city on stilts stands over flat water
   if (cfg.stilts && !cfg.terrain) cfg.hills = 0;
   // a floating city: its main streets are chasms between islands; no stilts, no dome
-  if (cfg.floating && !cfg.terrain) { cfg.canal = true; cfg.stilts = false; cfg.dome = false; cfg.harbour = false; }
+  if (cfg.floating && !cfg.terrain) {
+    cfg.canal = true; cfg.stilts = false; cfg.dome = false; cfg.harbour = false;
+    // the main streets planned wide, so the chasms between the islands are wide
+    if (cfg.avenueWidth === DEFAULTS.avenueWidth) cfg.avenueWidth = 13;
+    if (cfg.streetWidth === DEFAULTS.streetWidth) cfg.streetWidth = 9;
+  }
   // an Art Deco city: towers step back often, for the wedding-cake silhouette
   if (STYLE.deco) {
     cfg.setbacks = true;
@@ -166,7 +172,7 @@ export function generateCity(cfgIn, onProgress) {
   if (STYLE.venetian) {
     cfg.canal = true;
     cfg.piazzas = true;
-    cfg.transit = 'roads';
+    // (the Streets setting is the player's: Roads is already the default)
     if (cfg.hills === DEFAULTS.hills) cfg.hills = 0;
     if (cfg.pitch === DEFAULTS.pitch) cfg.pitch = 6;
     if (cfg.parkChance === DEFAULTS.parkChance) cfg.parkChance = 0.16;
@@ -188,6 +194,22 @@ export function generateCity(cfgIn, onProgress) {
   // walkway two wide: a railing on its inner row, the outer row to walk)
   if (floating) for (const c of canals) {
     c.noDock = true; c.railed = true; c.chasm = true;
+    // A wide street gives a wide chasm: all of it but a walkway two wide on each
+    // bank (railed on its inner row); the crossings and footbridges stay decks.
+    if (c.w >= 9) {
+      const decks = new Set();
+      for (const [b0, b1] of c.bridgeSpans) for (let u = b0; u <= b1; u++) decks.add(u);
+      for (const [f0, f2] of c.footbridges) for (let u = f0; u <= f2; u++) decks.add(u);
+      const n0 = c.a0 + 2, n1 = c.a1 - 2;
+      for (let u = c.u0; u <= c.u1; u++) {
+        if (decks.has(u)) continue;
+        for (let a = n0; a <= n1; a++) {
+          const [x, z] = c.cell(u, a);
+          if (plan.use[z * plan.W + x] === USE.SIDEWALK) plan.use[z * plan.W + x] = USE_CANAL;
+        }
+      }
+      c.ch0 = n0; c.ch1 = n1;
+    }
     if (c.w < 7) {
       const mid = Math.floor((c.ch0 + c.ch1) / 2);
       for (let u = c.u0; u <= c.u1; u++)

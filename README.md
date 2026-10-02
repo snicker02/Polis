@@ -1,4 +1,4 @@
-# Polis v0.32.0
+# Polis v0.32.1
 
 *Created with help from Claude AI.*
 
@@ -754,6 +754,24 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.32.1** — Wider gaps between the islands; the railway whatever the style.
+
+The chasms between floating islands were canal channels, three across or, in a
+narrow street, a one-block crack. A floating city now plans its streets wide
+(avenues 13, streets 9, where the sliders are at their defaults) and a chasm in
+a wide street takes all of it but a walkway two wide on each bank, railed on its
+inner row: gaps of five to nine, the crossings and footbridges still decks
+across the whole width. (A walled fortress keeps its streets wide when it
+floats.)
+
+The Venetian and Walled fortress styles set the Streets setting back to plain
+roads whatever was chosen, so a railway (or trams) never appeared in a city of
+either; that override is gone (Roads is already the default), and track crosses
+canals and chasms on the street bridges.
+
+2zr checks both: the chasms gaps, not cracks, the widest nine, and a railway
+when asked for in a modern, Venetian and fortress floating city (12 checks).
 
 **0.32.0** — A city of floating islands.
 
