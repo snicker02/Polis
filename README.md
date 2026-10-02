@@ -1,4 +1,4 @@
-# Polis v0.30.6
+# Polis v0.31.0
 
 *Created with help from Claude AI.*
 
@@ -754,6 +754,27 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.31.0** — A city on stilts over open water.
+
+A new option, "On stilts over open water" (invented cities; the ground is made
+flat). Everything above street level is the city it would have been; below it,
+under the streets, squares and buildings, the stone gives way to open water: a
+gravel seabed seven down, water up to the canal's own level, and two blocks of
+air under the deck, room for a boat. Dark timber piles hold the deck up, every
+four blocks under the streets, at every building's corners and every three
+blocks under it. Parks, farms and ranches stay islands of soil, and so does any
+column whose surface is not solid (a fountain's water would fall). A canal's
+channel opens into the water below at the same level, with no pile in it. The
+city's edge stands on a stone seawall, a breakwater at sea that keeps the water
+in on land, and a sea lantern in the seabed every eight blocks lights all the
+water (dark open water in an ocean would spawn drowned). Gravel ballast under
+tram track that ends up over the gap is made stone, so it cannot fall.
+
+New section 2zq (9 checks): above the deck the city unchanged, every building
+walks through and nothing is dark, open water from the seabed to the canal's
+level, the air gap, the piles, islands, seawall and seabed lanterns. A stilt
+city's export is all Bedrock's own block states.
 
 **0.30.6** — A fish spawner in every park pond.
 

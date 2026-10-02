@@ -27,7 +27,7 @@ import { makeBuilding, OUTWARD } from './building.js';
 import { doorId, DIR, MATERIALS } from './materials.js';
 import { farm, pond, scatterFlowers, furnish, bedSpawns, placeBell, golemSpawns, ranch, pandaGrove, catSpawns, RANCH_ANIMALS } from './life.js';
 import { layTransit, trimOverRails, sweepStrandedRails, edgeDistance } from './transit.js';
-import { planCanal, planCanals, buildCanal, USE_CANAL } from './water.js';
+import { planCanal, planCanals, buildCanal, USE_CANAL, WATER_HI } from './water.js';
 import { planHarbour, buildHarbour, harbourSidings } from './harbour.js';
 import { planBridges, buildBridges, bridgeRails } from './bridges.js';
 import { chooseLandmarks, buildLandmark } from './landmarks.js';
@@ -94,6 +94,7 @@ export const DEFAULTS = {
   hostileCount: 24,          // how many: daylight-proof kinds, a mix for the city's style
   dome: false,               // a glass dome over the whole city, sealed all round (invented cities only)
   lightAll: true,            // light every spot a hostile mob could spawn (lighting.js)
+  stilts: false,             // the city on stilts over open water (invented cities only)
   mixStyles: false,          // several styles, one to a district (districts.js)
   mixList: ['modern', 'medieval', 'eastasian', 'artdeco'],   // the styles ticked for mixing
   furnish: true,
@@ -150,6 +151,8 @@ export function generateCity(cfgIn, onProgress) {
   }
   // a glass city climbs by stairs
   if (STYLE.glass) cfg.useStairs = true;
+  // a city on stilts stands over flat water
+  if (cfg.stilts && !cfg.terrain) cfg.hills = 0;
   // an Art Deco city: towers step back often, for the wedding-cake silhouette
   if (STYLE.deco) {
     cfg.setbacks = true;
@@ -340,12 +343,12 @@ export function generateCity(cfgIn, onProgress) {
 
     if (lot.pen) {
       const rch = ranch(world, lot, frontage(plan, lot).side, lifeRng, GROUND, plan, lot.pen);
-      if (rch) { ranches.push(rch); continue; }
+      if (rch) { ranches.push(rch); lot.island = true; continue; }
     }
     if (lot.style === 'house' && cfg.farmChance > 0 &&
         lot.x1 - lot.x0 + 1 >= 7 && lot.z1 - lot.z0 + 1 >= 7 && lifeRng.chance(cfg.farmChance)) {
       const f = farm(world, lot, frontage(plan, lot).side, lifeRng, GROUND, plan);
-      if (f) { farms.push(f); continue; }
+      if (f) { farms.push(f); lot.island = true; continue; }
     }
 
 
@@ -590,6 +593,8 @@ export function generateCity(cfgIn, onProgress) {
   for (const rec of buildings) for (const p of (rec.furniture && rec.furniture.paintings) || []) spawns.push(p);
 
   // ---- city style: restyle the role materials, then snow -----------------------
+  // ---- on stilts: open water under the streets and buildings ----------------
+  const stilts = cfg.stilts && !cfg.terrain ? stiltCity(world, plan, buildings, GROUND) : null;
   if (SD) for (const name of SD.names) applyStyle(world, plan, styleOf(name), (x, z) => GROUND + elevAt(x, z), (x, z) => SD.at(x, z) === name);
   else applyStyle(world, plan, STYLE, (x, z) => GROUND + elevAt(x, z));
 
@@ -752,8 +757,8 @@ export function generateCity(cfgIn, onProgress) {
   }
 
   const shell = cfg.terrain ? terrainShell(plan, cfg.terrain, GROUND, cfg.cityStyle) : null;
-  const stats = summarise(world, plan, buildings, cfg, { farms, beds, spawns, bell, transit, wall, ranches, landmarks, hills, stairRuns, reach, canal, centre, streets, harbour, skirt, cutFaces, bridges, megaliths, ponds, courtyards, hostiles, dome, canals, lighting, styleDistricts: SD, spawners, unsupported: stats_unsupported });
-  return { world, plan, buildings, cfg, stats, shell, bridges, farms, ranches, spawns, bell, transit, wall, landmarks, canal, centre, streets, harbour, harbourPlan, megaliths, ponds, courtyards, hostiles, dome, canals, lighting, styleDistricts: SD, spawners,
+  const stats = summarise(world, plan, buildings, cfg, { farms, beds, spawns, bell, transit, wall, ranches, landmarks, hills, stairRuns, reach, canal, centre, streets, harbour, skirt, cutFaces, bridges, megaliths, ponds, courtyards, hostiles, dome, canals, lighting, styleDistricts: SD, spawners, stilts, unsupported: stats_unsupported });
+  return { world, plan, buildings, cfg, stats, shell, bridges, farms, ranches, spawns, bell, transit, wall, landmarks, canal, centre, streets, harbour, harbourPlan, megaliths, ponds, courtyards, hostiles, dome, canals, lighting, styleDistricts: SD, spawners, stilts,
     hills, stairRuns, reach, groundAt: (x, z) => GROUND + elevAt(x, z) };
 }
 
@@ -1702,6 +1707,70 @@ function stoneLanterns(world, cx, cz, G) {
   return placed;
 }
 
+// ---- a city on stilts over open water ------------------------------------------------
+// Under the streets, squares and buildings the stone gives way to open water:
+// a gravel seabed seven down, water up to the canal's own level, then two blocks
+// of air under the deck (room for a boat), the deck itself (every street,
+// pavement and floor) as it was. Dark timber piles hold it up: every four
+// blocks under the streets, at every building's corners and every three blocks
+// under it. Parks, farms and ranches stay islands of soil to the seabed, and so
+// does any column whose surface is not solid (a fountain's water would fall).
+// A canal's channel opens into the water below, the same level, with no pile in
+// it. The city's edge stands on a stone seawall (built on land, it keeps the
+// water in). A sea lantern in the seabed every eight blocks lights all the water
+// (dark open water in an ocean would spawn drowned).
+function stiltCity(world, plan, buildings, G) {
+  const { W, D, use, mask, lots } = plan;
+  const BED = G - 7;
+  const inCity = (x, z) => x >= 0 && z >= 0 && x < W && z < D && (!mask || mask[z * W + x]);
+  const island = new Uint8Array(W * D);
+  for (const l of lots) if (l.kind === USE.PARK || l.island)
+    for (let z = l.z0; z <= l.z1; z++) for (let x = l.x0; x <= l.x1; x++) if (inCity(x, z)) island[z * W + x] = 1;
+  const under = new Uint8Array(W * D);                     // building footprints: piles every three
+  for (const b of buildings)
+    for (let z = Math.max(0, b.z0); z <= Math.min(D - 1, b.z1); z++)
+      for (let x = Math.max(0, b.x0); x <= Math.min(W - 1, b.x1); x++) {
+        const corner = (x === b.x0 || x === b.x1) && (z === b.z0 || z === b.z1);
+        const grid = (x - b.x0) % 3 === 0 && (z - b.z0) % 3 === 0;
+        if (corner || grid) under[z * W + x] = 1;
+      }
+  const SOFT = new Set([MAT.BASE, MAT.CANAL_BED, MAT.DIRT, MAT.CLAY]);
+  const info = { piles: 0, lanterns: 0, island: 0, open: 0, seawall: 0, BED };
+  for (let z = 0; z < D; z++)
+    for (let x = 0; x < W; x++) {
+      if (!inCity(x, z)) continue;
+      const i = z * W + x;
+      let edge = false;
+      for (let dz = -1; dz <= 1 && !edge; dz++) for (let dx = -1; dx <= 1; dx++) if (!inCity(x + dx, z + dz)) { edge = true; break; }
+      const surf = world.get(x, G, z);
+      const canal = use[i] === USE_CANAL;
+      const solidTop = surf !== -1 && surf !== MAT.WATER && !MATERIALS.isPassable(surf);
+      if (edge) {                                          // the seawall
+        for (let y = BED; y < G; y++) if (!world.has(x, y, z) || SOFT.has(world.get(x, y, z))) world.set(x, y, z, MAT.BASE);
+        info.seawall++; continue;
+      }
+      if (island[i] || (!canal && !solidTop)) {            // an island, or a column that must stay solid
+        for (let y = BED; y < G; y++) if (!world.has(x, y, z) || SOFT.has(world.get(x, y, z))) world.set(x, y, z, y === BED ? MAT.BASE : MAT.DIRT);
+        info.island++; continue;
+      }
+      // open water: soft fill becomes water up to the canal's level, air above it
+      for (let y = BED + 1; y < G; y++) {
+        const id = world.get(x, y, z);
+        if (id !== -1 && !SOFT.has(id)) continue;          // keep what was built (a dock's steps, the canal's own water)
+        if (y <= WATER_HI) world.set(x, y, z, MAT.WATER); else world.clear(x, y, z);
+      }
+      const lamp = x % 8 === 4 && z % 8 === 4;
+      world.set(x, BED, z, lamp ? MAT.LANTERN : MAT.GRAVEL);
+      if (lamp) info.lanterns++;
+      if (!canal && (under[i] || (x % 4 === 0 && z % 4 === 0))) {
+        for (let y = BED + 1; y < G; y++) world.set(x, y, z, MAT.DARK_FRAME);
+        info.piles++;
+      }
+      info.open++;
+    }
+  return info;
+}
+
 // ---- a fish spawner on every pond's floor ---------------------------------------------
 // Fish summoned once do not last in Bedrock (they despawn when the player is
 // away), so each park pond also has a tropical fish spawner set into its floor:
@@ -2018,6 +2087,7 @@ function summarise(world, plan, buildings, cfg, life = {}) {
     footbridges: (life.canals || []).reduce((n, c) => n + (c.footbridges || []).length, 0),
     hostiles: (life.hostiles || []).length,
     fishSpawners: (life.spawners || []).length,
+    stilts: life.stilts ? { piles: life.stilts.piles, lanterns: life.stilts.lanterns, islands: life.stilts.island, open: life.stilts.open } : null,
     styleDistricts: life.styleDistricts ? life.styleDistricts.counts : null,
     lighting: life.lighting ? { added: life.lighting.hung + life.lighting.flush + life.lighting.standing, hung: life.lighting.hung, flush: life.lighting.flush, standing: life.lighting.standing, darkBefore: life.lighting.before, darkAfter: life.lighting.after } : null,
     dome: life.dome ? { radius: life.dome.R, height: life.dome.c, cells: life.dome.cells, doors: life.dome.doors.length } : null,

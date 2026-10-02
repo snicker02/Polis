@@ -16,7 +16,7 @@ import { buildPregenPack, pregenFileName, siteRegion, viewRegion, pregenCommand,
 import { decodeNbt } from './tools/nbt-read.js';
 import { THEMES } from './engine/materials.js';
 
-const VERSION = '0.30.6';
+const VERSION = '0.31.0';
 const $ = (id) => document.getElementById(id);
 const numVal = (id) => Number($(id).value);      // readCfg has its own local num()
 
@@ -26,7 +26,7 @@ const SLIDERS = {
   maxFloors: 0, pitch: 0, setbackEvery: 0, bw: 0, bd: 0, floors: 0, clip: 0,
   farmChance: 2, pondChance: 2, twistChance: 2, courtyardChance: 2, hostileCount: 0, villagers: 0, wallHeight: 0, foundation: 0, clearAbove: 0, hills: 0, golemsPer10: 0,
 };
-const CHECKS = ['setback', 'roofAccess', 'useStairs', 'lights', 'lamps', 'trees', 'markings', 'landmarks', 'canal', 'harbour', 'bridges', 'detail', 'streetSigns', 'fish', 'megaliths', 'hostiles', 'dome'];
+const CHECKS = ['setback', 'roofAccess', 'useStairs', 'lights', 'lamps', 'trees', 'markings', 'landmarks', 'canal', 'harbour', 'bridges', 'detail', 'streetSigns', 'fish', 'megaliths', 'hostiles', 'dome', 'stilts'];
 
 let renderer = null;
 let result = null;       // { world, plan, buildings, cfg, stats }
@@ -386,6 +386,7 @@ function showStats(mesh, times) {
     if (s.twisted) line('shaped towers', (() => { const c = {}; for (const n of s.shapes || []) c[n] = (c[n] || 0) + 1; return Object.entries(c).map(([k, v]) => `${v} ${k.replace('-', ' ')}`).join(', '); })());
     if (s.courtyards && s.courtyards.length) line('courtyard blocks', s.courtyards.join(', '));
     if (s.styleDistricts) line('districts', Object.entries(s.styleDistricts).map(([k, v]) => `${k} ${v}`).join(', '));
+    if (s.stilts) line('stilts', `${s.stilts.piles} piles over ${s.stilts.open} columns of open water, ${s.stilts.lanterns} seabed lanterns`);
     if (s.fishSpawners) line('fish spawners', `${s.fishSpawners} in the park ponds`);
     if (s.lighting) line('lighting', `${s.lighting.added} lights (${s.lighting.hung} hung, ${s.lighting.flush} in the floor, ${s.lighting.standing} standing) · ${s.lighting.darkAfter} dark spots left of ${s.lighting.darkBefore}`);
     if (s.dome) line('dome', `radius ${s.dome.radius}, ${s.dome.height} high, ${s.dome.cells.toLocaleString()} blocks, ${s.dome.doors} doors`);
