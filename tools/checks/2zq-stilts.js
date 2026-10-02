@@ -68,5 +68,44 @@ export default async function run(ctx) {
   check('stilts: parks, farms and ranches stand on islands of soil', islandBad === 0, `${islandBad}`);
   check('stilts: the edge stands on a seawall (the water stays in)', wallBad === 0, `${wallBad}`);
   check('stilts: sea lanterns in the seabed light the water', lanterns > 100, `${lanterns}`);
+  // the foundation, on stilts: the piles go on down, islands and seawall are
+  // founded, open water is left alone (Bedrock: nothing written; Java: nothing listed)
+  {
+    const { buildStructures } = await import('../../engine/export.js');
+    const { javaTiles } = await import('../../engine/export-java.js');
+    const { readJavaNbt } = await import('../../engine/javaworld.js');
+    const { decodeNbt } = await import('../nbt-read.js');
+    const r = generateCity({ ...DEFAULTS, seed: 7, size: 128, stilts: true });
+    const w = r.world, { W, D, kind } = w.stiltGrid, y0 = w.box.y0, F = 6;
+    let bad = 0, piles = 0, solid = 0, left = 0;
+    const judge = (wx, wy, wz, name) => {
+      if (wy >= y0 || wx < 0 || wz < 0 || wx >= W || wz >= D) return;
+      const k = kind[wz * W + wx];
+      if (k === 1) { if (name) bad++; else left++; }
+      if (k === 2) { if (name === 'minecraft:dark_oak_log') piles++; else bad++; }
+      if (k === 3) { if (name === 'minecraft:stone') solid++; else bad++; }
+    };
+    for (const st of buildStructures(w, { foundation: F })) {
+      const root = decodeNbt(st.data).root, bi = root.structure.block_indices[0], pal = root.structure.palette.default.block_palette;
+      const sy = root.size[1], sz = root.size[2], [ox, oy, oz] = st.offset;
+      for (let i = 0; i < bi.length; i++) {
+        const z = i % sz, y = Math.floor(i / sz) % sy, x = Math.floor(i / (sy * sz));
+        judge(ox + x, oy + y, oz + z, bi[i] === -1 ? null : pal[bi[i]].name);
+      }
+    }
+    check('stilts, Bedrock foundation: the piles go on down, islands and seawall founded, open water left alone', bad === 0 && piles > 1000 && solid > 1000 && left > 1000, `${piles} pile, ${solid} solid, ${left} left alone, ${bad} wrong`);
+    let jbad = 0, jp = 0;
+    for (const t of javaTiles(w, { prefix: 'city', spawns: r.spawns, fillAir: true, foundation: F })) {
+      const root = readJavaNbt(t.nbt), pal = root.palette.map((q) => q.Name);
+      for (const b of root.blocks) {
+        const wx = w.box.x0 + t.offset[0] + b.pos[0], wy = 2 + t.offset[1] + b.pos[1], wz = w.box.z0 + t.offset[2] + b.pos[2];
+        if (wy >= y0 || wx < 0 || wz < 0 || wx >= W || wz >= D) continue;
+        const k = kind[wz * W + wx], n = pal[b.state];
+        if (k === 1 || (k === 2 && n !== 'minecraft:dark_oak_log') || (k === 3 && n !== 'minecraft:stone')) jbad++;
+        if (k === 2) jp++;
+      }
+    }
+    check('stilts, Java foundation: the same', jbad === 0 && jp === piles, `${jp} pile, ${jbad} wrong`);
+  }
   note(`stilts: ${opens} open columns, ${lanterns} seabed lanterns`);
 }

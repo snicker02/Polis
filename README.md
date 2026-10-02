@@ -1,4 +1,4 @@
-# Polis v0.31.0
+# Polis v0.31.1
 
 *Created with help from Claude AI.*
 
@@ -754,6 +754,22 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.31.1** — On stilts, the piles are the foundation.
+
+The Foundation export setting filled solid stone under the whole city, which on
+a stilt city buried the water and piles under a block of rock. With stilts on,
+the foundation is the stilts carried on down: each pile goes the chosen depth
+further into the ground below, islands (parks, farms, ranches) and the seawall
+stand on solid ground, and under open water nothing is put, so whatever is
+beneath (the real seabed, water, land) is left as it is. The same on Bedrock
+(the foundation fill) and Java (the fill listed under the city). The stilt pass
+records each column's kind on the world for the exports, each pile stands
+through the seabed, and the seabed lanterns moved off the pile grid (they had
+fallen on the same cells) to stand between the piles. The placement guide says
+what the foundation does on stilts.
+
+2zq checks the foundation on stilts, Bedrock and Java (11 checks).
 
 **0.31.0** — A city on stilts over open water.
 

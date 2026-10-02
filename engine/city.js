@@ -1736,6 +1736,11 @@ function stiltCity(world, plan, buildings, G) {
       }
   const SOFT = new Set([MAT.BASE, MAT.CANAL_BED, MAT.DIRT, MAT.CLAY]);
   const info = { piles: 0, lanterns: 0, island: 0, open: 0, seawall: 0, BED };
+  // each column's kind, for the exports' foundation: the piles go on down into
+  // the ground below, islands and seawall stand on solid ground, and under open
+  // water nothing is put (1 open, 2 pile, 3 solid)
+  const kind = new Uint8Array(W * D);
+  world.stiltGrid = { W, D, kind };
   for (let z = 0; z < D; z++)
     for (let x = 0; x < W; x++) {
       if (!inCity(x, z)) continue;
@@ -1747,11 +1752,11 @@ function stiltCity(world, plan, buildings, G) {
       const solidTop = surf !== -1 && surf !== MAT.WATER && !MATERIALS.isPassable(surf);
       if (edge) {                                          // the seawall
         for (let y = BED; y < G; y++) if (!world.has(x, y, z) || SOFT.has(world.get(x, y, z))) world.set(x, y, z, MAT.BASE);
-        info.seawall++; continue;
+        kind[i] = 3; info.seawall++; continue;
       }
       if (island[i] || (!canal && !solidTop)) {            // an island, or a column that must stay solid
         for (let y = BED; y < G; y++) if (!world.has(x, y, z) || SOFT.has(world.get(x, y, z))) world.set(x, y, z, y === BED ? MAT.BASE : MAT.DIRT);
-        info.island++; continue;
+        kind[i] = 3; info.island++; continue;
       }
       // open water: soft fill becomes water up to the canal's level, air above it
       for (let y = BED + 1; y < G; y++) {
@@ -1759,12 +1764,15 @@ function stiltCity(world, plan, buildings, G) {
         if (id !== -1 && !SOFT.has(id)) continue;          // keep what was built (a dock's steps, the canal's own water)
         if (y <= WATER_HI) world.set(x, y, z, MAT.WATER); else world.clear(x, y, z);
       }
-      const lamp = x % 8 === 4 && z % 8 === 4;
+      const pileHere = !canal && (under[i] || (x % 4 === 0 && z % 4 === 0));
+      const lamp = x % 8 === 2 && z % 8 === 2 && !pileHere;  // (between the piles, which stand every four from 0)
       world.set(x, BED, z, lamp ? MAT.LANTERN : MAT.GRAVEL);
       if (lamp) info.lanterns++;
-      if (!canal && (under[i] || (x % 4 === 0 && z % 4 === 0))) {
+      kind[i] = 1;
+      if (pileHere) {
         for (let y = BED + 1; y < G; y++) world.set(x, y, z, MAT.DARK_FRAME);
-        info.piles++;
+        world.set(x, BED, z, MAT.DARK_FRAME);              // (the pile stands through the seabed: it goes on down with a foundation)
+        kind[i] = 2; info.piles++;
       }
       info.open++;
     }

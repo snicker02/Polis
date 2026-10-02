@@ -11,7 +11,7 @@
 // The city itself is untouched by any of this: it is the same blocks, written
 // a different way.
 
-import { MATERIALS } from './materials.js';
+import { MATERIALS, MAT } from './materials.js';
 import { toJava, javaSignText } from './java-blocks.js';
 import { HOSTILE_KINDS } from './hostiles.js';
 import { domeAir } from './dome.js';
@@ -211,7 +211,7 @@ export function javaTiles(world, opts = {}) {
   // for the empty part of every column the city occupies, up to its own roof
   // plus the clearance asked for.
   const air = [];
-  const ground = [];
+  const ground = [], piles = [];
   if (opts.fillAir) {
     const mask = world.cityMask;
     const inside = (x, z) => !mask || (x >= 0 && z >= 0 && x < mask.W && z < mask.D && mask.data[z * mask.W + x] === 1);
@@ -238,7 +238,10 @@ export function javaTiles(world, opts = {}) {
         // leave a cavern under the town and holes wherever the surface opens.
         const ceiling = Math.min(box.y1 + clearance, top + clearance);
         for (let y = bottom; y <= ceiling; y++) if (!world.has(x, y, z)) air.push([x, y, z]);
-        for (let y = bottom - depth; y < bottom; y++) if (!world.has(x, y, z)) ground.push([x, y, z]);
+        // (on stilts: a pile goes on down, islands and seawall are founded, open water is left alone)
+        const sk = world.stiltGrid && x >= 0 && z >= 0 && x < world.stiltGrid.W && z < world.stiltGrid.D ? world.stiltGrid.kind[z * world.stiltGrid.W + x] : 0;
+        if (sk === 1) continue;
+        for (let y = bottom - depth; y < bottom; y++) if (!world.has(x, y, z)) (sk === 2 ? piles : ground).push([x, y, z]);
       }
   }
   const AIR = MATERIALS.add(null, 'minecraft:air', '#000000', {}, { passable: true, transparent: true });
@@ -258,6 +261,7 @@ export function javaTiles(world, opts = {}) {
   };
   for (const [x, y, z] of air) place(x, y, z, AIR);
   for (const [x, y, z] of ground) place(x, y, z, FILL);
+  for (const [x, y, z] of piles) place(x, y, z, MAT.DARK_FRAME);
   world.forEach((x, y, z, id) => {
     const tx = Math.floor((x - box.x0) / step), ty = Math.floor((y - box.y0) / step), tz = Math.floor((z - box.z0) / step);
     const key = tx + ',' + ty + ',' + tz;
