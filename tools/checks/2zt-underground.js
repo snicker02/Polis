@@ -56,6 +56,27 @@ export default async function run(ctx) {
   check('underground: every room walled in stone all round', wallBad === 0, `${wallBad}`);
   check('underground: every room floored', floorBad === 0, `${floorBad}`);
   check('underground: every flight walked down a step at a time, head room all the way, onto the floor', walkBad === 0, `${walkBad}`);
+  // lit like a room, not only kept from spawning: torches on the walls, and the
+  // floor lit on average to what a room indoors is lit to (8)
+  {
+    const { lightMap } = await import('../../engine/lighting.js');
+    let unlit = 0, dim = 0, rooms = 0;
+    for (const r of cities) {
+      const w = r.world, m = lightMap(w);
+      for (const room of r.rooms) {
+        rooms++;
+        if (!room.torches) unlit++;
+        const b = room.box; let n = 0, sum = 0;
+        for (let x = b.x0; x <= b.x1; x++) for (let z = b.z0; z <= b.z1; z++) { const y = room.floorY + 1; if (w.has(x, y, z)) continue; n++; sum += m.light[m.idx(x, y, z)]; }
+        if (n && sum / n < 8) dim++;
+      }
+    }
+    check('underground: every room has torches on its walls', rooms > 0 && unlit === 0, `${unlit} of ${rooms} without`);
+    check('underground: every room lit like a room (its floor 8 on average)', dim === 0, `${dim} dim`);
+    const { toJava } = await import('../../engine/java-blocks.js');
+    const wt = toJava('minecraft:torch', { torch_facing_direction: 'east' }), st = toJava('minecraft:torch', { torch_facing_direction: 'top' });
+    check('underground, Java: a wall torch is a wall_torch facing the same way, a standing one a torch', wt.name === 'minecraft:wall_torch' && wt.props.facing === 'east' && st.name === 'minecraft:torch' && !Object.keys(st.props).length);
+  }
   // the exports write the rooms as air
   {
     const { buildStructures } = await import('../../engine/export.js');

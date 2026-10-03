@@ -127,6 +127,29 @@ export function digUnder(world, rec, opts = {}) {
         pieces++;
       }
   }
+  // torches on the walls at head height, about every four blocks round the room,
+  // pointing in, where nothing stands in front of them; and one by the foot of
+  // the stairs. (The lighting pass only makes sure nothing can spawn: a cellar
+  // lit to that and no more still looks dark.)
+  const TORCH = { east: MAT.TORCH_E, west: MAT.TORCH_W, north: MAT.TORCH_N, south: MAT.TORCH_S };
+  const ty = floorY + 2;
+  let torches = 0;
+  const torchAt = (x, z, facing) => {
+    if (world.has(x, ty, z) || keep(x, z)) return false;
+    if (world.has(x, ty - 1, z) && MATERIALS.isPassable(world.get(x, ty - 1, z)) === false && world.get(x, ty - 1, z) !== MAT.BARREL) return false;
+    set(x, ty, z, TORCH[facing]); torches++; return true;
+  };
+  for (let x = r.x0 + 2; x < r.x1 - 1; x += 4) { torchAt(x, r.z0 + 1, 'south'); torchAt(x, r.z1 - 1, 'north'); }
+  for (let z = r.z0 + 2; z < r.z1 - 1; z += 4) { torchAt(r.x0 + 1, z, 'east'); torchAt(r.x1 - 1, z, 'west'); }
+  {
+    const [fx, fz] = [landing[0] + run.dx, landing[1] + run.dz];
+    const walls = [[r.x0 + 1, fz, 'east'], [r.x1 - 1, fz, 'west'], [fx, r.z0 + 1, 'south'], [fx, r.z1 - 1, 'north']];
+    walls.sort((a, b) => (Math.abs(a[0] - fx) + Math.abs(a[1] - fz)) - (Math.abs(b[0] - fx) + Math.abs(b[1] - fz)));
+    for (const [x, z, f] of walls) {
+      if (world.has(x, ty, z) || keep(x, z)) continue;      // (never on the flight or its landing)
+      set(x, ty, z, TORCH[f]); torches++; break;
+    }
+  }
   // the building must still walk through with its stairs cut: otherwise, undone
   const plans = (rec.roomPlans || []).filter(Boolean).length ? rec.roomPlans : null;
   if (opts.verify !== false && (!verifyBuilding(world, rec).ok || (plans && !roomsReachable(world, rec, plans)))) {
@@ -135,14 +158,29 @@ export function digUnder(world, rec, opts = {}) {
   }
   const box = { x0: r.x0 + 1, y0: floorY + 1, z0: r.z0 + 1, x1: r.x1 - 1, y1: topY, z1: r.z1 - 1 };
   (world.airBoxes || (world.airBoxes = [])).push(box);
-  return { kind, box, floorY, depth, entry: [run.cells[0][0], G + 1, run.cells[0][1]], steps, landing: [landing[0] + run.dx, floorY + 1, landing[1] + run.dz], rails, pieces };
+  return { kind, box, floorY, depth, entry: [run.cells[0][0], G + 1, run.cells[0][1]], steps, landing: [landing[0] + run.dx, floorY + 1, landing[1] + run.dz], rails, pieces, torches };
 }
 
 // is (x, y, z) in a room that must be air (for the exports)
+// (column by column: a metro adds dozens of rooms, and an export asks this of
+// every cell of the city, so scanning the list each time was too slow)
 export function inAirBox(world) {
   const boxes = world.airBoxes || [];
   if (!boxes.length) return null;
-  return (x, y, z) => boxes.some((b) => x >= b.x0 && x <= b.x1 && y >= b.y0 && y <= b.y1 && z >= b.z0 && z <= b.z1);
+  const cols = new Map();
+  for (const b of boxes) {
+    if (b.y0 > b.y1) continue;
+    for (let x = b.x0; x <= b.x1; x++) for (let z = b.z0; z <= b.z1; z++) {
+      const k = x * 4096 + z, list = cols.get(k);
+      if (list) list.push(b.y0, b.y1); else cols.set(k, [b.y0, b.y1]);
+    }
+  }
+  return (x, y, z) => {
+    const list = cols.get(x * 4096 + z);
+    if (!list) return false;
+    for (let i = 0; i < list.length; i += 2) if (y >= list[i] && y <= list[i + 1]) return true;
+    return false;
+  };
 }
 
 // Before a building is furnished: choose the run its stairs down will take, on

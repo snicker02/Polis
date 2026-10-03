@@ -175,6 +175,13 @@ export function toJava(block, states = {}, extra = {}) {
     name = name === 'minecraft:chiseled_quartz_block' || name === 'minecraft:smooth_quartz' ? name : 'minecraft:quartz_pillar';
     if (name !== 'minecraft:quartz_pillar') delete props.axis;          // those two have no axis in Java
   }
+  // a torch on a wall is its own block in Java, facing the same way (away from
+  // the wall it hangs on); one standing on top of a block stays a torch
+  if (name === 'minecraft:torch') {
+    const f = String((states.torch_facing_direction && states.torch_facing_direction.value !== undefined) ? states.torch_facing_direction.value : states.torch_facing_direction || 'top');
+    if (['east', 'west', 'north', 'south'].includes(f)) { name = 'minecraft:wall_torch'; for (const k of Object.keys(props)) delete props[k]; props.facing = f; }
+    else for (const k of Object.keys(props)) delete props[k];
+  }
   // a plain pumpkin does not face anywhere in Java (a carved one does)
   if (name === 'minecraft:pumpkin') delete props.facing;
   // a full cauldron is its own block in Java

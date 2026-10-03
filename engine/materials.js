@@ -411,6 +411,11 @@ Object.assign(MAT, {
   ANVIL:         A('ANVIL', 'minecraft:anvil', '#444448', { 'minecraft:cardinal_direction': S('south') }),
   CAKE:          A('CAKE', 'minecraft:cake', '#f2e5d8', { bite_counter: I(0) }),
   HEARTH:        A('HEARTH', 'minecraft:campfire', '#e0802c', { extinguished: B(0), 'minecraft:cardinal_direction': S('south') }),
+  // a torch on a wall: it points away from the wall it hangs on (cellars, crypts)
+  TORCH_E:       A('TORCH_E', 'minecraft:torch', '#f0c050', { torch_facing_direction: S('east') }),
+  TORCH_W:       A('TORCH_W', 'minecraft:torch', '#f0c050', { torch_facing_direction: S('west') }),
+  TORCH_N:       A('TORCH_N', 'minecraft:torch', '#f0c050', { torch_facing_direction: S('north') }),
+  TORCH_S:       A('TORCH_S', 'minecraft:torch', '#f0c050', { torch_facing_direction: S('south') }),
   // a fish spawner on a pond's floor (0.30.6)
   SPAWNER:       A('SPAWNER', 'minecraft:mob_spawner', '#28343c'),
   // pines: spruce wood and needles under their own ids, so a style can turn oak

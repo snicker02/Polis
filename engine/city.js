@@ -20,6 +20,7 @@ import { lightUp, TARGET, TARGET_OUT } from './lighting.js';
 import { verifyBuilding } from './verify.js';
 import { planStyleDistricts } from './districts.js';
 import { digUnder, reserveUnder } from './underground.js';
+import { buildMetro } from './metro.js';
 import { megalith } from './megaliths.js';
 import { fishSpawns } from './fish.js';
 import { generatePlan, frontage, USE } from './plan.js';
@@ -99,6 +100,7 @@ export const DEFAULTS = {
   floating: false,           // the city on islands floating in the sky, chasms between them (invented cities only)
   cliff: false,              // the city in tiers up a cliff, stairs between them (invented cities only)
   underground: true,         // cellars under houses, a crypt under the cathedral (underground.js)
+  metro: false,              // a metro under the main streets, stations with stairs up (metro.js)
   mixStyles: false,          // several styles, one to a district (districts.js)
   mixList: ['modern', 'medieval', 'eastasian', 'artdeco'],   // the styles ticked for mixing
   furnish: true,
@@ -666,6 +668,10 @@ export function generateCity(cfgIn, onProgress) {
       if (c) rooms.push(c);
     }
   }
+  // ---- the metro: after the cellars, so it can keep clear of them --------------
+  // (on level ground only for now: not on stilts, in the sky, up a cliff or on fitted terrain)
+  const metro = cfg.metro && !stilts && !islands && !hills.cliff && !cfg.terrain ? buildMetro(world, plan, cfg, GROUND, { buildings }) : null;
+  if (metro) spawns = spawns.concat(metro.carts);           // a minecart waiting at every station
   if (SD) for (const name of SD.names) applyStyle(world, plan, styleOf(name), (x, z) => GROUND + elevAt(x, z), (x, z) => SD.at(x, z) === name);
   else applyStyle(world, plan, STYLE, (x, z) => GROUND + elevAt(x, z));
 
@@ -837,8 +843,8 @@ export function generateCity(cfgIn, onProgress) {
   }
 
   const shell = cfg.terrain ? terrainShell(plan, cfg.terrain, GROUND, cfg.cityStyle) : null;
-  const stats = summarise(world, plan, buildings, cfg, { farms, beds, spawns, bell, transit, wall, ranches, landmarks, hills, stairRuns, reach, canal, centre, streets, harbour, skirt, cutFaces, bridges, megaliths, ponds, courtyards, hostiles, dome, canals, lighting, styleDistricts: SD, spawners, stilts, islands, cliffWays, rooms, unsupported: stats_unsupported });
-  return { world, plan, buildings, cfg, stats, shell, bridges, farms, ranches, spawns, bell, transit, wall, landmarks, canal, centre, streets, harbour, harbourPlan, megaliths, ponds, courtyards, hostiles, dome, canals, lighting, styleDistricts: SD, spawners, stilts, islands, cliffWays, rooms,
+  const stats = summarise(world, plan, buildings, cfg, { farms, beds, spawns, bell, transit, wall, ranches, landmarks, hills, stairRuns, reach, canal, centre, streets, harbour, skirt, cutFaces, bridges, megaliths, ponds, courtyards, hostiles, dome, canals, lighting, styleDistricts: SD, spawners, stilts, islands, cliffWays, rooms, metro, unsupported: stats_unsupported });
+  return { world, plan, buildings, cfg, stats, shell, bridges, farms, ranches, spawns, bell, transit, wall, landmarks, canal, centre, streets, harbour, harbourPlan, megaliths, ponds, courtyards, hostiles, dome, canals, lighting, styleDistricts: SD, spawners, stilts, islands, cliffWays, rooms, metro,
     hills, stairRuns, reach, groundAt: (x, z) => GROUND + elevAt(x, z) };
 }
 
@@ -2382,6 +2388,7 @@ function summarise(world, plan, buildings, cfg, life = {}) {
     footbridges: (life.canals || []).reduce((n, c) => n + (c.footbridges || []).length, 0),
     hostiles: (life.hostiles || []).length,
     fishSpawners: (life.spawners || []).length,
+    metro: life.metro && life.metro.lines.length ? { lines: life.metro.lines.length, stations: life.metro.lines.reduce((n, l) => n + l.stations.length, 0), flights: life.metro.lines.reduce((n, l) => n + l.flights, 0) } : null,
     underground: (life.rooms || []).length ? { cellars: life.rooms.filter((r) => r.kind === 'cellar').length, crypts: life.rooms.filter((r) => r.kind === 'crypt').length } : null,
     cliff: life.cliffWays ? { tiers: life.cliffWays.edges.length + 1, flights: life.cliffWays.flights.length } : null,
     islands: life.islands ? { count: life.islands.count, deepest: life.islands.deepest, biggest: life.islands.sizes.slice(0, 5) } : null,

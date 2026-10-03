@@ -16,7 +16,7 @@ import { buildPregenPack, pregenFileName, siteRegion, viewRegion, pregenCommand,
 import { decodeNbt } from './tools/nbt-read.js';
 import { THEMES } from './engine/materials.js';
 
-const VERSION = '0.34.0';
+const VERSION = '0.35.0';
 const $ = (id) => document.getElementById(id);
 const numVal = (id) => Number($(id).value);      // readCfg has its own local num()
 
@@ -26,7 +26,7 @@ const SLIDERS = {
   maxFloors: 0, pitch: 0, setbackEvery: 0, bw: 0, bd: 0, floors: 0, clip: 0,
   farmChance: 2, pondChance: 2, twistChance: 2, courtyardChance: 2, hostileCount: 0, villagers: 0, wallHeight: 0, foundation: 0, clearAbove: 0, hills: 0, golemsPer10: 0,
 };
-const CHECKS = ['setback', 'roofAccess', 'useStairs', 'lights', 'lamps', 'trees', 'markings', 'landmarks', 'canal', 'harbour', 'bridges', 'detail', 'streetSigns', 'fish', 'megaliths', 'hostiles', 'dome', 'stilts', 'floating', 'cliff', 'underground'];
+const CHECKS = ['setback', 'roofAccess', 'useStairs', 'lights', 'lamps', 'trees', 'markings', 'landmarks', 'canal', 'harbour', 'bridges', 'detail', 'streetSigns', 'fish', 'megaliths', 'hostiles', 'dome', 'stilts', 'floating', 'cliff', 'underground', 'metro'];
 
 let renderer = null;
 let result = null;       // { world, plan, buildings, cfg, stats }
@@ -386,6 +386,7 @@ function showStats(mesh, times) {
     if (s.twisted) line('shaped towers', (() => { const c = {}; for (const n of s.shapes || []) c[n] = (c[n] || 0) + 1; return Object.entries(c).map(([k, v]) => `${v} ${k.replace('-', ' ')}`).join(', '); })());
     if (s.courtyards && s.courtyards.length) line('courtyard blocks', s.courtyards.join(', '));
     if (s.styleDistricts) line('districts', Object.entries(s.styleDistricts).map(([k, v]) => `${k} ${v}`).join(', '));
+    if (s.metro) line('metro', `${s.metro.lines} line${s.metro.lines > 1 ? 's' : ''}, ${s.metro.stations} stations, ${s.metro.flights} flights of stairs up`);
     if (s.underground) line('underground', `${s.underground.cellars} cellars${s.underground.crypts ? ', a crypt under the cathedral' : ''}`);
     if (s.cliff) line('cliff', `${s.cliff.tiers} tiers, ${s.cliff.flights} flights of stairs between them`);
     if (s.islands) line('floating islands', `${s.islands.count} islands, the deepest underside ${s.islands.deepest} blocks`);

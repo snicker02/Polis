@@ -1,4 +1,4 @@
-# Polis v0.34.0
+# Polis v0.35.0
 
 *Created with help from Claude AI.*
 
@@ -60,7 +60,7 @@ npm run combine                  # adds the batches up into one result
 npm run validate:list            # every section, and how long it took last time
 ```
 
-The suite (59 sections, about eleven minutes of machine time) is run in pieces:
+The suite (60 sections, about eleven minutes of machine time) is run in pieces:
 each run writes a shard to `.validate/`, and `npm run combine` adds them into
 one total. The combiner will not report a pass if a section was missed,
 counted twice, or measured before the newest source file changed.
@@ -761,6 +761,56 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.35.0** — A metro under the main streets.
+
+A new option, "Metro under the main streets" (engine/metro.js; off by
+default). A line runs under the longest main street each way, along its middle
+(at least 64 long, the street's middle street all along, so never under a
+canal): a tunnel three wide and three high, nine under the street, stone brick
+walls, roof and floor, track down the middle with a powered rail every eight on
+a hidden redstone block, a stop wall at each end. The second line runs five
+deeper and passes under the first, since track cannot cross on the level.
+Stations stand at both ends and about every 48 between: a hall nine wide, nine
+long and four high, lanterns hung down both sides, a minecart waiting on the
+track. The hall's end walls stop at the tunnel, which runs on through them.
+
+From each station stairs climb to the pavement, a step a block: a straight
+flight first, on a row clear of the track, and failing that a switchback (half
+the way up, a landing, back the other way on the next row over), which comes
+out by its own station. The opening is railed round (never on the flight, whose
+top step is the way out), street furniture over it gives way, and it keeps a
+block from any door. Torches light the tunnel walls (the lighting pass would
+put floor lights under the track, where the redstone is). Nothing is dug where
+something is built already (a cellar, the crypt): the metro is dug after the
+cellars, into soft fill only. Every tunnel, hall and stair is listed on the
+world as air for the exports; the rooms are now looked up column by column (an
+export asks of every cell, and a metro adds dozens), and the Java export lists
+each air cell once where rooms overlap. Not on stilts, in the sky, up a cliff
+or on fitted terrain, for now.
+
+New section 2zu (13 checks): a line in every city with two stations or more,
+track all along with room over it, powered rails on redstone, stop walls, a
+cart at every station, torches, stairs from most stations and every line, every
+flight walked up a step at a time onto the street, the air on both exports,
+none when switched off or on stilts, floating or up a cliff, every building
+walking through and nothing dark.
+
+**0.34.1** — Torches in the cellars and the crypt.
+
+The lighting pass only makes sure nothing can spawn, which under a building is
+light 1: a cellar lit to that and no more looked dark, and some were. Every
+cellar and crypt now has torches on its walls at head height, about every four
+blocks round the room, pointing in, where nothing stands in front of them, and
+one on the wall nearest the foot of the stairs (never on the flight or its
+landing). Cellars come out at light 10 to 11 on average across the floor;
+crypts about 10, a little dimmer behind their columns. Four torch blocks are
+added (TORCH_E, TORCH_W, TORCH_N, TORCH_S: Bedrock's torch with its facing),
+and the Java export turns a torch facing a compass direction into Java's
+wall_torch facing the same way (a standing torch stays a torch).
+
+2zt checks that every room has torches and its floor is lit to 8 on average,
+and the Java wall torch (13 checks).
 
 **0.34.0** — Cellars under the houses, a crypt under the cathedral.
 
