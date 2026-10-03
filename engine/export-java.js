@@ -15,6 +15,7 @@ import { MATERIALS, MAT } from './materials.js';
 import { toJava, javaSignText } from './java-blocks.js';
 import { HOSTILE_KINDS } from './hostiles.js';
 import { domeAir } from './dome.js';
+import { inAirBox } from './underground.js';
 import { VoxelWorld } from './blockcore.js';
 import { javaEntity, javaEntityPos } from './java-entities.js';
 
@@ -244,6 +245,11 @@ export function javaTiles(world, opts = {}) {
         for (let y = bottom - depth; y < bottom; y++) if (!world.has(x, y, z)) (sk === 2 ? piles : ground).push([x, y, z]);
       }
   }
+  // every room dug under a building is air (Java places only what is listed:
+  // without it the world's own ground would fill the room)
+  for (const b of world.airBoxes || [])
+    for (let x = b.x0; x <= b.x1; x++) for (let z = b.z0; z <= b.z1; z++) for (let y = b.y0; y <= b.y1; y++)
+      if (!world.has(x, y, z)) air.push([x, y, z]);
   const AIR = MATERIALS.add(null, 'minecraft:air', '#000000', {}, { passable: true, transparent: true });
   const FILL = MATERIALS.add(null, 'minecraft:stone', '#7d7d7d');
   const place = (x, y, z, id) => {

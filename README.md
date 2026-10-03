@@ -1,4 +1,4 @@
-# Polis v0.33.0
+# Polis v0.34.0
 
 *Created with help from Claude AI.*
 
@@ -54,20 +54,27 @@ banner and refuses to export until you hard-refresh (Ctrl+Shift+R).
 Headless checks:
 
 ```
-npm run validate                 # all 39 sections, about three and a half minutes
-npm run validate:fast            # the quick ones, about 35 seconds
-npm run validate:slow:1          # heavy sections, first half
-npm run validate:slow:2          # second half
-npm run combine                  # adds the shards up
-npm run validate:list            # the sections, and how long each took last time
+npm run validate:plan            # once: packs the suite into batches of at most 4 minutes
+npm run validate:batch -- 1      # then each batch: 1, 2, 3 (the plan says how many)
+npm run combine                  # adds the batches up into one result
+npm run validate:list            # every section, and how long it took last time
 ```
 
-The suite outgrew a single command, so it can be run in pieces: each run
-writes a shard to `.validate/`, and `npm run combine` adds them into one
-total. The combiner will not report a pass if a section was missed, counted
-twice, or measured before the newest source file changed. `node
-tools/validate.js --only 2z,3` runs named sections; `--part k/n` splits a
-group by measured cost.
+The suite (59 sections, about eleven minutes of machine time) is run in pieces:
+each run writes a shard to `.validate/`, and `npm run combine` adds them into
+one total. The combiner will not report a pass if a section was missed,
+counted twice, or measured before the newest source file changed.
+
+`--plan [seconds]` packs the sections into batches that each fit the budget
+(240 by default), from the measured times, and saves the plan; `--batch k`
+runs batch k of it. The plan does not move until the next `--plan`, so times
+measured meanwhile cannot shift a section into two batches or none. Every run
+records its sections' times in `tools/checks/times.json` (kept with the checks,
+so a release carries them). `node tools/validate.js --only 2z,3` runs named
+sections, `--group fast|slow` a group, and `--part k/n` still splits a group
+on the spot. A check that needs many cities but asks only about the plan, the
+streets or the outdoors builds them with `LIGHT` (tools/checks/harness.js): no
+furniture, lighting, fish or hostile mobs, three or four times quicker.
 
 ## The requirements, and how they are met
 
@@ -754,6 +761,64 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.34.0** — Cellars under the houses, a crypt under the cathedral.
+
+A new option, "Cellars and crypt", on by default (engine/underground.js). A
+room is dug under a building's whole footprint: stone brick walls on the
+footprint's edge, a stone floor, the ground floor's slab for a ceiling. A
+cellar is three high, with barrels and the odd chest along its walls; the
+crypt under the cathedral is a storey deep, with stone columns on a grid of
+three and chiseled stone tombs between them. A straight flight of stone brick
+stairs goes down from the ground floor, a step a block, with a railing round
+the opening where the floor above was taken out for head room. The flight's
+run is chosen on the bare ground floor before the building is furnished
+(reserveUnder) and kept clear of furniture; the room is dug after the lift, so
+a terraced building's cellar is under its floor as it ends up, and only into
+the soft fill the city stands on. A building that would no longer walk through,
+or whose rooms could no longer be reached, with its stairs cut has its cellar
+undone. About a third of houses get one (the rest have no straight run of free
+floor long enough), and every cathedral its crypt. None on stilts or in the
+sky. In the game the ground under a city is the world's own, so every room is
+listed on the world and both exports write air through it (export.js: cityAir,
+which the dome's air now shares).
+
+Lighting: a lantern hung from the ceiling looked for its ceiling with -1 for
+"none in reach" and -2 for "one that will not hold it"; a spot on a crypt's
+floor is below both, so a lantern could be hung under nothing. They are null
+and NaN now.
+
+New section 2zt (10 checks): cellars and crypts, walled and floored, every
+flight walked down a step at a time with head room onto the floor, every room's
+empty cells written as air on Bedrock and listed on Java, none with the option
+off, on stilts or floating, every building walking through and nothing dark.
+2i leaves dug rooms out of "terraces are solid underneath"; 2zq compares a
+stilt city with one on solid ground with no cellars on either side.
+
+**0.33.1** — A tidier, quicker validator (nothing new in the cities).
+
+The times the validator balances its splits by were kept in .validate/, which
+is cleared before a release is packaged, and were only written by a run that
+was not split, which the suite has outgrown: so they were stale or missing,
+and the checks had to be run in batches made by hand. Now every run but a
+--part one records its sections' times, in tools/checks/times.json, kept with
+the checks. --plan [seconds] packs the suite into batches that each fit the
+budget (240 by default) from those times and saves the plan; --batch k runs
+batch k of it, and the plan does not move until the next --plan. The whole
+suite is three batches: --plan, --batch 1, 2 and 3, combine. combine.js leaves
+the plan out of the shards and the times out of its staleness test (they are
+measurements, not code), and a time like 239.6 s prints as 4m00s.
+
+The slowest checks built dozens of full cities to ask about the plan or the
+outdoors: the wall's gates at every size and street width (2e), the farm pens
+in every style (2j), the centre mark in big cities (2zp). They build them light
+now (no furniture, lighting, fish or hostile mobs; LIGHT in harness.js): 2e
+from 58 s to 23, 2j from 70 to 37, 2zp from 25 to 9. In the generator,
+lighting looks up whether a spot is indoors in a grid instead of asking every
+building, and banisters check a building once instead of once a floor (falling
+back to floor by floor only when the rails would cost a floor or a room);
+cities come out block for block as they did in 0.33.0. The whole suite: 9m54s
+of machine time, from 11m26s.
 
 **0.33.0** — A city in tiers up a cliff.
 

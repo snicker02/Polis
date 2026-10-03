@@ -734,13 +734,39 @@ export function furnish(world, rec, rng, opts = {}) {
   const buildBanisters = () => {
     if (!core || rec.floors < 2 || !rec.floorYs) return;
     const fence = railFence();
+    // Every floor's rail first, then one look at the whole building: almost always
+    // it walks through, and a walk-through per floor was slow. Only if it does not
+    // are the rails taken out and put back floor by floor, each one checked.
+    // (a building that does not walk through even before its rails is about to be
+    // furnished again from scratch: rails now would only be checked for nothing)
+    const before = verifyBuilding(world, rec).ok && (!plans.length || roomsReachable(world, rec, plans));
+    if (!before) return;
+    const all = [];
+    for (let k = 1; k < rec.floors; k++) all.push(...railFloor(k, fence));
+    if (!all.length) return;
+    if (verifyBuilding(world, rec).ok && (!plans.length || roomsReachable(world, rec, plans))) { banisters += all.length; return; }
+    const gone = new Set(all.map((c) => c.join()));
+    for (const [x, yy, z] of all) world.clear(x, yy, z);
+    for (let i = placed.length - 1; i >= 0; i--) if (gone.has(placed[i].join())) placed.splice(i, 1);
     for (let k = 1; k < rec.floors; k++) {
+      const here = railFloor(k, fence);
+      if (!here.length) continue;
+      if (!verifyBuilding(world, rec).ok || (plans.length && !roomsReachable(world, rec, plans))) {
+        for (const [x, yy, z] of here) world.clear(x, yy, z);
+        const g2 = new Set(here.map((c) => c.join()));
+        for (let i = placed.length - 1; i >= 0; i--) if (g2.has(placed[i].join())) placed.splice(i, 1);
+      } else banisters += here.length;
+    }
+  };
+  // one floor's rail along its stairwell (no checking here: buildBanisters checks)
+  const railFloor = (k, fence) => {
+    const here = [];
+    {
       const sy = rec.floorYs[k], y = sy + 1;
       let ladder = false;
       for (let z = core.z0 - 1; z <= core.z1 + 1 && !ladder; z++) for (let x = core.x0 - 1; x <= core.x1 + 1; x++) if (ladderAt(x, y, z) || ladderAt(x, sy - 1, z)) { ladder = true; break; }
-      if (ladder) continue;
+      if (ladder) return here;
       const hole = (x, z) => x >= core.x0 && x <= core.x1 && z >= core.z0 && z <= core.z1 && !solidAt(world, x, sy, z) && !world.has(x, y, z);
-      const here = [];
       for (let z = core.z0 - 1; z <= core.z1 + 1; z++)
         for (let x = core.x0 - 1; x <= core.x1 + 1; x++) {
           if (!solidAt(world, x, sy, z) || world.has(x, y, z) || world.has(x, y + 1, z)) continue;
@@ -753,13 +779,8 @@ export function furnish(world, rec, rng, opts = {}) {
           put(x, y, z, fence);
           here.push([x, y, z]);
         }
-      if (!here.length) continue;
-      if (!verifyBuilding(world, rec).ok || (plans.length && !roomsReachable(world, rec, plans))) {
-        for (const [x, yy, z] of here) world.clear(x, yy, z);
-        const gone = new Set(here.map((c) => c.join()));
-        for (let i = placed.length - 1; i >= 0; i--) if (gone.has(placed[i].join())) placed.splice(i, 1);
-      } else banisters += here.length;
     }
+    return here;
   };
 
   // a school is furnished as one hall per floor
@@ -953,7 +974,7 @@ export function furnish(world, rec, rng, opts = {}) {
 
 // Walk from the front door (up only onto stairs, down up to three, through
 // doors) and check every room has a floor cell that can be reached.
-function roomsReachable(world, rec, plans) {
+export function roomsReachable(world, rec, plans) {
   const passable = (x, y, z) => { const id = world.get(x, y, z); return id === -1 || MATERIALS.isPassable(id); };
   const stand = (x, y, z) => solidAt(world, x, y - 1, z) && passable(x, y, z) && passable(x, y + 1, z);
   // (a wing sharing a stair is walked over its whole block, as verify does)

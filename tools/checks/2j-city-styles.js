@@ -5,6 +5,7 @@ import { dirname, join } from 'node:path';
 import zlib from 'node:zlib';
 
 import { generateCity, generateSingle, DEFAULTS } from '../../engine/city.js';
+import { LIGHT } from './harness.js';
 import { USE } from '../../engine/plan.js';
 import { verifyAll, verifyBuilding } from '../../engine/verify.js';
 import { MATERIALS, THEMES, DOOR_KINDS, doorId, MAT, BED_VEC, stairId, cropId, CROP_KINDS, bedId, furnaceId, railId, poweredRailId,
@@ -78,7 +79,7 @@ export default async function run(ctx) {
   {
     let short = [];
     for (const st of Object.keys(STYLES)) for (const [size, seed] of [[160, 12345], [128, 3], [224, 4]]) {
-      const r = generateCity({ ...DEFAULTS, size, seed, cityStyle: st });
+      const r = generateCity({ ...DEFAULTS, ...LIGHT, size, seed, cityStyle: st });   // (pens: outdoors, built light)
       const kinds = new Set(r.ranches.map((x) => x.kind));
       if (r.ranches.length < 4 || kinds.size < 4 || r.ranches.some((x) => x.animals.length < 4)) short.push(`${st} ${size}/${seed}: ${r.ranches.length} pens`);
     }

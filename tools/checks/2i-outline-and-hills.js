@@ -69,7 +69,9 @@ export default async function run(ctx) {
       for (let z = b.z0; z <= b.z1; z++) for (let x = b.x0; x <= b.x1; x++) {
         const i = stairAt.get(x + ',' + z);
         const topSolid = i === undefined ? 1 + b.e : 1 + i;       // step i sits on solid ground up to y = 1 + i (a notch: y = 0)
-        for (let y = 0; y <= topSolid; y++) if (!w.has(x, y, z)) hollow++;
+        // (but a room dug under a building: a cellar or the crypt, air by design)
+        const dug = (w.airBoxes || []).some((b) => x >= b.x0 - 1 && x <= b.x1 + 1 && z >= b.z0 - 1 && z <= b.z1 + 1);
+        if (!dug) for (let y = 0; y <= topSolid; y++) if (!w.has(x, y, z)) hollow++;
       }
     }
     // streets stay level: every road cell has its surface at the street level

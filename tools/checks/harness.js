@@ -88,8 +88,9 @@ export function makeHarness() {
 export function fmt(ms) {
   if (ms < 1000) return ms + 'ms';
   if (ms < 60000) return (ms / 1000).toFixed(1) + 's';
-  const m = Math.floor(ms / 60000);
-  return m + 'm' + String(Math.round((ms - m * 60000) / 1000)).padStart(2, '0') + 's';
+  // (whole seconds first, then minutes: 239.6 s is 4m00s, not 3m60s)
+  const s = Math.round(ms / 1000), m = Math.floor(s / 60);
+  return m + 'm' + String(s - m * 60).padStart(2, '0') + 's';
 }
 
 // Prints the tail every runner ends with. Returns the exit code.
@@ -107,3 +108,9 @@ export function report(title, { pass, fail, failures, times }) {
 }
 
 export function readJson(path) { return JSON.parse(readFileSync(path, 'utf8')); }
+
+// A city built light: no furniture, no lighting pass, no fish, no hostile mobs.
+// For a check that asks about the plan, the streets, the wall or the outdoors
+// (gates, pens, the centre mark), and needs many cities: three or four times
+// quicker, and nothing it looks at depends on what was left out.
+export const LIGHT = { furnish: false, lightAll: false, fish: false, hostileCount: 0 };

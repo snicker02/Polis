@@ -6,9 +6,8 @@
 // no shard covered, because a green total over half the suite is worse than
 // no total at all.
 //
-//   node tools/validate.js --group fast
-//   node tools/validate.js --group slow --part 1/2
-//   node tools/validate.js --group slow --part 2/2
+//   node tools/validate.js --plan          (once: batches that each fit 240 s)
+//   node tools/validate.js --batch 1       (and 2, 3, ...)
 //   node tools/combine.js
 //
 // Shards older than the newest source file are reported as stale: a count
@@ -28,7 +27,7 @@ if (!existsSync(SHARD_DIR)) {
 }
 
 const shards = readdirSync(SHARD_DIR)
-  .filter((f) => f.endsWith('.json') && f !== 'times.json')
+  .filter((f) => f.endsWith('.json') && f !== 'times.json' && f !== 'plan.json')
   .map((f) => ({ file: f, ...JSON.parse(readFileSync(join(SHARD_DIR, f), 'utf8')), mtime: statSync(join(SHARD_DIR, f)).mtimeMs }))
   .sort((a, b) => a.mtime - b.mtime);
 
@@ -42,6 +41,7 @@ const walk = (dir) => {
     const p = join(dir, e.name);
     if (e.isDirectory()) { walk(p); continue; }
     if (!/\.(js|mjs|html|json)$/.test(e.name)) continue;
+    if (p.endsWith('/tools/checks/times.json')) continue;   // (measurements, not code: every run rewrites them)
     const m = statSync(p).mtimeMs;
     if (m > newestSrc) { newestSrc = m; newestName = p.replace(ROOT + '/', ''); }
   }

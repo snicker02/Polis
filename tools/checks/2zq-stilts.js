@@ -24,7 +24,9 @@ export default async function run(ctx) {
   for (const [seed, size, style] of [[7, 160, 'modern'], [12345, 192, 'venetian']]) {
     const base = { ...DEFAULTS, seed, size, cityStyle: style, hills: 0 };
     // above the deck: the same city
-    const a = generateCity({ ...base, lightAll: false }), b = generateCity({ ...base, lightAll: false, stilts: true });
+    // (no cellars on either side: a stilt city has no ground to dig, so the one on
+    // solid ground would differ by its cellar stairs and the floor kept for them)
+    const a = generateCity({ ...base, lightAll: false, underground: false }), b = generateCity({ ...base, lightAll: false, underground: false, stilts: true });
     const ma = new Map(); a.world.forEach((x, y, z, id) => { if (y >= G) ma.set(x + ',' + y + ',' + z, id); });
     b.world.forEach((x, y, z, id) => {
       if (y < G) return;

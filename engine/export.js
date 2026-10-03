@@ -17,7 +17,7 @@ import { makeRng } from './rng.js';
 // Must match main.js VERSION, package.json and index.html data-version;
 // tools/validate.js fails if they drift. The app refuses to export when the
 // browser has mixed cached copies of old and new files.
-export const POLIS_VERSION = '0.33.0';
+export const POLIS_VERSION = '0.34.0';
 
 export const CHUNK = 64;          // Bedrock structure limit per horizontal axis
 export const GROUND_DROP = 2;     // base layer y=0 sits 2 below feet; surface y=1 replaces the block you stand on
@@ -199,13 +199,23 @@ export function buildStructures(world, opts = {}) {
     const res = writeMcStructure(t.chunk.keys, t.chunk.ids, t.box, MATERIALS,
       { airId, blockData: world.data, inside: cityInside(world), ...fill, ...limits,
         // a dome's inside is always written as air: water or ground there is driven out
-        ...(world.dome ? { airAt: domeAir(world.dome), domeAirId: MAT.AIR } : {}) });
+        // and so is every room dug under a building (a cellar, the crypt)
+        ...(cityAir(world) ? { airAt: cityAir(world), domeAirId: MAT.AIR } : {}) });
     return {
       name: t.name, data: res.data, box: t.box,
       size: res.size, cells: res.cells, paletteSize: res.paletteSize, entities: res.entities,
       offset: t.offset,
     };
   });
+}
+
+// The cells that must be written as air whatever else is asked: the inside of a
+// dome, and every room dug under a building (in the game the ground there is the
+// world's own: without air it would fill the room)
+export function cityAir(world) {
+  const dome = world.dome ? domeAir(world.dome) : null, rooms = inAirBox(world);
+  if (!dome && !rooms) return null;
+  return (x, y, z) => (dome && dome(x, y, z)) || (rooms && rooms(x, y, z));
 }
 
 // ---- fish that stay ------------------------------------------------------------
@@ -317,6 +327,7 @@ export const SUMMON_IDS = { minecart: 'minecraft:minecart', boat: 'minecraft:boa
 export const FISH = new Set(['cod', 'salmon', 'tropicalfish']);
 import { HOSTILE_KINDS } from './hostiles.js';
 import { domeAir } from './dome.js';
+import { inAirBox } from './underground.js';
 import { VANILLA_FISH } from './fish-entities.js';
 const FARM_ANIMALS = ['cow', 'sheep', 'pig', 'chicken'];
 

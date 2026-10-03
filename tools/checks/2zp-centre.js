@@ -15,12 +15,13 @@ export default async function run(ctx) {
   const { generateCity, DEFAULTS } = await import('../../engine/city.js');
   const { exportPack, cityId, centreAnchor } = await import('../../engine/export.js');
   const { STYLE_NAMES } = await import('../../engine/styles.js');
+  const { LIGHT } = await import('./harness.js');
 
   // ---- the mark, in big cities
   let found = 0, cities = 0, far = 0;
   const drifts = [];
   for (const [size, seed, mix, hills] of [[512, 931927914, true, undefined], [384, 12345, true, 3], [320, 99, false, 4], [256, 3, true, 4]]) {
-    const cfg = { ...DEFAULTS, size, seed, ...(hills !== undefined ? { hills } : {}) };
+    const cfg = { ...DEFAULTS, ...LIGHT, size, seed, ...(hills !== undefined ? { hills } : {}) };   // (the mark: outdoors, built light)
     if (mix) Object.assign(cfg, { mixStyles: true, mixList: STYLE_NAMES, cityStyle: 'village' });
     const r = generateCity(cfg);
     cities++;

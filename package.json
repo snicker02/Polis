@@ -1,6 +1,6 @@
 {
   "name": "polis",
-  "version": "0.33.0",
+  "version": "0.34.0",
   "type": "module",
   "private": true,
   "description": "Polis \u2014 Minecraft Bedrock city generator",
@@ -8,11 +8,11 @@
     "validate": "node tools/validate.js",
     "validate:fast": "node tools/validate.js --group fast",
     "validate:slow": "node tools/validate.js --group slow",
-    "validate:slow:1": "node tools/validate.js --group slow --part 1/2",
-    "validate:slow:2": "node tools/validate.js --group slow --part 2/2",
     "validate:list": "node tools/validate.js --list",
     "combine": "node tools/combine.js",
     "serve": "node tools/serve.js",
-    "embed-pregen": "node tools/embed-pregen.js"
+    "embed-pregen": "node tools/embed-pregen.js",
+    "validate:plan": "node tools/validate.js --plan",
+    "validate:batch": "node tools/validate.js --batch"
   }
 }

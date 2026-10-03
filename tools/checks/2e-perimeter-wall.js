@@ -5,6 +5,7 @@ import { dirname, join } from 'node:path';
 import zlib from 'node:zlib';
 
 import { generateCity, generateSingle, DEFAULTS } from '../../engine/city.js';
+import { LIGHT } from './harness.js';
 import { USE } from '../../engine/plan.js';
 import { verifyAll, verifyBuilding } from '../../engine/verify.js';
 import { MATERIALS, THEMES, DOOR_KINDS, doorId, MAT, BED_VEC, stairId, cropId, CROP_KINDS, bedId, furnaceId, railId, poweredRailId,
@@ -95,7 +96,7 @@ export default async function run(ctx) {
   let combos = 0, missing = 0;
   for (const size of [64, 96, 128, 160, 192, 256]) for (const [aw, sw] of [[7, 5], [5, 3], [9, 7], [3, 3]]) for (const transit of ['roads', 'rails']) {
     combos++;
-    const r = generateCity({ ...DEFAULTS, size, seed: size + aw, transit, avenueWidth: aw, streetWidth: sw, wallHeight: 4 });
+    const r = generateCity({ ...DEFAULTS, ...LIGHT, size, seed: size + aw, transit, avenueWidth: aw, streetWidth: sw, wallHeight: 4 });   // (gates: the plan and the wall)
     if (r.wall.gates.length !== 4) missing++;
   }
   check('wall: four gates at every city size and street width', missing === 0, `${missing}/${combos} cities short of gates`);

@@ -165,9 +165,11 @@ export function lightUp(world, inside, opts = {}) {
   // lanterns keep clear of the stairs (a core and the cells round it)
   const noHang = opts.noHang || (() => false);
   const hangAt = (x, y, z) => {
-    let ceil = -1;
-    for (let h = 1; h <= 6; h++) { const id = world.get(x, y + h, z); if (id !== -1) { ceil = opaque[id] ? y + h : -2; break; } }
-    if (ceil < y + 4 || world.has(x, ceil - 1, z) || noHang(x, z)) return false;
+    // (null: no ceiling within reach; NaN: one that will not hold a lantern. These
+    // were -1 and -2, which a spot deep underground, a crypt's floor, can be under)
+    let ceil = null;
+    for (let h = 1; h <= 6; h++) { const id = world.get(x, y + h, z); if (id !== -1) { ceil = opaque[id] ? y + h : NaN; break; } }
+    if (ceil === null || Number.isNaN(ceil) || ceil < y + 4 || world.has(x, ceil - 1, z) || noHang(x, z)) return false;
     addSource(x, ceil - 1, z, hang);
     added.hung++;
     return true;

@@ -19,6 +19,7 @@ import { buildDome } from './dome.js';
 import { lightUp, TARGET, TARGET_OUT } from './lighting.js';
 import { verifyBuilding } from './verify.js';
 import { planStyleDistricts } from './districts.js';
+import { digUnder, reserveUnder } from './underground.js';
 import { megalith } from './megaliths.js';
 import { fishSpawns } from './fish.js';
 import { generatePlan, frontage, USE } from './plan.js';
@@ -97,6 +98,7 @@ export const DEFAULTS = {
   stilts: false,             // the city on stilts over open water (invented cities only)
   floating: false,           // the city on islands floating in the sky, chasms between them (invented cities only)
   cliff: false,              // the city in tiers up a cliff, stairs between them (invented cities only)
+  underground: true,         // cellars under houses, a crypt under the cathedral (underground.js)
   mixStyles: false,          // several styles, one to a district (districts.js)
   mixList: ['modern', 'medieval', 'eastasian', 'artdeco'],   // the styles ticked for mixing
   furnish: true,
@@ -375,6 +377,8 @@ export function generateCity(cfgIn, onProgress) {
         }
         if (L.rec) {
           buildings.push(L.rec);
+          // (the crypt's stairs kept clear before the church is furnished)
+          if (cfg.underground && L.kind === 'church') reserveUnder(world, L.rec, (L.rec.pitch || 5) + 1);
           if (cfg.furnish) {
             const f = furnish(world, L.rec, furnRng(L.rec), { useStairs: cfg.useStairs, paintings: !lotStyleOf(lot).glass });
             L.rec.beds = f.beds; L.rec.furniture = f;
@@ -474,6 +478,8 @@ export function generateCity(cfgIn, onProgress) {
 
     if (rec) {
       buildings.push(rec);
+      // (a cellar's stairs kept clear before the house is furnished)
+      if (cfg.underground && rec.style === 'house') reserveUnder(world, rec, 4);
       if (cfg.furnish) {
         const f = furnish(world, rec, furnRng(rec), { useStairs: cfg.useStairs, paintings: !LS.glass });
         rec.beds = f.beds; rec.furniture = f;
@@ -648,6 +654,18 @@ export function generateCity(cfgIn, onProgress) {
   const stilts = cfg.stilts && !cfg.terrain ? stiltCity(world, plan, buildings, GROUND) : null;
   // ---- floating: chasms through, a rocky underside under every island -------
   const islands = floating ? floatCity(world, plan, canals, GROUND, cfg) : null;
+  // ---- underground: cellars under houses, a crypt under the cathedral ---------
+  // (none on stilts or in the sky: there is no ground under them to dig)
+  const rooms = [];
+  if (cfg.underground && !stilts && !islands) {
+    const church = landmarks.find((L) => L.kind === 'church');
+    if (church && church.rec) { const c = digUnder(world, church.rec, { kind: 'crypt', depth: (church.rec.pitch || 5) + 1 }); if (c) { c.of = 'church'; rooms.push(c); } }
+    for (const b of buildings) {
+      if (b.style !== 'house' || b.landmark) continue;
+      const c = digUnder(world, b, { kind: 'cellar', depth: 4 });     // (a cellar three high: a short flight fits a house)
+      if (c) rooms.push(c);
+    }
+  }
   if (SD) for (const name of SD.names) applyStyle(world, plan, styleOf(name), (x, z) => GROUND + elevAt(x, z), (x, z) => SD.at(x, z) === name);
   else applyStyle(world, plan, STYLE, (x, z) => GROUND + elevAt(x, z));
 
@@ -780,7 +798,16 @@ export function generateCity(cfgIn, onProgress) {
     const inside = dome ? (x, z) => (x - dome.cx) ** 2 + (z - dome.cz) ** 2 < dome.R * dome.R : inCity;
     const keep = dome ? (x, y, z) => ((x - dome.cx) ** 2 + (z - dome.cz) ** 2) / dome.R ** 2 + ((y - GROUND) / dome.c) ** 2 < 1 : () => true;
     // inside a building (below its roof) a spot wants a properly lit room; outside, any light at all
-    const indoor = (x, y, z) => buildings.some((b) => x >= b.x0 && x <= b.x1 && z >= b.z0 && z <= b.z1 && y > b.groundY && y <= b.roofY);
+    // which columns lie inside a building, and between what heights (a grid: asked
+    // of every one of a city's spawn spots, scanning the buildings was slow)
+    const inLo = new Int16Array(W * D).fill(32767), inHi = new Int16Array(W * D).fill(-32768);
+    for (const b of buildings)
+      for (let z = Math.max(0, b.z0); z <= Math.min(D - 1, b.z1); z++)
+        for (let x = Math.max(0, b.x0); x <= Math.min(W - 1, b.x1); x++) {
+          const i = z * W + x;
+          inLo[i] = Math.min(inLo[i], b.groundY + 1); inHi[i] = Math.max(inHi[i], b.roofY);
+        }
+    const indoor = (x, y, z) => x >= 0 && z >= 0 && x < W && z < D && y >= inLo[z * W + x] && y <= inHi[z * W + x];
     const nearStairs = (x, z) => buildings.some((b) => b.core && x >= b.core.x0 - 1 && x <= b.core.x1 + 1 && z >= b.core.z0 - 1 && z <= b.core.z1 + 1);
     lighting = lightUp(world, inside, {
       keep, target: (x, y, z) => (indoor(x, y, z) ? TARGET : TARGET_OUT), noHang: nearStairs,
@@ -810,8 +837,8 @@ export function generateCity(cfgIn, onProgress) {
   }
 
   const shell = cfg.terrain ? terrainShell(plan, cfg.terrain, GROUND, cfg.cityStyle) : null;
-  const stats = summarise(world, plan, buildings, cfg, { farms, beds, spawns, bell, transit, wall, ranches, landmarks, hills, stairRuns, reach, canal, centre, streets, harbour, skirt, cutFaces, bridges, megaliths, ponds, courtyards, hostiles, dome, canals, lighting, styleDistricts: SD, spawners, stilts, islands, cliffWays, unsupported: stats_unsupported });
-  return { world, plan, buildings, cfg, stats, shell, bridges, farms, ranches, spawns, bell, transit, wall, landmarks, canal, centre, streets, harbour, harbourPlan, megaliths, ponds, courtyards, hostiles, dome, canals, lighting, styleDistricts: SD, spawners, stilts, islands, cliffWays,
+  const stats = summarise(world, plan, buildings, cfg, { farms, beds, spawns, bell, transit, wall, ranches, landmarks, hills, stairRuns, reach, canal, centre, streets, harbour, skirt, cutFaces, bridges, megaliths, ponds, courtyards, hostiles, dome, canals, lighting, styleDistricts: SD, spawners, stilts, islands, cliffWays, rooms, unsupported: stats_unsupported });
+  return { world, plan, buildings, cfg, stats, shell, bridges, farms, ranches, spawns, bell, transit, wall, landmarks, canal, centre, streets, harbour, harbourPlan, megaliths, ponds, courtyards, hostiles, dome, canals, lighting, styleDistricts: SD, spawners, stilts, islands, cliffWays, rooms,
     hills, stairRuns, reach, groundAt: (x, z) => GROUND + elevAt(x, z) };
 }
 
@@ -2355,6 +2382,7 @@ function summarise(world, plan, buildings, cfg, life = {}) {
     footbridges: (life.canals || []).reduce((n, c) => n + (c.footbridges || []).length, 0),
     hostiles: (life.hostiles || []).length,
     fishSpawners: (life.spawners || []).length,
+    underground: (life.rooms || []).length ? { cellars: life.rooms.filter((r) => r.kind === 'cellar').length, crypts: life.rooms.filter((r) => r.kind === 'crypt').length } : null,
     cliff: life.cliffWays ? { tiers: life.cliffWays.edges.length + 1, flights: life.cliffWays.flights.length } : null,
     islands: life.islands ? { count: life.islands.count, deepest: life.islands.deepest, biggest: life.islands.sizes.slice(0, 5) } : null,
     stilts: life.stilts ? { piles: life.stilts.piles, lanterns: life.stilts.lanterns, islands: life.stilts.island, open: life.stilts.open } : null,
