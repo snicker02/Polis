@@ -1,4 +1,4 @@
-# Polis v0.35.1
+# Polis v0.35.2
 
 *Created with help from Claude AI.*
 
@@ -761,6 +761,21 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.35.2** — Watertight underground.
+
+Water came into the metro in the game. Under the city the ground round a dug
+room is the world's own, and since 1.18 that ground is full of water: a room
+keeps it out only where the city put a block. The tunnels, halls, cellars and
+crypt were walled all round, but a stair shaft's walls went three over each step
+and no higher, and nothing roofed it under the street: about 110 open faces in a
+metro city, through which the world's water came down the stairs. Now after all
+the digging (cellars, crypt, metro) every empty cell next to a dug room, below
+street level and not in a room itself, becomes stone brick (underground.js:
+sealRooms). No opening is left from any room into the ground round it, and the
+stairs, the walks and the lighting are as they were.
+
+2zt and 2zu each check that their rooms are watertight (14 and 16 checks).
 
 **0.35.1** — Lanterns underground, powered track, and a loop round the city.
 

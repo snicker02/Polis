@@ -19,7 +19,7 @@ import { buildDome } from './dome.js';
 import { lightUp, TARGET, TARGET_OUT } from './lighting.js';
 import { verifyBuilding } from './verify.js';
 import { planStyleDistricts } from './districts.js';
-import { digUnder, reserveUnder } from './underground.js';
+import { digUnder, reserveUnder, sealRooms } from './underground.js';
 import { buildMetro } from './metro.js';
 import { megalith } from './megaliths.js';
 import { fishSpawns } from './fish.js';
@@ -672,6 +672,8 @@ export function generateCity(cfgIn, onProgress) {
   // (on level ground only for now: not on stilts, in the sky, up a cliff or on fitted terrain)
   const metro = cfg.metro && !stilts && !islands && !hills.cliff && !cfg.terrain ? buildMetro(world, plan, cfg, GROUND, { buildings }) : null;
   if (metro) spawns = spawns.concat(metro.carts);           // a minecart waiting at every station
+  // every room under the city watertight: the world's own ground round it can be water
+  const sealed = sealRooms(world, GROUND);
   if (SD) for (const name of SD.names) applyStyle(world, plan, styleOf(name), (x, z) => GROUND + elevAt(x, z), (x, z) => SD.at(x, z) === name);
   else applyStyle(world, plan, STYLE, (x, z) => GROUND + elevAt(x, z));
 

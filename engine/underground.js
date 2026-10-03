@@ -212,3 +212,29 @@ export function reserveUnder(world, rec, depth) {
       }
   return null;
 }
+
+// Every room dug under the city made watertight. In the game the ground round a
+// room is the world's own, and that can be water (since 1.18 the ground is full
+// of it): a room only keeps it out where the city put a block. So every empty
+// cell next to a room, below street level and not in a room itself, becomes stone
+// brick. (A stair shaft's walls went three over each step and no higher, and
+// nothing roofed it under the street: water came in down the stairs.)
+export function sealRooms(world, G) {
+  const air = inAirBox(world);
+  if (!air) return 0;
+  const done = new Set();
+  let sealed = 0;
+  for (const b of world.airBoxes)
+    for (let x = b.x0; x <= b.x1; x++) for (let z = b.z0; z <= b.z1; z++) for (let y = b.y0; y <= b.y1; y++)
+      for (const [dx, dy, dz] of [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]]) {
+        const nx = x + dx, ny = y + dy, nz = z + dz;
+        if (ny >= G) continue;                                // street level and above is the city's own open air
+        const k = nx + ',' + ny + ',' + nz;
+        if (done.has(k)) continue;
+        done.add(k);
+        if (world.has(nx, ny, nz) || air(nx, ny, nz)) continue;
+        world.set(nx, ny, nz, MAT.STONEBRICK);
+        sealed++;
+      }
+  return sealed;
+}

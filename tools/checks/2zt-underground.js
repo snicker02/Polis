@@ -80,6 +80,22 @@ export default async function run(ctx) {
     const wt = toJava('minecraft:torch', { torch_facing_direction: 'east' }), st = toJava('minecraft:torch', { torch_facing_direction: 'top' });
     check('underground, Java: a wall torch is a wall_torch facing the same way, a standing one a torch', wt.name === 'minecraft:wall_torch' && wt.props.facing === 'east' && st.name === 'minecraft:torch' && !Object.keys(st.props).length);
   }
+  // watertight: every cell beside a dug room, below the street, is a block or
+  // another room (the world's own ground round it can be water)
+  {
+    const { inAirBox } = await import('../../engine/underground.js');
+    let gaps = 0;
+    for (const r of cities) {
+      const w = r.world, air = inAirBox(w);
+      if (!air) continue;
+      for (const b of w.airBoxes) for (let x = b.x0; x <= b.x1; x++) for (let z = b.z0; z <= b.z1; z++) for (let y = b.y0; y <= b.y1; y++)
+        for (const [dx, dy, dz] of [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]]) {
+          const nx = x + dx, ny = y + dy, nz = z + dz;
+          if (ny < 1 && !w.has(nx, ny, nz) && !air(nx, ny, nz)) gaps++;
+        }
+    }
+    check('underground: watertight, no opening from a room into the ground round it', gaps === 0, `${gaps} open faces`);
+  }
   // the exports write the rooms as air
   {
     const { buildStructures } = await import('../../engine/export.js');
