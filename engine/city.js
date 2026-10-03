@@ -380,7 +380,7 @@ export function generateCity(cfgIn, onProgress) {
         if (L.rec) {
           buildings.push(L.rec);
           // (the crypt's stairs kept clear before the church is furnished)
-          if (cfg.underground && L.kind === 'church') reserveUnder(world, L.rec, (L.rec.pitch || 5) + 1);
+          if (cfg.underground && L.kind === 'church') reserveUnder(world, L.rec, 6);   // (a crypt five high: the nave's storey is far taller)
           if (cfg.furnish) {
             const f = furnish(world, L.rec, furnRng(L.rec), { useStairs: cfg.useStairs, paintings: !lotStyleOf(lot).glass });
             L.rec.beds = f.beds; L.rec.furniture = f;
@@ -661,7 +661,7 @@ export function generateCity(cfgIn, onProgress) {
   const rooms = [];
   if (cfg.underground && !stilts && !islands) {
     const church = landmarks.find((L) => L.kind === 'church');
-    if (church && church.rec) { const c = digUnder(world, church.rec, { kind: 'crypt', depth: (church.rec.pitch || 5) + 1 }); if (c) { c.of = 'church'; rooms.push(c); } }
+    if (church && church.rec) { const c = digUnder(world, church.rec, { kind: 'crypt', depth: 6 }); if (c) { c.of = 'church'; rooms.push(c); } }
     for (const b of buildings) {
       if (b.style !== 'house' || b.landmark) continue;
       const c = digUnder(world, b, { kind: 'cellar', depth: 4 });     // (a cellar three high: a short flight fits a house)

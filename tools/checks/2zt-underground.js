@@ -14,7 +14,7 @@ export default async function run(ctx) {
   const { check, note } = ctx;
   const { generateCity, DEFAULTS } = await import('../../engine/city.js');
   const { verifyAll } = await import('../../engine/verify.js');
-  const { MATERIALS } = await import('../../engine/materials.js');
+  const { MAT, MATERIALS } = await import('../../engine/materials.js');
   const solid = (w, x, y, z) => { const id = w.get(x, y, z); return id >= 0 && !MATERIALS.isPassable(id); };
 
   check('defaults: cellars and crypt unless switched off', DEFAULTS.underground === true);
@@ -60,18 +60,21 @@ export default async function run(ctx) {
   // floor lit on average to what a room indoors is lit to (8)
   {
     const { lightMap } = await import('../../engine/lighting.js');
-    let unlit = 0, dim = 0, rooms = 0;
+    let unlit = 0, dim = 0, rooms = 0, low = 0;
     for (const r of cities) {
       const w = r.world, m = lightMap(w);
       for (const room of r.rooms) {
         rooms++;
-        if (!room.torches) unlit++;
+        if (!room.lights) unlit++;
+        // every lantern hung over head height: two clear under it, the floor below that
+        for (let x = room.box.x0; x <= room.box.x1; x++) for (let z = room.box.z0; z <= room.box.z1; z++)
+          if (w.get(x, room.box.y1, z) === MAT.LAMP_HANG && room.box.y1 - (room.floorY + 1) < 2) low++;
         const b = room.box; let n = 0, sum = 0;
         for (let x = b.x0; x <= b.x1; x++) for (let z = b.z0; z <= b.z1; z++) { const y = room.floorY + 1; if (w.has(x, y, z)) continue; n++; sum += m.light[m.idx(x, y, z)]; }
         if (n && sum / n < 8) dim++;
       }
     }
-    check('underground: every room has torches on its walls', rooms > 0 && unlit === 0, `${unlit} of ${rooms} without`);
+    check('underground: every room has lanterns hung from its ceiling, over head height', rooms > 0 && unlit === 0 && low === 0, `${unlit} of ${rooms} without, ${low} low`);
     check('underground: every room lit like a room (its floor 8 on average)', dim === 0, `${dim} dim`);
     const { toJava } = await import('../../engine/java-blocks.js');
     const wt = toJava('minecraft:torch', { torch_facing_direction: 'east' }), st = toJava('minecraft:torch', { torch_facing_direction: 'top' });

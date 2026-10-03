@@ -1,4 +1,4 @@
-# Polis v0.35.0
+# Polis v0.35.1
 
 *Created with help from Claude AI.*
 
@@ -761,6 +761,42 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.35.1** — Lanterns underground, powered track, and a loop round the city.
+
+Lanterns: the torches on cellar, crypt and tunnel walls came out in the game
+standing in the open, not on the walls. They are gone: cellars and crypts have
+lanterns hung from the ceiling, so that every spot of the floor is within three
+of one, all over head height; tunnels have lanterns hung from the roof over the
+walkways, every six, either side in turn. A crypt was as deep as the church's
+storey plus one, and a nave's storey is tall: crypts came out twelve high, lit
+from far above. They are five high now.
+
+Track: in the game the plain rails between the powered ones broke while the
+powered ones stayed. The track is powered rails all along now, still on a
+redstone block one in eight (so every one is powered), with plain rails only for
+the loop's curves. (The track as generated was sound: every rail on a solid
+block, straight, with room over it.)
+
+The loop: a third line, a closed rectangle nineteen down, under the cellars, the
+crypt and both cross lines, so it need not follow the streets: it is the city's
+footprint drawn in until the loop and its halls lie inside the city all round,
+whatever the outline. Its corners are curved, so a cart can go round the city
+for ever. Its stations stand where a street crosses over it, clear of the
+corners and 32 apart, and only where their stairs reach the street (each tried
+first, dry). metro.js is rewritten around shared pieces (a tunnel, a hall, its
+stairs, track, lanterns), the cross lines as they were. A later line, hall or
+stair keeps clear of an earlier one's air as well as of cellars, and a stair
+shaft's walls never go into another room's air (a loop's stair had walled off a
+cross line); over a station hall's footprint only the hall's own height is
+exempt from the check (a switchback climbs back over it far above its roof, and
+one had gone through a cross line).
+
+2zu checks powered track and the redstone, the loop closed all round with track,
+room over it, curved corners and under both cross lines, lanterns in every
+tunnel (15 checks). 2zt checks lanterns over head height (13). 2t counts the
+air the Java pieces list for dug rooms; 6b allows air with air fill off only
+inside a dug room.
 
 **0.35.0** — A metro under the main streets.
 

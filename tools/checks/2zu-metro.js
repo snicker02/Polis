@@ -20,7 +20,8 @@ export default async function run(ctx) {
   const solid = (w, x, y, z) => { const id = w.get(x, y, z); return id >= 0 && !MATERIALS.isPassable(id); };
 
   check('defaults: no metro unless asked', DEFAULTS.metro === false);
-  let ok = true, dark = 0, lines = 0, stations = 0, reached = 0, trackBad = 0, endBad = 0, powerBad = 0, walkBad = 0, cartBad = 0, torchless = 0, flightless = 0;
+  let ok = true, dark = 0, lines = 0, stations = 0, reached = 0, trackBad = 0, endBad = 0, powerBad = 0, walkBad = 0, cartBad = 0, torchless = 0, flightless = 0, plain = 0;
+  let loops = 0, loopOpen = 0, loopTrack = 0, cornerBad = 0, loopShallow = 0;
   const cities = [];
   for (const [seed, size, style, extra] of [[7, 192, 'modern', {}], [12345, 256, 'medieval', {}], [99, 224, 'modern', { transit: 'trams' }]]) {
     const r = generateCity({ ...DEFAULTS, seed, size, cityStyle: style, metro: true, ...extra });
@@ -31,16 +32,35 @@ export default async function run(ctx) {
     dark += r.stats.lighting.darkAfter;
     for (const l of r.metro.lines) {
       lines++;
-      if (!l.torches) torchless++;
+      if (!l.lights) torchless++;
       if (!l.flights) flightless++;
-      // the track all along, room over it, a floor under it, redstone under the powered rails
+      if (l.ring) {
+        // the loop: closed, a step to the next cell all round; track, room over it,
+        // curves at its four corners, powered rails elsewhere; under both cross lines
+        loops++;
+        const P = l.path;
+        for (let i = 0; i < P.length; i++) {
+          const [x, z] = P[i], [nx, nz] = P[(i + 1) % P.length];
+          if (Math.abs(nx - x) + Math.abs(nz - z) !== 1) loopOpen++;
+          const b = blk(w, x, l.F + 1, z);
+          if (!/rail/.test(b) || w.has(x, l.F + 2, z) || w.has(x, l.F + 3, z) || !solid(w, x, l.F, z)) loopTrack++;
+          const corner = l.corners.some(([cx, cz]) => cx === x && cz === z);
+          if (corner) { const d = MATERIALS.def(w.get(x, l.F + 1, z)).states.rail_direction; const v = d && (d.value ?? d); if (b !== 'minecraft:rail' || !(v >= 6 && v <= 9)) cornerBad++; }
+          else if (b !== 'minecraft:golden_rail') plain++;
+        }
+        if (r.metro.lines.some((o) => !o.ring && o.F - 5 < l.F + 4 + 1 && o.F <= l.F + 4)) loopShallow++;
+      } else {
+      // the track all along, room over it, a floor under it; powered rails all along
       for (let u = l.u0; u <= l.u1; u++) {
         const [x, z] = l.cell(u, l.a);
         const b = blk(w, x, l.F + 1, z);
         if (!/rail/.test(b) || w.has(x, l.F + 2, z) || w.has(x, l.F + 3, z) || !solid(w, x, l.F, z)) trackBad++;
-        if (b === 'minecraft:golden_rail' && blk(w, x, l.F, z) !== 'minecraft:redstone_block') powerBad++;
+        if (b !== 'minecraft:golden_rail') plain++;
+        // a redstone block under one in eight, so every powered rail is powered
+        if ((u - l.u0) % 8 === 4 && blk(w, x, l.F, z) !== 'minecraft:redstone_block') powerBad++;
       }
       for (const u of [l.u0 - 1, l.u1 + 1]) { const [x, z] = l.cell(u, l.a); if (!solid(w, x, l.F + 1, z)) endBad++; }
+      }
       // the stations: a cart each on the track; the stairs walked up
       for (const st of l.stations) {
         stations++;
@@ -68,10 +88,12 @@ export default async function run(ctx) {
   check('metro: every building walks through, every door reached; nothing dark', ok && dark === 0, `${dark} dark`);
   check('metro: a line in every city, two stations or more to a line', lines >= cities.length && stations >= lines * 2, `${lines} lines, ${stations} stations`);
   check('metro: track all along, room over it, a floor under it', trackBad === 0, `${trackBad}`);
-  check('metro: every powered rail on a redstone block', powerBad === 0, `${powerBad}`);
+  check('metro: powered rails all along (plain ones only on the loop\'s curves), a redstone block under one in eight', powerBad === 0 && plain === 0, `${powerBad} unpowered, ${plain} plain`);
+  check('metro: a loop round the city, closed all the way round', loops >= cities.length && loopOpen === 0, `${loops} loops, ${loopOpen} gaps`);
+  check('metro: the loop has track all round, room over it, curves at its corners, under both cross lines', loopTrack === 0 && cornerBad === 0 && loopShallow === 0, `${loopTrack} track, ${cornerBad} corners, ${loopShallow} shallow`);
   check('metro: a stop wall at each end of the line', endBad === 0, `${endBad}`);
   check('metro: a minecart on the track at every station', cartBad === 0, `${cartBad}`);
-  check('metro: torches along every tunnel', torchless === 0, `${torchless}`);
+  check('metro: lanterns along every tunnel', torchless === 0, `${torchless}`);
   check('metro: every line has stairs up, most stations do', flightless === 0 && reached >= stations * 0.75, `${reached}/${stations} stations, ${flightless} lines without`);
   check('metro: every flight walked up a step at a time, head room all the way, out onto the street', walkBad === 0, `${walkBad}`);
   // the exports write the tunnels, halls and stairs as air

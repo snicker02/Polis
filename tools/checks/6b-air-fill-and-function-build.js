@@ -149,15 +149,24 @@ refreshWalkThrough();
 
   // with air fill off, empty cells stay as structure void
   const plain = buildStructures(w, { fillAir: false });
+  // (but a room dug under a building, a cellar or the crypt, is always air: the
+  // ground in the game would fill it otherwise)
+  const { inAirBox } = await import('../../engine/underground.js');
+  const room = inAirBox(w) || (() => false);
   let plainVoids = 0, plainAir = 0;
   for (const st of plain.slice(0, 2)) {
     const { root } = decodeNbt(st.data);
-    const l0 = root.structure.block_indices[0];
-    for (let i = 0; i < l0.length; i++) if (l0[i] === -1) plainVoids++;
-    if (root.structure.palette.default.block_palette.some((p) => p.name === 'minecraft:air')) plainAir++;
+    const l0 = root.structure.block_indices[0], pal = root.structure.palette.default.block_palette;
+    const sy = root.size[1], sz = root.size[2], [ox, oy, oz] = st.offset;
+    for (let i = 0; i < l0.length; i++) {
+      if (l0[i] === -1) { plainVoids++; continue; }
+      if (pal[l0[i]].name !== 'minecraft:air') continue;
+      const z = i % sz, y = Math.floor(i / sz) % sy, x = Math.floor(i / (sy * sz));
+      if (!room(ox + x, oy + y, oz + z)) plainAir++;
+    }
   }
   check('air off: empty cells remain structure void', plainVoids > 0);
-  check('air off: no air in palettes', plainAir === 0);
+  check('air off: no air in palettes but inside a room dug under a building', plainAir === 0, `${plainAir} air cells outside a room`);
   note(`${out.structures.length} tiles · ${(out.data.length / 1024).toFixed(0)} KiB pack · ` +
     `simulated both functions cell-for-cell against the source world`);
 }

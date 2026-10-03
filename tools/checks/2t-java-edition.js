@@ -44,7 +44,10 @@ export default async function run(ctx) {
   check('java: the city is cut into pieces a structure block can place', tiles.length > 0 &&
     tiles.every((t) => t.size.every((s) => s <= 48)), tiles.map((t) => t.size.join('x')).join(' '));
   const total = tiles.reduce((a, t) => a + t.blocks, 0);
-  check('java: every block of the city is in a piece', total === city.stats.blocks, `${total} vs ${city.stats.blocks}`);
+  // (the pieces also list as air every empty cell of a room dug under a building)
+  const roomAir = new Set();
+  for (const b of city.world.airBoxes || []) for (let x = b.x0; x <= b.x1; x++) for (let z = b.z0; z <= b.z1; z++) for (let y = b.y0; y <= b.y1; y++) if (!city.world.has(x, y, z)) roomAir.add(x + ',' + y + ',' + z);
+  check('java: every block of the city is in a piece (and every room\'s air)', total === city.stats.blocks + roomAir.size, `${total} vs ${city.stats.blocks} + ${roomAir.size}`);
 
   // a big-endian reader, to check a finished structure the way the game reads it
   function readStructure(nbt) {
