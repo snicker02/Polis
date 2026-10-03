@@ -1,4 +1,4 @@
-# Polis v0.35.3
+# Polis v0.36.0
 
 *Created with help from Claude AI.*
 
@@ -60,7 +60,7 @@ npm run combine                  # adds the batches up into one result
 npm run validate:list            # every section, and how long it took last time
 ```
 
-The suite (60 sections, about eleven minutes of machine time) is run in pieces:
+The suite (61 sections, about twelve minutes of machine time) is run in pieces:
 each run writes a shard to `.validate/`, and `npm run combine` adds them into
 one total. The combiner will not report a pass if a section was missed,
 counted twice, or measured before the newest source file changed.
@@ -761,6 +761,32 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.36.0** — Save and load settings.
+
+Under Generate, three buttons. Save settings downloads every setting as a small
+file (named for the style, the seed and the version: polis-settings-medieval-
+12345-v0.36.0.json); Load settings puts them all back, the city built once
+after; Reset to defaults forgets the remembered settings. The page also
+remembers the last settings in the browser and starts from them.
+
+Every control in the panel is saved by its id (a checkbox by whether it is
+ticked, anything else by its value), the styles ticked for mixing by their
+values, and the downtown's place on the map; nothing is listed by hand, so a
+control added later is saved too (engine/settings.js). The world file is not
+(a page cannot set a file input). The building style goes back before the theme,
+since it refills the theme list. Settings saved by an older Polis load, with a
+note that the same settings may build a slightly different city in another
+version, and any setting this version no longer has is named, not fatal; a
+control the file does not name keeps what it has. The same settings and the same
+Polis build the same city.
+
+New section 2zv (10 checks), run against the page's own controls read from
+index.html: every control saved and put back exactly, the styles to mix and the
+downtown's place too, the style before the theme, older settings loading with a
+note, unknown names told, the world file never saved, anything that is not a
+settings file refused, the buttons on the page, the city waiting while settings
+go in.
 
 **0.35.3** — Plugs first: no water in the metro while the city goes in.
 

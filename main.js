@@ -1,6 +1,7 @@
 // main.js — Polis UI.
 
 import { generateCity, generateSingle, DEFAULTS } from './engine/city.js';
+import { collectSettings, applySettings } from './engine/settings.js';
 import { USE } from './engine/plan.js';
 import { verifyAll } from './engine/verify.js';
 import { buildMesh } from './engine/mesher.js';
@@ -16,7 +17,7 @@ import { buildPregenPack, pregenFileName, siteRegion, viewRegion, pregenCommand,
 import { decodeNbt } from './tools/nbt-read.js';
 import { THEMES } from './engine/materials.js';
 
-const VERSION = '0.35.3';
+const VERSION = '0.36.0';
 const $ = (id) => document.getElementById(id);
 const numVal = (id) => Number($(id).value);      // readCfg has its own local num()
 
@@ -138,6 +139,17 @@ function boot() {
   fillThemes();
   document.body.className = 'mode-city';
   window.addEventListener('resize', () => renderer.invalidate());
+  // settings: save, load, reset, and the last ones remembered
+  $('saveSettings').addEventListener('click', saveSettingsFile);
+  $('loadSettings').addEventListener('click', () => $('settingsFile').click());
+  $('settingsFile').addEventListener('change', (e) => { if (e.target.files[0]) loadSettingsFile(e.target.files[0]); e.target.value = ''; });
+  $('resetSettings').addEventListener('click', () => { try { localStorage.removeItem(SETTINGS_KEY); } catch (e) { /* off */ } location.reload(); });
+  let rememberTimer = null;
+  const later = () => { clearTimeout(rememberTimer); rememberTimer = setTimeout(rememberSettings, 300); };
+  document.addEventListener('change', later);
+  document.addEventListener('input', later);
+  restoreRemembered();
+  document.body.className = 'mode-' + $('mode').value;
   requestAnimationFrame(loop);
   generate();
 }
@@ -227,7 +239,55 @@ function readCfg() {
 }
 
 // ---- generate ---------------------------------------------------------------
+// ---- saving and loading settings ----------------------------------------------
+// Save downloads every setting as a file; Load puts them all back; the page also
+// remembers the last settings in the browser and starts from them. While they are
+// being put back, generate waits, and runs once at the end.
+const SETTINGS_KEY = 'polis.settings';
+let applyingSettings = false;
+const controlsNow = () => [...document.querySelectorAll('input, select, textarea')];
+const settingsNote = (msg) => { const n = $('settingsNote'); if (n) n.textContent = msg || ''; };
+function settingsNow() { return collectSettings(controlsNow(), { version: VERSION, focal }); }
+function rememberSettings() { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settingsNow())); } catch (e) { /* storage may be off: nothing to remember into */ } }
+function putSettingsBack(data, { quiet } = {}) {
+  applyingSettings = true;
+  let res;
+  try {
+    res = applySettings(data, controlsNow(), {
+      version: VERSION,
+      changed: (el) => { el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); },
+    });
+  } finally { applyingSettings = false; }
+  if (res.focal) focal = res.focal;
+  if (!quiet) settingsNote(['settings loaded', res.note, res.unknown.length ? `(${res.unknown.length} not in this version: ${res.unknown.slice(0, 4).join(', ')})` : ''].filter(Boolean).join(' · '));
+  return res;
+}
+function saveSettingsFile() {
+  const data = settingsNow();
+  const name = `polis-settings-${(data.settings.cityStyle || 'city')}-${data.settings.seed || 'seed'}-v${VERSION}.json`;
+  const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2) + '\n'], { type: 'application/json' }));
+  const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+  settingsNote('settings saved as ' + name);
+}
+function loadSettingsFile(file) {
+  const r = new FileReader();
+  r.onload = () => {
+    try { putSettingsBack(JSON.parse(r.result)); rememberSettings(); generate(); }
+    catch (e) { settingsNote('could not load those settings: ' + e.message); }
+  };
+  r.readAsText(file);
+}
+function restoreRemembered() {
+  try {
+    const raw = localStorage.getItem(SETTINGS_KEY);
+    if (raw) putSettingsBack(JSON.parse(raw), { quiet: true });
+  } catch (e) { /* nothing remembered, or storage off */ }
+}
+
 function generate() {
+  if (applyingSettings) return;
+  rememberSettings();                                         // (the downtown's place changes by a click on the map)
   busy(true);
   $('gen').disabled = true;
   setTimeout(() => {
