@@ -40,7 +40,9 @@ export default async function run(ctx) {
 
   // the structures themselves: readable, within the 48-block limit, complete
   const city = generateCity({ ...DEFAULTS, size: 96, seed: 4242, transit: 'rails' });
-  const tiles = javaTiles(city.world, { prefix: 'polis' });
+  // (the city's own pieces: the plugs for the rooms under it go in first, and are
+  // stone through the rooms, not the city)
+  const tiles = javaTiles(city.world, { prefix: 'polis' }).filter((t) => !t.plug && !t.drain);
   check('java: the city is cut into pieces a structure block can place', tiles.length > 0 &&
     tiles.every((t) => t.size.every((s) => s <= 48)), tiles.map((t) => t.size.join('x')).join(' '));
   const total = tiles.reduce((a, t) => a + t.blocks, 0);

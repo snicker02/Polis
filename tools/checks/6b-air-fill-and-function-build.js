@@ -30,6 +30,9 @@ refreshWalkThrough();
   const city = generateCity({ ...DEFAULTS, size: 160, seed: 41 });
   const w = city.world, wb = w.box;
   const out = await exportPack(w, { fillAir: true, deflateRaw, rand: Math.random });
+  // (the city's own tiles: the plugs for the rooms under it, loaded first, are stone
+  // through the rooms and void elsewhere, so the air-fill checks are not for them)
+  const cityTiles = out.structures.filter((st) => !st.plug && !st.drain);
   const z = readZip(out.data);
   const inflate = (e) => {
     const p = localPayload(out.data, e);
@@ -67,7 +70,7 @@ refreshWalkThrough();
   let voidsInside = 0, voidsOutside = 0, notAir0 = 0, heightBad = 0, footprint = 0, wideBad = 0;
   const cityMask = w.cityMask;
   const insideCity = (x, z) => !cityMask || (x >= 0 && z >= 0 && x < cityMask.W && z < cityMask.D && cityMask.data[z * cityMask.W + x] === 1);
-  for (const st of out.structures) {
+  for (const st of cityTiles) {
     const e = byName.get(`structures/polis/${st.name}.mcstructure`);
     const { root } = decodeNbt(inflate(e));
     const pal = root.structure.palette.default.block_palette;
@@ -84,6 +87,13 @@ refreshWalkThrough();
     footprint += root.size[0] * root.size[2];
     tiles.set(st.name, { size: [...root.size], pal, l0 });
   }
+  // (the plugs too, for the simulation below: build loads them first, and the
+  // city's own tiles put the air back over them)
+  for (const st of out.structures) {
+    if (!st.plug && !st.drain) continue;
+    const { root } = decodeNbt(inflate(byName.get(`structures/polis/${st.name}.mcstructure`)));
+    tiles.set(st.name, { size: [...root.size], pal: root.structure.palette.default.block_palette, l0: root.structure.block_indices[0] });
+  }
   check('air fill: no structure-void cells inside the outline (void only outside it)', voidsInside === 0, `${voidsInside} void inside`);
   check('air fill: land outside an organic outline is left untouched', !cityMask || voidsOutside > 0);
   check('air fill: air is in every palette', notAir0 === 0, `${notAir0} tiles without`);
@@ -93,7 +103,7 @@ refreshWalkThrough();
   // organic outline, where there is nothing, are simply not written)
   {
     const covered = new Map();
-    for (const st of out.structures) for (let x = st.box.x0; x <= st.box.x1; x++) for (let z = st.box.z0; z <= st.box.z1; z++)
+    for (const st of cityTiles) for (let x = st.box.x0; x <= st.box.x1; x++) for (let z = st.box.z0; z <= st.box.z1; z++)
       covered.set(x + ',' + z, (covered.get(x + ',' + z) || 0) + 1);
     let missingCols = 0, doubled = 0;
     for (let z = wb.z0; z <= wb.z1; z++) for (let x = wb.x0; x <= wb.x1; x++) {

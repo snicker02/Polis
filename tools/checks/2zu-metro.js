@@ -143,6 +143,52 @@ export default async function run(ctx) {
     }
     check('metro, Java: the same cells listed as air', javaAir === want.size, `${javaAir}/${want.size}`);
   }
+  // In the game the city goes in a tile at a time: while one is in and the next
+  // is not, a tunnel stood open at the edge onto the world's own ground, and its
+  // water came in and took the rails. Plugs (stone through every room and its
+  // walls) go in first; each tile puts its own share back.
+  {
+    const { buildStructures, buildPlugStructures, functionFiles, exportPack, cityId } = await import('../../engine/export.js');
+    const { javaTiles } = await import('../../engine/export-java.js');
+    const { inAirBox } = await import('../../engine/underground.js');
+    const { decodeNbt } = await import('../nbt-read.js');
+    const r = cities[0], w = r.world, room = inAirBox(w);
+    const plugs = buildPlugStructures(w, {}), tiles = buildStructures(w, {});
+    const placed = new Map();
+    const put = (st) => {
+      const root = decodeNbt(st.data).root, bi = root.structure.block_indices[0], pal = root.structure.palette.default.block_palette;
+      const sy = root.size[1], sz = root.size[2], [ox, oy, oz] = st.offset;
+      for (let i = 0; i < bi.length; i++) { if (bi[i] === -1) continue; const z = i % sz, y = Math.floor(i / sz) % sy, x = Math.floor(i / (sy * sz)); placed.set(`${ox + x},${oy + y},${oz + z}`, pal[bi[i]].name === 'minecraft:air' ? 'air' : 'block'); }
+    };
+    for (const p of plugs) put(p);
+    let worst = 0;
+    for (const st of tiles) {
+      put(st);
+      let open = 0;
+      for (const [k, v] of placed) {
+        if (v !== 'air') continue;
+        const [x, y, z] = k.split(',').map(Number);
+        if (y >= 1 || !room(x, y, z)) continue;
+        for (const [dx, dy, dz] of [[1, 0, 0], [-1, 0, 0], [0, -1, 0], [0, 1, 0], [0, 0, 1], [0, 0, -1]]) if (y + dy < 1 && !placed.has(`${x + dx},${y + dy},${z + dz}`)) { open++; break; }
+      }
+      worst = Math.max(worst, open);
+    }
+    check('metro: going in a tile at a time with the plugs first, no room is ever open onto the ground round it', plugs.length > 0 && worst === 0, `${worst} open at worst`);
+    let left = 0;
+    for (const [k, v] of placed) { const [x, y, z] = k.split(',').map(Number); if (room(x, y, z) && !w.has(x, y, z) && v !== 'air') left++; }
+    check('metro: once the city is in, every room is air again (no plug left behind)', left === 0, `${left}`);
+    const fns = functionFiles(tiles, w, { namespace: 'test', spawns: r.spawns });
+    let orderBad = 0;
+    for (const n of ['build', 'build_centered']) {
+      const lines = fns.find((f) => f.fn === 'test/' + n).text.split('\n').filter((l) => l.startsWith('structure load'));
+      const lastPlug = Math.max(...lines.map((l, i) => (/_p /.test(l) ? i : -1))), firstTile = lines.findIndex((l) => !/_p /.test(l) && !/_d /.test(l));
+      if (lines.filter((l) => /_p /.test(l)).length !== plugs.length || lastPlug > firstTile) orderBad++;
+    }
+    check('metro: build and build_centered load every plug before any of the city', orderBad === 0, `${orderBad}`);
+    const jt = javaTiles(w, { prefix: 'city', spawns: r.spawns });
+    const firstCity = jt.findIndex((t) => !t.plug && !t.drain), lastPlugJ = Math.max(...jt.map((t, i) => (t.plug ? i : -1)));
+    check('metro, Java: the plug pieces placed before any of the city', jt.some((t) => t.plug) && lastPlugJ < firstCity);
+  }
   // none when switched off, on stilts, in the sky, up a cliff
   {
     const { LIGHT } = await import('./harness.js');

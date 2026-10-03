@@ -312,6 +312,43 @@ export function javaTiles(world, opts = {}) {
   // cell of its inside, blocks' cells included, placed before the city (build
   // places pieces in order). Java's /place template waterlogs a block it puts
   // into water, so every block has to go into air instead.
+  // The rooms under the city plugged first (stone brick through every cell of
+  // them), so a tunnel open at the edge of a piece not yet placed meets a plug, not
+  // the world's own ground and its water; the city's pieces put the air back.
+  const plugOut = [];
+  if ((world.airBoxes || []).length) {
+    const STONE = MAT.STONEBRICK, plugs = new Map(), seen = new Set();
+    // (a room's cells and the cells round them under the street: its walls too)
+    const cellsToPlug = [];
+    for (const b of world.airBoxes)
+      for (let x = b.x0 - 1; x <= b.x1 + 1; x++) for (let z = b.z0 - 1; z <= b.z1 + 1; z++) for (let y = b.y0 - 1; y <= Math.min(0, b.y1 + 1); y++) {
+        const inside = x >= b.x0 && x <= b.x1 && z >= b.z0 && z <= b.z1 && y >= b.y0 && y <= b.y1;
+        const faces = [x >= b.x0 && x <= b.x1, y >= b.y0 && y <= b.y1, z >= b.z0 && z <= b.z1].filter(Boolean).length;
+        if (!inside && faces < 2) continue;                   // (face neighbours only, not edges or corners)
+        cellsToPlug.push([x, y, z]);
+      }
+    for (const [x, y, z] of cellsToPlug) {
+        const k = x + ',' + y + ',' + z;
+        if (seen.has(k)) continue;
+        seen.add(k);
+        const key = Math.floor((x - box.x0) / step) + ',' + Math.floor((y - box.y0) / step) + ',' + Math.floor((z - box.z0) / step);
+        let t = plugs.get(key);
+        if (!t) { t = { cells: [], box: { x0: Infinity, y0: Infinity, z0: Infinity, x1: -Infinity, y1: -Infinity, z1: -Infinity } }; plugs.set(key, t); }
+        t.cells.push([x, y, z, STONE, null]);
+        const bb = t.box;
+        if (x < bb.x0) bb.x0 = x; if (y < bb.y0) bb.y0 = y; if (z < bb.z0) bb.z0 = z;
+        if (x > bb.x1) bb.x1 = x; if (y > bb.y1) bb.y1 = y; if (z > bb.z1) bb.z1 = z;
+    }
+    let m = 0;
+    for (const t of plugs.values()) {
+      const s = writeJavaStructure(t.cells, t.box, { ...opts, spawns: [] });
+      plugOut.push({
+        name: `${opts.prefix || 'city'}_p${m++}`, plug: true,
+        nbt: s.nbt, size: s.size, palette: s.palette, blocks: s.blocks, entities: 0,
+        offset: [t.box.x0 - box.x0, t.box.y0 - (opts.groundDrop === undefined ? 2 : opts.groundDrop), t.box.z0 - box.z0],
+      });
+    }
+  }
   if (world.dome) {
     const d = world.dome, inDome = domeAir(d), drains = new Map();
     for (let x = Math.floor(d.cx - d.R); x <= Math.ceil(d.cx + d.R); x++)
@@ -336,9 +373,9 @@ export function javaTiles(world, opts = {}) {
         offset: [t.box.x0 - box.x0, t.box.y0 - (opts.groundDrop === undefined ? 2 : opts.groundDrop), t.box.z0 - box.z0],
       });
     }
-    return drainOut.concat(out);
+    return plugOut.concat(drainOut, out);
   }
-  return out;
+  return plugOut.concat(out);
 }
 
 // ---- the datapack --------------------------------------------------------

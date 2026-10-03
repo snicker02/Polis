@@ -1,4 +1,4 @@
-# Polis v0.35.2
+# Polis v0.35.3
 
 *Created with help from Claude AI.*
 
@@ -761,6 +761,30 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.35.3** — Plugs first: no water in the metro while the city goes in.
+
+Water and broken rails were still in the metro. The pack itself was watertight
+(rebuilt from a pack made in the game: its canal and ponds touch no room), so
+the water came in while the city was going in. A city goes in a tile at a time;
+a tunnel crosses many, and while one tile is in and the next is not, the tunnel
+stands open at the edge between them onto the world's own ground. Where that
+ground holds water, the water came in, and flowing water takes rails off (the
+dropped rails in the tunnels). Loading a metro city tile by tile, up to 112 room
+cells stood open onto the ground at once.
+
+Now, before any of the city, plugs go in: stone brick through every cell of every
+room dug under the city (cellars, the crypt, the metro) and the cells round them
+under the street (export.js: buildPlugStructures; the Java pieces likewise, placed
+first). build and build_centered load them first; each tile of the city then puts
+its own share back to air and walls (sealRooms made every cell round a room a
+block, so none of the plug is left). Loaded tile by tile with the plugs first, no
+room is open onto the ground at any step. The guide says so.
+
+2zu checks the plugs: loaded first by build and build_centered and placed first on
+Java, no room ever open while the city goes in, every room air again once it is
+in (20 checks). 2t and 6b leave the plugs out of the counts that are about the
+city's own pieces, and 6b's build simulation loads them first.
 
 **0.35.2** — Watertight underground.
 

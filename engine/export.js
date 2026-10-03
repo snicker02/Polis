@@ -17,7 +17,7 @@ import { makeRng } from './rng.js';
 // Must match main.js VERSION, package.json and index.html data-version;
 // tools/validate.js fails if they drift. The app refuses to export when the
 // browser has mixed cached copies of old and new files.
-export const POLIS_VERSION = '0.35.2';
+export const POLIS_VERSION = '0.35.3';
 
 export const CHUNK = 64;          // Bedrock structure limit per horizontal axis
 export const GROUND_DROP = 2;     // base layer y=0 sits 2 below feet; surface y=1 replaces the block you stand on
@@ -253,6 +253,29 @@ export function buildDrainStructures(world, opts = {}) {
   });
 }
 
+// ---- plugging the rooms under the city before it goes in ---------------------------
+// The city goes in a tile at a time. A tunnel crosses many tiles: while one is in
+// and the next is not, the tunnel stands open at the edge between them, onto the
+// world's own ground, and where that ground holds water the water came in (and
+// took the rails with it). So before any of the city, plugs go in: stone brick
+// through every cell of every room dug under the city (cellars, the crypt, the
+// metro). Each tile of the city then puts its own share back to air, and a room's
+// open edge only ever meets a plug until the next tile replaces it.
+export function buildPlugStructures(world, opts = {}) {
+  const rooms = inAirBox(world);
+  if (!rooms) return [];
+  const boxes = world.airBoxes;
+  // a room's cells and the cells round them under the street (its walls: the
+  // next tile's wall can stand right on the edge between tiles). The city's tiles
+  // overwrite every one of these: sealRooms made every cell round a room a block.
+  const N6 = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
+  const plugAt = (x, y, z) => rooms(x, y, z) || (y < 1 && N6.some(([dx, dy, dz]) => rooms(x + dx, y + dy, z + dz)));
+  return tileList(world, opts).filter((t) => boxes.some((b) => b.x0 <= t.box.x1 && b.x1 >= t.box.x0 && b.z0 <= t.box.z1 && b.z1 >= t.box.z0 && b.y0 <= t.box.y1 && b.y1 >= t.box.y0)).map((t) => {
+    const res = writeMcStructure([], [], t.box, MATERIALS, { airAt: plugAt, domeAirId: MAT.STONEBRICK });
+    return { name: t.name + '_p', data: res.data, box: t.box, size: res.size, cells: 0, offset: t.offset, plug: true };
+  });
+}
+
 // ---- mob structures ------------------------------------------------------------
 // Villagers and golems travel inside entity-only structures (no blocks, every
 // cell structure void), one per 64x64 tile, so they arrive wherever blocks do.
@@ -380,11 +403,15 @@ export function functionFiles(tiles, world, opts = {}) {
     `structure load ${ns}:${t.name} ${rel(t.offset[0] - dx)} ${rel(t.offset[1] - GROUND_DROP)} ${rel(t.offset[2] - dz)}`;
   // the armor stand build_centered leaves on its spot: this city's own name
   const anchor = centreAnchor(ns);
+  // the plugs for the rooms under the city: which tiles have one (same names, _p)
+  const plugTiles = new Set(buildPlugStructures(world, opts).map((p) => p.name));
+  const plugs = tiles.filter((t) => plugTiles.has(t.name + '_p')).map((t) => ({ ...t, name: t.name + '_p' }));
   const build = (dx, dz, title, pop) => [
     `# ${title}`,
     `# ${tiles.length} structure${tiles.length === 1 ? '' : 's'}. Safe to run again: blocks only.`,
     '# Only loaded chunks are filled: stand near the middle and raise render distance.',
     `# When the whole city is standing, run /function ${ns}/${pop} from the SAME spot.`,
+    ...plugs.map((t) => load(t, dx, dz)),                                                     // the rooms under the city plugged first
     ...(world.dome ? tiles.map((t) => load({ ...t, name: t.name + '_d' }, dx, dz)) : []),   // drain the dome first
     ...tiles.map((t) => load(t, dx, dz)),
     ...areas.map((a) => `tickingarea add ${rel(a.x0 - dx)} ${rel(-GROUND_DROP)} ${rel(a.z0 - dz)} ${rel(a.x1 - dx)} ${rel(top)} ${rel(a.z1 - dz)} ${a.name}`),
@@ -512,6 +539,7 @@ export function placementGuide(tiles, opts = {}) {
     L.push('');
   }
   if (opts.centre) L.push('The city centre is a diamond monument with beacons on top: build_centered puts you in its alcove, under the sign.');
+  if (opts.plugs) L.push('Underground: build first fills every room under the city (cellars, crypt, metro) with stone, then the city puts the rooms back: the world\'s own groundwater cannot get in at the edge of a tile not yet loaded.');
   L.push(`build_centered also leaves an armor stand on its spot (named ${centreAnchor(ns)}). Run populate_centered`);
   L.push('  from that spot; if you have moved, go back to it first:');
   L.push(`    /tp @s @e[type=armor_stand,name=${centreAnchor(ns)},c=1]`);
@@ -584,9 +612,9 @@ export async function exportPack(world, optsIn = {}) {
   // the city's marked centre unless the caller names one
   const opts = { ...optsIn, centre: optsIn.centre || world.centre };
   const tiles = tileList(world, opts);
-  const structures = buildStructures(world, opts).concat(buildDrainStructures(world, opts));
+  const structures = buildStructures(world, opts).concat(buildDrainStructures(world, opts), buildPlugStructures(world, opts));
   const mobStructs = buildMobStructures(opts.spawns, opts);
-  const guide = placementGuide(tiles, { ...opts, dome: !!world.dome, stilts: !!world.stiltGrid, floating: !!world.floating });
+  const guide = placementGuide(tiles, { ...opts, dome: !!world.dome, stilts: !!world.stiltGrid, floating: !!world.floating, plugs: !!(world.airBoxes && world.airBoxes.length) });
   const fns = functionFiles(tiles, world, { ...opts, mobTiles: mobStructs });
   const hasFish = (opts.spawns || []).some((p) => FISH.has(p.type));
   const data = await buildMcPack(structures.concat(mobStructs), {
@@ -598,9 +626,9 @@ export async function exportPack(world, optsIn = {}) {
 
 export async function exportStructuresZip(world, opts = {}) {
   const tiles = tileList(world, opts);
-  const structures = buildStructures(world, opts).concat(buildDrainStructures(world, opts));
+  const structures = buildStructures(world, opts).concat(buildDrainStructures(world, opts), buildPlugStructures(world, opts));
   const mobStructs = buildMobStructures(opts.spawns, opts);
-  const guide = placementGuide(tiles, { ...opts, dome: !!world.dome, stilts: !!world.stiltGrid, floating: !!world.floating });
+  const guide = placementGuide(tiles, { ...opts, dome: !!world.dome, stilts: !!world.stiltGrid, floating: !!world.floating, plugs: !!(world.airBoxes && world.airBoxes.length) });
   const fns = functionFiles(tiles, world, { ...opts, mobTiles: mobStructs });
   const files = structures.concat(mobStructs).map((s) => ({ name: `${s.name}.mcstructure`, data: s.data }));
   for (const f of fns) files.push({ name: f.name, data: new TextEncoder().encode(f.text) });
