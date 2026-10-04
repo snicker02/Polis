@@ -74,6 +74,9 @@ export default async function run(ctx) {
       for (const [dx, dz] of [[1, 0], [0, 1]]) {
         const j = (z + dz) * 160 + (x + dx);
         if (!r.plan.mask[j] || faces.has((x + dx) + ',' + (z + dz))) continue;
+        // (lots stepping on rugged ground: a lot is held only to the street it
+        // faces, and a wall between it and anything else is meant; 2zw checks those)
+        if (r.hills.breaks && !r.hills.breaks.tied(i, j)) continue;
         if (Math.abs(elev[i] - elev[j]) > 1) tallSteps++;
       }
     }
@@ -112,7 +115,7 @@ export default async function run(ctx) {
     `${built} cities, ${floorsBad} with unreachable floors, ${unreachable} doors`);
   check('fitted cities: the city surface follows the ground cell by cell', blocks > 0 && followed / blocks > 0.8,
     `${((followed / blocks) * 100).toFixed(0)}% of cells within two blocks of their ground`);
-  check('fitted cities: no step taller than one block anywhere in the city', tallSteps === 0, `${tallSteps} steps`);
+  check('fitted cities: no step taller than one block between anything held together (streets, a lot and its street)', tallSteps === 0, `${tallSteps} steps`);
   check('fitted cities: every lot is dead level under its building', lots > 0 && flatLots === lots, `${flatLots}/${lots}`);
   check('fitted cities: the canal holds one level (water cannot slope)', canals === 0 || levelCanals === canals, `${levelCanals}/${canals}`);
   // the clearance setting has to reach above the city, and trees standing on

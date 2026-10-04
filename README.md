@@ -1,4 +1,4 @@
-# Polis v0.36.0
+# Polis v0.37.0
 
 *Created with help from Claude AI.*
 
@@ -60,7 +60,7 @@ npm run combine                  # adds the batches up into one result
 npm run validate:list            # every section, and how long it took last time
 ```
 
-The suite (61 sections, about twelve minutes of machine time) is run in pieces:
+The suite (62 sections, about twelve minutes of machine time) is run in pieces:
 each run writes a shard to `.validate/`, and `npm run combine` adds them into
 one total. The combiner will not report a pass if a section was missed,
 counted twice, or measured before the newest source file changed.
@@ -761,6 +761,37 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.37.0** — Lots that step on rugged ground.
+
+A city fitted to real ground held every pair of neighbouring cells within a
+block: each lot flat, and every lot within a block of every lot and street round
+it. On steep ground that chained whole blocks of lots to one compromise level.
+(Stairs along a steep street would not have helped: a flight climbs a block a
+block, the same as a street already may.) Now, with "Step lots on rugged ground"
+(on by default, under the world file), a lot is held within a block only of the
+street it faces, all along its frontage, so its door stays reachable; against
+anything else (the lots behind and beside it, a side street) it stands at its own
+height, a retaining wall between (terrain.js: tied). Streets keep the one-block
+rule among themselves. Where a lot or a pavement stands two or more over a
+neighbour it is not held to, a railing goes along the edge (city.js: railSteps).
+
+On the rugged sites of the test terrain, cells within a block of the real ground
+rise from 41% to 45% and from 37% to 43%; on the gentler ones by three to eight
+points. A lot is now about 3.2 blocks off its ground on average where a flat lot
+at its own ground's median could do no better than 2.4, so most of what lots can
+win is won. What is left: half a site's ground lies under its base level (the
+median), which the fitter can only raise to it; a lower base helped the rugged
+sites and hurt the gentle one and doubled the fill, so it is not the default. And
+a few street steps of more than a block on very rugged ground, as before (a
+street pulled both ways by its neighbours): no more than the old fit leaves.
+
+New section 2zw (9 checks), on the rugged test sites: nearer the ground than the
+old fit, every lot within a block of its frontage street, no more street steps
+than before, the lots really stepping, every step of two or more a solid wall
+with a railing where one can stand, every building and door reached, nothing
+dark, and the old fit when switched off. 2r's "no step over a block" counts the
+cells held together; a wall between lots is meant.
 
 **0.36.0** — Save and load settings.
 

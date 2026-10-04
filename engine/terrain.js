@@ -20,7 +20,7 @@
 
 import { MAT, MATERIALS, stairId, WEIRDO } from './materials.js';
 import { fbm2, clamp } from './rng.js';
-import { USE } from './plan.js';
+import { USE, frontage } from './plan.js';
 
 // ---- the hill pattern ------------------------------------------------------
 export function planHills(plan, cfg) {
@@ -141,6 +141,39 @@ function terrainElevation(plan, cfg, elev) {
   // city takes the middle of the two, which is slope-limited as well and
   // stays as near the real ground as a walkable surface can.
   const inMask = (i) => !plan.mask || plan.mask[i];
+  // Which neighbours are held within a block of each other. Streets are, among
+  // themselves (they stay walkable); a lot is held to the street its door faces,
+  // its frontage, all along it. With terrainBreaks (the default), that is all: two
+  // lots side by side, or a lot and a street it does not face, may stand at their
+  // own heights, a retaining wall between, so each lot sits near its own ground
+  // and a steep block steps down a lot at a time instead of being dragged to one
+  // level. (A street cannot climb faster than a block a block, stairs or not: the
+  // gain is in letting the lots step.)
+  const breaks = cfg.terrainBreaks !== false;
+  const lotAt = new Int32Array(W * D).fill(-1);
+  const front = new Set();
+  if (breaks) {
+    plan.lots.forEach((lot, li) => {
+      for (let z = lot.z0; z <= lot.z1; z++) for (let x = lot.x0; x <= lot.x1; x++) lotAt[z * W + x] = li;
+      const side = frontage(plan, lot).side;
+      const edge = side === 'north' ? [[lot.x0, lot.z0, 1, 0, 0, -1], lot.x1 - lot.x0 + 1] : side === 'south' ? [[lot.x0, lot.z1, 1, 0, 0, 1], lot.x1 - lot.x0 + 1]
+        : side === 'west' ? [[lot.x0, lot.z0, 0, 1, -1, 0], lot.z1 - lot.z0 + 1] : [[lot.x1, lot.z0, 0, 1, 1, 0], lot.z1 - lot.z0 + 1];
+      const [[sx, sz, ax, az, ox, oz], n] = edge;
+      for (let k = 0; k < n; k++) {
+        const x = sx + ax * k, z = sz + az * k, nx = x + ox, nz = z + oz;
+        if (nx < 0 || nz < 0 || nx >= W || nz >= D) continue;
+        const i = z * W + x, j = nz * W + nx;
+        front.add(Math.min(i, j) + ',' + Math.max(i, j));
+      }
+    });
+  }
+  const tied = (i, j) => {
+    if (!breaks) return true;
+    const li = lotAt[i], lj = lotAt[j];
+    if (li < 0 && lj < 0) return true;                       // street and street
+    if (li >= 0 && lj >= 0) return li === lj;               // the same lot, or two lots: free
+    return front.has(Math.min(i, j) + ',' + Math.max(i, j)); // a lot and the street it faces
+  };
   const smooth = () => {
     const L = Int16Array.from(want), U = Int16Array.from(want);
     const sweep = (arr, cmp, adj) => {
@@ -153,7 +186,7 @@ function terrainElevation(plan, cfg, elev) {
             const nx = x + dx, nz = z + dz;
             if (nx < 0 || nz < 0 || nx >= W || nz >= D) continue;
             const j = nz * W + nx;
-            if (!inMask(j)) continue;
+            if (!inMask(j) || !tied(i, j)) continue;
             const v = arr[j] + adj;
             if (cmp(v, arr[i])) arr[i] = v;
           }
@@ -179,7 +212,7 @@ function terrainElevation(plan, cfg, elev) {
             const nx = x + dx, nz = z + dz;
             if (nx < 0 || nz < 0 || nx >= W || nz >= D) continue;
             const j = nz * W + nx;
-            if (!inMask(j)) continue;
+            if (!inMask(j) || !tied(i, j)) continue;
             if (want[i] - want[j] > 1) { want[i] = want[j] + 1; fixed++; }
           }
         }
@@ -236,7 +269,7 @@ function terrainElevation(plan, cfg, elev) {
             const nx = x + dx, nz = z + dz;
             if (nx < 0 || nz < 0 || nx >= W || nz >= D) continue;
             const j = nz * W + nx;
-            if (!inMask(j)) continue;
+            if (!inMask(j) || !tied(i, j)) continue;
             lo = Math.max(lo, want[j] - 1);
             hi = Math.min(hi, want[j] + 1);
           }
@@ -256,7 +289,7 @@ function terrainElevation(plan, cfg, elev) {
           const nx = x + dx, nz = z + dz;
           if (nx >= W || nz >= D) continue;
           const j = nz * W + nx;
-          if (!inMask(j) || !fixed[j]) continue;
+          if (!inMask(j) || !fixed[j] || !tied(i, j)) continue;
           if (Math.abs(want[i] - want[j]) <= 1) continue;
           const lower = want[i] < want[j] ? want[i] : want[j];
           for (const lot of plan.lots) {
@@ -303,7 +336,7 @@ function terrainElevation(plan, cfg, elev) {
             const nx = x + dx, nz = z + dz;
             if (nx < 0 || nz < 0 || nx >= W || nz >= D) continue;
             const j = nz * W + nx;
-            if (!inMask(j)) continue;
+            if (!inMask(j) || !tied(i, j)) continue;
             lo = Math.max(lo, want[j] - 1);
             hi = Math.min(hi, want[j] + 1);
           }
@@ -323,7 +356,7 @@ function terrainElevation(plan, cfg, elev) {
           const nx = x + dx, nz = z + dz;
           if (nx >= W || nz >= D) continue;
           const j = nz * W + nx;
-          if (!inMask(j) || Math.abs(want[i] - want[j]) <= 1) continue;
+          if (!inMask(j) || !tied(i, j) || Math.abs(want[i] - want[j]) <= 1) continue;
           const [hiI, loI] = want[i] > want[j] ? [i, j] : [j, i];
           left++;
           if (lotOf[hiI] >= 0) setLot(lotOf[hiI], want[loI] + 1);
@@ -340,7 +373,7 @@ function terrainElevation(plan, cfg, elev) {
     for (let z = b.z0; z <= b.z1; z++) for (let x = b.x0; x <= b.x1; x++) e = Math.max(e, elev[z * W + x]);
     return { ...b, e, rolling: true };
   });
-  return { elev, blocks, H, rolling: true };
+  return { elev, blocks, H, rolling: true, breaks: breaks ? { tied } : null };
 }
 
 // ---- a city in tiers up a cliff ----------------------------------------------------
