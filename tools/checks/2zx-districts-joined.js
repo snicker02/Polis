@@ -61,28 +61,43 @@ export default async function run(ctx) {
     if (Math.max(0, ...[...touch.values()].map((s) => s.size)) < ds.length) railSplit++;
     for (const b of r.bridges) if (!b.cells.some(([x, z]) => railCols.has(z * W + x))) bareBridge++;
   }
-  // ridden, not only touching: following the rails by their own shapes from the
-  // city loop, one closed circuit (every rail joined to two) through every
-  // district, so a cart can go round all of them for ever (the old check only
-  // asked that one network touch every district, which a broken loop passed)
+  // ridden, not only touching: following the rails as a cart can (railgraph.js:
+  // shapes that lead to each other, and a height change only up a slope), from
+  // the city loop, one closed circuit through every district (the old check only
+  // asked that one network touch every district, which a broken loop passed; and
+  // a flat rail beside a higher one was counted joined, which a cart cannot take)
   {
-    const OUT = { 0: [[0, -1], [0, 1]], 1: [[1, 0], [-1, 0]], 2: [[1, 0], [-1, 0]], 3: [[1, 0], [-1, 0]], 4: [[0, -1], [0, 1]], 5: [[0, -1], [0, 1]], 6: [[0, 1], [1, 0]], 7: [[0, 1], [-1, 0]], 8: [[0, -1], [-1, 0]], 9: [[0, -1], [1, 0]] };
-    let open = 0, short = 0;
+    const { railLinks, railsOf, trackFrom } = await import('../../engine/railgraph.js');
+    const { findSites } = await import('../../engine/worldfile.js');
+    let open = 0, short = 0, loopsOpen = 0, sitesChecked = 0;
     for (const [, r] of cities) {
       const { W } = r.plan, ds = r.plan.districts;
-      const rails = new Map();
-      r.world.forEach((x, y, z, id) => { const d = MATERIALS.def(id); if (!/rail/.test(d.block) || y < 1) return; const st = d.states.rail_direction; rails.set(x + ',' + y + ',' + z, Number(st ? (st.value ?? st) : 0)); });
-      const nb = (k) => { const [x, y, z] = k.split(',').map(Number), out = []; for (const [dx, dz] of OUT[rails.get(k)]) for (const dy of [-1, 0, 1]) { const m = (x + dx) + ',' + (y + dy) + ',' + (z + dz); if (rails.has(m) && OUT[rails.get(m)].some(([bx, bz]) => bx === -dx && bz === -dz)) out.push(m); } return out; };
+      const rails = railsOf(r.world, MATERIALS);
       const loop = r.transit.lines.find((l) => l.loop);
       const start = loop && loop.cells.map((c) => c.join(',')).find((k) => rails.has(k));
       if (!start) { open++; continue; }
-      const seen = new Set([start]); const q = [start];
-      while (q.length) for (const m of nb(q.pop())) if (!seen.has(m)) { seen.add(m); q.push(m); }
-      if ([...seen].some((k) => nb(k).length !== 2)) open++;
-      if (!ds.every((d) => [...seen].some((k) => { const [x, , z] = k.split(',').map(Number); return d.has(z * W + x); }))) short++;
+      const t = trackFrom(rails, start);
+      if ([...t].some((k) => railLinks(rails, k).length !== 2)) open++;
+      if (!ds.every((d) => [...t].some((k) => { const [x, , z] = k.split(',').map(Number); return d.has(z * W + x); }))) short++;
     }
-    check('districts: the city loop is one closed circuit, every rail joined to two (a cart goes round for ever)', open === 0, `${open} open`);
+    // and on the fitted test sites (hills: a street dipping a block for a cell
+    // made a dip in the track a cart cannot take), every loop closed
+    for (const size of [160, 192]) {
+      const sites = findSites(terrain, size, { step: 64 });
+      for (let i = 0; i < Math.min(3, sites.length); i++) {
+        const r = generateCity({ ...DEFAULTS, ...L, size, seed: 447261885, terrain: siteGround(terrain, sites[i].x, sites[i].z, size), transit: 'rails', bridges: true });
+        const rails = railsOf(r.world, MATERIALS);
+        sitesChecked++;
+        for (const l of r.transit.lines.filter((q) => q.loop)) {
+          const st = l.cells.map((c) => c.join(',')).find((k) => rails.has(k));
+          if (!st) continue;
+          if ([...trackFrom(rails, st)].some((k) => railLinks(rails, k).length !== 2)) loopsOpen++;
+        }
+      }
+    }
+    check('districts: the city loop is one closed circuit a cart can ride (every rail joined to two, climbs only up slopes)', open === 0, `${open} open`);
     check('districts: and that circuit runs through every district, across the bridges', short === 0, `${short} cities where it misses one`);
+    check('loops: on every fitted test site the loop is closed (no dips a cart cannot take)', loopsOpen === 0 && sitesChecked >= 4, `${loopsOpen} open over ${sitesChecked} sites`);
   }
   check('districts: the made landscape falls into three, the far one bridged through the middle', cities[0][1].plan.districts.length === 3 && cities[0][1].bridges.length === 2);
   check('districts: every one reached on foot from downtown\'s streets, across the bridges', notReached === 0, `${notReached} not reached`);

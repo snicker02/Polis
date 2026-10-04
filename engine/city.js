@@ -36,7 +36,7 @@ import { chooseLandmarks, buildLandmark } from './landmarks.js';
 import { planHills, liftBlocks, cutStairs, shiftBuilding, walkCity } from './terrain.js';
 import { styleOf, remapTable, STYLES } from './styles.js';
 import { signTags } from './landmarks.js';
-import { signId, SIGN_FACING, railId, RAIL } from './materials.js';
+import { signId, SIGN_FACING, railId, poweredRailId, RAIL } from './materials.js';
 import { buildCentre, centreCells, footprint } from './centre.js';
 import { PROFESSION_NAMES } from './entities.js';
 import { FLOWERS } from './materials.js';
@@ -1208,6 +1208,49 @@ function shiftTransit(world, transit, elevAt, G) {
         const id = world.get(x, y + h, z);
         if (id >= 0 && !MATERIALS.isPassable(id)) world.clear(x, y + h, z);
       }
+  // No dips. A rail lower than both its neighbours is a step down and up again
+  // that a cart cannot take (a slope rises one way only), and a street that dips
+  // a block for one cell made one. It is lifted to the lower neighbour's height,
+  // on gravel, until there are none (a peak is fine: a slope rises to it from
+  // either side). Then every rail of the line is shaped from its two neighbours
+  // and their heights: a slope where the next one up is, else straight or curved.
+  const RISE_TO = (d) => (d[0] === 1 ? 2 : d[0] === -1 ? 3 : d[1] === -1 ? 4 : 5);
+  for (const line of transit.lines) {
+    const cells = line.cells, n = cells.length;
+    if (n < 3) continue;
+    const ring = !!line.loop;
+    const at = (k) => (ring ? cells[(k + n) % n] : cells[k]);
+    for (let pass = 0, moved = 1; moved && pass < 8; pass++) {
+      moved = 0;
+      for (let k = ring ? 0 : 1; k < (ring ? n : n - 1); k++) {
+        const c = at(k), a = at(k - 1), b = at(k + 1);
+        if (!a || !b || c.length < 3 || a.length < 3 || b.length < 3) continue;
+        if (c[1] < a[1] && c[1] < b[1] && railAt(c[0], c[1], c[2])) {
+          const id = world.get(c[0], c[1], c[2]);
+          world.set(c[0], c[1], c[2], MAT.GRAVEL);
+          for (let h = 1; h <= 2; h++) if (world.has(c[0], c[1] + h, c[2]) && !railAt(c[0], c[1] + h, c[2])) world.clear(c[0], c[1] + h, c[2]);
+          world.set(c[0], c[1] + 1, c[2], id);
+          c[1] += 1; moved++;
+        }
+      }
+    }
+    for (let k = 0; k < n; k++) {
+      const c = cells[k];
+      if (c.length < 3 || !railAt(c[0], c[1], c[2])) continue;
+      const a = at(k - 1), b = at(k + 1);
+      const dir = (o) => (o ? [Math.sign(o[0] - c[0]), Math.sign(o[2] - c[2])] : null);
+      const da = a && Math.abs(a[0] - c[0]) + Math.abs(a[2] - c[2]) === 1 ? dir(a) : null;
+      const db = b && Math.abs(b[0] - c[0]) + Math.abs(b[2] - c[2]) === 1 ? dir(b) : null;
+      let shape;
+      if (db && b[1] === c[1] + 1) shape = RISE_TO(db);
+      else if (da && a[1] === c[1] + 1) shape = RISE_TO(da);
+      else if (da && db) shape = da[0] + db[0] === 0 && da[1] + db[1] === 0 ? (db[0] ? RAIL.EW : RAIL.NS)
+        : (() => { const sx = da[0] + db[0], sz = da[1] + db[1]; return sx > 0 ? (sz > 0 ? RAIL.SE : RAIL.NE) : (sz > 0 ? RAIL.SW : RAIL.NW); })();
+      else { const d = db || da; if (!d) continue; shape = d[0] ? RAIL.EW : RAIL.NS; }
+      const golden = MATERIALS.def(world.get(c[0], c[1], c[2])).block === 'minecraft:golden_rail';
+      world.set(c[0], c[1], c[2], golden && shape < 6 ? poweredRailId(shape) : railId(shape));
+    }
+  }
 }
 
 // ---- street names ------------------------------------------------------------

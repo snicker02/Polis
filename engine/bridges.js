@@ -770,17 +770,31 @@ export function bridgeRails(world, bridges, transit, G) {
           if (!taken.has(key3(jx, yy, jz))) { jy = yy; break; }
         }
         if (jy === null) return null;
+        // A height change is made on the spur's first cell, a slope (a flat rail
+        // beside one a block higher looked joined and was a step a cart cannot
+        // take): up, it rises onward; down, it rises back toward the deck and the
+        // spur goes on a block lower. Then the spur runs at the ring's height to
+        // the junction, which stays a flat curve. So it needs a straight cell first.
+        const dy = jy - end[1];
+        const RISE = (d) => (d[0] === 1 ? RAIL.UP_E : d[0] === -1 ? RAIL.UP_W : d[1] === -1 ? RAIL.UP_N : RAIL.UP_S);
+        if (dy !== 0 && a < 2) return null;
 
         const sign = Math.sign(l);
         const spur = [];
-        for (let k = 1; k <= (l === 0 ? a - 1 : a); k++) spur.push({ pos: at(k, 0), rail: straightFor(step) });
+        for (let k = 1; k <= (l === 0 ? a - 1 : a); k++) {
+          const first = k === 1 && dy !== 0;
+          spur.push({ pos: at(k, 0), y: dy < 0 ? jy : first ? end[1] : jy,
+            rail: first ? RISE(dy > 0 ? step : [-step[0], -step[1]]) : straightFor(step) });
+        }
         if (l !== 0) {
           if (!spur.length) return null;                     // no room for a corner
+          if (dy !== 0 && spur.length < 2) return null;      // (the slope and the corner need a cell each)
           spur[spur.length - 1].rail = curveFor([-step[0], -step[1]], [latU[0] * sign, latU[1] * sign]);
-          for (let m = 1; m < Math.abs(l); m++) spur.push({ pos: at(a, sign * m), rail: straightFor(latU) });
+          for (let m = 1; m < Math.abs(l); m++) spur.push({ pos: at(a, sign * m), y: jy, rail: straightFor(latU) });
+          if (spur[spur.length - 1].rail >= 2 && spur[spur.length - 1].rail <= 5 && Math.abs(l)) return null;   // (a corner cannot be the slope)
         }
-        for (const { pos } of spur)
-          if (taken.has(key3(pos[0], end[1], pos[1])) || railAt(pos[0], end[1], pos[1])) return null;
+        for (const { pos, y: sy } of spur)
+          if (taken.has(key3(pos[0], sy, pos[1])) || railAt(pos[0], sy, pos[1])) return null;
 
         // Which side of the junction the rest of the ring lies on decides the
         // curve, so it is looked up rather than assumed — and "side" is
@@ -816,7 +830,7 @@ export function bridgeRails(world, bridges, transit, G) {
         // the cells a candidate would claim, so two of them can be told apart
         for (const c of cands) {
           c.cells = new Set([key3(c.jx, c.jy, c.jz)]);
-          for (const { pos } of c.spur) c.cells.add(key3(pos[0], c.y, pos[1]));
+          for (const { pos, y: sy } of c.spur) c.cells.add(key3(pos[0], sy !== undefined ? sy : c.y, pos[1]));
         }
         return { cands };
       }
@@ -835,13 +849,13 @@ export function bridgeRails(world, bridges, transit, G) {
     };
 
     const commit = ({ cells, li, head }, best) => {
-      for (const { pos, rail } of best.spur) {
-        const [x, z] = pos;
-        if (!world.has(x, best.y - 1, z)) world.set(x, best.y - 1, z, MAT.GRAVEL);
-        world.set(x, best.y, z, railId(rail));
-        for (let h = 1; h <= 3; h++) world.clear(x, best.y + h, z);
-        taken.add(key3(x, best.y, z));
-        cells.push([x, best.y, z]);
+      for (const { pos, rail, y: sy } of best.spur) {
+        const [x, z] = pos, yy = sy !== undefined ? sy : best.y;
+        if (!world.has(x, yy - 1, z)) world.set(x, yy - 1, z, MAT.GRAVEL);
+        world.set(x, yy, z, railId(rail));
+        for (let h = 1; h <= 3; h++) world.clear(x, yy + h, z);
+        taken.add(key3(x, yy, z));
+        cells.push([x, yy, z]);
       }
       // Bend the ring's own rail so it leads onto the spur. A rail joins two
       // directions and no more, so the ring gives way here: a cart coming
@@ -855,7 +869,7 @@ export function bridgeRails(world, bridges, transit, G) {
       const laneEnd = head ? cells[0] : cells[cells.length - 1 - best.spur.length];
       const laneNext = head ? cells[1] : cells[cells.length - 2 - best.spur.length];
       record(li, { joined: true, head, a: best.a, leg: Math.abs(best.l), ring: best.ring,
-        junction: [best.jx, best.jy, best.jz], wasRail, spur: best.spur.map(({ pos }) => [pos[0], best.y, pos[1]]),
+        junction: [best.jx, best.jy, best.jz], wasRail, spur: best.spur.map(({ pos, y: sy }) => [pos[0], sy !== undefined ? sy : best.y, pos[1]]),
         approach: best.approach, sides: best.sides, laneEnd, laneNext });
     };
 
@@ -993,7 +1007,10 @@ export function bridgeRails(world, bridges, transit, G) {
       if (Math.abs(last[0] - e.junction[0]) + Math.abs(last[2] - e.junction[2]) !== 1) continue;
       if (!railAt(last[0], last[1], last[2])) continue;
       const a = dirTo(last, prev), c = dirTo(last, e.junction);
-      const shape = a[0] + c[0] === 0 && a[1] + c[1] === 0 ? straightFor(c) : curveFor(a, c);
+      const straightOn = a[0] + c[0] === 0 && a[1] + c[1] === 0;
+      // the junction a block up: the cell before it rises toward it (straight on)
+      const RISE_TO = (d) => (d[0] === 1 ? RAIL.UP_E : d[0] === -1 ? RAIL.UP_W : d[1] === -1 ? RAIL.UP_N : RAIL.UP_S);
+      const shape = e.junction[1] === last[1] + 1 && straightOn ? RISE_TO(c) : straightOn ? straightFor(c) : curveFor(a, c);
       world.set(last[0], last[1], last[2], railId(shape));
     }
 

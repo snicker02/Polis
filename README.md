@@ -1,4 +1,4 @@
-# Polis v0.37.3
+# Polis v0.37.4
 
 *Created with help from Claude AI.*
 
@@ -761,6 +761,28 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.37.4** — Track a cart can take: no steps, no dips.
+
+Checked against more junctions built in the game and fixed by hand (e4/f4,
+e5/f5): track only changes height up a slope (the lower rail rising toward the
+higher), and the checks counted a flat rail beside one a block higher as joined.
+A new shared rail graph (engine/railgraph.js: railLinks, railsOf, trackFrom)
+follows the rails as a cart can, and found two faults the old check passed:
+
+- On hills, a street dipping a block for one cell made a dip in the track (down
+  a block and up again), which a cart cannot take: a slope rises one way only.
+  After the track is raised to the streets (city.js: shiftTransit), any rail
+  lower than both its neighbours is lifted onto gravel, until there are none,
+  and every rail of the line is shaped again from its neighbours and heights.
+- A bridge's spur joined a ring a block above or below the deck with a flat
+  step. Now the height change is made on the spur's first cell, a slope (rising
+  onward to a ring above, rising back toward the deck to one below), and the
+  spur runs on at the ring's height to the junction, which stays a flat curve.
+
+2zx follows the rails by the rail graph: the city loop one closed circuit a cart
+can ride through every district, and on six fitted test sites every loop
+closed (8 checks).
 
 **0.37.3** — One loop round every island: the bridge junctions fixed.
 
