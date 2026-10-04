@@ -1,4 +1,4 @@
-# Polis v0.37.2
+# Polis v0.37.3
 
 *Created with help from Claude AI.*
 
@@ -761,6 +761,33 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.37.3** — One loop round every island: the bridge junctions fixed.
+
+A bridge carries two tracks, one each way, and the ring on each bank is turned
+onto them, so ring, bridge and ring are one circuit round every district. The
+junctions were built wrong, and the circuit never crossed (followed by the
+rails' own shapes, the city loop had two loose ends at the first bridge).
+Checked against junctions built in the game and fixed by hand (e1/f1, e2/f2,
+f3), four faults, all in bridges.js: bridgeRails:
+
+- The two junctions on a bank both turned the same way along the ring, so the
+  stretch between them dead-ended. Each now turns to its ring neighbour on the
+  longer stretch round the ring (measured round the ring: by direction alone a
+  partner a little to one side fooled it).
+- The lane's last cell was left pointing past its junction (a lane ending beside
+  its junction, not facing it). Every join is made mutual: the cell before a
+  junction is turned to lead from its own neighbour into it.
+- On an angled deck a lane could run on over the ring at the bank and cut it.
+  A lane that crosses the ring at right angles stops short of it and joins it
+  there; if that leaves it no way onto the ring, it is laid whole again.
+- The stretch of ring between a bank's two junctions, left out of the circuit,
+  is taken up, as it was by hand (a stub a cart could stray onto).
+
+2zx now follows the rails by their shapes: the city loop one closed circuit,
+every rail joined to two, through every district across the bridges (the old
+check only asked that one network touch every district, which the broken loop
+passed). 7 checks.
 
 **0.37.2** — Rails set again once the city is in; remove a city.
 

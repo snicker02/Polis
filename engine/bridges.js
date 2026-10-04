@@ -634,9 +634,10 @@ export function bridgeRails(world, bridges, transit, G) {
   // piece of track it happens to meet, so a ring cell always beats a nearer
   // non-ring one.
   const ringCells = new Set();
+  const ringIndex = new Map();               // a ring cell -> its ring and its place round it
   for (const line of transit.lines || []) {
     if (!line.loop) continue;
-    for (const [x, y, z] of line.cells) ringCells.add(key3(x, y, z));
+    line.cells.forEach(([x, y, z], i) => { ringCells.add(key3(x, y, z)); ringIndex.set(key3(x, y, z), { line, i }); });
   }
   // cells this function has laid or bent: two spurs must not cross, and a
   // ring cell already turned onto one lane cannot be turned onto another
@@ -677,7 +678,35 @@ export function bridgeRails(world, bridges, transit, G) {
     };
 
     const lanes = [-1, 1].map((side) => {
-      const cells = laneCells(side);
+      // A lane stops short of any ring: on an angled deck it can run on over the
+      // ring's track at the bank, and laid over it, it cut the ring it was meant
+      // to join. Trimmed from the deck's middle outward, it ends in front of the
+      // ring instead, and joins it there.
+      const full = laneCells(side);
+      // (only where the lane crosses the ring at right angles: that is the lane
+      // that cut it; one running alongside the ring is left as it was, since an
+      // end trimmed there would point along the ring with nothing to turn onto)
+      const ringAt = (x, z) => { for (const yy of [y - 1, y, y + 1]) { const r = ringIndex.get(key3(x, yy, z)); if (r) return r; } return null; };
+      const crosses = (k) => {
+        const [x, z] = full[k], r = ringAt(x, z);
+        if (!r) return false;
+        const n = r.line.cells.length, a = r.line.cells[(r.i - 1 + n) % n], c = r.line.cells[(r.i + 1) % n];
+        const ringAlongX = a[0] !== c[0] && a[2] === c[2], ringAlongZ = a[2] !== c[2] && a[0] === c[0];
+        const p = full[k - 1] || full[k], q = full[k + 1] || full[k];
+        const laneAlongX = p[0] !== q[0] && p[1] === q[1], laneAlongZ = p[1] !== q[1] && p[0] === q[0];
+        return (ringAlongX && laneAlongZ) || (ringAlongZ && laneAlongX);
+      };
+      const mid = Math.floor(full.length / 2);
+      let lo = mid, hi = mid;
+      while (lo > 0 && !crosses(lo - 1)) lo--;
+      while (hi < full.length - 1 && !crosses(hi + 1)) hi++;
+      const trimmed = crosses(mid) ? [] : full.slice(lo, hi + 1);
+      const out = layLane(trimmed);
+      out.full = full; out.trimmed = trimmed.length !== full.length;
+      return out;
+    });
+    // lay a lane's cells: track, the odd booster on a straight, room over it
+    function layLane(cells) {
       const dirs = cells.map(([x, z], k) => {
         const prev = cells[k - 1], next = cells[k + 1];
         if (prev && next) {
@@ -702,7 +731,7 @@ export function bridgeRails(world, bridges, transit, G) {
         out.push([x, y, z]);
       });
       return out;
-    });
+    }
 
     // ---- lead each lane end onto the ring ----------------------------------
     // Four ends, and the junctions they want are not always four different
@@ -769,7 +798,7 @@ export function bridgeRails(world, bridges, transit, G) {
         // a ring always beats a stray piece of track, then the shortest run,
         // then the straightest
         const score = (ring ? 0 : 1e6) + (a + Math.abs(l)) * 10 + Math.abs(l);
-        return { score, a, l, spur, jx, jy, jz, curve, ring, y: end[1] };
+        return { score, a, l, spur, jx, jy, jz, curve, ring, y: end[1], approach, sides: side };
       };
 
       // every junction this end could use, its cheapest approach kept
@@ -823,8 +852,11 @@ export function bridgeRails(world, bridges, transit, G) {
       world.set(best.jx, best.jy, best.jz, railId(best.curve));
       taken.add(key3(best.jx, best.jy, best.jz));
       joined++;
+      const laneEnd = head ? cells[0] : cells[cells.length - 1 - best.spur.length];
+      const laneNext = head ? cells[1] : cells[cells.length - 2 - best.spur.length];
       record(li, { joined: true, head, a: best.a, leg: Math.abs(best.l), ring: best.ring,
-        junction: [best.jx, best.jy, best.jz], wasRail, spur: best.spur.map(({ pos }) => [pos[0], best.y, pos[1]]) });
+        junction: [best.jx, best.jy, best.jz], wasRail, spur: best.spur.map(({ pos }) => [pos[0], best.y, pos[1]]),
+        approach: best.approach, sides: best.sides, laneEnd, laneNext });
     };
 
     // The four ends are settled together rather than one after another.
@@ -836,7 +868,18 @@ export function bridgeRails(world, bridges, transit, G) {
     // of combinations, not a search.
     const seats = [];
     lanes.forEach((cells, li) => { if (cells.length >= 4) seats.push({ li, cells, head: true }, { li, cells, head: false }); });
-    const found = seats.map(search);
+    let found = seats.map(search);
+    // (trimmed short of a ring it crossed, a lane can end where it has no way onto
+    // the ring: that lane is laid again whole, as it was before the trim)
+    lanes.forEach((cells, li) => {
+      if (!cells.trimmed) return;
+      const mine = seats.map((st, k) => (st.li === li ? k : -1)).filter((k) => k >= 0);
+      if (mine.every((k) => found[k].cands)) return;
+      for (const [x, yy, z] of cells) { world.clear(x, yy, z); if (world.get(x, yy - 1, z) === MAT.REDSTONE) world.set(x, yy - 1, z, MAT.GRAVEL); }
+      const whole = layLane(cells.full);
+      cells.length = 0; cells.push(...whole); cells.trimmed = false;
+      for (const k of mine) found[k] = search(seats[k]);
+    });
     const options = found.map((r) => r.cands || []);
 
     let chosen = null;
@@ -898,6 +941,61 @@ export function bridgeRails(world, bridges, transit, G) {
       }
       removed.push(li);
     });
+
+    // The two junctions on one bank turn opposite ways along the ring: each to the
+    // side away from the other. Then the ring comes in along one, crosses, goes
+    // round the other district, comes back on the other lane and carries on
+    // along the ring the other way; the stretch of ring between the two is left
+    // out. (Each chose its side by which had track first, so both turned the same
+    // way: the ring between them dead-ended, and the circuit never crossed.)
+    for (const head of [true, false]) {
+      const pair = kept.length === 2 ? ends.filter((e) => e.joined && e.head === head && e.sides) : [];
+      if (pair.length !== 2) continue;
+      // "away" is measured round the ring: the shorter stretch between the two is
+      // the one left out, so each turns onto its ring neighbour on the longer
+      // stretch (by direction alone, a partner a little to one side fooled it)
+      pair.forEach((e, k) => {
+        const o = pair[1 - k];
+        const me = ringIndex.get(key3(...e.junction)), them = ringIndex.get(key3(...o.junction));
+        if (!me || !them || me.line !== them.line) return;
+        const cells = me.line.cells, n = cells.length;
+        const fwd = (them.i - me.i + n) % n, back = (me.i - them.i + n) % n;
+        const nb = cells[fwd < back ? (me.i - 1 + n) % n : (me.i + 1) % n];
+        const [jx, , jz] = e.junction, side = [Math.sign(nb[0] - jx), Math.sign(nb[2] - jz)];
+        if (!e.sides.some(([sx, sz]) => sx === side[0] && sz === side[1])) return;   // (not across the approach: leave it)
+        world.set(...e.junction, railId(curveFor([-e.approach[0], -e.approach[1]], side)));
+      });
+      // the stretch of ring between the two, left out of the circuit, is taken up
+      // (a stub a cart could stray onto and stop)
+      if (pair.length === 2) {
+        const a = ringIndex.get(key3(...pair[0].junction)), c = ringIndex.get(key3(...pair[1].junction));
+        if (a && c && a.line === c.line) {
+          const cells = a.line.cells, n = cells.length;
+          const fwd = (c.i - a.i + n) % n, back = (a.i - c.i + n) % n;
+          const [from, len] = fwd <= back ? [a.i, fwd] : [c.i, back];
+          if (len > 1 && len < 16) for (let s2 = 1; s2 < len; s2++) {
+            const [x, yy, z] = cells[(from + s2) % n];
+            if (taken.has(key3(x, yy, z)) || !railAt(x, yy, z)) continue;
+            world.clear(x, yy, z);
+            if (world.get(x, yy - 1, z) === MAT.REDSTONE) world.set(x, yy - 1, z, MAT.GRAVEL);
+          }
+        }
+      }
+    }
+    // Every join made mutual: the cell before a junction (the spur's last, or the
+    // lane's end) turned to lead from its own neighbour into the junction. (A lane
+    // that ended beside its junction, not facing it, was left pointing at nothing.)
+    const dirTo = (from, to) => [Math.sign(to[0] - from[0]), Math.sign(to[2] - from[2])];
+    for (const e of ends) {
+      if (!e.joined || !e.laneEnd || !e.laneNext) continue;
+      const chain = [e.laneNext, e.laneEnd, ...e.spur];
+      const last = chain[chain.length - 1], prev = chain[chain.length - 2];
+      if (Math.abs(last[0] - e.junction[0]) + Math.abs(last[2] - e.junction[2]) !== 1) continue;
+      if (!railAt(last[0], last[1], last[2])) continue;
+      const a = dirTo(last, prev), c = dirTo(last, e.junction);
+      const shape = a[0] + c[0] === 0 && a[1] + c[1] === 0 ? straightFor(c) : curveFor(a, c);
+      world.set(last[0], last[1], last[2], railId(shape));
+    }
 
     for (const cells of kept) {
       const mid = cells[Math.floor(cells.length / 2)];

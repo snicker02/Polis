@@ -61,6 +61,29 @@ export default async function run(ctx) {
     if (Math.max(0, ...[...touch.values()].map((s) => s.size)) < ds.length) railSplit++;
     for (const b of r.bridges) if (!b.cells.some(([x, z]) => railCols.has(z * W + x))) bareBridge++;
   }
+  // ridden, not only touching: following the rails by their own shapes from the
+  // city loop, one closed circuit (every rail joined to two) through every
+  // district, so a cart can go round all of them for ever (the old check only
+  // asked that one network touch every district, which a broken loop passed)
+  {
+    const OUT = { 0: [[0, -1], [0, 1]], 1: [[1, 0], [-1, 0]], 2: [[1, 0], [-1, 0]], 3: [[1, 0], [-1, 0]], 4: [[0, -1], [0, 1]], 5: [[0, -1], [0, 1]], 6: [[0, 1], [1, 0]], 7: [[0, 1], [-1, 0]], 8: [[0, -1], [-1, 0]], 9: [[0, -1], [1, 0]] };
+    let open = 0, short = 0;
+    for (const [, r] of cities) {
+      const { W } = r.plan, ds = r.plan.districts;
+      const rails = new Map();
+      r.world.forEach((x, y, z, id) => { const d = MATERIALS.def(id); if (!/rail/.test(d.block) || y < 1) return; const st = d.states.rail_direction; rails.set(x + ',' + y + ',' + z, Number(st ? (st.value ?? st) : 0)); });
+      const nb = (k) => { const [x, y, z] = k.split(',').map(Number), out = []; for (const [dx, dz] of OUT[rails.get(k)]) for (const dy of [-1, 0, 1]) { const m = (x + dx) + ',' + (y + dy) + ',' + (z + dz); if (rails.has(m) && OUT[rails.get(m)].some(([bx, bz]) => bx === -dx && bz === -dz)) out.push(m); } return out; };
+      const loop = r.transit.lines.find((l) => l.loop);
+      const start = loop && loop.cells.map((c) => c.join(',')).find((k) => rails.has(k));
+      if (!start) { open++; continue; }
+      const seen = new Set([start]); const q = [start];
+      while (q.length) for (const m of nb(q.pop())) if (!seen.has(m)) { seen.add(m); q.push(m); }
+      if ([...seen].some((k) => nb(k).length !== 2)) open++;
+      if (!ds.every((d) => [...seen].some((k) => { const [x, , z] = k.split(',').map(Number); return d.has(z * W + x); }))) short++;
+    }
+    check('districts: the city loop is one closed circuit, every rail joined to two (a cart goes round for ever)', open === 0, `${open} open`);
+    check('districts: and that circuit runs through every district, across the bridges', short === 0, `${short} cities where it misses one`);
+  }
   check('districts: the made landscape falls into three, the far one bridged through the middle', cities[0][1].plan.districts.length === 3 && cities[0][1].bridges.length === 2);
   check('districts: every one reached on foot from downtown\'s streets, across the bridges', notReached === 0, `${notReached} not reached`);
   check('districts: one rail network touches every district', railSplit === 0, `${railSplit} cities split`);
