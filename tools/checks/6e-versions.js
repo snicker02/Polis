@@ -48,10 +48,16 @@ export default async function run(ctx) {
     /^summon minecraft:(cod|salmon|tropicalfish) ~-?\d* ~-?\d* ~-?\d* 0 0 polis:keep (Cod|Salmon|Koi)$/,   // kept by the pack's polis:keep event
     /^summon minecraft:(creeper|spider|enderman|witch|pillager|vindicator|evocation_illager|husk|blaze|magma_cube|wither_skeleton|zoglin|zombie_pigman) [A-Za-z]+ ~-?\d* ~-?\d* ~-?\d*$/,   // hostiles, named
     /^kill @e\[type=minecraft:[a-z_]+,name=[A-Za-z]+\]$/,
+    // every rail set again with its exact shape (populate, rails)
+    /^setblock ~-?\d* ~-?\d* ~-?\d* minecraft:rail \["rail_direction"=\d\]$/,
+    /^setblock ~-?\d* ~-?\d* ~-?\d* minecraft:golden_rail \["rail_data_bit"=true,"rail_direction"=\d\]$/,
+    // remove: every non-player entity in the city's room
+    /^kill @e\[type=!player,x=~-?\d*,y=~-?\d*,z=~-?\d*,dx=\d+,dy=\d+,dz=\d+\]$/,
     // the centre marker: build_centered places it, the other centred functions run from it
     /^kill @e\[type=armor_stand,name=[a-z0-9_]+_centre\]$/,
     /^summon armor_stand [a-z0-9_]+_centre ~ ~ ~$/,
     /^execute at @e\[type=armor_stand,name=[a-z0-9_]+_centre,c=1\] run function [a-z0-9_]+\/[a-z_]+_centered$/,
+    /^say Polis: .+$/,
     /^tickingarea add ~-?\d* ~-?\d* ~-?\d* ~-?\d* ~-?\d* ~-?\d* [a-z0-9_]+$/, /^tickingarea remove [a-z0-9_]+$/];
   let badCmd = null;
   for (const f of out.functions) for (const l of f.text.split('\n')) {

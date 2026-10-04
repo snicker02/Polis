@@ -46,7 +46,7 @@ export default async function run(ctx) {
   let workOk = true, extraOk = true;
   for (const f of centred) {
     const base = f.fn.slice(ns.length + 1, -'_centered'.length);
-    if (!/^(structure load|summon) /m.test(f.text) || /execute at/.test(f.text)) workOk = false;
+    if (!/^(structure load|summon|setblock) /m.test(f.text) || /execute at/.test(f.text)) workOk = false;   // (rails_centered sets rails)
     const fm = fn(`${base}_from_mark`);
     if (!fm || !fm.text.includes(`execute at @e[type=armor_stand,name=${anchor},c=1] run function ${ns}/${base}_centered`)) extraOk = false;
   }

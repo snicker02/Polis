@@ -1,4 +1,4 @@
-# Polis v0.37.1
+# Polis v0.37.2
 
 *Created with help from Claude AI.*
 
@@ -60,7 +60,7 @@ npm run combine                  # adds the batches up into one result
 npm run validate:list            # every section, and how long it took last time
 ```
 
-The suite (63 sections, about eleven minutes of machine time) is run in pieces:
+The suite (64 sections, about thirteen minutes of machine time) is run in pieces:
 each run writes a shard to `.validate/`, and `npm run combine` adds them into
 one total. The combiner will not report a pass if a section was missed,
 counted twice, or measured before the newest source file changed.
@@ -761,6 +761,34 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.37.2** — Rails set again once the city is in; remove a city.
+
+No curved rails in the game. The cities still carry them (the same 40-odd
+curves as before); they were lost going in. The game reshapes a rail to the
+rails beside it as it goes in, and a city goes in a tile at a time: a curve at
+a tile's edge, its neighbour not in yet, turned itself straight and stayed so.
+Now populate sets every rail of the city again with its exact shape once the
+city is in, before the minecarts (export.js: railLines): straights and climbs
+first, the curves last, both their neighbours there when they go in. rails and
+rails_centered do it on their own (for a city already built: run from the build
+spot). Only where the city has track.
+
+remove and remove_centered take a city away, from the same spot as build or
+build_centered: every entity in the city's room that is not a player first
+(villagers, animals, minecarts, items, so nothing is buried), then the city:
+everything it put above its ground back to air, its ground to grass, everything
+under it (cellars, metro, foundations) to dirt, column by column at the city's
+own ground height, inside its outline (buildRemoveStructures). With air fill
+the city replaced the world's ground, so this leaves a clean site, not the old
+one. The guide says how.
+
+New section 2zy (6 checks): every rail set again once each with its exact
+shape, the curves last, populate setting them after the mobs and before the
+minecarts and before the city can unload, rails / rails_centered; a city built
+and then removed leaving every cell inside its outline air above its ground,
+grass on it, dirt under it; remove clearing the entities first. 6e knows the
+new commands; 6b and 2zp count them where they count the city's own.
 
 **0.37.1** — Every district joined to the rest.
 

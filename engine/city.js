@@ -677,6 +677,11 @@ export function generateCity(cfgIn, onProgress) {
   if (metro) spawns = spawns.concat(metro.carts);           // a minecart waiting at every station
   // every room under the city watertight: the world's own ground round it can be water
   const sealed = sealRooms(world, GROUND);
+  // for the exports' remove: where the city's ground is, column by column
+  world.cityGround = {
+    at: (x, z) => GROUND + elevAt(x, z),
+    inside: (x, z) => x >= 0 && z >= 0 && x < plan.W && z < plan.D && (!plan.mask || plan.mask[z * plan.W + x] === 1),
+  };
   if (SD) for (const name of SD.names) applyStyle(world, plan, styleOf(name), (x, z) => GROUND + elevAt(x, z), (x, z) => SD.at(x, z) === name);
   else applyStyle(world, plan, STYLE, (x, z) => GROUND + elevAt(x, z));
 

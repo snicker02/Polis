@@ -32,7 +32,8 @@ refreshWalkThrough();
   const out = await exportPack(w, { fillAir: true, deflateRaw, rand: Math.random });
   // (the city's own tiles: the plugs for the rooms under it, loaded first, are stone
   // through the rooms and void elsewhere, so the air-fill checks are not for them)
-  const cityTiles = out.structures.filter((st) => !st.plug && !st.drain);
+  const cityTiles = out.structures.filter((st) => !st.plug && !st.drain && !st.remove);
+  const builtByBuild = out.structures.filter((st) => !st.remove);   // (remove's structures are loaded by remove, not build)
   const z = readZip(out.data);
   const inflate = (e) => {
     const p = localPayload(out.data, e);
@@ -62,8 +63,8 @@ refreshWalkThrough();
   check('function: every command is a valid relative structure load or say (no leading slash)',
     build.every((l) => !l.bad) && cent.every((l) => !l.bad),
     (build.concat(cent).find((l) => l.bad) || {}).bad);
-  check('function: one line per structure', build.length === out.structures.length && cent.length === out.structures.length,
-    `${build.length}/${cent.length} vs ${out.structures.length}`);
+  check('function: one line per structure', build.length === builtByBuild.length && cent.length === builtByBuild.length,
+    `${build.length}/${cent.length} vs ${builtByBuild.length}`);
 
   // decode every tile and check the air fill
   const tiles = new Map();

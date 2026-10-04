@@ -9,7 +9,7 @@
 //
 // Both put the city's ground layer where the block under your feet is.
 
-import { splitWorld, writeMcStructure, buildMcPack, makeZip, crc32 } from './blockcore.js';
+import { splitWorld, writeMcStructure, buildMcPack, makeZip, crc32, VoxelWorld } from './blockcore.js';
 import { MATERIALS, MAT } from './materials.js';
 import { makeEntity, STRUCTURE_MOBS } from './entities.js';
 import { makeRng } from './rng.js';
@@ -17,7 +17,7 @@ import { makeRng } from './rng.js';
 // Must match main.js VERSION, package.json and index.html data-version;
 // tools/validate.js fails if they drift. The app refuses to export when the
 // browser has mixed cached copies of old and new files.
-export const POLIS_VERSION = '0.37.1';
+export const POLIS_VERSION = '0.37.2';
 
 export const CHUNK = 64;          // Bedrock structure limit per horizontal axis
 export const GROUND_DROP = 2;     // base layer y=0 sits 2 below feet; surface y=1 replaces the block you stand on
@@ -276,6 +276,44 @@ export function buildPlugStructures(world, opts = {}) {
   });
 }
 
+// ---- taking a city away -----------------------------------------------------------
+// remove: everything the city put above its ground goes back to air, its ground
+// to grass, and under that (cellars, metro, foundations) to dirt, column by
+// column at the city's own ground height (a city on hills leaves the hills'
+// shape). Only inside the city's outline. With air fill the city replaced the
+// world's ground, so there is no old ground to put back: this leaves a clean
+// site. One structure a tile, loaded by remove and remove_centered.
+export function buildRemoveStructures(world, opts = {}) {
+  const g = world.cityGround;
+  if (!g) return [];
+  const above = (x, y, z) => g.inside(x, z) && y > g.at(x, z);
+  // the ground: grass on the city's own surface, dirt under it (the writer's fill,
+  // asked of every cell of the tile; nothing outside the outline)
+  const ground = (x, y, z) => { if (!g.inside(x, z)) return -1; const top = g.at(x, z); return y > top ? -1 : y === top ? MAT.GRASS : MAT.DIRT; };
+  return tileList(world, opts).map((t) => {
+    const res = writeMcStructure([], [], t.box, MATERIALS, { airAt: above, domeAirId: MAT.AIR, fillFn: ground, fillBelowY: t.box.y1 + 1 });
+    return { name: t.name + '_r', data: res.data, box: t.box, size: res.size, cells: 0, offset: t.offset, remove: true };
+  });
+}
+
+// Every rail of the city set again with its exact shape, once the whole city is
+// in. The game reshapes a rail to the rails beside it as it goes in, and the city
+// goes in a tile at a time: a curve at a tile's edge, its neighbour not in yet,
+// turned itself straight, and stayed so. Straights and climbs first, the curves
+// last (both their neighbours there when they go in).
+export function railLines(world, dx, dz) {
+  const rails = [];
+  world.forEach((x, y, z, id) => {
+    const d = MATERIALS.def(id);
+    if (d.block !== 'minecraft:rail' && d.block !== 'minecraft:golden_rail') return;
+    const st = d.states.rail_direction, dir = st ? (st.value ?? st) : 0;
+    rails.push({ x, y, z, golden: d.block === 'minecraft:golden_rail', dir: Number(dir) });
+  });
+  const rank = (r) => (r.dir >= 6 ? 2 : r.dir >= 2 ? 1 : 0);
+  rails.sort((a, b) => rank(a) - rank(b));
+  return rails.map((r) => `setblock ${rel(r.x - dx)} ${rel(r.y - GROUND_DROP)} ${rel(r.z - dz)} ${r.golden ? `minecraft:golden_rail ["rail_data_bit"=true,"rail_direction"=${r.dir}]` : `minecraft:rail ["rail_direction"=${r.dir}]`}`);
+}
+
 // ---- mob structures ------------------------------------------------------------
 // Villagers and golems travel inside entity-only structures (no blocks, every
 // cell structure void), one per 64x64 tile, so they arrive wherever blocks do.
@@ -421,6 +459,21 @@ export function functionFiles(tiles, world, opts = {}) {
     `say Polis: city placed. When it has finished appearing, run /function ${ns}/${pop} from this same spot.`,
     ...(pop === 'populate_centered' ? [`say Polis: this spot is marked by an armor stand. To come back to it: /tp @s @e[type=armor_stand,name=${anchor},c=1]`] : []),
   ].join('\n') + '\n';
+  const railCache = new Map();
+  const rails = (dx, dz) => { const k = dx + ',' + dz; if (!railCache.has(k)) railCache.set(k, railLines(world, dx, dz)); return railCache.get(k); };
+  // remove: every entity but players in the city's room taken away first (nothing
+  // buried), then the city taken away, the ticking areas let go
+  const removeTiles = world.cityGround ? tiles.map((t) => ({ ...t, name: t.name + '_r' })) : [];
+  const remove = (dx, dz) => [
+    '# Polis: take this city away. Run from the same spot as build (or build_centered for remove_centered).',
+    '# Everything the city put above its ground goes back to air, its ground to grass, everything under it to dirt.',
+    '# Every entity in the city\'s room that is not a player (villagers, animals, minecarts, items...) is removed first.',
+    `say Polis: taking the city away...`,
+    `kill @e[type=!player,x=${rel(wb.x0 - dx)},y=${rel(wb.y0 - GROUND_DROP)},z=${rel(wb.z0 - dz)},dx=${wb.x1 - wb.x0},dy=${wb.y1 - wb.y0 + 8},dz=${wb.z1 - wb.z0}]`,
+    ...removeTiles.map((t) => load(t, dx, dz)),
+    ...areas.map((a) => `tickingarea remove ${a.name}`),
+    'say Polis: the city is gone. Run it again from the same spot if any of it was not loaded.',
+  ].join('\n') + '\n';
   const populate = (dx, dz, title) => [
     `# ${title}`,
     `# ${villagers} villagers, ${golems} iron golems, ${cats} cats, ${pandas} pandas and ${animals.length} farm animals ` +
@@ -430,6 +483,7 @@ export function functionFiles(tiles, world, opts = {}) {
     `say Polis: bringing in ${villagers} villagers, ${golems} golems, ${cats} cats, ${pandas} pandas, ` +
       `${animals.length} farm animals` + (summoned.length ? `, ${summonedNote()}...` : '...'),
     ...mobs.map((t) => load(t, dx, dz)),
+    ...(rails(dx, dz).length ? ['say Polis: setting every rail again (a curve can straighten itself while the city goes in)...', ...rails(dx, dz)] : []),
     ...summoned.map((p) => sumLine(p, dx, dz)),
     ...(inPop ? [`say Polis: and ${hostiles.length} hostile mobs.`, ...hostiles.map((p) => hostLine(p, dx, dz)), ...hostileWarnings] : []),
     ...areas.map((a) => `tickingarea remove ${a.name}`),
@@ -442,6 +496,17 @@ export function functionFiles(tiles, world, opts = {}) {
       text: build(wb.x0, wb.z0, 'Polis: city corner at your feet', 'populate') },
     { name: `functions/${ns}/build_centered.mcfunction`, fn: `${ns}/build_centered`,
       text: build(cx, cz, 'Polis: city centred on you', 'populate_centered') },
+    // (only where the city has track)
+    ...(rails(wb.x0, wb.z0).length ? [
+      { name: `functions/${ns}/rails.mcfunction`, fn: `${ns}/rails`,
+        text: ['# Polis: every rail set again with its exact shape. Run from the same spot as build.', ...rails(wb.x0, wb.z0)].join('\n') + '\n' },
+      { name: `functions/${ns}/rails_centered.mcfunction`, fn: `${ns}/rails_centered`,
+        text: ['# Polis: every rail set again with its exact shape. Run from the same spot as build_centered.', ...rails(cx, cz)].join('\n') + '\n' },
+    ] : []),
+    ...(removeTiles.length ? [
+      { name: `functions/${ns}/remove.mcfunction`, fn: `${ns}/remove`, text: remove(wb.x0, wb.z0) },
+      { name: `functions/${ns}/remove_centered.mcfunction`, fn: `${ns}/remove_centered`, text: remove(cx, cz) },
+    ] : []),
     { name: `functions/${ns}/populate.mcfunction`, fn: `${ns}/populate`,
       text: populate(wb.x0, wb.z0, 'Polis: villagers, golems and minecarts (pairs with build)') },
     { name: `functions/${ns}/populate_centered.mcfunction`, fn: `${ns}/populate_centered`,
@@ -539,6 +604,8 @@ export function placementGuide(tiles, opts = {}) {
     L.push('');
   }
   if (opts.centre) L.push('The city centre is a diamond monument with beacons on top: build_centered puts you in its alcove, under the sign.');
+  L.push('To take the city away again: /function <city id>/remove_centered from the build_centered spot (or remove from the build spot).'.replace('<city id>', opts.namespace || 'polis'));
+  L.push('  It clears the city to a clean site (grass on the city\'s own ground) and removes every non-player entity in the area.');
   if (opts.plugs) L.push('Underground: build first fills every room under the city (cellars, crypt, metro) with stone, then the city puts the rooms back: the world\'s own groundwater cannot get in at the edge of a tile not yet loaded.');
   L.push(`build_centered also leaves an armor stand on its spot (named ${centreAnchor(ns)}). Run populate_centered`);
   L.push('  from that spot; if you have moved, go back to it first:');
@@ -612,7 +679,7 @@ export async function exportPack(world, optsIn = {}) {
   // the city's marked centre unless the caller names one
   const opts = { ...optsIn, centre: optsIn.centre || world.centre };
   const tiles = tileList(world, opts);
-  const structures = buildStructures(world, opts).concat(buildDrainStructures(world, opts), buildPlugStructures(world, opts));
+  const structures = buildStructures(world, opts).concat(buildDrainStructures(world, opts), buildPlugStructures(world, opts), buildRemoveStructures(world, opts));
   const mobStructs = buildMobStructures(opts.spawns, opts);
   const guide = placementGuide(tiles, { ...opts, dome: !!world.dome, stilts: !!world.stiltGrid, floating: !!world.floating, plugs: !!(world.airBoxes && world.airBoxes.length) });
   const fns = functionFiles(tiles, world, { ...opts, mobTiles: mobStructs });
@@ -626,7 +693,7 @@ export async function exportPack(world, optsIn = {}) {
 
 export async function exportStructuresZip(world, opts = {}) {
   const tiles = tileList(world, opts);
-  const structures = buildStructures(world, opts).concat(buildDrainStructures(world, opts), buildPlugStructures(world, opts));
+  const structures = buildStructures(world, opts).concat(buildDrainStructures(world, opts), buildPlugStructures(world, opts), buildRemoveStructures(world, opts));
   const mobStructs = buildMobStructures(opts.spawns, opts);
   const guide = placementGuide(tiles, { ...opts, dome: !!world.dome, stilts: !!world.stiltGrid, floating: !!world.floating, plugs: !!(world.airBoxes && world.airBoxes.length) });
   const fns = functionFiles(tiles, world, { ...opts, mobTiles: mobStructs });
