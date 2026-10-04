@@ -154,17 +154,31 @@ export function planBridges(plan, cfg, districts) {
   const width = Math.max(7, Math.min(9, (cfg.streetWidth | 0 || 5) + 2));
   const half = width >> 1;
   const spans = [];
-  const inMain = (i) => main.has(i);
-
-  for (const other of districts.slice(1)) {
-    let best = straightCrossing(W, D, other, inMain);
-    if (best) {
-      best.path = stepsAlong(best.from, best.to);
-      best.angled = false;
-    } else {
-      best = angledCrossing(W, D, other, main, half);
+  // Joined in a chain: each district to whatever is joined already (downtown's
+  // district, the districts bridged so far, their bridges), the nearest first, so
+  // a district reached only through another is still reached. (Each used to be
+  // bridged only to downtown's, and one more than a span away from it, behind
+  // another, was left with no road or rail to the rest.)
+  const joined = new Set(main);
+  const left = districts.slice(1);
+  while (left.length) {
+    const inJoined = (i) => joined.has(i);
+    let pick = null;
+    for (let k = 0; k < left.length; k++) {
+      const other = left[k];
+      let best = straightCrossing(W, D, other, inJoined);
+      if (best) { best.path = stepsAlong(best.from, best.to); best.angled = false; }
+      else best = angledCrossing(W, D, other, joined, half);
+      if (!best) continue;
+      const len = Math.abs(best.from[0] - best.to[0]) + Math.abs(best.from[1] - best.to[1]);
+      if (!pick || len < pick.len) pick = { k, best, len };
     }
-    if (best) spans.push({ ...best, width, half });
+    if (!pick) break;                                        // nothing left can be reached
+    const other = left.splice(pick.k, 1)[0];
+    spans.push({ ...pick.best, width, half });
+    for (const i of other) joined.add(i);
+    for (let k = 0; k < pick.best.path.length; k++)
+      for (const [cx, cz] of stripAt(pick.best.path, k, half)) if (cx >= 0 && cz >= 0 && cx < W && cz < D) joined.add(cz * W + cx);
   }
 
   // the deck's cells become street, so the city builds and exports them

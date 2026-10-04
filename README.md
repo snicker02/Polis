@@ -1,4 +1,4 @@
-# Polis v0.37.0
+# Polis v0.37.1
 
 *Created with help from Claude AI.*
 
@@ -60,7 +60,7 @@ npm run combine                  # adds the batches up into one result
 npm run validate:list            # every section, and how long it took last time
 ```
 
-The suite (62 sections, about twelve minutes of machine time) is run in pieces:
+The suite (63 sections, about eleven minutes of machine time) is run in pieces:
 each run writes a shard to `.validate/`, and `npm run combine` adds them into
 one total. The combiner will not report a pass if a section was missed,
 counted twice, or measured before the newest source file changed.
@@ -761,6 +761,28 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.37.1** — Every district joined to the rest.
+
+A city fitted to real ground can fall into districts (land split by water, or
+by ground too high or low to build on), and bridges join them. Each was bridged
+only to downtown's district, by a crossing of at most 96: a district further
+than that, reachable only through another, got no bridge, so no road or rail to
+the rest (it kept its own streets and track, cut off). And the reach check walks
+from every district's own streets, so nothing noticed. Now the districts are
+joined in a chain (bridges.js: planBridges), the nearest first, each to whatever
+is joined already: downtown's district, the districts bridged so far and their
+bridges. A district behind another is reached through it. Where a bridge's
+straight run meets higher ground, the ground is cut through at the deck (its
+cells are city street, cleared by air fill), as before. A single bridge comes
+out as it did.
+
+New section 2zx (5 checks), on a made landscape (three masses west to east, two
+channels of water, downtown in the west, the east more than a span from it) and
+on the test terrain's split site: the far district bridged through the middle,
+every district reached on foot from downtown's streets across the bridges, one
+rail network touching every district, track across every bridge, every building
+walking through.
 
 **0.37.0** — Lots that step on rugged ground.
 

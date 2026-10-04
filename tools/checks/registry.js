@@ -58,6 +58,7 @@ export const SECTIONS = [
   { id: '2zu', file: '2zu-metro.js',                           group: 'fast' },
   { id: '2zv', file: '2zv-settings.js',                        group: 'fast' },
   { id: '2zw', file: '2zw-stepped-terrain.js',                 group: 'fast' },
+  { id: '2zx', file: '2zx-districts-joined.js',                group: 'fast' },
   { id: '2v', file: '2v-java-worlds.js',                      group: 'fast' },
   { id: '2w', file: '2w-square-stadium-cemetery-allotments.js', group: 'slow' },
   { id: '2x', file: '2x-village-style.js',                    group: 'fast' },
