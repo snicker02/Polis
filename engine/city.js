@@ -688,7 +688,9 @@ export function generateCity(cfgIn, onProgress) {
   else applyStyle(world, plan, STYLE, (x, z) => GROUND + elevAt(x, z));
 
   // ---- the bridges between districts -----------------------------------------
-  const bridges = bridgeSpans.length ? buildBridges(world, plan, bridgeSpans, hills, GROUND, cfg.terrain, buildings, cfg.transit !== 'roads' ? transit : null) : [];
+  // (ringed whole, a deck is not bent toward a ring: the loop already runs over
+  // it, and a deck bent on over the land paved over the loop's own track there)
+  const bridges = bridgeSpans.length ? buildBridges(world, plan, bridgeSpans, hills, GROUND, cfg.terrain, buildings, cfg.transit !== 'roads' && !(transit && transit.ringedWhole) ? transit : null) : [];
   if (bridges.length && transit && cfg.transit !== 'roads') {
     bridgeRails(world, bridges, transit, GROUND);
     // ringed whole: the loop, now on the decks, shaped as a cart can run it
@@ -707,7 +709,15 @@ export function generateCity(cfgIn, onProgress) {
   // left leading nowhere is taken up. It has to come last: each of those
   // steps can sever a line, and a sweep run before them would tidy a world
   // that no longer exists.
+  // every line shaped as a cart can run it, before anything is swept up as
+  // stranded: a loop rail a bridge's approach took away laid again on the ground
+  // there, then ramps, no dips, no curve below a neighbour (a curve cannot climb),
+  // every rail from its neighbours
+  if (transit && cfg.transit !== 'roads') for (const line of transit.lines) shapeLine(world, line, { relay: true });
   if (transit && cfg.transit !== 'roads') sweepStrandedRails(world, transit, GROUND);
+  // (and again after the sweep, which can take a loop's cell up: a loop is the
+  // one track that must close, so its gaps are filled and laid again)
+  if (transit && cfg.transit !== 'roads') for (const line of transit.lines) shapeLine(world, line, { relay: !!line.loop });
 
   // ---- the centre marker -----------------------------------------------------
   const centre = cfg.centreMark ? markCentre(world, plan, buildings, GROUND, elevAt, spawns, stairRuns) : null;
@@ -1092,7 +1102,32 @@ function buildSkirt(world, plan, hills, terrain, G, buildings = []) {
 // lower than both its neighbours (a dip, from a street dipping a block for a
 // cell); then every rail is shaped from its two neighbours and their heights: a
 // slope where the next one up is, else straight or curved.
-export function shapeLine(world, line) {
+export function shapeLine(world, line, opts = {}) {
+  // (relay: a short gap in the line's list, four cells or less, the list skipping
+  // a cell or two, is filled in, straight or round one corner through cells with
+  // no other rail in them; the rails go on below, and the shaping fits them)
+  if (opts.relay && line.cells.length > 2) {
+    const railHere = (x, z, y) => { for (let d = -3; d <= 3; d++) { const id = world.get(x, y + d, z); if (id >= 0 && /rail/.test(MATERIALS.def(id).block)) return true; } return false; };
+    const C = line.cells, out = [], ringed = !!line.loop;
+    for (let i = 0; i < C.length; i++) {
+      const a = C[i], b = ringed ? C[(i + 1) % C.length] : C[i + 1];
+      out.push(a);
+      if (!b || a.length < 3 || b.length < 3) continue;
+      const gap = Math.abs(a[0] - b[0]) + Math.abs(a[2] - b[2]);
+      if (gap < 2 || gap > 4) continue;
+      for (const corner of [[b[0], a[2]], [a[0], b[2]]]) {
+        const way = [];
+        for (const [p, q] of [[[a[0], a[2]], corner], [corner, [b[0], b[2]]]]) {
+          const sx = Math.sign(q[0] - p[0]), sz = Math.sign(q[1] - p[1]);
+          for (let x = p[0], z = p[1]; x !== q[0] || z !== q[1];) { x += sx; z += sz; if (!(x === b[0] && z === b[2])) way.push([x, z]); }
+        }
+        if (way.some(([x, z]) => railHere(x, z, a[1]))) continue;
+        for (const [x, z] of way) out.push([x, a[1], z]);
+        break;
+      }
+    }
+    line.cells = out;
+  }
   const cells = line.cells, n = cells.length;
   if (n < 3) return;
   const ring = !!line.loop;
@@ -1105,17 +1140,43 @@ export function shapeLine(world, line) {
     world.set(c[0], toY, c[2], id);
     c[1] = toY;
   };
-  for (let pass = 0, moved = 1; moved && pass < 64; pass++) {
+  // (each cell from where its rail is now: passes since may have moved it)
+  for (const c of cells) {
+    if (c.length < 3 || railAt(c[0], c[1], c[2])) continue;
+    let found = false;
+    for (let d = 1; d <= 4 && !found; d++) {
+      if (railAt(c[0], c[1] + d, c[2])) { c[1] += d; found = true; }
+      else if (railAt(c[0], c[1] - d, c[2])) { c[1] -= d; found = true; }
+    }
+    // (relay: a rail something since took away, a bridge's approach levelled
+    // under it, goes back on the ground there now; the shaping then fits it)
+    if (!found && opts.relay) {
+      for (let y = c[1] + 2; y >= c[1] - 8; y--) {
+        const id = world.get(c[0], y, c[2]);
+        if (id >= 0 && !MATERIALS.isPassable(id)) {
+          for (let h = 1; h <= 3; h++) if (!railAt(c[0], y + h, c[2])) world.clear(c[0], y + h, c[2]);
+          world.set(c[0], y + 1, c[2], railId(RAIL.NS)); c[1] = y + 1;
+          break;
+        }
+      }
+    }
+  }
+  const adj = (o, c) => o && o.length === 3 && Math.abs(o[0] - c[0]) + Math.abs(o[2] - c[2]) === 1;
+  for (let pass = 0, moved = 1; moved && pass < 96; pass++) {
     moved = 0;
     for (let k = 0; k < n; k++) {
       const c = at(k);
-      if (!c || c.length < 3) continue;
+      if (!c || c.length < 3 || !railAt(c[0], c[1], c[2])) continue;
       for (const o of [at(k - 1), at(k + 1)]) {
-        if (!o || o.length < 3 || Math.abs(o[0] - c[0]) + Math.abs(o[2] - c[2]) !== 1) continue;
+        if (!adj(o, c)) continue;
         if (o[1] - c[1] > 1) { lift(c, o[1] - 1); moved++; }            // a ramp up to a higher neighbour
       }
-      const a = at(k - 1), b = at(k + 1);
-      if ((ring || (k > 0 && k < n - 1)) && a && b && a.length === 3 && b.length === 3 && c[1] < a[1] && c[1] < b[1]) { lift(c, Math.min(a[1], b[1])); moved++; }   // no dips
+      const a = ring || k > 0 ? at(k - 1) : null, b = ring || k < n - 1 ? at(k + 1) : null;
+      if (!adj(a, c) || !adj(b, c)) continue;
+      const corner = (a[0] - c[0]) + (b[0] - c[0]) !== 0 || (a[2] - c[2]) + (b[2] - c[2]) !== 0;
+      // a corner is a curve, and a curve is flat: no neighbour may stand above it
+      if (corner && c[1] < Math.max(a[1], b[1])) { lift(c, Math.max(a[1], b[1])); moved++; continue; }
+      if (c[1] < a[1] && c[1] < b[1]) { lift(c, Math.min(a[1], b[1])); moved++; }                     // no dips
     }
   }
   const RISE_TO = (d) => (d[0] === 1 ? 2 : d[0] === -1 ? 3 : d[1] === -1 ? 4 : 5);
@@ -1126,6 +1187,10 @@ export function shapeLine(world, line) {
     const dir = (o) => [Math.sign(o[0] - c[0]), Math.sign(o[2] - c[2])];
     const da = a && a.length === 3 && Math.abs(a[0] - c[0]) + Math.abs(a[2] - c[2]) === 1 ? dir(a) : null;
     const db = b && b.length === 3 && Math.abs(b[0] - c[0]) + Math.abs(b[2] - c[2]) === 1 ? dir(b) : null;
+    // (where the line's list has a gap, a neighbour that is not next to it, the
+    // cell keeps the shape it was given: the rails beside it are the line's, not
+    // the list's, and a guess would cut it)
+    if ((a && !da) || (b && !db)) continue;
     let shape;
     if (db && b[1] === c[1] + 1) shape = RISE_TO(db);
     else if (da && a[1] === c[1] + 1) shape = RISE_TO(da);

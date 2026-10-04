@@ -190,6 +190,38 @@ export function layTransit(world, plan, mode, G) {
   // minO; its outlying districts have had rings of their own since they
   // started getting them, and nothing kept the lines off those.
   const ringGuard = new Uint8Array(W * D);
+  // A traced ring can skip a cell or two where the city's edge is ragged (big
+  // cities, real ground): rails go only on the ring's cells, so each skip was a
+  // gap in the track and the loop could not be ridden round. Every gap is closed
+  // by the shortest way through street between the cells either side of it,
+  // keeping off the rest of the ring.
+  for (const ring of [loop, ...extraLoops]) {
+    if (!ring || !ring.cells) continue;
+    const C = ring.cells, onRing = new Set(C.map(([x, z]) => x + ',' + z)), out = [];
+    for (let i = 0; i < C.length; i++) {
+      const a = C[i], b = C[(i + 1) % C.length];
+      out.push(a);
+      if (Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) <= 1) continue;
+      const prev = new Map([[a[0] + ',' + a[1], null]]), q = [[a[0], a[1], 0]];
+      let found = null;
+      while (q.length && !found) {
+        const [x, z, d] = q.shift();
+        if (d > 12) break;
+        for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const nx = x + dx, nz = z + dz, k = nx + ',' + nz;
+          if (prev.has(k)) continue;
+          if (nx === b[0] && nz === b[1]) { prev.set(k, x + ',' + z); found = k; break; }
+          if (!road(nx, nz) || onRing.has(k)) continue;
+          prev.set(k, x + ',' + z); q.push([nx, nz, d + 1]);
+        }
+      }
+      if (!found) continue;
+      const between = [];
+      for (let k = prev.get(found); k && k !== a[0] + ',' + a[1]; k = prev.get(k)) between.unshift(k.split(',').map(Number));
+      for (const c of between) { out.push(c); onRing.add(c[0] + ',' + c[1]); }
+    }
+    ring.cells = out;
+  }
   for (const ring of [loop, ...extraLoops]) {
     if (!ring) continue;
     for (const [x, z] of ring.cells)

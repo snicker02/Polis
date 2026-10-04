@@ -82,7 +82,9 @@ export default async function run(ctx) {
     }
     // and on the fitted test sites (hills: a street dipping a block for a cell
     // made a dip in the track a cart cannot take), every loop closed
-    for (const size of [160, 192]) {
+    // (and the bigger 256 ones, where a bridge's approach levelled away track
+    // beside its landing and the loop came out with gaps)
+    for (const size of [160, 192, 256]) {
       const sites = findSites(terrain, size, { step: 64 });
       for (let i = 0; i < Math.min(3, sites.length); i++) {
         const r = generateCity({ ...DEFAULTS, ...L, size, seed: 447261885, terrain: siteGround(terrain, sites[i].x, sites[i].z, size), transit: 'rails', bridges: true });

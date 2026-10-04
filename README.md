@@ -1,4 +1,4 @@
-# Polis v0.38.0
+# Polis v0.38.1
 
 *Created with help from Claude AI.*
 
@@ -761,6 +761,31 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.38.1** — The loop closed in big hilly cities.
+
+Read from a city built in the game (multi41144, 400 across, fitted), by the rail
+graph: the loop came out in pieces. Four causes, all fixed:
+
+- A curve where the track changes height (a curve is flat: it cannot climb).
+  shapeLine (city.js) now holds every line to the rules a cart needs: a block a
+  cell at most, no dip, and no curve below either neighbour, raising rails onto
+  gravel until they hold, then shaping each rail from its neighbours. It runs
+  last, on every line, from where each rail actually is.
+- Where a bridge lands on hilly ground, its approach is levelled, and the loop's
+  rails beside the landing went with it; the sweep then took the stranded pieces
+  up. Before the sweep, a loop rail that is gone is laid again on the ground
+  there, and a short gap in a line's list (four cells or less) is filled in,
+  straight or round a corner through cells with no other rail; and again after
+  the sweep for the loop, which is the one track that must close.
+- A traced ring could skip a cell or two where the edge is ragged: the gaps are
+  closed through street when the ring is traced (transit.js).
+- Ringed whole, a bridge's deck is no longer bent toward a ring.
+
+On the fitted test sites (160, 192 and 256 across) every loop is closed as a
+cart runs it, a district's own ring as well. 2zx checks the 256-across sites
+too. Short lines on very rugged ground can still come out in two pieces (each
+runs between its buffers).
 
 **0.38.0** — Bridges: narrower, centred, curving; one loop round every island by design.
 
