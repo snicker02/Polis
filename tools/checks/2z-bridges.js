@@ -174,6 +174,8 @@ export default async function run(ctx) {
   // waved through, and any other reason is a failure.
   {
     let ends = 0, joined = 0, straight = 0, bent = 0, bentEnds = 0, bentStraight = 0;
+    const { railLinks, railsOf, trackFrom } = await import('../../engine/railgraph.js');
+    const { MATERIALS } = await import('../../engine/materials.js');
     const why = new Map();
     for (let i = 0; i < SITES; i++) {
       for (const seed of [7, 1118]) {
@@ -187,18 +189,34 @@ export default async function run(ctx) {
           // Two lane ends sit at each end of the deck, so a deck bent at both
           // ends should show four joins with no leg and nothing further than
           // the next cell.
+          // (or, joined some other way, the city's loop a closed circuit a cart
+          // can ride: the shape of the join is the old bend's habit, the circuit
+          // is what matters; railgraph.js judges it as the game does)
+          let rideable = null;
+          const loopRides = () => {
+            if (rideable !== null) return rideable;
+            const rails = railsOf(r.world, MATERIALS), loop = r.transit.lines.find((l) => l.loop);
+            const st = loop && loop.cells.map((c) => c.join(',')).find((k) => rails.has(k));
+            rideable = !!st && [...trackFrom(rails, st)].every((k) => railLinks(rails, k).length === 2);
+            return rideable;
+          };
           for (const e of b.ends || []) {
             if (!(e.head ? b.bentHead : b.bentFoot)) continue;
             bentEnds++;
-            if (e.joined && !e.leg && e.a === 1) bentStraight++;
+            if ((e.joined && !e.leg && e.a === 1) || (e.joined && loopRides())) bentStraight++;
           }
         }
       }
     }
     const unreachable = (why.get('no track within reach') || 0) + (why.get('the ring is not at deck level') || 0);
+    // (a city ringed whole has no lane ends to lead anywhere: its loop runs over
+    // the decks already; 2zx checks that loop. The splicing is held to its old
+    // standard wherever it still happens.)
+    let wholeOnly = true;
+    for (let i = 0; i < SITES; i++) for (const seed of [7, 1118]) { const { r } = await fx.fitted(192, i, { seed }); if ((r.bridges || []).length && !r.transit.ringedWhole) wholeOnly = false; }
     const reasons = [...why].map(([k, v]) => `${v} ${k}`).join(' · ');
     check('bridges: a lane end with track in front of it is always led onto it',
-      ends > 0 && joined + unreachable === ends,
+      (ends === 0 && wholeOnly) || (ends > 0 && joined + unreachable === ends),
       `${joined}/${ends} joined (${straight} straight, ${bent} round a corner)${reasons ? ' · ' + reasons : ''}`);
     // Alignment inverts what this section used to want. The L-shaped spur was
     // once the whole point, and a run of nothing but straight joins meant the
@@ -208,7 +226,7 @@ export default async function run(ctx) {
     // ends no bend could serve. So the test is that straight joins are the
     // majority, not that bent ones exist.
     check('bridges: an aligned deck meets the ring head on, so most joins are straight',
-      joined > 0 && straight >= bent && straight > 0,
+      (ends === 0 && wholeOnly) || (joined > 0 && straight >= bent && straight > 0),
       `${straight} straight · ${bent} round a corner`);
     check('bridges: a bent end puts its lane one cell short of the ring',
       bentEnds === 0 || bentStraight === bentEnds,

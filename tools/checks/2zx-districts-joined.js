@@ -99,6 +99,32 @@ export default async function run(ctx) {
     check('districts: and that circuit runs through every district, across the bridges', short === 0, `${short} cities where it misses one`);
     check('loops: on every fitted test site the loop is closed (no dips a cart cannot take)', loopsOpen === 0 && sitesChecked >= 4, `${loopsOpen} open over ${sitesChecked} sites`);
   }
+  // bridges: five across (two tracks, a kerb either side), carrying a street on
+  // centred at both ends, curving (straight runs and square corners) where the
+  // streets do not line up; and the loop rides round over them, one closed circuit
+  {
+    const { railLinks, railsOf, trackFrom } = await import('../../engine/railgraph.js');
+    const land = (size, wet) => { const g = new Float32Array(size * size).fill(64), w = new Uint8Array(size * size); for (let z = 0; z < size; z++) for (let x = 0; x < size; x++) if (wet(x, z)) { w[z * size + x] = 1; g[z * size + x] = 62; } return { ground: g, raw: g, water: w, baseY: 64, size, x0: 0, z0: 0, exact: false, surface: null, coverage: 1, waterShare: 0.2, buildableShare: 0.8, p05: 64, p95: 64 }; };
+    const made = [
+      generateCity({ ...DEFAULTS, ...L, size: 224, seed: 447261885, focal: [0.27, 0.31], transit: 'rails', bridges: true, terrain: land(224, (x, z) => !((x - 60) ** 2 + (z - 70) ** 2 < 55 ** 2 || (x - 170) ** 2 + (z - 160) ** 2 < 45 ** 2)) }),
+      generateCity({ ...DEFAULTS, ...L, size: 256, seed: 7, focal: [0.27, 0.5], transit: 'rails', bridges: true, terrain: land(256, (x, z) => !((x - 70) ** 2 + (z - 128) ** 2 < 60 ** 2 || (x - 180) ** 2 + (z - 60) ** 2 < 40 ** 2 || (x - 190) ** 2 + (z - 200) ** 2 < 42 ** 2)) }),
+    ];
+    let wide = 0, offStreet = 0, curved = 0, openLoops = 0, missed = 0, all = 0;
+    for (const r of [...made, ...cities.map(([, c]) => c)]) {
+      const { W, use } = r.plan, street = ([x, z]) => use[z * W + x] === USE.ROAD || use[z * W + x] === USE.SIDEWALK;
+      for (const b of r.bridges) { all++; if (2 * b.half + 1 !== 5) wide++; if (!street(b.from) || !street(b.to)) offStreet++; if (b.curved) curved++; }
+      const rails = railsOf(r.world, MATERIALS), loop = r.transit.lines.find((l) => l.loop);
+      const st = loop && loop.cells.map((c) => c.join(',')).find((k) => rails.has(k));
+      if (!st) { openLoops++; continue; }
+      const t = trackFrom(rails, st);
+      if ([...t].some((k) => railLinks(rails, k).length !== 2)) openLoops++;
+      if (!r.plan.districts.every((d) => [...t].some((k) => { const [x, , z] = k.split(',').map(Number); return d.has(z * W + x); }))) missed++;
+    }
+    check('bridges: five across (two tracks, a kerb either side)', wide === 0 && all > 0, `${wide} of ${all} not`);
+    check('bridges: each carries a street on, landing on one at both ends (centred, not off to one side)', offStreet === 0, `${offStreet} off the street`);
+    check('bridges: where the streets do not line up, a bridge curves (square corners)', curved >= 2, `${curved} curved`);
+    check('bridges: over straight and curved bridges alike, the loop one closed circuit through every district', openLoops === 0 && missed === 0, `${openLoops} open, ${missed} missing a district`);
+  }
   check('districts: the made landscape falls into three, the far one bridged through the middle', cities[0][1].plan.districts.length === 3 && cities[0][1].bridges.length === 2);
   check('districts: every one reached on foot from downtown\'s streets, across the bridges', notReached === 0, `${notReached} not reached`);
   check('districts: one rail network touches every district', railSplit === 0, `${railSplit} cities split`);

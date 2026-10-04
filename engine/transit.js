@@ -95,7 +95,30 @@ export function layTransit(world, plan, mode, G) {
   // city split into districts and joined by bridges has several edges, so the
   // loop follows the main district and the outlying ones are reached by the
   // bridge instead of being ringed as well.
-  const main = plan.districts && plan.districts.length > 1 ? plan.districts[0] : null;
+  // A city whose districts the bridges join is ringed whole: the loop traced over
+  // all of it, bridge decks included. On a deck five across, the contour two in
+  // from its edge is the two lane rows, so the one loop crosses every bridge out
+  // on one side and back on the other, round every district: one circuit by its
+  // shape (splicing each district's own ring onto the bridges after the fact went
+  // wrong over and over). Only if that does not close is the old way taken.
+  let main = plan.districts && plan.districts.length > 1 ? plan.districts[0] : null;
+  if (main && plan.bridged) {
+    const Ow = edgeDistance(plan);
+    for (const k of [2, 3]) {
+      const cyc = traceContour(W, D, (x, z) => Ow[z * W + x] >= k && road(x, z));
+      if (!cyc || cyc.length < 40) continue;
+      const touches = plan.districts.every((d) => cyc.some(([x, z]) => d.has(z * W + x)));
+      // and never beside itself: two stretches of one ring side by side (where a
+      // deck pinches against its bank) would run into each other in the game
+      const at = new Map(); cyc.forEach(([x, z], i) => at.set(x + ',' + z, i));
+      const n = cyc.length;
+      const besideItself = cyc.some(([x, z], i) => [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dz]) => {
+        const j = at.get((x + dx) + ',' + (z + dz));
+        return j !== undefined && Math.min((j - i + n) % n, (i - j + n) % n) > 1;
+      }));
+      if (touches && !besideItself) { main = null; plan.unionLoop = { k, cells: cyc }; break; }
+    }
+  }
   const inMain = (x, z) => !main || main.has(z * W + x);
   // Two measures of "how far in from the edge": one for the whole city, which
   // decides where the ordinary lines may run, and one for the main district
@@ -103,8 +126,8 @@ export function layTransit(world, plan, mode, G) {
   // leaves the outlying districts with no lines at all.
   const O = edgeDistance(plan);
   const Oloop = main ? edgeDistance(plan, (x, z) => inMain(x, z)) : O;
-  let loop = null;
-  {
+  let loop = plan.unionLoop || null;                          // (the whole city's first: a tidy rectangle would miss the bridges)
+  if (!loop) {
     const body = main || (() => { const set = new Set(); for (let i = 0; i < W * D; i++) if (road(i % W, (i - (i % W)) / W)) set.add(i); return set; })();
     const rect = rectRing(W, D, body, (x, z) => road(x, z) && inMain(x, z) && Oloop[z * W + x] >= 2);
     if (rect) loop = { k: 3, cells: rect };
@@ -120,6 +143,7 @@ export function layTransit(world, plan, mode, G) {
   // all, and with it go every curved rail in the city. So when that fails,
   // the edge is walked instead — a contour always closes, however ragged the
   // shape — and the walk is tidied into a circuit.
+  if (!loop && plan.unionLoop) loop = plan.unionLoop;           // the whole city's, bridges and all
   if (!loop) {
     for (const k of [3, 2, 4]) {
       const cyc = traceContour(W, D, (x, z) => Oloop[z * W + x] >= k && road(x, z) && inMain(x, z));
@@ -130,6 +154,7 @@ export function layTransit(world, plan, mode, G) {
     }
   }
   const extraLoops = [];
+  const ringedWhole = !!plan.unionLoop && loop === plan.unionLoop;
   if (main) {
     for (const d of plan.districts.slice(1)) {
       if (d.size < 600) continue;               // too small to be worth a circuit
@@ -353,7 +378,7 @@ export function layTransit(world, plan, mode, G) {
   stats.lines = lines.length;
   // one cart per line, on its first station
   const carts = lines.map((l) => ({ type: 'minecart', x: l.stations[0][0], y: l.stations[0][1], z: l.stations[0][2] }));
-  return { mode, lines, carts, stats };
+  return { mode, lines, carts, stats, ringedWhole };
 }
 
 // Trees are planted after the railway, and a canopy can hang into the two

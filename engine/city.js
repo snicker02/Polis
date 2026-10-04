@@ -241,6 +241,8 @@ export function generateCity(cfgIn, onProgress) {
   const harbourPlan = planHarbour(plan, canal, cfg);
   // districts the outline kept but could not join up: give them viaducts
   const bridgeSpans = planBridges(plan, cfg, plan.districts || []);
+  // (bridged: the transit rings the whole city, decks and all; see transit.js)
+  plan.bridged = bridgeSpans.length > 0 && cfg.transit !== 'roads';
   const at = (x, z) => z * W + x;
 
   // ---- base + surface ------------------------------------------------------
@@ -687,7 +689,11 @@ export function generateCity(cfgIn, onProgress) {
 
   // ---- the bridges between districts -----------------------------------------
   const bridges = bridgeSpans.length ? buildBridges(world, plan, bridgeSpans, hills, GROUND, cfg.terrain, buildings, cfg.transit !== 'roads' ? transit : null) : [];
-  if (bridges.length && transit && cfg.transit !== 'roads') bridgeRails(world, bridges, transit, GROUND);
+  if (bridges.length && transit && cfg.transit !== 'roads') {
+    bridgeRails(world, bridges, transit, GROUND);
+    // ringed whole: the loop, now on the decks, shaped as a cart can run it
+    if (transit.ringedWhole) for (const line of transit.lines) if (line.loop) shapeLine(world, line);
+  }
 
   // ---- blending the edge into the land ---------------------------------------
   const skirt = cfg.terrain && hills.rolling ? buildSkirt(world, plan, hills, cfg.terrain, GROUND, buildings) : 0;
@@ -1079,6 +1085,58 @@ function buildSkirt(world, plan, hills, terrain, G, buildings = []) {
 // Three things then need doing: move the records (cells, stations, carts) up
 // with it, turn the rails where the street steps into climbing rails so a cart
 // can ride them, and clear the space above so nothing is in the way.
+// ---- a line of track shaped as a cart can run it ---------------------------------------
+// Track changes height only up a slope, a block a cell, and a slope rises one way.
+// So: where the next rail is two or more higher (a bridge deck above its bank),
+// the lower ones are raised a block a cell onto gravel, a ramp; no rail is left
+// lower than both its neighbours (a dip, from a street dipping a block for a
+// cell); then every rail is shaped from its two neighbours and their heights: a
+// slope where the next one up is, else straight or curved.
+export function shapeLine(world, line) {
+  const cells = line.cells, n = cells.length;
+  if (n < 3) return;
+  const ring = !!line.loop;
+  const railAt = (x, y, z) => { const id = world.get(x, y, z); return id >= 0 && /rail/.test(MATERIALS.def(id).block); };
+  const at = (k) => (ring ? cells[((k % n) + n) % n] : cells[k]);
+  const lift = (c, toY) => {
+    const id = railAt(c[0], c[1], c[2]) ? world.get(c[0], c[1], c[2]) : railId(RAIL.NS);
+    for (let y = c[1]; y < toY; y++) world.set(c[0], y, c[2], MAT.GRAVEL);
+    for (let h = 1; h <= 2; h++) if (world.has(c[0], toY + h, c[2]) && !railAt(c[0], toY + h, c[2])) world.clear(c[0], toY + h, c[2]);
+    world.set(c[0], toY, c[2], id);
+    c[1] = toY;
+  };
+  for (let pass = 0, moved = 1; moved && pass < 64; pass++) {
+    moved = 0;
+    for (let k = 0; k < n; k++) {
+      const c = at(k);
+      if (!c || c.length < 3) continue;
+      for (const o of [at(k - 1), at(k + 1)]) {
+        if (!o || o.length < 3 || Math.abs(o[0] - c[0]) + Math.abs(o[2] - c[2]) !== 1) continue;
+        if (o[1] - c[1] > 1) { lift(c, o[1] - 1); moved++; }            // a ramp up to a higher neighbour
+      }
+      const a = at(k - 1), b = at(k + 1);
+      if ((ring || (k > 0 && k < n - 1)) && a && b && a.length === 3 && b.length === 3 && c[1] < a[1] && c[1] < b[1]) { lift(c, Math.min(a[1], b[1])); moved++; }   // no dips
+    }
+  }
+  const RISE_TO = (d) => (d[0] === 1 ? 2 : d[0] === -1 ? 3 : d[1] === -1 ? 4 : 5);
+  for (let k = 0; k < n; k++) {
+    const c = cells[k];
+    if (c.length < 3 || !railAt(c[0], c[1], c[2])) continue;
+    const a = ring || k > 0 ? at(k - 1) : null, b = ring || k < n - 1 ? at(k + 1) : null;
+    const dir = (o) => [Math.sign(o[0] - c[0]), Math.sign(o[2] - c[2])];
+    const da = a && a.length === 3 && Math.abs(a[0] - c[0]) + Math.abs(a[2] - c[2]) === 1 ? dir(a) : null;
+    const db = b && b.length === 3 && Math.abs(b[0] - c[0]) + Math.abs(b[2] - c[2]) === 1 ? dir(b) : null;
+    let shape;
+    if (db && b[1] === c[1] + 1) shape = RISE_TO(db);
+    else if (da && a[1] === c[1] + 1) shape = RISE_TO(da);
+    else if (da && db) shape = da[0] + db[0] === 0 && da[1] + db[1] === 0 ? (db[0] ? RAIL.EW : RAIL.NS)
+      : (() => { const sx = da[0] + db[0], sz = da[1] + db[1]; return sx > 0 ? (sz > 0 ? RAIL.SE : RAIL.NE) : (sz > 0 ? RAIL.SW : RAIL.NW); })();
+    else { const d = db || da; if (!d) continue; shape = d[0] ? RAIL.EW : RAIL.NS; }
+    const golden = MATERIALS.def(world.get(c[0], c[1], c[2])).block === 'minecraft:golden_rail';
+    world.set(c[0], c[1], c[2], golden && shape < 6 ? poweredRailId(shape) : railId(shape));
+  }
+}
+
 function shiftTransit(world, transit, elevAt, G) {
   const up = ([x, y, z]) => [x, y + elevAt(x, z), z];
   for (const line of transit.lines) {
@@ -1208,49 +1266,8 @@ function shiftTransit(world, transit, elevAt, G) {
         const id = world.get(x, y + h, z);
         if (id >= 0 && !MATERIALS.isPassable(id)) world.clear(x, y + h, z);
       }
-  // No dips. A rail lower than both its neighbours is a step down and up again
-  // that a cart cannot take (a slope rises one way only), and a street that dips
-  // a block for one cell made one. It is lifted to the lower neighbour's height,
-  // on gravel, until there are none (a peak is fine: a slope rises to it from
-  // either side). Then every rail of the line is shaped from its two neighbours
-  // and their heights: a slope where the next one up is, else straight or curved.
-  const RISE_TO = (d) => (d[0] === 1 ? 2 : d[0] === -1 ? 3 : d[1] === -1 ? 4 : 5);
-  for (const line of transit.lines) {
-    const cells = line.cells, n = cells.length;
-    if (n < 3) continue;
-    const ring = !!line.loop;
-    const at = (k) => (ring ? cells[(k + n) % n] : cells[k]);
-    for (let pass = 0, moved = 1; moved && pass < 8; pass++) {
-      moved = 0;
-      for (let k = ring ? 0 : 1; k < (ring ? n : n - 1); k++) {
-        const c = at(k), a = at(k - 1), b = at(k + 1);
-        if (!a || !b || c.length < 3 || a.length < 3 || b.length < 3) continue;
-        if (c[1] < a[1] && c[1] < b[1] && railAt(c[0], c[1], c[2])) {
-          const id = world.get(c[0], c[1], c[2]);
-          world.set(c[0], c[1], c[2], MAT.GRAVEL);
-          for (let h = 1; h <= 2; h++) if (world.has(c[0], c[1] + h, c[2]) && !railAt(c[0], c[1] + h, c[2])) world.clear(c[0], c[1] + h, c[2]);
-          world.set(c[0], c[1] + 1, c[2], id);
-          c[1] += 1; moved++;
-        }
-      }
-    }
-    for (let k = 0; k < n; k++) {
-      const c = cells[k];
-      if (c.length < 3 || !railAt(c[0], c[1], c[2])) continue;
-      const a = at(k - 1), b = at(k + 1);
-      const dir = (o) => (o ? [Math.sign(o[0] - c[0]), Math.sign(o[2] - c[2])] : null);
-      const da = a && Math.abs(a[0] - c[0]) + Math.abs(a[2] - c[2]) === 1 ? dir(a) : null;
-      const db = b && Math.abs(b[0] - c[0]) + Math.abs(b[2] - c[2]) === 1 ? dir(b) : null;
-      let shape;
-      if (db && b[1] === c[1] + 1) shape = RISE_TO(db);
-      else if (da && a[1] === c[1] + 1) shape = RISE_TO(da);
-      else if (da && db) shape = da[0] + db[0] === 0 && da[1] + db[1] === 0 ? (db[0] ? RAIL.EW : RAIL.NS)
-        : (() => { const sx = da[0] + db[0], sz = da[1] + db[1]; return sx > 0 ? (sz > 0 ? RAIL.SE : RAIL.NE) : (sz > 0 ? RAIL.SW : RAIL.NW); })();
-      else { const d = db || da; if (!d) continue; shape = d[0] ? RAIL.EW : RAIL.NS; }
-      const golden = MATERIALS.def(world.get(c[0], c[1], c[2])).block === 'minecraft:golden_rail';
-      world.set(c[0], c[1], c[2], golden && shape < 6 ? poweredRailId(shape) : railId(shape));
-    }
-  }
+  for (const line of transit.lines) shapeLine(world, line);
+
 }
 
 // ---- street names ------------------------------------------------------------

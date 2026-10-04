@@ -106,6 +106,18 @@ function stripAt(path, k, half) {
       out.push([x, z, w]);
     }
   }
+  // at a corner the deck turns full width, a square (the two crossings alone left
+  // the outside of the bend open: the deck pinched there, and the loop two in from
+  // its edge could not get round)
+  if (dirs.length === 2 && (dirs[0][0] !== dirs[1][0] || dirs[0][1] !== dirs[1][1])) {
+    const p = perpOf(dirs[0]);
+    for (let dz = -half; dz <= half; dz++) for (let dx = -half; dx <= half; dx++) {
+      const x = path[k][0] + dx, z = path[k][1] + dz, kk = key2(x, z);
+      if (seen.has(kk)) continue;
+      seen.add(kk);
+      out.push([x, z, Math.max(Math.abs(dx), Math.abs(dz)) * (p[0] * dx + p[1] * dz < 0 ? -1 : 1)]);
+    }
+  }
   return out;
 }
 
@@ -149,9 +161,9 @@ export function planBridges(plan, cfg, districts) {
   if (!cfg.bridges || districts.length < 2) return [];
   const { W, D, use } = plan;
   const main = districts[0];
-  // Two lanes and a rail: a bridge carries the traffic of the street it
-  // joins, and the loop has to be able to run across it.
-  const width = Math.max(7, Math.min(9, (cfg.streetWidth | 0 || 5) + 2));
+  // Two tracks, one each way, a kerb either side: five across, the tracks two
+  // apart (side by side they would run into each other). Wider was not needed.
+  const width = 5;
   const half = width >> 1;
   const spans = [];
   // Joined in a chain: each district to whatever is joined already (downtown's
@@ -166,9 +178,15 @@ export function planBridges(plan, cfg, districts) {
     let pick = null;
     for (let k = 0; k < left.length; k++) {
       const other = left[k];
-      let best = straightCrossing(W, D, other, inJoined);
-      if (best) { best.path = stepsAlong(best.from, best.to); best.angled = false; }
-      else best = angledCrossing(W, D, other, joined, half);
+      // a street carried on across, centred on it: straight if its line reaches
+      // the far side's street, else curving from the end of one street to the
+      // end of another; only then the old searches
+      let best = centredCrossing(plan, other, inJoined, half) || curvedCrossing(plan, other, inJoined, half);
+      if (!best) {
+        best = straightCrossing(W, D, other, inJoined);
+        if (best) { best.path = stepsAlong(best.from, best.to); best.angled = false; }
+        else best = angledCrossing(W, D, other, joined, half);
+      }
       if (!best) continue;
       const len = Math.abs(best.from[0] - best.to[0]) + Math.abs(best.from[1] - best.to[1]);
       if (!pick || len < pick.len) pick = { k, best, len };
@@ -231,6 +249,139 @@ function straightCrossing(W, D, other, inMain) {
     let lo = Infinity, hi = -Infinity;
     for (const i of other) { if (i % W !== x) continue; const z = (i - (i % W)) / W; lo = Math.min(lo, z); hi = Math.max(hi, z); }
     if (lo <= hi) { consider(x, lo, 'z'); consider(x, hi, 'z'); }
+  }
+  return best;
+}
+
+// ---- a street carried on across -------------------------------------------------
+// A bridge carries a street on: it leaves on a street's centre line and lands on
+// one (it used to take the shortest gap along any row, and landed off the street).
+// The streets: the corridors' centre lines; where one leaves a district, the last
+// cell in it is an exit, heading out.
+function streetExits(plan, inSet, half) {
+  const { W, D, use, corridors } = plan;
+  const street = (x, z) => x >= 0 && z >= 0 && x < W && z < D && (use[z * W + x] === USE.ROAD || use[z * W + x] === USE.SIDEWALK);
+  const exits = [];
+  for (const c of corridors || []) {
+    if (c.w < 3) continue;
+    const alongX = c.axis === 'x';
+    const a = alongX ? Math.floor((c.z0 + c.z1) / 2) : Math.floor((c.x0 + c.x1) / 2);
+    const u0 = alongX ? c.x0 : c.z0, u1 = alongX ? c.x1 : c.z1;
+    const cell = (u) => (alongX ? [u, a] : [a, u]);
+    for (let u = u0; u <= u1; u++) {
+      const [x, z] = cell(u);
+      if (x <= half || z <= half || x >= W - half - 1 || z >= D - half - 1) continue;
+      if (!inSet(z * W + x) || !street(x, z)) continue;
+      for (const dir of [1, -1]) {
+        const [nx, nz] = cell(u + dir);
+        if (nx < 0 || nz < 0 || nx >= W || nz >= D || inSet(nz * W + nx)) continue;
+        const out = alongX ? [dir, 0] : [0, dir];
+        if (!landsSquare(plan, inSet, [x, z], [-out[0], -out[1]], half)) continue;
+        exits.push({ at: [x, z], out, axis: c.axis });
+      }
+    }
+  }
+  return exits;
+}
+
+// A bridge lands INTO a district, not along its edge: the street goes on inland
+// three cells or more, with land either side of it for the deck's width and one
+// more over those cells. (Landing on the coast, the deck ran in along the shore,
+// its middle only two from the water, and the loop round the city cut across the
+// end of it: the two tracks side by side, which in the game run into each other.)
+function landsSquare(plan, inSet, at, inward, half) {
+  const { W, D, use } = plan;
+  const ok = (x, z) => x >= 0 && z >= 0 && x < W && z < D && inSet(z * W + x);
+  const street = (x, z) => use[z * W + x] === USE.ROAD || use[z * W + x] === USE.SIDEWALK;
+  const side = [inward[1], inward[0]];
+  // (the deck's own width on land for its first two cells in: enough to keep it
+  // off the coast without ruling out a street that reaches a rounded shore)
+  for (let k = 0; k <= 2; k++) {
+    const x = at[0] + inward[0] * k, z = at[1] + inward[1] * k;
+    if (!ok(x, z) || !street(x, z)) return false;
+    if (k <= 1) for (const sg of [1, -1]) for (let w = 1; w <= half; w++) if (!ok(x + side[0] * w * sg, z + side[1] * w * sg)) return false;
+  }
+  return true;
+}
+
+// straight: a street's line runs out over the gap and onto a street of the other
+function centredCrossing(plan, other, inJoined, half) {
+  const { W, D, use } = plan;
+  const street = (x, z) => use[z * W + x] === USE.ROAD || use[z * W + x] === USE.SIDEWALK;
+  let best = null;
+  for (const e of streetExits(plan, (i) => other.has(i), half)) {
+    const [x, z] = e.at, [dx, dz] = e.out;
+    for (let step = 1; step <= MAX_GAP; step++) {
+      const nx = x + dx * step, nz = z + dz * step;
+      if (nx <= half || nz <= half || nx >= W - half - 1 || nz >= D - half - 1) break;
+      const j = nz * W + nx;
+      if (other.has(j)) break;                              // back on home ground: not a crossing
+      if (inJoined(j)) {
+        if (step - 1 >= MIN_GAP && street(nx, nz) && landsSquare(plan, inJoined, [nx, nz], [dx, dz], half) && (!best || step < best.gap)) {
+          best = { axis: e.axis, from: [x, z], to: [nx, nz], gap: step - 1, dir: dx || dz };
+          best.path = stepsAlong(best.from, best.to); best.angled = false; best.centred = true;
+        }
+        break;
+      }
+    }
+  }
+  return best;
+}
+
+// curved: from the end of a street of this district to the end of one of the
+// other, leaving square out of the one and arriving square into the other, made
+// as streets turn: straight runs and right-angled corners (an L where the two
+// streets meet square, a Z where they face each other a little to one side). A
+// staircase of single steps would not carry the loop: the contour two in from a
+// ragged edge is not two clean lane rows. Over open ground only.
+function curvedCrossing(plan, other, inJoined, half) {
+  const { W, D } = plan;
+  const from = streetExits(plan, (i) => other.has(i), half), to = streetExits(plan, inJoined, half);
+  const legs = (pts) => { const path = []; for (let k = 0; k + 1 < pts.length; k++) { const run = stepsAlong(pts[k], pts[k + 1]); path.push(...(k ? run.slice(1) : run)); } return path; };
+  let best = null;
+  for (const a of from) for (const b of to) {
+    const [ax, az] = a.at, [bx, bz] = b.at;
+    // (a curve may be half as long again as a straight span: it is only looked for
+    // where no street carries straight across, and a long bridge that carries the
+    // loop round is better than a short one landing off the street)
+    const dist = Math.abs(ax - bx) + Math.abs(az - bz);
+    if (dist < MIN_GAP + 2 || dist > MAX_GAP * 1.5) continue;
+    const routes = [];
+    const dot = a.out[0] * b.out[0] + a.out[1] * b.out[1];
+    if (dot === 0) {                                           // an L: one corner
+      const c = a.out[0] ? [bx, az] : [ax, bz];
+      if (a.out[0] * (c[0] - ax) + a.out[1] * (c[1] - az) > half + 1 && b.out[0] * (c[0] - bx) + b.out[1] * (c[1] - bz) > half + 1) routes.push([a.at, c, b.at]);
+    } else if (dot === 1) {                                    // a U: out of both, along beyond them, back in
+      const alongX = a.out[0] !== 0, sg = alongX ? a.out[0] : a.out[1];
+      const reach = sg > 0 ? Math.max(alongX ? ax : az, alongX ? bx : bz) + half + 3 : Math.min(alongX ? ax : az, alongX ? bx : bz) - half - 3;
+      const lateral = alongX ? bz - az : bx - ax;
+      if (Math.abs(lateral) > 2 * half + 2) routes.push(alongX ? [a.at, [reach, az], [reach, bz], b.at] : [a.at, [ax, reach], [bx, reach], b.at]);
+    } else if (dot === -1) {                                   // a Z: out, across at the middle, on in
+      const along = a.out[0] ? 0 : 1, gap = along ? bz - az : bx - ax, side = along ? bx - ax : bz - bz + (bz - az);
+      const lateral = along ? bx - ax : bz - az;
+      if (gap * (a.out[0] + a.out[1]) > 2 * (half + 1) && lateral !== 0) {
+        const m = Math.round((along ? az + bz : ax + bx) / 2);
+        const p1 = along ? [ax, m] : [m, az], p2 = along ? [bx, m] : [m, bz];
+        routes.push([a.at, p1, p2, b.at]);
+      }
+    }
+    for (const pts of routes) {
+      const path = legs(pts);
+      if (path.length > MAX_GAP * 1.6) continue;
+      const turns = pts.length - 2, score = path.length + 3 * turns;
+      if (best && score >= best.score) continue;
+      let ok = path.length >= 3;
+      for (let k = 1; k < path.length - 1 && ok; k++) {
+        const [x, z] = path[k];
+        if (x <= half || z <= half || x >= W - half - 1 || z >= D - half - 1) ok = false;
+        const j = z * W + x;
+        if ((other.has(j) && k > half + 1) || (inJoined(j) && k < path.length - half - 2)) ok = false;
+      }
+      if (!ok) continue;
+      const vx = bx - ax, vz = bz - az, alongX = Math.abs(vx) >= Math.abs(vz);
+      best = { score, len: path.length, gap: path.length, from: a.at, to: b.at, path, angled: true, curved: true, centred: true,
+        axis: alongX ? 'x' : 'z', dir: Math.sign(alongX ? vx : vz) || 1 };
+    }
   }
   return best;
 }
@@ -622,6 +773,32 @@ export function buildBridges(world, plan, spans, hills, G, terrain, buildings = 
 // a ring below deck level, or none within reach — the older L-shaped search
 // still runs: inward, then a turn, with a curve at the corner.
 export function bridgeRails(world, bridges, transit, G) {
+  // Ringed whole (transit.js): the loop already runs over every deck, along its
+  // two lane rows. Its rails there are seated on the deck, at deck height; the
+  // line is then shaped whole (city.js: shapeLine), ramps at the banks included.
+  if (transit && transit.ringedWhole) {
+    let seated = 0;
+    for (const b of bridges) {
+      const strip = new Set(b.cells.map(([x, z]) => x + ',' + z));
+      const y = b.deckY + 1;
+      for (const line of transit.lines) {
+        if (!line.loop) continue;
+        for (const c of line.cells) {
+          if (c.length < 3 || !strip.has(c[0] + ',' + c[2])) continue;
+          const id = world.get(c[0], c[1], c[2]);
+          const isRail = id >= 0 && /rail/.test(MATERIALS.def(id).block);
+          if (c[1] !== y) {
+            if (isRail) world.clear(c[0], c[1], c[2]);
+            c[1] = y;
+          }
+          for (let h = 1; h <= 2; h++) world.clear(c[0], y + h, c[2]);
+          world.set(c[0], y, c[2], isRail ? id : railId(RAIL.NS));
+          seated++;
+        }
+      }
+    }
+    return seated;
+  }
   if (!transit || !bridges.length) return 0;
   const REACH_IN = 28;            // how far onward a spur may run
   const REACH_LAT = 20;           // and how far it may turn aside after that

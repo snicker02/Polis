@@ -1,4 +1,4 @@
-# Polis v0.37.4
+# Polis v0.38.0
 
 *Created with help from Claude AI.*
 
@@ -761,6 +761,38 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.38.0** — Bridges: narrower, centred, curving; one loop round every island by design.
+
+Bridges are five across: two tracks, one each way, a kerb either side, the tracks
+two apart (they were seven to nine). A bridge carries a street on: it leaves on a
+street's centre line and lands on one, square into the district, the street going
+on inland and the deck's width on land where it lands (it used to take the
+shortest gap along any row, and landed off the street or along a coast). Straight
+where a street's line reaches a street on the far side; otherwise it turns the way
+streets do, straight runs and full-width square corners: an L where the two
+streets meet square, a Z where they face each other a little to one side, a U
+where both run the same way (out of both, along beyond them, back in). A curve may
+run half as long again as a straight span. The old searches only if none of that
+can be made (bridges.js: centredCrossing, curvedCrossing, landsSquare).
+
+And the loop no longer has each district's ring spliced onto the bridges after the
+fact (that went wrong over and over, in junctions found and fixed by hand in the
+game). A bridged city is ringed whole (transit.js): the loop is traced over all of
+it, decks included, and on a deck five across the contour two in from its edge is
+the two lane rows, so the one loop crosses every bridge out on one side and back on
+the other, round every district. Its rails on a deck are seated at deck height and
+the line shaped whole (city.js: shapeLine): a ramp a block a cell up to a higher
+deck, no dips, every rail from its neighbours. A deck turns full width at a corner
+(the deck pinched at a bend, and the loop could not get round). A whole-city ring
+that would run beside itself is refused for the old way.
+
+On nine made landscapes (channels, offset islands, two islands), every loop one
+closed circuit a cart can ride through every district, six of the bridges curved.
+2zx checks bridges five across, landing on streets at both ends, curving where the
+streets do not line up, and the loop closed over straight and curved bridges alike
+(12 checks); 2z accepts a city ringed whole for its lane joins, and a bent end
+joined otherwise if the city's loop rides.
 
 **0.37.4** — Track a cart can take: no steps, no dips.
 
