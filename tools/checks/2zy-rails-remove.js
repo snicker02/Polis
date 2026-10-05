@@ -32,7 +32,10 @@ export default async function run(ctx) {
   let countBad = 0, orderBad = 0, popBad = 0;
   for (const r of [fitted, invented]) {
     const w = r.world;
-    let n = 0; w.forEach((x, y, z, id) => { const b = MATERIALS.def(id).block; if (b === 'minecraft:rail' || b === 'minecraft:golden_rail') n++; });
+    // the rails the game can have reshaped: within two of a tile's edge (64 a
+    // tile), and every curve and slope (a straight inside a tile keeps its shape)
+    const edge = (q) => { const m = ((q % 64) + 64) % 64; return m <= 1 || m >= 62; };
+    let n = 0; w.forEach((x, y, z, id) => { const d = MATERIALS.def(id), b = d.block; if (b !== 'minecraft:rail' && b !== 'minecraft:golden_rail') return; const st = d.states.rail_direction, dir = Number(st ? (st.value ?? st) : 0); if (dir >= 2 || edge(x) || edge(z)) n++; });
     const lines = railLines(w, w.box.x0, w.box.z0);
     if (lines.length !== n || n === 0) countBad++;
     const firstCurve = lines.findIndex((l) => /rail_direction"=[6-9]\]/.test(l));
@@ -48,7 +51,16 @@ export default async function run(ctx) {
     }
     if (!fns.some((f) => f.fn === 'test/rails') || !fns.some((f) => f.fn === 'test/rails_centered')) popBad++;
   }
-  check('rails: every rail of the city set again, once each, with its exact shape', countBad === 0, `${countBad}`);
+  check('rails: every rail the game can reshape set again (at a tile\'s edge, every curve and slope), once each, its exact shape', countBad === 0, `${countBad}`);
+  // and no function longer than Bedrock will take: a function file over ten
+  // thousand commands is not loaded at all (a big city's populate and rails were
+  // missing from the game): on a big city with a railway, a metro, a jail and a zoo
+  {
+    const big = generateCity({ ...DEFAULTS, size: 320, seed: 12345, transit: 'rails', metro: true, jail: true, zoo: true, furnish: false });
+    const fns = functionFiles(buildStructures(big.world, {}), big.world, { namespace: 'test', spawns: big.spawns, zoo: big.zoo, inmates: big.inmates });
+    const longest = fns.map((f) => [f.fn || f.name, (f.text || '').split('\n').filter((l) => l.trim() && !l.startsWith('#')).length]).sort((a, b) => b[1] - a[1])[0];
+    check('functions: none longer than Bedrock loads (well under ten thousand commands), on a big city with a railway, metro, jail and zoo', longest[1] < 9000, `${longest[0]}: ${longest[1]}`);
+  }
   check('rails: the curves last (their neighbours there when they go in)', orderBad === 0, `${orderBad}`);
   check('rails: populate sets them after the mobs, before the minecarts and before letting the city unload; rails / rails_centered too', popBad === 0, `${popBad}`);
 

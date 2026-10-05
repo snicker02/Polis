@@ -1,4 +1,4 @@
-# Polis v0.40.0
+# Polis v0.40.1
 
 *Created with help from Claude AI.*
 
@@ -761,6 +761,22 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.40.1** — populate and rails load again on big cities.
+
+On a big city the game loaded neither populate (nor populate_centered) nor rails
+(nor rails_centered): only populate_from_mark was there, and the world gave
+errors as it opened. Bedrock does not load a function file of more than ten
+thousand commands, and since 0.37.2 those set every rail of the city again; a big
+city with a metro has more rails than that. Now only the rails the game can have
+reshaped are set again (export.js: railLines): those within two of a tile's edge,
+where a rail goes in before the one it joins in the next tile, and every curve and
+slope; a straight inside a tile goes in with its neighbours and keeps its shape.
+About a fifth as many: on a city 320 across with a railway, a metro, a jail and a
+zoo, populate is 1,266 commands, not 5,882.
+
+2zy checks exactly those rails set again, and that no function on such a big city
+comes near Bedrock's limit (7 checks).
 
 **0.40.0** — A zoo with every land animal, an aquarium with every fish, and signs.
 

@@ -17,7 +17,7 @@ import { makeRng } from './rng.js';
 // Must match main.js VERSION, package.json and index.html data-version;
 // tools/validate.js fails if they drift. The app refuses to export when the
 // browser has mixed cached copies of old and new files.
-export const POLIS_VERSION = '0.40.0';
+export const POLIS_VERSION = '0.40.1';
 
 export const CHUNK = 64;          // Bedrock structure limit per horizontal axis
 export const GROUND_DROP = 2;     // base layer y=0 sits 2 below feet; surface y=1 replaces the block you stand on
@@ -309,12 +309,19 @@ export function buildRemoveStructures(world, opts = {}) {
 // turned itself straight, and stayed so. Straights and climbs first, the curves
 // last (both their neighbours there when they go in).
 export function railLines(world, dx, dz) {
+  // Only the rails the game can have reshaped: those within two of a tile's edge
+  // (a rail there goes in before the one it joins, in the next tile, and turns to
+  // what it finds) and every curve and slope; a straight inside a tile goes in with
+  // its neighbours and keeps its shape. (Every rail of a big city with a metro ran
+  // past ten thousand commands, and Bedrock would not load populate or rails.)
+  const nearEdge = (n) => { const m = ((n % CHUNK) + CHUNK) % CHUNK; return m <= 1 || m >= CHUNK - 2; };
   const rails = [];
   world.forEach((x, y, z, id) => {
     const d = MATERIALS.def(id);
     if (d.block !== 'minecraft:rail' && d.block !== 'minecraft:golden_rail') return;
-    const st = d.states.rail_direction, dir = st ? (st.value ?? st) : 0;
-    rails.push({ x, y, z, golden: d.block === 'minecraft:golden_rail', dir: Number(dir) });
+    const st = d.states.rail_direction, dir = Number(st ? (st.value ?? st) : 0);
+    if (dir < 2 && !nearEdge(x) && !nearEdge(z)) return;
+    rails.push({ x, y, z, golden: d.block === 'minecraft:golden_rail', dir });
   });
   const rank = (r) => (r.dir >= 6 ? 2 : r.dir >= 2 ? 1 : 0);
   rails.sort((a, b) => rank(a) - rank(b));
