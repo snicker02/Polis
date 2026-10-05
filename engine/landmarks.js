@@ -28,6 +28,7 @@ import { styleOf } from './styles.js';
 const styleHere = (cfg, lot) => (cfg.styleAt ? cfg.styleAt((lot.x0 + lot.x1) / 2, (lot.z0 + lot.z1) / 2) : styleOf(cfg.cityStyle));
 import { gothicChurch, fleche } from './gothic.js';
 import { jail } from './jail.js';
+import { zoo, aquarium } from './zoo.js';
 
 export const LANDMARKS = ['townhall', 'clocktower', 'library', 'market', 'church', 'mansion', 'school', 'lighthouse', 'castle',
   'townsquare', 'stadium', 'cemetery', 'allotments', 'bandstand'];
@@ -35,7 +36,7 @@ const NEED = {                       // [shorter side, longer side] of the lot
   townhall: [13, 15], clocktower: [9, 9], library: [11, 12], market: [12, 12],
   church: [13, 15], mansion: [15, 20], school: [17, 25], lighthouse: [9, 9], castle: [13, 13],
   townsquare: [13, 13], stadium: [17, 21], cemetery: [12, 14], allotments: [13, 13], bandstand: [9, 9],
-  jail: [15, 23],
+  jail: [15, 23], zoo: [15, 24], aquarium: [11, 20],
 };
 
 // Mark the lots, each kind at most once:
@@ -77,9 +78,12 @@ export function chooseLandmarks(plan, cfg, hills = null, canal = null) {
   // The jail, when asked for, first of all: it needs a big lot (fifteen by
   // twenty-three), a fitted town may have only one, and the core landmarks all
   // fit far smaller ones. Toward the edge of town where it can be.
-  if (cfg.jail) {
-    const lots = all.filter((c) => fits(c, 'jail')).sort((p, q) => q.d - p.d);
-    if (lots.length) { lots[0].l.landmark = 'jail'; out.push(lots[0].l); }
+  // (and the zoo and aquarium, when asked for, next: the zoo as big as the jail,
+  // the aquarium smaller)
+  for (const kind of ['jail', 'zoo', 'aquarium']) {
+    if (!cfg[kind === 'aquarium' ? 'zoo' : kind]) continue;
+    const lots = all.filter((c) => fits(c, kind)).sort((p, q) => q.d - p.d);
+    if (lots.length) { lots[0].l.landmark = kind; out.push(lots[0].l); }
   }
   const downtown = all.filter((c) => c.l.style !== 'house' && c.d <= reach).sort((p, q) => p.d - q.d);
   // a walled fortress town: the keep takes the heart of the town first, the
@@ -766,10 +770,14 @@ function mansion(world, lot, face, cfg, rng, G) {
 }
 
 const BUILDERS = { townhall: townHall, clocktower: clockTower, library, market, church, mansion, school, lighthouse, castle,
-  townsquare: townSquare, stadium, cemetery, allotments, bandstand, jail };
+  townsquare: townSquare, stadium, cemetery, allotments, bandstand,
+  // (the jail, zoo and aquarium put up signs: they are handed signTags)
+  jail: (w, l, f, c, r, G) => jail(w, l, f, c, r, G, signTags),
+  zoo: (w, l, f, c, r, G) => zoo(w, l, f, c, r, G, signTags),
+  aquarium: (w, l, f, c, r, G) => aquarium(w, l, f, c, r, G, signTags) };
 export const LANDMARK_NAMES = { townhall: 'Town Hall', clocktower: 'Clock Tower', library: 'Library', market: 'Market',
   church: 'Church', school: 'School', lighthouse: 'Lighthouse', castle: 'Castle', mansion: 'Mansion',
-  townsquare: 'Town Square', stadium: 'Stadium', cemetery: 'Cemetery', allotments: 'Allotments', bandstand: 'Bandstand', jail: 'Jail' };
+  townsquare: 'Town Square', stadium: 'Stadium', cemetery: 'Cemetery', allotments: 'Allotments', bandstand: 'Bandstand', jail: 'Jail', zoo: 'Zoo', aquarium: 'Aquarium' };
 
 export function buildLandmark(world, lot, face, cfg, rng, G) {
   const L = BUILDERS[lot.landmark](world, lot, face, cfg, rng, G);

@@ -367,6 +367,12 @@ Object.assign(MAT, {
   // keeps the corridor too low for an enderman
   JAIL_WALL:         A('JAIL_WALL', 'minecraft:polished_blackstone_bricks', '#2e2a33'),
   JAIL_SLAB:         A('JAIL_SLAB', 'minecraft:polished_blackstone_brick_slab', '#2e2a33', { 'minecraft:vertical_half': S('bottom') }),
+  // the zoo and aquarium (zoo.js)
+  ZOO_STONE:         A('ZOO_STONE', 'minecraft:stone', '#7d7d7d'),
+  PODZOL:            A('PODZOL', 'minecraft:podzol', '#5b3d1c'),
+  SEA_LANTERN:       A('SEA_LANTERN', 'minecraft:sea_lantern', '#b8d8d0'),
+  AQUA_WALL:         A('AQUA_WALL', 'minecraft:prismarine_bricks', '#5ea89a'),
+  SNOW_BLOCK:        A('SNOW_BLOCK', 'minecraft:snow', '#f0f6f8'),
   PB_BRICKS:         A('PB_BRICKS', 'minecraft:polished_blackstone_bricks', '#302a31'),
   CHISELED_PB:       A('CHISELED_PB', 'minecraft:chiseled_polished_blackstone', '#353039'),
   GILDED_BLACKSTONE: A('GILDED_BLACKSTONE', 'minecraft:gilded_blackstone', '#3b2f25'),

@@ -1,4 +1,4 @@
-# Polis v0.39.0
+# Polis v0.40.0
 
 *Created with help from Claude AI.*
 
@@ -761,6 +761,38 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.40.0** — A zoo with every land animal, an aquarium with every fish, and signs.
+
+A new option, "A zoo and an aquarium with every animal and fish" (off by
+default), builds two landmarks (zoo.js), since big lots are few:
+
+- The zoo, outdoors, fifteen by twenty-four: a plaza at the gate, a path down the
+  middle, lanterns on posts, ten pens with their animals' own ground, fences three
+  high (goats, frogs and foxes jump; nothing clears three), a sign on each, the
+  aviary roofed in glass. 27 kinds, penned so none hunts another: the farm (cow,
+  sheep, pig, chicken, mooshroom); horses (horse, donkey, mule); drylands (camel,
+  llama, armadillo, sniffer, strider); goats; the polar bear on snow; pandas; cats
+  and the fox; wolves alone; the pond (turtle, frog, rabbit); the aviary (parrot,
+  bee, allay, bat).
+- The aquarium, indoors, eleven by twenty: prismarine, glass-fronted tanks with
+  lit floors, water three deep under a block of air. The reef across the back
+  holds all 22 named tropical fish, each summoned as itself: the pack's tropical
+  fish gets a keep event per variety, the game's own become_X event with the keep
+  group added (export.js). And dolphins; cod and salmon; pufferfish; squid and
+  glow squid; axolotls alone (they hunt fish).
+
+Every animal and fish is summoned in populate, a kept fish by the pack's event and
+everything else by its name. The jail's cells now carry signs naming their
+inmates. When a jail or zoo is asked for and no lot is big enough, the summary
+says so.
+
+New section 2zza (9 checks): built on flat cities and on a player's own fitted
+one; every land animal in it, each on its feet; each pen fenced three solid high
+all round; the aviary and every tank closed; every fish in water, all 22
+varieties in the reef; a sign at every pen; populate summoning every animal and
+fish; the pack's keep event for each variety. 2zc accepts the variety events only
+if each is exactly the game's own plus the keep group.
 
 **0.39.0** — A jail: every hostile mob that can be held, behind bars.
 

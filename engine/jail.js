@@ -25,7 +25,7 @@
 // reaches fifty blocks), and the piglins and hoglins, which turn into other mobs
 // in the Overworld.
 
-import { MAT, stairId, WEIRDO } from './materials.js';
+import { MAT, stairId, WEIRDO, signId, SIGN_FACING } from './materials.js';
 import { OUTWARD } from './building.js';
 
 export const JAIL_SIZE = [15, 23];       // the building, across and deep (a row before it where the lot allows)
@@ -54,7 +54,7 @@ export const JAIL_HALLS = { creeper: 'creeper', guardian: 'guardian', ghast: 'gh
 
 const W_ = 15, DEPTH = 23, E = 16;        // E: the row the cells end on (three to a side a floor)
 
-export function jail(world, lot, face, cfg, rng, G) {
+export function jail(world, lot, face, cfg, rng, G, signTags = null) {
   const F = OUTWARD[face];
   if (!F) return null;
   const lotW = lot.x1 - lot.x0 + 1, lotD = lot.z1 - lot.z0 + 1;
@@ -116,6 +116,14 @@ export function jail(world, lot, face, cfg, rng, G) {
       for (let v = va; v <= vb; v++) for (let y = y0; y <= y1; y++) put(bars, v, y, MAT.BARS);
       lamp(Math.floor((ua + ub) / 2), va + 1, f);
       const group = JAIL_CELLS[next++];
+      // its sign: on the corridor floor before the bars, facing the corridor
+      if (group && signTags) {
+        const [sx, sz] = at(side === 0 ? 6 : 8, va + 1);
+        const d = side === 0 ? across : [-across[0], -across[1]];
+        const nm = d[0] > 0 ? 'east' : d[0] < 0 ? 'west' : d[1] > 0 ? 'south' : 'north';
+        world.set(sx, y0, sz, signId(SIGN_FACING[nm]));
+        world.setData(sx, y0, sz, { id: 'Sign', tags: signTags(group.name) });
+      }
       const cell = { floor: f, side, u: [ua, ub], v: [va, vb], y: [y0, y1], name: group ? group.name : 'empty', kinds: group ? group.kinds : [] };
       cells.push(cell);
       if (group) group.kinds.forEach((kind, i) => {

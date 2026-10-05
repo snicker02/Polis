@@ -127,11 +127,20 @@ export default async function run(ctx) {
           const e = d['minecraft:entity'], ve = v['minecraft:entity'];
           const kept = e.component_groups['polis:kept'];
           if (!kept || !('minecraft:persistent' in kept) || JSON.stringify(e.events['polis:keep']) !== JSON.stringify({ add: { component_groups: ['polis:kept'] } })) fine = false;
+          // and, for a tropical fish kept as one of the 22 named ones (the aquarium),
+          // polis:keep_X: exactly the game's own become_X, and kept
+          for (const [k, ev] of Object.entries(e.events)) {
+            const m = k.match(/^polis:keep_(.+)$/);
+            if (!m) continue;
+            const game = ve.events && ve.events['minecraft:become_' + m[1]];
+            if (!game || JSON.stringify(ev) !== JSON.stringify({ add: { component_groups: [...game.add.component_groups, 'polis:kept'] } })) fine = false;
+          }
           // everything else exactly the game's own
           // (a section the game's file did not have, and only ours in it, goes too)
           const strip = (x) => {
             const c = JSON.parse(JSON.stringify(x)); const ce = c['minecraft:entity'];
             delete ce.component_groups['polis:kept']; delete ce.events['polis:keep'];
+            for (const k of Object.keys(ce.events || {})) if (/^polis:keep_/.test(k)) delete ce.events[k];
             // (the game's cod has "events": null: what it had goes back)
             for (const k of ['events', 'component_groups'])
               if (!Object.keys(ce[k]).length && !ve[k]) { if (k in ve) ce[k] = ve[k]; else delete ce[k]; }
@@ -139,7 +148,7 @@ export default async function run(ctx) {
           };
           if (strip(d) !== JSON.stringify(v)) fine = false;
         }
-        check('bedrock: the pack carries the game\'s own three fish, with only the keep event added', fine);
+        check('bedrock: the pack carries the game\'s own three fish, with only the keep events added (and a tropical one kept as each named variety)', fine);
         const { readZip } = await import('../nbt-read.js');
         const names = readZip(out.data).entries.map((q) => q.name);
         check('bedrock: those entity files are in the pack', ['entities/tropicalfish.json', 'entities/fish.json', 'entities/salmon.json'].every((n) => names.includes(n)));

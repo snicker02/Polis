@@ -102,6 +102,7 @@ export const DEFAULTS = {
   underground: true,         // cellars under houses, a crypt under the cathedral (underground.js)
   metro: false,              // a metro under the main streets, stations with stairs up (metro.js)
   jail: false,               // a jail landmark holding every hostile mob that can be held (jail.js)
+  zoo: false,                // a zoo with every land animal and an aquarium with every fish (zoo.js)
   terrainBreaks: true,       // on fitted terrain, lots step at their own heights (retaining walls), held only to the street they face
   mixStyles: false,          // several styles, one to a district (districts.js)
   mixList: ['modern', 'medieval', 'eastasian', 'artdeco'],   // the styles ticked for mixing
@@ -588,6 +589,7 @@ export function generateCity(cfgIn, onProgress) {
     for (const L of landmarks) {
       if (L.bell) L.bell[1] += elevAt(L.bell[0], L.bell[2]);
       for (const m of L.inmates || []) m.y += elevAt(Math.floor(m.x), Math.floor(m.z));   // the jail's inmates ride up with it
+      for (const m of [...(L.animals || []), ...(L.fish || [])]) m.y += elevAt(Math.floor(m.x), Math.floor(m.z));   // the zoo's too
       if (L.belfryBell) L.belfryBell[1] += elevAt(L.belfryBell[0], L.belfryBell[2]);
       if (L.faces) for (const f of L.faces) f.centre[1] += elevAt(f.centre[0], f.centre[2]);
       // every point a landmark records rides up with the ground under it —
@@ -879,7 +881,13 @@ export function generateCity(cfgIn, onProgress) {
   // the jail's inmates, summoned by populate (every one named, so none despawns)
   const inmates = landmarks.flatMap((L) => L.inmates || []);
   if (inmates.length) stats.jail = { inmates: inmates.length, kinds: new Set(inmates.map((m) => m.type)).size };
-  return { world, plan, buildings, cfg, stats, shell, bridges, farms, ranches, spawns, bell, transit, wall, landmarks, canal, centre, streets, harbour, harbourPlan, megaliths, ponds, courtyards, hostiles, inmates, dome, canals, lighting, styleDistricts: SD, spawners, stilts, islands, cliffWays, rooms, metro, hills, stepRails,
+  const zoo = landmarks.flatMap((L) => [...(L.animals || []), ...(L.fish || [])]);
+  // (asked for, but no lot big enough: said so, not left silent)
+  if (cfg.zoo && !landmarks.some((L) => L.kind === 'zoo')) stats.zooMissing = 'no lot big enough for the zoo (it needs 15 by 24)';
+  if (cfg.jail && !landmarks.some((L) => L.kind === 'jail')) stats.jailMissing = 'no lot big enough for the jail (it needs 15 by 23)';
+  if (zoo.length) stats.zoo = { animals: landmarks.flatMap((L) => L.animals || []).length, fish: landmarks.flatMap((L) => L.fish || []).length,
+    kinds: new Set(zoo.map((m) => m.variety || m.type)).size };
+  return { world, plan, buildings, cfg, stats, shell, bridges, farms, ranches, spawns, bell, transit, wall, landmarks, canal, centre, streets, harbour, harbourPlan, megaliths, ponds, courtyards, hostiles, inmates, zoo, dome, canals, lighting, styleDistricts: SD, spawners, stilts, islands, cliffWays, rooms, metro, hills, stepRails,
     hills, stairRuns, reach, groundAt: (x, z) => GROUND + elevAt(x, z) };
 }
 

@@ -17,7 +17,7 @@ import { makeRng } from './rng.js';
 // Must match main.js VERSION, package.json and index.html data-version;
 // tools/validate.js fails if they drift. The app refuses to export when the
 // browser has mixed cached copies of old and new files.
-export const POLIS_VERSION = '0.39.0';
+export const POLIS_VERSION = '0.40.0';
 
 export const CHUNK = 64;          // Bedrock structure limit per horizontal axis
 export const GROUND_DROP = 2;     // base layer y=0 sits 2 below feet; surface y=1 replaces the block you stand on
@@ -233,6 +233,13 @@ export function fishEntityFiles() {
     const e = d['minecraft:entity'];
     e.component_groups = { ...(e.component_groups || {}), 'polis:kept': KEPT };
     e.events = { ...(e.events || {}), 'polis:keep': { add: { component_groups: ['polis:kept'] } } };
+    // and a tropical fish kept as one of the 22 named ones: the game's own
+    // become_X event's groups, and kept (the aquarium's reef: zoo.js)
+    for (const [name, ev] of Object.entries(e.events)) {
+      const m = name.match(/^minecraft:become_(.+)$/);
+      if (!m || !ev.add || !ev.add.component_groups) continue;
+      e.events['polis:keep_' + m[1]] = { add: { component_groups: [...ev.add.component_groups, 'polis:kept'] } };
+    }
     return { name: `entities/${kind === 'cod' ? 'fish' : kind}.json`, data: JSON.stringify(d, null, 2) };
   });
 }
@@ -420,6 +427,13 @@ export function functionFiles(tiles, world, opts = {}) {
   // hostile mobs: their own functions always; populate too when asked
   const hostiles = opts.hostiles || [];
   const inmates = opts.inmates || [];
+  // the zoo's animals and the aquarium's fish (zoo.js): kept fish by the pack's
+  // event (a tropical one as its named variety), everything else by its name
+  const zooFolk = opts.zoo || [];
+  const ZOO_KEEP = new Set(['cod', 'salmon', 'tropicalfish']);
+  const zooLine = (p, dx, dz) => ZOO_KEEP.has(p.type)
+    ? `summon minecraft:${p.type} ${rel(p.x - dx)} ${rel(p.y - GROUND_DROP)} ${rel(p.z - dz)} 0 0 polis:keep${p.variety ? '_' + p.variety : ''} ${p.name}`
+    : `summon minecraft:${p.type} ${p.name} ${rel(p.x - dx)} ${rel(p.y - GROUND_DROP)} ${rel(p.z - dz)}`;
   const hostLine = (p, dx, dz) => `summon ${HOSTILE_KINDS[p.type].be} ${p.name} ${rel(p.x - dx)} ${rel(p.y - GROUND_DROP)} ${rel(p.z - dz)}`;
   const inPop = !!opts.hostilesInPopulate && hostiles.length > 0;
   const kindsIn = [...new Set(hostiles.map((p) => p.type))];
@@ -490,6 +504,7 @@ export function functionFiles(tiles, world, opts = {}) {
     // the jail's inmates: always, they are locked up (named, so none despawns)
     ...(inmates.length ? [`say Polis: and ${inmates.length} inmates for the jail.`, ...inmates.map((p) => hostLine(p, dx, dz)),
       'say Polis: the jail is empty on Peaceful: hostile mobs do not appear there.'] : []),
+    ...(zooFolk.length ? [`say Polis: and ${zooFolk.length} animals and fish for the zoo and aquarium.`, ...zooFolk.map((p) => zooLine(p, dx, dz))] : []),
     ...areas.map((a) => `tickingarea remove ${a.name}`),
     'say Polis: done. Villagers take jobs from the workstations and claim beds over the next few minutes.',
     ...(boats.length ? [`say Polis: any boat that did not appear, run /function ${ns}/${dx === wb.x0 ? 'boats' : 'boats_centered'} from beside the water.`] : []),
