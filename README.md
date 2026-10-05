@@ -1,4 +1,4 @@
-# Polis v0.40.1
+# Polis v0.40.2
 
 *Created with help from Claude AI.*
 
@@ -761,6 +761,22 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.40.2** — populate loads again: a zombie villager /summon can create.
+
+The game's own error said it: populate failed to load at the jail's zombie
+villager, `summon minecraft:zombie_villager_v2`. Mojang's files mark that entity
+not summonable (is_summonable false), and one such summon and Bedrock loads none
+of the function. The jail now summons minecraft:zombie_villager, which /summon
+does create. (0.40.1's guess, the length of the function, was wrong; its smaller
+populate and rails stand anyway.)
+
+Every entity Polis summons is now checked against Mojang's own behaviour files
+(github.com/Mojang/bedrock-samples): tools/bedrock-summonable.json holds
+is_summonable for each of them, all 64 found summonable. 2zz checks every summon
+in every function, on a city with the jail, the zoo, hostiles and a railway,
+names one of them; one not in the list fails too, so no new mob slips in
+unchecked (10 checks).
 
 **0.40.1** — populate and rails load again on big cities.
 

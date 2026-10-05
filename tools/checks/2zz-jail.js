@@ -133,6 +133,21 @@ export default async function run(ctx) {
     const lines = text.split('\n');
     const summons = lines.filter((l) => /^summon minecraft:\S+ Inmate /.test(l));
     check('jail: populate summons every inmate, each named', summons.length === r.inmates.length && r.inmates.length > 0, `${summons.length} of ${r.inmates.length}`);
+    // every summon in every function names an entity /summon may create: one that
+    // may not (zombie_villager_v2) and Bedrock loads none of populate. Checked
+    // against Mojang's own files (tools/bedrock-summonable.json); one not listed
+    // there fails too, so a new mob cannot slip in unchecked.
+    {
+      const ok = JSON.parse(readFileSync(new URL('../bedrock-summonable.json', import.meta.url), 'utf8')).summonable;
+      const all = generateCity({ ...DEFAULTS, ...L, size: 256, seed: 7, jail: true, zoo: true, hostiles: true, hostileCount: 40, transit: 'rails' });
+      const files = functionFiles(buildStructures(all.world, {}), all.world, { namespace: 'test', spawns: all.spawns, inmates: all.inmates, zoo: all.zoo, hostiles: all.hostiles, hostilesInPopulate: true });
+      const bad = new Set();
+      for (const f of files) for (const l of (f.text || '').split('\n')) {
+        const m = l.match(/^summon (minecraft:[a-z_0-9]+)/);
+        if (m && ok[m[1]] !== true) bad.add(m[1]);
+      }
+      check('functions: every summon names an entity Bedrock lets /summon create (Mojang\'s own is_summonable)', bad.size === 0, [...bad].join(', '));
+    }
     note(`jail: ${r.inmates.length} inmates of ${new Set(r.inmates.map((m) => m.type)).size} kinds; ${cities.filter(([, c]) => c.landmarks.some((Lm) => Lm.kind === 'jail' && Lm.sideways)).length} of ${cities.length} jails turned sideways`);
   }
 }
