@@ -32,7 +32,10 @@ export default async function run(ctx) {
     for (const b of on.bridges) {
       decks++;
       let ok = 0;
-      for (const [x, z] of b.path) if (walked.has(x + ',' + (b.deckY + 1) + ',' + z)) ok++;
+      // (beside the middle: a raised brick runs down it now, between the tracks,
+      // and you walk either side of it)
+      const y = b.deckY + 1;
+      for (const [x, z] of b.path) if ([[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dz]) => walked.has((x + dx) + ',' + y + ',' + (z + dz)))) ok++;
       if (ok > b.path.length * 0.9) deckWalkable++;
     }
   }

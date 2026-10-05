@@ -208,6 +208,7 @@ export function planBridges(plan, cfg, districts) {
         const i = cz * W + cx;
         use[i] = USE.ROAD;
         if (plan.mask) plan.mask[i] = 1;
+        (plan.bridgeCells || (plan.bridgeCells = new Set())).add(i);   // (no ordinary line runs on a bridge: transit.js)
         s.cells.push([cx, cz, w]);
       }
     s.length = s.path.length;
@@ -750,7 +751,19 @@ export function buildBridges(world, plan, spans, hills, G, terrain, buildings = 
     // polyline, because that cell is the one facing the ring. A plain end
     // keeps the old margin: the lane stops one cell inside the deck, so the
     // kerb of the viaduct is not also the buffer of a railway.
-    built.push({ ...s, path, kind, spanPath, deckY, piers, lamps, half, laneOff,
+    // A raised brick along the deck's middle, end to end, so its two tracks can
+    // never run into each other (side by side, or with a third line laid down the
+    // middle, the game merged them into a tangle), and each has one way on at
+    // either end. On every cell of the deck's centre line with deck under it.
+    let divider = 0;
+    for (const [x, z] of path) {
+      if (!world.has(x, deckY, z)) continue;
+      const id = world.get(x, deckY + 1, z);
+      if (id >= 0 && !/rail|air/.test(MATERIALS.def(id).block) && !MATERIALS.isPassable(id)) continue;
+      world.set(x, deckY + 1, z, MAT.STONEBRICK);
+      divider++;
+    }
+    built.push({ ...s, path, kind, spanPath, deckY, piers, lamps, half, laneOff, divider,
       lane: [headTail ? 0 : 1, footTail ? path.length - 1 : path.length - 2],
       bentHead: !!headTail, bentFoot: !!footTail,
       from: path[0], to: path[path.length - 1], length: path.length,

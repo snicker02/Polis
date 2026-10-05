@@ -30,7 +30,7 @@ export default async function run(ctx) {
   const root = ROOT || join(new URL('.', import.meta.url).pathname, '..', '..');
   const { generateCity, DEFAULTS } = await import('../../engine/city.js');
   const { USE } = await import('../../engine/plan.js');
-  const { MATERIALS } = await import('../../engine/materials.js');
+  const { MATERIALS, MAT } = await import('../../engine/materials.js');
   const { verifyAll } = await import('../../engine/verify.js');
   const { siteGround } = await import('../../engine/worldfile.js');
   const raw = JSON.parse(readFileSync(join(root, 'tools', 'test-terrain.json'), 'utf8'));
@@ -122,6 +122,29 @@ export default async function run(ctx) {
       if ([...t].some((k) => railLinks(rails, k).length !== 2)) openLoops++;
       if (!r.plan.districts.every((d) => [...t].some((k) => { const [x, , z] = k.split(',').map(Number); return d.has(z * W + x); }))) missed++;
     }
+    // the two tracks kept apart: a raised brick down the middle of every deck, end
+    // to end, no rail on a deck's middle, and no rail on a deck crowded by more
+    // than two others (three tracks side by side merged into a tangle in the game)
+    let gapsInDivider = 0, midRails = 0, crowded = 0;
+    for (const r of [...made, ...cities.map(([, c]) => c)]) {
+      const w = r.world;
+      for (const b of r.bridges) {
+        const deck = new Set(b.cells.map(([x, z]) => x + ',' + z));
+        for (const [x, z] of b.path) {
+          if (!w.has(x, b.deckY, z)) continue;
+          if (w.get(x, b.deckY + 1, z) !== MAT.STONEBRICK) gapsInDivider++;
+          for (let y = b.deckY; y <= b.deckY + 2; y++) { const id = w.get(x, y, z); if (id >= 0 && /rail/.test(MATERIALS.def(id).block)) midRails++; }
+        }
+        for (const k of deck) {
+          const [x, z] = k.split(',').map(Number), y = b.deckY + 1, isRail = (xx, zz) => { for (const dy of [-1, 0, 1]) { const id = w.get(xx, y + dy, zz); if (id >= 0 && /rail/.test(MATERIALS.def(id).block)) return true; } return false; };
+          if (!isRail(x, z)) continue;
+          if ([[1, 0], [-1, 0], [0, 1], [0, -1]].filter(([dx, dz]) => isRail(x + dx, z + dz)).length > 2) crowded++;
+        }
+      }
+    }
+    check('bridges: a raised brick down the middle of every deck, end to end', gapsInDivider === 0, `${gapsInDivider} gaps`);
+    check('bridges: no rail on a deck\'s middle (no line laid between its two tracks)', midRails === 0, `${midRails}`);
+    check('bridges: two tracks a deck, never crowded together', crowded === 0, `${crowded} crowded`);
     check('bridges: five across (two tracks, a kerb either side)', wide === 0 && all > 0, `${wide} of ${all} not`);
     check('bridges: each carries a street on, landing on one at both ends (centred, not off to one side)', offStreet === 0, `${offStreet} off the street`);
     check('bridges: where the streets do not line up, a bridge curves (square corners)', curved >= 2, `${curved} curved`);

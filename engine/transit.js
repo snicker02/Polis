@@ -125,6 +125,10 @@ export function layTransit(world, plan, mode, G) {
   // alone, which the loop is traced on. Using the main-district one for both
   // leaves the outlying districts with no lines at all.
   const O = edgeDistance(plan);
+  // (no ordinary line on a bridge: a street carried across the water brought its
+  // line down the middle of the deck, between the deck's own two tracks, and the
+  // three merged in the game; a line comes to its end at the bank instead)
+  if (plan.bridgeCells) for (const i of plan.bridgeCells) O[i] = 0;
   const Oloop = main ? edgeDistance(plan, (x, z) => inMain(x, z)) : O;
   let loop = plan.unionLoop || null;                          // (the whole city's first: a tidy rectangle would miss the bridges)
   if (!loop) {

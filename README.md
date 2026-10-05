@@ -1,4 +1,4 @@
-# Polis v0.38.1
+# Polis v0.38.2
 
 *Created with help from Claude AI.*
 
@@ -761,6 +761,24 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.38.2** — Two tracks a bridge, a brick between them.
+
+A bridge built in the game (multi41253) came out with its deck a tangle of
+rails. Read from the pack: three tracks side by side, the deck's own two and
+an ordinary line down the middle (a street carried across the water brought its
+line with it), and three rails abreast merge as the game loads them. Now:
+
+- No ordinary line runs on a bridge: the bridge's cells are recorded in the plan
+  (plan.bridgeCells) and a line will not go there (transit.js); one comes to its
+  end at the bank instead.
+- A raised stone brick runs down the middle of every deck, end to end (bridges.js),
+  so the deck's two tracks can never touch, and each has one way on and one way
+  off at either end. You walk either side of it.
+
+2zx checks the brick end to end on every deck, no rail on a deck's middle, and no
+rail on a deck crowded by more than two others (15 checks); 2z walks the deck
+either side of the brick.
 
 **0.38.1** — The loop closed in big hilly cities.
 
