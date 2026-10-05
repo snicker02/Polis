@@ -1,4 +1,4 @@
-# Polis v0.38.3
+# Polis v0.38.4
 
 *Created with help from Claude AI.*
 
@@ -761,6 +761,32 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.38.4** — Every bridge on the loop: landing platforms, and the city's outline walked whole.
+
+A city built in the game (1004954, rebuilt here from the player's own world and
+saved settings) came out with its bridges off the loop: the loop U-turned along
+the shore at each landing and the decks' lanes were dead ends, knotted at the
+junctions. Two faults, both fixed:
+
+- The walk that traces the loop round the whole city stopped the first time it
+  stepped on its starting cell, which a ragged outline can pass through half way
+  round, and dropped what it had walked twice: it came back with one district's
+  ring and no bridges, and the city fell back to splicing rings onto decks. Now
+  the walk (transit.js: traceOuter) goes on until it is back where it began
+  facing the way it set off, keeps every step, and refuses an outline it walks a
+  cell of twice (the track would cross itself there).
+- A bridge from the old search landed at a corner of the shore, the water close
+  beside it, and the band the loop is traced in pinched to a single row there.
+  Every bridge now has a landing platform at each end: the deck fills out over any
+  water within its half-width and one more of where it lands (bridges.js: apron),
+  so it always arrives full width.
+
+Players' own cities are in the checks now: two, rebuilt from their sites (ground
+and water read from the blocks of their worlds) and saved settings; each must come
+out ringed whole, its loop closed through every district and across every bridge,
+each line one piece, and at the bridges no rail crowded and no brick on a landing
+(2zx, 22 checks).
 
 **0.38.3** — The divider stops where the deck meets the land.
 

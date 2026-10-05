@@ -213,6 +213,26 @@ export function planBridges(plan, cfg, districts) {
         (plan.bridgeCells || (plan.bridgeCells = new Set())).add(i);   // (no ordinary line runs on a bridge: transit.js)
         s.cells.push([cx, cz, w]);
       }
+    // A landing platform at each end: the deck fills out over any water within
+    // its half-width and one more of where it lands, so it always arrives full
+    // width. (Landing at a corner of the shore, the water came in beside it; the
+    // band the loop is traced in pinched there to a single row, the loop would
+    // have crossed itself, and the city fell back to splicing rings onto decks.)
+    s.apron = [];
+    for (const end of [0, s.path.length - 1]) {
+      const [ex, ez] = s.path[end], r = s.half + 1;
+      for (let dz = -r; dz <= r; dz++) for (let dx = -r; dx <= r; dx++) {
+        const cx = ex + dx, cz = ez + dz;
+        if (cx < 1 || cz < 1 || cx >= W - 1 || cz >= D - 1) continue;
+        const i = cz * W + cx;
+        if (!plan.mask || plan.mask[i]) continue;                // land already
+        use[i] = USE.ROAD;
+        plan.mask[i] = 1;
+        (plan.bridgeCells || (plan.bridgeCells = new Set())).add(i);
+        s.cells.push([cx, cz, 0]);
+        s.apron.push([cx, cz, end]);
+      }
+    }
     s.length = s.path.length;
   }
   return spans;
@@ -682,6 +702,14 @@ export function buildBridges(world, plan, spans, hills, G, terrain, buildings = 
         if (had) { had[3] = had[3] && Math.abs(w) === half; continue; }
         deck.set(kk, [x, z, k, Math.abs(w) === half]);
       }
+    // the landing platforms: deck, middle (no parapet: the road and the track
+    // turn onto the land across them)
+    for (const [x, z, end] of s.apron || []) {
+      const kk = key2(x, z);
+      if (deck.has(kk) || clipped(x, z) || !inPlan(x, z)) continue;
+      if (ringRail.has(key3(x, deckY + 1, z))) continue;
+      deck.set(kk, [x, z, end === 0 ? 0 : path.length - 1, false]);
+    }
     // the open mouths of the roadway carry no parapet, or nothing could drive on
     const mouths = new Set();
     for (const k of [0, path.length - 1])

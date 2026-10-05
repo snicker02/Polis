@@ -157,6 +157,41 @@ export default async function run(ctx) {
     check('bridges: where the streets do not line up, a bridge curves (square corners)', curved >= 2, `${curved} curved`);
     check('bridges: over straight and curved bridges alike, the loop one closed circuit through every district', openLoops === 0 && missed === 0, `${openLoops} open, ${missed} missing a district`);
   }
+  // Players' own cities, rebuilt from their sites (ground and water read from the
+  // blocks of their worlds) and their saved settings. Each ringed whole: one loop
+  // closed through every district and across every bridge, each line one piece,
+  // and at the bridges no rail crowded and no brick where a deck meets the land.
+  // (The second has two bridges from the old search, one landing at a corner of
+  // the shore: the loop's band pinched there until landings got platforms.)
+  {
+    const { railLinks, railsOf, trackFrom } = await import('../../engine/railgraph.js');
+    const { readFileSync } = await import('node:fs');
+    for (const name of ['site-1004841.json', 'site-1004954.json']) {
+      const fx = JSON.parse(readFileSync(new URL('./' + name, import.meta.url), 'utf8'));
+      const ground = new Int16Array(Uint8Array.from(Buffer.from(fx.ground, 'base64')).buffer);
+      const water = Uint8Array.from(Buffer.from(fx.water, 'base64'));
+      const r = generateCity({ ...DEFAULTS, ...fx.settings, furnish: false, villagers: 0, fish: false, terrain: { ground, water, baseY: fx.baseY } });
+      const rails = railsOf(r.world, MATERIALS);
+      const loop = r.transit.lines.find((l) => l.loop);
+      const st = loop && loop.cells.map((c) => c.join(',')).find((k) => rails.has(k));
+      const t = st ? trackFrom(rails, st) : new Set();
+      const closed = t.size > 0 && [...t].every((k) => railLinks(rails, k).length === 2);
+      const { W } = r.plan;
+      const through = r.plan.districts.every((d) => [...t].some((k) => { const [x, , z] = k.split(',').map(Number); return d.has(z * W + x); }));
+      const seen = new Set(); let pieces = 0;
+      for (const k of rails.keys()) { if (seen.has(k)) continue; pieces++; const c = [k]; seen.add(k); for (let j = 0; j < c.length; j++) for (const m of railLinks(rails, c[j])) if (!seen.has(m)) { seen.add(m); c.push(m); } }
+      // crowded rails at the bridges: on a deck or within six of a landing
+      const nearBridge = (x, z) => r.bridges.some((b) => b.cells.some(([bx, bz]) => Math.abs(bx - x) <= 6 && Math.abs(bz - z) <= 6));
+      let crowdedAtBridges = 0;
+      for (const k of rails.keys()) { const [x, y, z] = k.split(',').map(Number); let n = 0; for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) for (const dy of [-1, 0, 1]) if (rails.has((x + dx) + ',' + (y + dy) + ',' + (z + dz))) { n++; break; } if (n >= 3 && nearBridge(x, z)) crowdedAtBridges++; }
+      let shore = 0;
+      for (const b of r.bridges) { const gap = b.gapCells || new Set(); for (const [x, z] of b.path) if (!gap.has(z * W + x) && r.world.get(x, b.deckY + 1, z) === MAT.STONEBRICK) shore++; }
+      const id = name.replace('site-', '').replace('.json', '');
+      check(`a player's city (${id}): rebuilt as it was (${fx.expect.districts} districts, ${fx.expect.bridges} bridges), ringed whole`, r.plan.districts.length === fx.expect.districts && r.bridges.length === fx.expect.bridges && !!r.transit.ringedWhole, `${r.plan.districts.length} districts, ${r.bridges.length} bridges, ringed whole ${!!r.transit.ringedWhole}`);
+      check(`a player's city (${id}): the loop one closed circuit through every district`, closed && through, `${closed ? 'closed' : 'open'}, ${through ? 'through all' : 'misses one'}`);
+      check(`a player's city (${id}): each line one piece; at the bridges no rail crowded, no brick on a landing`, pieces === r.transit.lines.length && crowdedAtBridges === 0 && shore === 0, `${pieces} pieces for ${r.transit.lines.length} lines, ${crowdedAtBridges} crowded at bridges, ${shore} bricks on landings`);
+    }
+  }
   check('districts: the made landscape falls into three, the far one bridged through the middle', cities[0][1].plan.districts.length === 3 && cities[0][1].bridges.length === 2);
   check('districts: every one reached on foot from downtown\'s streets, across the bridges', notReached === 0, `${notReached} not reached`);
   check('districts: one rail network touches every district', railSplit === 0, `${railSplit} cities split`);

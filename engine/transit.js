@@ -105,7 +105,7 @@ export function layTransit(world, plan, mode, G) {
   if (main && plan.bridged) {
     const Ow = edgeDistance(plan);
     for (const k of [2, 3]) {
-      const cyc = traceContour(W, D, (x, z) => Ow[z * W + x] >= k && road(x, z));
+      const cyc = traceOuter(W, D, (x, z) => Ow[z * W + x] >= k && road(x, z));
       if (!cyc || cyc.length < 40) continue;
       const touches = plan.districts.every((d) => cyc.some(([x, z]) => d.has(z * W + x)));
       // and never beside itself: two stretches of one ring side by side (where a
@@ -647,6 +647,44 @@ function tidyRing(cells) {
 // hand on the wall, which comes back to where it started however ragged the
 // shape is. The result is thinned so that no cell repeats and each is next to
 // the one before, which is what the rails need.
+// The whole outline of a region, walked with a hand on its wall until the walk
+// is back where it began facing the way it set off (traceContour stops the first
+// time it steps on its start, which a ragged outline can pass through half way
+// round, and then dropped what it had walked twice: on a big city it came back
+// with one district's ring and none of the bridges). Every step is kept. A cell
+// walked twice is a pinch, where the track would cross itself: its cells are
+// returned as pinches so they can be widened, and no ring is returned.
+export function traceOuter(W, D, ok, info = null) {
+  let start = null;
+  for (let z = 0; z < D && !start; z++) for (let x = 0; x < W; x++) if (ok(x, z)) { start = [x, z]; break; }
+  if (!start) return null;
+  const DIRS = [[1, 0], [0, 1], [-1, 0], [0, -1]];
+  const path = [];
+  const states = new Set();
+  let [cx, cz] = start, dir = 0;
+  for (let step = 0; step < W * D * 4; step++) {
+    const state = cx + ',' + cz + ',' + dir;
+    if (states.has(state)) break;
+    states.add(state);
+    path.push([cx, cz]);
+    let moved = false;
+    for (let t = 3; t <= 6; t++) {
+      const nd = (dir + t) % 4, nx = cx + DIRS[nd][0], nz = cz + DIRS[nd][1];
+      if (nx < 0 || nz < 0 || nx >= W || nz >= D || !ok(nx, nz)) continue;
+      cx = nx; cz = nz; dir = nd; moved = true;
+      break;
+    }
+    if (!moved) return null;
+  }
+  while (path.length > 1 && path[path.length - 1][0] === path[0][0] && path[path.length - 1][1] === path[0][1]) path.pop();
+  const count = new Map();
+  for (const [x, z] of path) { const k = x + ',' + z; count.set(k, (count.get(k) || 0) + 1); }
+  const pinches = [...count].filter(([, n]) => n > 1).map(([k]) => k.split(',').map(Number));
+  if (info) { info.pinches = pinches; info.length = path.length; }
+  if (pinches.length) return null;
+  return path.length >= 40 ? path : null;
+}
+
 function traceContour(W, D, ok) {
   let start = null;
   for (let z = 0; z < D && !start; z++) for (let x = 0; x < W; x++) if (ok(x, z)) { start = [x, z]; break; }
