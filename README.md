@@ -1,4 +1,4 @@
-# Polis v0.38.2
+# Polis v0.38.3
 
 *Created with help from Claude AI.*
 
@@ -761,6 +761,21 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.38.3** — The divider stops where the deck meets the land.
+
+The brick between a bridge's two tracks (0.38.2) followed the deck's middle onto
+the shore, and was laid even over the loop's own rail there: at the junctions,
+where the land meets the bridge, it stood in L-shapes and blocks, and the
+repairs routed the track round it in knots and crossings. Checked against
+junctions built in the game and fixed by hand (e6/f6, f7, e8/f8, e9/f9): the
+brick runs only over the water, and where the deck meets the land the two
+tracks part, the one carrying on with the ring and the other turning once onto
+it (going round clockwise, on at the left lane, off at the right). Now the brick
+goes only on the deck's cells over the gap (recorded when the bridge is planned:
+gapCells), never on a cell with a rail or anything else on it.
+
+2zx checks no brick where the deck meets the land (17 checks).
 
 **0.38.2** — Two tracks a bridge, a brick between them.
 

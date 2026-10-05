@@ -206,6 +206,8 @@ export function planBridges(plan, cfg, districts) {
       for (const [cx, cz, w] of stripAt(s.path, k, s.half)) {
         if (cx < 0 || cz < 0 || cx >= W || cz >= D) continue;
         const i = cz * W + cx;
+        // (the cells over the gap, not on either shore: the divider goes only there)
+        if (plan.mask && !plan.mask[i]) (s.gapCells || (s.gapCells = new Set())).add(i);
         use[i] = USE.ROAD;
         if (plan.mask) plan.mask[i] = 1;
         (plan.bridgeCells || (plan.bridgeCells = new Set())).add(i);   // (no ordinary line runs on a bridge: transit.js)
@@ -751,15 +753,18 @@ export function buildBridges(world, plan, spans, hills, G, terrain, buildings = 
     // polyline, because that cell is the one facing the ring. A plain end
     // keeps the old margin: the lane stops one cell inside the deck, so the
     // kerb of the viaduct is not also the buffer of a railway.
-    // A raised brick along the deck's middle, end to end, so its two tracks can
-    // never run into each other (side by side, or with a third line laid down the
-    // middle, the game merged them into a tangle), and each has one way on at
-    // either end. On every cell of the deck's centre line with deck under it.
+    // A raised brick along the deck's middle so its two tracks can never run into
+    // each other (side by side, or with a third line laid down the middle, the game
+    // merged them into a tangle). Only over the water: where the deck meets the
+    // land the two tracks part, one carrying on with the ring, the other turning
+    // once onto it, and a brick there (it followed the deck onto the shore, and was
+    // laid even over the loop's own rail) forced them into knots. Never over a rail.
     let divider = 0;
+    const gap = s.gapCells || new Set();
     for (const [x, z] of path) {
-      if (!world.has(x, deckY, z)) continue;
+      if (!gap.has(z * W + x) || !world.has(x, deckY, z)) continue;
       const id = world.get(x, deckY + 1, z);
-      if (id >= 0 && !/rail|air/.test(MATERIALS.def(id).block) && !MATERIALS.isPassable(id)) continue;
+      if (id >= 0) continue;                                 // (a rail, or anything else standing there)
       world.set(x, deckY + 1, z, MAT.STONEBRICK);
       divider++;
     }

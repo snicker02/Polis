@@ -125,14 +125,20 @@ export default async function run(ctx) {
     // the two tracks kept apart: a raised brick down the middle of every deck, end
     // to end, no rail on a deck's middle, and no rail on a deck crowded by more
     // than two others (three tracks side by side merged into a tangle in the game)
-    let gapsInDivider = 0, midRails = 0, crowded = 0;
+    // (over the water only: where the deck meets the land the two tracks part,
+    // one carrying on with the ring and the other turning once onto it, and a
+    // brick on the shore forced them into knots)
+    let gapsInDivider = 0, midRails = 0, crowded = 0, onShore = 0;
     for (const r of [...made, ...cities.map(([, c]) => c)]) {
-      const w = r.world;
+      const w = r.world, Wp = r.plan.W;
       for (const b of r.bridges) {
         const deck = new Set(b.cells.map(([x, z]) => x + ',' + z));
+        const gap = b.gapCells || new Set();
         for (const [x, z] of b.path) {
           if (!w.has(x, b.deckY, z)) continue;
-          if (w.get(x, b.deckY + 1, z) !== MAT.STONEBRICK) gapsInDivider++;
+          const brick = w.get(x, b.deckY + 1, z) === MAT.STONEBRICK;
+          if (!gap.has(z * Wp + x)) { if (brick) onShore++; continue; }
+          if (!brick) gapsInDivider++;
           for (let y = b.deckY; y <= b.deckY + 2; y++) { const id = w.get(x, y, z); if (id >= 0 && /rail/.test(MATERIALS.def(id).block)) midRails++; }
         }
         for (const k of deck) {
@@ -142,7 +148,8 @@ export default async function run(ctx) {
         }
       }
     }
-    check('bridges: a raised brick down the middle of every deck, end to end', gapsInDivider === 0, `${gapsInDivider} gaps`);
+    check('bridges: a raised brick down the middle of every deck over the water, end to end', gapsInDivider === 0, `${gapsInDivider} gaps`);
+    check('bridges: no brick where the deck meets the land (the tracks part there)', onShore === 0, `${onShore} on the shore`);
     check('bridges: no rail on a deck\'s middle (no line laid between its two tracks)', midRails === 0, `${midRails}`);
     check('bridges: two tracks a deck, never crowded together', crowded === 0, `${crowded} crowded`);
     check('bridges: five across (two tracks, a kerb either side)', wide === 0 && all > 0, `${wide} of ${all} not`);
