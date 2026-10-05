@@ -1,0 +1,138 @@
+// tools/checks/2zz-jail.js — the jail (jail.js): every hostile mob that can be
+// held, behind bars, and none of them getting out.
+//
+// Built into the world and looked at there: from each inmate, where it could
+// move (air and water; not walls, bars, glass, fences, slabs): its own cell or
+// hall only, never the street or the corridor. From the door, where a visitor
+// can walk (never on a fence: a block and a half high): the corridor on every
+// floor. The corridor's ceiling a slab low its whole length (no enderman fits).
+// No spot a visitor reaches within four of a creeper (a creeper lights within
+// three). The pack's populate summons every inmate, each by name. On flat cities
+// and on a player's own fitted one (the jail rides up with the ground).
+
+import { readFileSync } from 'node:fs';
+
+export const id = '2zz';
+export const label = '2zz. the jail';
+
+let MATERIALS, MAT;
+
+function inspectJail(r) {
+  const J = r.landmarks.find((L) => L.kind === 'jail');
+  if (!J) return { built: false };
+  const w = r.world;
+  const blockOf = (x, y, z) => { const id = w.get(x, y, z); return id < 0 ? 'air' : MATERIALS.def(id).block.replace('minecraft:', ''); };
+  // what a mob can move through: air and water (not walls, bars, glass, fences, slabs, stairs)
+  // (a lantern hangs in the air; a sea lantern is a whole block)
+  const open = (x, y, z) => { const b = blockOf(x, y, z); return b === 'air' || b === 'water' || b === 'lantern' || b === 'soul_lantern'; };
+  const fill = (x, y, z, limit = 4000) => {
+    const seen = new Set([x + ',' + y + ',' + z]), q = [[x, y, z]];
+    while (q.length && seen.size < limit) {
+      const [a, b, c] = q.pop();
+      for (const [dx, dy, dz] of [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]]) {
+        const k = (a + dx) + ',' + (b + dy) + ',' + (c + dz);
+        if (seen.has(k) || !open(a + dx, b + dy, c + dz)) continue;
+        seen.add(k); q.push([a + dx, b + dy, c + dz]);
+      }
+    }
+    return seen;
+  };
+  // each inmate's space: small (its own room), never the door's space
+  const fr0 = J.frame;
+  const [fx, fz] = fr0.at(7, 10);
+  let lift = 0;
+  for (let d = -3; d <= 6; d++) if (/polished_blackstone_bricks$/.test(blockOf(fx, fr0.floorY(0) + d, fz)) && blockOf(fx, fr0.floorY(0) + d + 1, fz) === 'air') { lift = d; break; }
+  const FY = (f) => fr0.floorY(f) + lift;
+  const [dx0, dz0] = [J.door[0], J.door[2]]; const dy0 = J.door[1] + lift;
+  const outside = fill(dx0, dy0, dz0, 20000);
+  const res = { lift, built: true, inmates: J.inmates.length, kinds: new Set(J.inmates.map((m) => m.type)).size, escaped: [], spaces: [] };
+  const spaceOf = new Map();
+  for (const m of J.inmates) {
+    const k = Math.floor(m.x) + ',' + m.y + ',' + Math.floor(m.z);
+    if (!open(Math.floor(m.x), m.y, Math.floor(m.z))) { res.escaped.push(`${m.type}: spawns inside a block (${blockOf(Math.floor(m.x), m.y, Math.floor(m.z))})`); continue; }
+    const sp = fill(Math.floor(m.x), m.y, Math.floor(m.z));
+    if (sp.size >= 4000 || outside.has(k)) {
+      const fp = new Set(); for (let v = 0; v < J.frame.DEPTH; v++) for (let u = 0; u < J.frame.W; u++) fp.add(J.frame.at(u, v).join(','));
+      // the first cells of its space that are outside the cell's own box, in the order the fill found them
+      const c = J.cells[m.cell], box = new Set(); if (c) for (let u = c.u[0]; u <= c.u[1]; u++) for (let v = c.v[0]; v <= c.v[1]; v++) box.add(J.frame.at(u, v).join(','));
+      const leak = [...sp].filter((q3) => { const [x, , z] = q3.split(',').map(Number); return !box.has(x + ',' + z); }).slice(0, 4);
+      res.escaped.push(`${m.type}: its space reaches the street or the corridor (${sp.size} cells), first outside its cell: ${leak.join(' ')}`);
+    }
+    res.spaces.push(`${m.type}:${sp.size}`);
+  }
+  // visitors: the corridor of each floor reachable from the door (walking: two of air above a solid floor)
+  const walk = new Set([dx0 + ',' + dy0 + ',' + dz0]); const q = [[dx0, dy0, dz0]];
+  const stand = (x, y, z) => { const b = blockOf(x, y, z), a = blockOf(x, y + 1, z), u = blockOf(x, y - 1, z); return (b === 'air' || /lantern|slab/.test(b) && false || /stairs/.test(b)) && (a === 'air' || /slab|lantern/.test(a)) && u !== 'air' && u !== 'water' && !/fence/.test(u); };   // (no one stands on a fence: it is a block and a half high)
+  while (q.length && walk.size < 30000) {
+    const [a, b, c] = q.pop();
+    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) for (const dy of [0, 1, -1]) {
+      const x = a + dx, y = b + dy, z = c + dz, k = x + ',' + y + ',' + z;
+      if (walk.has(k) || !stand(x, y, z)) continue;
+      if (dy === 1 && blockOf(a, b + 2, c) !== 'air' && !/slab/.test(blockOf(a, b + 2, c))) continue;
+      walk.add(k); q.push([x, y, z]);
+    }
+  }
+  const fr = J.frame, corr = [0, 1, 2].map((f) => { const [x, z] = fr.at(7, 10); return walk.has(x + ',' + (FY(f) + 1) + ',' + z); });
+  res.corridors = corr;
+  // creepers: no walkable spot within 4
+  let near = 0;
+  const inside = new Set(); for (let v = 0; v < fr.DEPTH; v++) for (let u = 0; u < fr.W; u++) inside.add(fr.at(u, v).join(','));
+  for (const m of J.inmates.filter((q2) => q2.type === 'creeper')) for (const k of walk) { const [x, y, z] = k.split(',').map(Number); if (!inside.has(x + ',' + z)) continue; if (Math.hypot(x + 0.5 - m.x, z + 0.5 - m.z) < 4 && Math.abs(y - m.y) < 3) near++; }
+  res.creeperNear = near;
+  res.creeperSpots = [];
+  const uvOf = new Map(); for (let v = -1; v <= fr.DEPTH; v++) for (let u = -1; u <= fr.W; u++) uvOf.set(fr.at(u, v).join(','), `u${u}v${v}`);
+  for (const m of J.inmates.filter((q2) => q2.type === 'creeper')) for (const k of walk) { const [x, y, z] = k.split(',').map(Number); if (!inside.has(x + ',' + z)) continue; if (Math.hypot(x + 0.5 - m.x, z + 0.5 - m.z) < 4 && Math.abs(y - m.y) < 3) res.creeperSpots.push(`${uvOf.get(x + ',' + z)}@${y - FY(0)}`); }
+  // the corridor's ceiling: a slab at its top row all along, every floor
+  let lowGaps = 0;
+  for (let f = 0; f < 3; f++) for (let v = 4; v <= fr.E; v++) for (let u = 6; u <= 8; u++) { const [x, z] = fr.at(u, v); if (!/slab/.test(blockOf(x, FY(f) + 3, z))) lowGaps++; }
+  res.enderGaps = lowGaps;
+  return res;
+}
+
+export default async function run(ctx) {
+  const { check, note } = ctx;
+  const { generateCity, DEFAULTS } = await import('../../engine/city.js');
+  ({ MATERIALS, MAT } = await import('../../engine/materials.js'));
+  const { buildStructures, functionFiles } = await import('../../engine/export.js');
+  const { HOSTILE_KINDS } = await import('../../engine/hostiles.js');
+  const { JAIL_CELLS } = await import('../../engine/jail.js');
+  const L = { furnish: false, villagers: 0, fish: false };
+  const fx = JSON.parse(readFileSync(new URL('./site-1004954.json', import.meta.url), 'utf8'));
+  const ground = new Int16Array(Uint8Array.from(Buffer.from(fx.ground, 'base64')).buffer);
+  const water = Uint8Array.from(Buffer.from(fx.water, 'base64'));
+  const cities = [
+    ['flat 256', generateCity({ ...DEFAULTS, ...L, size: 256, seed: 7, jail: true })],
+    ['flat 320', generateCity({ ...DEFAULTS, ...L, size: 320, seed: 12345, jail: true })],
+    ['a player\'s fitted city', generateCity({ ...DEFAULTS, ...fx.settings, ...L, jail: true, terrain: { ground, water, baseY: fx.baseY } })],
+  ];
+  check('defaults: no jail unless asked', DEFAULTS.jail === false);
+  const kindsWanted = new Set([...JAIL_CELLS.flatMap((c) => c.kinds), 'creeper', 'guardian', 'ghast']);
+  check('jail: every kind it holds is one Polis can summon', [...kindsWanted].every((k) => HOSTILE_KINDS[k] && HOSTILE_KINDS[k].be), [...kindsWanted].filter((k) => !HOSTILE_KINDS[k]).join(','));
+  let built = 0, escaped = [], corridorsOk = 0, enderGaps = 0, creeperNear = 0, kindsAll = 0;
+  for (const [name, r] of cities) {
+    const t = inspectJail(r);
+    if (!t.built) { escaped.push(`${name}: no jail`); continue; }
+    built++;
+    if (t.kinds === kindsWanted.size) kindsAll++;
+    escaped.push(...t.escaped.map((e) => `${name}: ${e}`));
+    if (t.corridors.every(Boolean)) corridorsOk++;
+    enderGaps += t.enderGaps; creeperNear += t.creeperNear;
+  }
+  check('jail: built when asked, on flat cities and on a fitted one', built === cities.length, `${built} of ${cities.length}`);
+  check('jail: every kind it holds is in it', kindsAll === built && built > 0, `${kindsAll} of ${built}`);
+  check("jail: no inmate can get out (each one's space its own cell or hall)", escaped.length === 0, escaped.slice(0, 3).join('; '));
+  check('jail: a visitor walks in from the street to the corridor on every floor', corridorsOk === built, `${corridorsOk} of ${built}`);
+  check("jail: the corridor's ceiling a slab low all along (no enderman fits under it)", enderGaps === 0, `${enderGaps} gaps`);
+  check('jail: no visitor within four of a creeper (one lights within three)', creeperNear === 0, `${creeperNear} spots`);
+  // the pack: every inmate summoned in populate, each by name (a named mob is kept)
+  {
+    const r = cities[0][1], w = r.world;
+    const fns = functionFiles(buildStructures(w, {}), w, { namespace: 'test', spawns: r.spawns, inmates: r.inmates });
+    const pop = fns.find((f) => /(^|\/)populate\.mcfunction$/.test(f.name));
+    const text = !pop ? '' : typeof pop.data === 'string' ? pop.data : pop.data ? new TextDecoder().decode(pop.data) : (pop.text || '');
+    const lines = text.split('\n');
+    const summons = lines.filter((l) => /^summon minecraft:\S+ Inmate /.test(l));
+    check('jail: populate summons every inmate, each named', summons.length === r.inmates.length && r.inmates.length > 0, `${summons.length} of ${r.inmates.length}`);
+    note(`jail: ${r.inmates.length} inmates of ${new Set(r.inmates.map((m) => m.type)).size} kinds; ${cities.filter(([, c]) => c.landmarks.some((Lm) => Lm.kind === 'jail' && Lm.sideways)).length} of ${cities.length} jails turned sideways`);
+  }
+}

@@ -45,11 +45,24 @@ export function buildMetro(world, plan, cfg, G, opts = {}) {
   const inRoom = (x, y, z) => rooms.some((b) => near(b, x, y, z, 1)) || boxes.some((b) => near(b, x, y, z, 1));
   const inAir = (x, y, z) => rooms.some((b) => near(b, x, y, z, 0)) || boxes.some((b) => near(b, x, y, z, 0));
   const free = (x, y, z) => { const id = world.get(x, y, z); return (id === -1 || SOFT.has(id)) && !inRoom(x, y, z); };
+  // The street's surface: on a fitted city it rises and falls (opts.surface), on
+  // a flat one it is G everywhere. Tunnels keep their depths below the lowest
+  // street, all at one level (so the second cross line still passes under the
+  // first): under high ground they simply lie deeper, and a station's stairs
+  // climb as far as its own street.
+  const surf = opts.surface || (() => G);
+  let Gb = G;
+  if (opts.surface) {
+    Gb = Infinity;
+    for (let z = 0; z < D; z++) for (let x = 0; x < W; x++) if (isStreet(x, z)) Gb = Math.min(Gb, surf(x, z));
+    if (Gb === Infinity) Gb = G;
+  }
   const doors = [];
   for (const b of opts.buildings || []) for (const d of b.doorCells || []) doors.push(d);
   const byDoor = (x, z) => doors.some(([dx, dz]) => Math.abs(dx - x) <= 1 && Math.abs(dz - z) <= 1);
   const clearAbove = (x, z) => {
-    for (let y = G + 1; y <= G + 3; y++) {
+    const g = surf(x, z);
+    for (let y = g + 1; y <= g + 3; y++) {
       const id = world.get(x, y, z); if (id === -1) continue;
       const n = MATERIALS.def(id).block;
       if (!FURNITURE.test(n) && n !== 'minecraft:sea_lantern') return false;
@@ -94,7 +107,23 @@ export function buildMetro(world, plan, cfg, G, opts = {}) {
     box(hx0, hz0, hx1, hz1, F + 1, F + 4);
     for (let u = st.u - 3; u <= st.u + 3; u += 3) for (const da of [-3, 3]) { const [x, z] = cell(u, a + da); world.set(x, F + 4, z, MAT.LAMP_HANG); }
   };
+  // A flight climbs to the street over its top, whose height a straight flight's
+  // length decides and which decides its length: so each street height near the
+  // station is tried in turn, the lowest first, and a flight taken whose way out
+  // and opening stand on level street at that height (on a flat city, one try).
   const buildStairs = (seg, st, dry) => {
+    const { cell, a } = seg;
+    let lo = Infinity, hi = -Infinity;
+    for (let u = st.u - 30; u <= st.u + 30; u++) for (let da = -6; da <= 6; da++) {
+      const [x, z] = cell(u, a + da);
+      if (!isStreet(x, z)) continue;
+      const g = surf(x, z); lo = Math.min(lo, g); hi = Math.max(hi, g);
+    }
+    if (lo === Infinity) return null;
+    for (let g = lo; g <= hi; g++) { const r = stairsTo(seg, st, dry, g); if (r) return r; }
+    return null;
+  };
+  const stairsTo = (seg, st, dry, G) => {
     const { F, cell, a, axis } = seg;
     const rise = G - F;
     const climbUp = { 1: axis === 'x' ? WEIRDO.east : WEIRDO.south, [-1]: axis === 'x' ? WEIRDO.west : WEIRDO.north };
@@ -118,6 +147,9 @@ export function buildMetro(world, plan, cfg, G, opts = {}) {
     for (const pl of plans) {
       const [ex, ez] = cell(pl.exit.u, pl.exit.a);
       if (!isStreet(ex, ez) || !clearAbove(ex, ez) || byDoor(ex, ez)) continue;
+      if (surf(ex, ez) !== G) continue;                       // the way out at this street height
+      // (and the opening on level street at it: no step in the pavement round it)
+      if ([...pl.steps, ...pl.landing].some((q) => q.y + 3 >= G && surf(...cell(q.u, q.a)) !== G)) continue;
       if (pl.steps.some((q) => Math.abs(q.a - a) >= 5 && hallHas(q.u, q.a))) continue;      // not through the hall's side walls
       let ok = true;
       for (const q of [...pl.steps, ...pl.landing]) {
@@ -238,7 +270,7 @@ export function buildMetro(world, plan, cfg, G, opts = {}) {
     return best;
   };
   [pick('x'), pick('z')].filter(Boolean).forEach((p, li) => {
-    const F = G - 9 - li * 5;
+    const F = Gb - 9 - li * 5;
     const cell = (u, a) => (p.axis === 'x' ? [u, a] : [a, u]);
     let u0 = p.u0 + 4, u1 = p.u1 - 4;
     while (u0 < u1 && !inCity(...cell(u0, p.a))) u0++;
@@ -265,7 +297,7 @@ export function buildMetro(world, plan, cfg, G, opts = {}) {
 
   // ---- the loop round the city -----------------------------------------------------
   if (opts.loop !== false) {
-    const F = G - 19;
+    const F = Gb - 19;
     // The loop runs nineteen down, under everything else (cellars, the crypt and
     // the cross lines are all higher), so it need not follow the streets: it is
     // the city's own footprint drawn in until the loop and its halls lie inside

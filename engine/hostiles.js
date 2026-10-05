@@ -32,6 +32,24 @@ export const HOSTILE_KINDS = {
   wither_skeleton:  { be: 'minecraft:wither_skeleton',    java: 'minecraft:wither_skeleton',  name: 'WitherSkeleton' },
   zoglin:           { be: 'minecraft:zoglin',             java: 'minecraft:zoglin',           name: 'Zoglin' },
   zombified_piglin: { be: 'minecraft:zombie_pigman',      java: 'minecraft:zombified_piglin', name: 'Piglin' },
+  // the rest the jail holds (jail.js)
+  zombie:           { be: 'minecraft:zombie',             java: 'minecraft:zombie',           name: 'Zombie' },
+  drowned:          { be: 'minecraft:drowned',            java: 'minecraft:drowned',          name: 'Drowned' },
+  zombie_villager:  { be: 'minecraft:zombie_villager_v2', java: 'minecraft:zombie_villager',  name: 'ZombieVillager' },
+  skeleton:         { be: 'minecraft:skeleton',           java: 'minecraft:skeleton',         name: 'Skeleton' },
+  stray:            { be: 'minecraft:stray',              java: 'minecraft:stray',            name: 'Stray' },
+  bogged:           { be: 'minecraft:bogged',             java: 'minecraft:bogged',           name: 'Bogged' },
+  cave_spider:      { be: 'minecraft:cave_spider',        java: 'minecraft:cave_spider',      name: 'CaveSpider' },
+  endermite:        { be: 'minecraft:endermite',          java: 'minecraft:endermite',        name: 'Endermite' },
+  silverfish:       { be: 'minecraft:silverfish',         java: 'minecraft:silverfish',       name: 'Silverfish' },
+  slime:            { be: 'minecraft:slime',              java: 'minecraft:slime',            name: 'Slime' },
+  phantom:          { be: 'minecraft:phantom',            java: 'minecraft:phantom',          name: 'Phantom' },
+  shulker:          { be: 'minecraft:shulker',            java: 'minecraft:shulker',          name: 'Shulker' },
+  breeze:           { be: 'minecraft:breeze',             java: 'minecraft:breeze',           name: 'Breeze' },
+  creaking:         { be: 'minecraft:creaking',           java: 'minecraft:creaking',         name: 'Creaking' },
+  ravager:          { be: 'minecraft:ravager',            java: 'minecraft:ravager',          name: 'Ravager' },
+  guardian:         { be: 'minecraft:guardian',           java: 'minecraft:guardian',         name: 'Guardian' },
+  ghast:            { be: 'minecraft:ghast',              java: 'minecraft:ghast',            name: 'Ghast' },
 };
 
 // what each style brings, with weights

@@ -363,6 +363,10 @@ Object.assign(MAT, {
 Object.assign(MAT, {
   BLACKSTONE:        A('BLACKSTONE', 'minecraft:blackstone', '#2a2328'),
   POL_BLACKSTONE:    A('POL_BLACKSTONE', 'minecraft:polished_blackstone', '#35303a'),
+  // the jail (jail.js): bricks silverfish cannot burrow into, and the slab that
+  // keeps the corridor too low for an enderman
+  JAIL_WALL:         A('JAIL_WALL', 'minecraft:polished_blackstone_bricks', '#2e2a33'),
+  JAIL_SLAB:         A('JAIL_SLAB', 'minecraft:polished_blackstone_brick_slab', '#2e2a33', { 'minecraft:vertical_half': S('bottom') }),
   PB_BRICKS:         A('PB_BRICKS', 'minecraft:polished_blackstone_bricks', '#302a31'),
   CHISELED_PB:       A('CHISELED_PB', 'minecraft:chiseled_polished_blackstone', '#353039'),
   GILDED_BLACKSTONE: A('GILDED_BLACKSTONE', 'minecraft:gilded_blackstone', '#3b2f25'),

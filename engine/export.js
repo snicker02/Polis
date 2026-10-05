@@ -17,7 +17,7 @@ import { makeRng } from './rng.js';
 // Must match main.js VERSION, package.json and index.html data-version;
 // tools/validate.js fails if they drift. The app refuses to export when the
 // browser has mixed cached copies of old and new files.
-export const POLIS_VERSION = '0.38.4';
+export const POLIS_VERSION = '0.39.0';
 
 export const CHUNK = 64;          // Bedrock structure limit per horizontal axis
 export const GROUND_DROP = 2;     // base layer y=0 sits 2 below feet; surface y=1 replaces the block you stand on
@@ -419,6 +419,7 @@ export function functionFiles(tiles, world, opts = {}) {
   const summoned = carts.concat(boats, fish);
   // hostile mobs: their own functions always; populate too when asked
   const hostiles = opts.hostiles || [];
+  const inmates = opts.inmates || [];
   const hostLine = (p, dx, dz) => `summon ${HOSTILE_KINDS[p.type].be} ${p.name} ${rel(p.x - dx)} ${rel(p.y - GROUND_DROP)} ${rel(p.z - dz)}`;
   const inPop = !!opts.hostilesInPopulate && hostiles.length > 0;
   const kindsIn = [...new Set(hostiles.map((p) => p.type))];
@@ -486,6 +487,9 @@ export function functionFiles(tiles, world, opts = {}) {
     ...(rails(dx, dz).length ? ['say Polis: setting every rail again (a curve can straighten itself while the city goes in)...', ...rails(dx, dz)] : []),
     ...summoned.map((p) => sumLine(p, dx, dz)),
     ...(inPop ? [`say Polis: and ${hostiles.length} hostile mobs.`, ...hostiles.map((p) => hostLine(p, dx, dz)), ...hostileWarnings] : []),
+    // the jail's inmates: always, they are locked up (named, so none despawns)
+    ...(inmates.length ? [`say Polis: and ${inmates.length} inmates for the jail.`, ...inmates.map((p) => hostLine(p, dx, dz)),
+      'say Polis: the jail is empty on Peaceful: hostile mobs do not appear there.'] : []),
     ...areas.map((a) => `tickingarea remove ${a.name}`),
     'say Polis: done. Villagers take jobs from the workstations and claim beds over the next few minutes.',
     ...(boats.length ? [`say Polis: any boat that did not appear, run /function ${ns}/${dx === wb.x0 ? 'boats' : 'boats_centered'} from beside the water.`] : []),

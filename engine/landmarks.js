@@ -27,6 +27,7 @@ import { styleOf } from './styles.js';
 // styles (cfg.styleAt, set by generateCity), otherwise the city's.
 const styleHere = (cfg, lot) => (cfg.styleAt ? cfg.styleAt((lot.x0 + lot.x1) / 2, (lot.z0 + lot.z1) / 2) : styleOf(cfg.cityStyle));
 import { gothicChurch, fleche } from './gothic.js';
+import { jail } from './jail.js';
 
 export const LANDMARKS = ['townhall', 'clocktower', 'library', 'market', 'church', 'mansion', 'school', 'lighthouse', 'castle',
   'townsquare', 'stadium', 'cemetery', 'allotments', 'bandstand'];
@@ -34,6 +35,7 @@ const NEED = {                       // [shorter side, longer side] of the lot
   townhall: [13, 15], clocktower: [9, 9], library: [11, 12], market: [12, 12],
   church: [13, 15], mansion: [15, 20], school: [17, 25], lighthouse: [9, 9], castle: [13, 13],
   townsquare: [13, 13], stadium: [17, 21], cemetery: [12, 14], allotments: [13, 13], bandstand: [9, 9],
+  jail: [15, 23],
 };
 
 // Mark the lots, each kind at most once:
@@ -72,6 +74,13 @@ export function chooseLandmarks(plan, cfg, hills = null, canal = null) {
     const pick = list.find((c) => fits(c, kind)) || list.find((c) => fitsLoose(c, kind));
     if (pick) { pick.l.landmark = kind; out.push(pick.l); }
   };
+  // The jail, when asked for, first of all: it needs a big lot (fifteen by
+  // twenty-three), a fitted town may have only one, and the core landmarks all
+  // fit far smaller ones. Toward the edge of town where it can be.
+  if (cfg.jail) {
+    const lots = all.filter((c) => fits(c, 'jail')).sort((p, q) => q.d - p.d);
+    if (lots.length) { lots[0].l.landmark = 'jail'; out.push(lots[0].l); }
+  }
   const downtown = all.filter((c) => c.l.style !== 'house' && c.d <= reach).sort((p, q) => p.d - q.d);
   // a walled fortress town: the keep takes the heart of the town first, the
   // market square the next nearest lot
@@ -757,10 +766,10 @@ function mansion(world, lot, face, cfg, rng, G) {
 }
 
 const BUILDERS = { townhall: townHall, clocktower: clockTower, library, market, church, mansion, school, lighthouse, castle,
-  townsquare: townSquare, stadium, cemetery, allotments, bandstand };
+  townsquare: townSquare, stadium, cemetery, allotments, bandstand, jail };
 export const LANDMARK_NAMES = { townhall: 'Town Hall', clocktower: 'Clock Tower', library: 'Library', market: 'Market',
   church: 'Church', school: 'School', lighthouse: 'Lighthouse', castle: 'Castle', mansion: 'Mansion',
-  townsquare: 'Town Square', stadium: 'Stadium', cemetery: 'Cemetery', allotments: 'Allotments', bandstand: 'Bandstand' };
+  townsquare: 'Town Square', stadium: 'Stadium', cemetery: 'Cemetery', allotments: 'Allotments', bandstand: 'Bandstand', jail: 'Jail' };
 
 export function buildLandmark(world, lot, face, cfg, rng, G) {
   const L = BUILDERS[lot.landmark](world, lot, face, cfg, rng, G);

@@ -101,6 +101,7 @@ export const DEFAULTS = {
   cliff: false,              // the city in tiers up a cliff, stairs between them (invented cities only)
   underground: true,         // cellars under houses, a crypt under the cathedral (underground.js)
   metro: false,              // a metro under the main streets, stations with stairs up (metro.js)
+  jail: false,               // a jail landmark holding every hostile mob that can be held (jail.js)
   terrainBreaks: true,       // on fitted terrain, lots step at their own heights (retaining walls), held only to the street they face
   mixStyles: false,          // several styles, one to a district (districts.js)
   mixList: ['modern', 'medieval', 'eastasian', 'artdeco'],   // the styles ticked for mixing
@@ -586,6 +587,7 @@ export function generateCity(cfgIn, onProgress) {
     }
     for (const L of landmarks) {
       if (L.bell) L.bell[1] += elevAt(L.bell[0], L.bell[2]);
+      for (const m of L.inmates || []) m.y += elevAt(Math.floor(m.x), Math.floor(m.z));   // the jail's inmates ride up with it
       if (L.belfryBell) L.belfryBell[1] += elevAt(L.belfryBell[0], L.belfryBell[2]);
       if (L.faces) for (const f of L.faces) f.centre[1] += elevAt(f.centre[0], f.centre[2]);
       // every point a landmark records rides up with the ground under it —
@@ -675,7 +677,11 @@ export function generateCity(cfgIn, onProgress) {
   }
   // ---- the metro: after the cellars, so it can keep clear of them --------------
   // (on level ground only for now: not on stilts, in the sky, up a cliff or on fitted terrain)
-  const metro = cfg.metro && !stilts && !islands && !hills.cliff && !cfg.terrain ? buildMetro(world, plan, cfg, GROUND, { buildings }) : null;
+  // (on a fitted city too: the metro takes the street's surface, which rises and
+  // falls, and keeps its tunnels below the lowest street; its stairs climb as far
+  // as each station's own)
+  const metroSurface = cfg.terrain && hills.elev ? (x, z) => GROUND + (x >= 0 && z >= 0 && x < W && z < D ? hills.elev[z * W + x] : 0) : null;
+  const metro = cfg.metro && !stilts && !islands && !hills.cliff ? buildMetro(world, plan, cfg, GROUND, { buildings, surface: metroSurface }) : null;
   if (metro) spawns = spawns.concat(metro.carts);           // a minecart waiting at every station
   // every room under the city watertight: the world's own ground round it can be water
   const sealed = sealRooms(world, GROUND);
@@ -870,7 +876,10 @@ export function generateCity(cfgIn, onProgress) {
 
   const shell = cfg.terrain ? terrainShell(plan, cfg.terrain, GROUND, cfg.cityStyle) : null;
   const stats = summarise(world, plan, buildings, cfg, { farms, beds, spawns, bell, transit, wall, ranches, landmarks, hills, stairRuns, reach, canal, centre, streets, harbour, skirt, cutFaces, bridges, megaliths, ponds, courtyards, hostiles, dome, canals, lighting, styleDistricts: SD, spawners, stilts, islands, cliffWays, rooms, metro, stepRails, unsupported: stats_unsupported });
-  return { world, plan, buildings, cfg, stats, shell, bridges, farms, ranches, spawns, bell, transit, wall, landmarks, canal, centre, streets, harbour, harbourPlan, megaliths, ponds, courtyards, hostiles, dome, canals, lighting, styleDistricts: SD, spawners, stilts, islands, cliffWays, rooms, metro, hills, stepRails,
+  // the jail's inmates, summoned by populate (every one named, so none despawns)
+  const inmates = landmarks.flatMap((L) => L.inmates || []);
+  if (inmates.length) stats.jail = { inmates: inmates.length, kinds: new Set(inmates.map((m) => m.type)).size };
+  return { world, plan, buildings, cfg, stats, shell, bridges, farms, ranches, spawns, bell, transit, wall, landmarks, canal, centre, streets, harbour, harbourPlan, megaliths, ponds, courtyards, hostiles, inmates, dome, canals, lighting, styleDistricts: SD, spawners, stilts, islands, cliffWays, rooms, metro, hills, stepRails,
     hills, stairRuns, reach, groundAt: (x, z) => GROUND + elevAt(x, z) };
 }
 

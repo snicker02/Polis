@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Polis — Minecraft Bedrock city generator</title>
 <style>
+  /* options a fitted city cannot have: marked once a site from the world is chosen */
+  .fitnote { display: none; color: #d08a4a; font-size: 0.85em; margin-left: 0.4em; }
+  body.fitted .fitnote { display: inline; }
   :root {
     --bg: #0e1013;
     --panel: #15181d;
@@ -138,12 +141,12 @@
   }
 </style>
 </head>
-<body class="mode-city" data-version="0.38.4">
+<body class="mode-city" data-version="0.39.0">
 <div id="app">
   <div id="panel">
     <div id="panelScroll">
       <h1>PO<span>L</span>IS</h1>
-      <div class="sub">procedural city → Minecraft Bedrock · v0.38.4</div>
+      <div class="sub">procedural city → Minecraft Bedrock · v0.39.0</div>
 
       <fieldset>
         <legend>Mode</legend>
@@ -303,12 +306,13 @@
           <label class="chk"><input type="checkbox" id="flowers" checked>Flowers</label>
           <label class="chk city-only"><input type="checkbox" id="fish" checked>Fish in ponds and canal</label>
           <label class="chk city-only"><input type="checkbox" id="megaliths" checked>Standing stones in parks</label>
-          <label class="chk city-only"><input type="checkbox" id="dome">Glass dome over the whole city</label>
-          <label class="chk city-only"><input type="checkbox" id="stilts">On stilts over open water</label>
-          <label class="chk city-only"><input type="checkbox" id="floating">Floating islands in the sky</label>
-          <label class="chk city-only"><input type="checkbox" id="cliff">A cliff city in tiers</label>
+          <label class="chk city-only"><input type="checkbox" id="dome">Glass dome over the whole city<span class="fitnote">(not on fitted ground)</span></label>
+          <label class="chk city-only"><input type="checkbox" id="stilts">On stilts over open water<span class="fitnote">(not on fitted ground)</span></label>
+          <label class="chk city-only"><input type="checkbox" id="floating">Floating islands in the sky<span class="fitnote">(not on fitted ground)</span></label>
+          <label class="chk city-only"><input type="checkbox" id="cliff">A cliff city in tiers<span class="fitnote">(not on fitted ground)</span></label>
           <label class="chk city-only"><input type="checkbox" id="underground" checked>Cellars and crypt</label>
           <label class="chk city-only"><input type="checkbox" id="metro">Metro under the main streets</label>
+          <label class="chk city-only"><input type="checkbox" id="jail">A jail holding every hostile mob</label>
           <label class="chk city-only"><input type="checkbox" id="hostiles">Hostile mobs arrive with populate</label>
         </div>
         <div class="row city-only"><label>Hostile mobs</label><input type="range" id="hostileCount" min="0" max="80" step="1" value="24"><span class="val" id="hostileCount_v"></span></div>
@@ -374,6 +378,6 @@
     <div id="busy">generating…</div>
   </div>
 </div>
-<script type="module" src="./main.js?v=0.38.4"></script>
+<script type="module" src="./main.js?v=0.39.0"></script>
 </body>
 </html>

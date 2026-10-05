@@ -843,6 +843,45 @@ export function bridgeRails(world, bridges, transit, G) {
         }
       }
     }
+    // Boosters on the decks. Seated rails kept their kind but not the redstone
+    // they stood on, and those laid new were plain: a deck was a long run of
+    // plain or unpowered rail (an unpowered one brakes a cart) and carts crawled
+    // across. Round each loop once: on a deck's straights a powered rail on a
+    // redstone block set into the deck, every BOOST_EVERY rails counted from the
+    // last boost the cart had, land included; a powered rail on a deck straight
+    // given its redstone, one on a curve made plain.
+    const onDeck = new Set();
+    for (const b of bridges) for (const [x, z] of b.cells) onDeck.add(x + ',' + z);
+    const isGolden = (x, y, z) => { const id = world.get(x, y, z); return id >= 0 && MATERIALS.def(id).block === 'minecraft:golden_rail'; };
+    for (const line of transit.lines) {
+      if (!line.loop) continue;
+      const C = line.cells, n = C.length;
+      if (n < 3) continue;
+      // start the count just after a powered rail on land, so it carries on evenly
+      let start = C.findIndex(([x, y, z]) => !onDeck.has(x + ',' + z) && isGolden(x, y, z) && world.get(x, y - 1, z) === MAT.REDSTONE);
+      if (start < 0) start = 0;
+      let since = 0;
+      for (let s2 = 1; s2 <= n; s2++) {
+        const k = (start + s2) % n, [x, y, z] = C[k];
+        const a = C[(k - 1 + n) % n], b = C[(k + 1) % n];
+        const straight = a[0] + b[0] === 2 * x && a[2] + b[2] === 2 * z && Math.abs(a[0] - b[0]) + Math.abs(a[2] - b[2]) === 2;
+        if (!onDeck.has(x + ',' + z)) {
+          if (isGolden(x, y, z) && world.get(x, y - 1, z) === MAT.REDSTONE) since = 0; else since++;
+          continue;
+        }
+        const id = world.get(x, y, z);
+        if (id < 0 || !/rail/.test(MATERIALS.def(id).block)) { since++; continue; }
+        if (straight && (since >= BOOST_EVERY || isGolden(x, y, z))) {
+          const along = a[0] !== b[0] ? RAIL.EW : RAIL.NS;
+          world.set(x, y, z, poweredRailId(along));
+          world.set(x, y - 1, z, MAT.REDSTONE);
+          since = 0;
+        } else {
+          if (isGolden(x, y, z)) world.set(x, y, z, railId(straight ? (a[0] !== b[0] ? RAIL.EW : RAIL.NS) : RAIL.NS));
+          since++;
+        }
+      }
+    }
     return seated;
   }
   if (!transit || !bridges.length) return 0;

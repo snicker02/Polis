@@ -1,4 +1,4 @@
-# Polis v0.38.4
+# Polis v0.39.0
 
 *Created with help from Claude AI.*
 
@@ -761,6 +761,68 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.39.0** — A jail: every hostile mob that can be held, behind bars.
+
+A new option, "A jail holding every hostile mob" (off by default), builds a jail
+landmark (jail.js): fifteen across, twenty-three deep, three floors. A lobby with
+the stairs, a corridor down the middle, cells either side (three wide, four deep,
+three high) with iron bars, and a hall at the back of each floor: creepers on the
+ground floor, a guardians' tank on the first, ghasts on the top. 32 inmates of 28
+kinds, in 17 cells grouped so cellmates will not fight (the zoglin alone).
+
+What holds them: polished blackstone bricks (silverfish cannot burrow into them);
+iron bars (they stand a ghast's fireball); the corridor's ceiling a slab low (no
+enderman fits under it to teleport in); the creepers behind bars two rows past a
+fence (five from any visitor; a creeper lights within three); every room roofed
+(nothing burns); every inmate summoned by name in populate (a named mob does not
+despawn). Not held, because no cell keeps them: the evoker (vexes pass walls), the
+vex, the Wither, the Warden, the Ender Dragon, the elder guardian, and the piglins
+and hoglins (they change in the Overworld). The jail gets first pick of the lots
+when asked for (it needs a big one), and turns sideways on a lot long beside its
+street. On fitted cities its inmates ride up with the ground. The jail is empty on
+Peaceful.
+
+New section 2zz (9 checks): built on flat cities and on a player's own fitted one;
+every kind in it; no inmate's space reaching the corridor or the street; the
+corridor reached from the street on every floor; the slab ceiling all along; no
+visitor within four of a creeper; populate summoning every inmate by name.
+
+**0.38.6** — A metro under fitted cities; the page says what a fitted city cannot have.
+
+The metro was never built under a city fitted to the world, and the page said
+nothing: its tunnels were laid at fixed depths under one ground height, and on
+real ground the streets rise and fall. Now (metro.js) it takes the street's
+surface (city.js: from the city's own elevations): every tunnel keeps its depth
+below the lowest street in the city, all at one level, so the second cross line
+still passes under the first and under high ground they simply lie deeper; and
+each station's stairs climb as far as its own street, each street height near
+the station tried in turn, the flight taken whose way out and opening stand on
+level street at that height. On a flat city, exactly as before.
+
+A fitted city follows the world's own ground, so it has no glass dome, no stilts,
+no floating islands and no cliff tiers. Those four options are marked "not on
+fitted ground" once a site from the world is chosen, and the summary names any
+that were ticked.
+
+2zu checks the metro under a player's own city (from the blocks of their world):
+lines and stations, every flight out on its own street's surface, every room
+watertight below the street over it, each line's track its whole tunnel in one
+piece (24 checks).
+
+**0.38.5** — Boosters across the bridges.
+
+Carts crawled over the bridges: the loop's rails seated on a deck kept their kind
+but not the redstone they stood on, and those laid new were plain, so a deck was
+a long run of plain rail (the longest, 131) with not one powered rail, and on one
+bridge five powered rails with no power, which brake a cart. Now, round each loop
+once (bridges.js: bridgeRails), a deck's straights get a powered rail on a
+redstone block set into the deck every 9 rails, counted on from the last boost
+the cart had on land; a powered rail on a deck straight is given its redstone, one
+on a curve made plain. On the players' two cities: every powered rail on a deck
+powered, never more than 10 rails apart.
+
+2zx checks the boosters across every bridge of both cities (24 checks).
 
 **0.38.4** — Every bridge on the loop: landing platforms, and the city's outline walked whole.
 

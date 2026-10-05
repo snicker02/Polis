@@ -187,6 +187,18 @@ export default async function run(ctx) {
       let shore = 0;
       for (const b of r.bridges) { const gap = b.gapCells || new Set(); for (const [x, z] of b.path) if (!gap.has(z * W + x) && r.world.get(x, b.deckY + 1, z) === MAT.STONEBRICK) shore++; }
       const id = name.replace('site-', '').replace('.json', '');
+      // boosters on the bridges: carts crawled across decks of plain rail
+      let unpowered = 0, longest = 0;
+      const loopLine = r.transit.lines.find((l) => l.loop);
+      const deckSet = new Set(); for (const b of r.bridges) for (const [x, z] of b.cells) deckSet.add(x + ',' + z);
+      let run = 0;
+      for (const [x, y, z] of loopLine.cells) {
+        if (!deckSet.has(x + ',' + z)) { run = 0; continue; }
+        const d = MATERIALS.def(r.world.get(x, y, z));
+        if (d.block === 'minecraft:golden_rail') { if (r.world.get(x, y - 1, z) !== MAT.REDSTONE) unpowered++; run = 0; }
+        else if (/rail/.test(d.block)) { run++; longest = Math.max(longest, run); }
+      }
+      check(`a player's city (${id}): boosters across every bridge (powered, never more than 12 rails apart)`, unpowered === 0 && longest <= 12, `${unpowered} unpowered, longest plain run ${longest}`);
       check(`a player's city (${id}): rebuilt as it was (${fx.expect.districts} districts, ${fx.expect.bridges} bridges), ringed whole`, r.plan.districts.length === fx.expect.districts && r.bridges.length === fx.expect.bridges && !!r.transit.ringedWhole, `${r.plan.districts.length} districts, ${r.bridges.length} bridges, ringed whole ${!!r.transit.ringedWhole}`);
       check(`a player's city (${id}): the loop one closed circuit through every district`, closed && through, `${closed ? 'closed' : 'open'}, ${through ? 'through all' : 'misses one'}`);
       check(`a player's city (${id}): each line one piece; at the bridges no rail crowded, no brick on a landing`, pieces === r.transit.lines.length && crowdedAtBridges === 0 && shore === 0, `${pieces} pieces for ${r.transit.lines.length} lines, ${crowdedAtBridges} crowded at bridges, ${shore} bricks on landings`);

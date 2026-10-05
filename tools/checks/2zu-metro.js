@@ -197,4 +197,53 @@ export default async function run(ctx) {
     check('metro: none when switched off, on stilts, floating, or up a cliff', rs.every((r) => !r.metro));
   }
   note(`metro: ${lines} lines, ${stations} stations, ${reached} with stairs, over ${cities.length} cities`);
+
+  // On a fitted city: a player's own (its site's ground and water from the blocks
+  // of their world), the metro switched on. The street rises and falls: the
+  // tunnels lie below the lowest street, at one level, and each station's stairs
+  // climb to its own street's surface. Every room watertight below its street.
+  {
+    const { readFileSync } = await import('node:fs');
+    const { MATERIALS } = await import('../../engine/materials.js');
+    const { railLinks, railsOf, trackFrom } = await import('../../engine/railgraph.js');
+    const fx = JSON.parse(readFileSync(new URL('./site-1004954.json', import.meta.url), 'utf8'));
+    const ground = new Int16Array(Uint8Array.from(Buffer.from(fx.ground, 'base64')).buffer);
+    const water = Uint8Array.from(Buffer.from(fx.water, 'base64'));
+    const r = generateCity({ ...DEFAULTS, ...fx.settings, metro: true, furnish: false, villagers: 0, fish: false, terrain: { ground, water, baseY: fx.baseY } });
+    const m = r.metro, w = r.world, { W, D } = r.plan;
+    const G = r.cfg && r.cfg.ground !== undefined ? r.cfg.ground : null;
+    const ls = m ? m.lines : [];
+    let flights = 0, off = 0;
+    for (const l of ls) for (const st of l.stations) {
+      if (!st.stairs) continue;
+      flights++;
+      const [ex, ey, ez] = st.stairs.exit;
+      // out on the street: solid underfoot, open above
+      if (!w.has(ex, ey - 1, ez) || (w.has(ex, ey, ez) && !/fence|lantern|sign|air/.test(MATERIALS.def(w.get(ex, ey, ez)).block))) off++;
+    }
+    // watertight: beside every metro room, below the street over it, solid or another room
+    const boxes = (w.airBoxes || []).filter((b) => ls.some((l) => b.y1 <= l.F + 5 + 30));
+    const inBox = (x, y, z) => boxes.some((b) => x >= b.x0 && x <= b.x1 && y >= b.y0 && y <= b.y1 && z >= b.z0 && z <= b.z1);
+    let leaks = 0;
+    const streetTop = (x, z) => { for (let y = 120; y > -64; y--) { const id = w.get(x, y, z); if (id >= 0 && !MATERIALS.isPassable(id)) return y; } return -64; };
+    for (const b of boxes) for (let y = b.y0; y <= b.y1; y++) for (let z = b.z0; z <= b.z1; z++) for (let x = b.x0; x <= b.x1; x++) {
+      for (const [dx, dy, dz] of [[1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1], [0, -1, 0]]) {
+        const nx = x + dx, ny = y + dy, nz = z + dz;
+        if (inBox(nx, ny, nz) || w.has(nx, ny, nz)) continue;
+        if (ny >= streetTop(nx, nz)) continue;                  // open air at or above the street
+        leaks++;
+      }
+    }
+    const rails = railsOf(w, MATERIALS);
+    let whole = 0;
+    for (const l of ls) {
+      const [x0, z0] = l.cell(Math.round((l.u0 + l.u1) / 2), l.a);
+      const k = [...rails.keys()].find((q) => { const [x, y, z] = q.split(',').map(Number); return x === x0 && z === z0 && y >= l.F && y <= l.F + 2; });
+      if (k && trackFrom(rails, k).size >= l.u1 - l.u0 + 1) whole++;
+    }
+    check('metro on a fitted city: lines and stations under a player\'s own city', ls.length >= 1 && ls.reduce((n, l) => n + l.stations.length, 0) >= 2, `${ls.length} lines`);
+    check('metro on a fitted city: every flight comes out on its own street\'s surface', flights >= 2 && off === 0, `${flights} flights, ${off} not out on the street`);
+    check('metro on a fitted city: every room watertight below the street over it', leaks === 0, `${leaks} open faces`);
+    check('metro on a fitted city: each line\'s track runs its whole tunnel in one piece', whole === ls.length, `${whole} of ${ls.length}`);
+  }
 }
