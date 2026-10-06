@@ -17,7 +17,7 @@ import { makeRng } from './rng.js';
 // Must match main.js VERSION, package.json and index.html data-version;
 // tools/validate.js fails if they drift. The app refuses to export when the
 // browser has mixed cached copies of old and new files.
-export const POLIS_VERSION = '0.40.3';
+export const POLIS_VERSION = '0.40.4';
 
 export const CHUNK = 64;          // Bedrock structure limit per horizontal axis
 export const GROUND_DROP = 2;     // base layer y=0 sits 2 below feet; surface y=1 replaces the block you stand on
@@ -437,6 +437,14 @@ export function functionFiles(tiles, world, opts = {}) {
   // the zoo's animals and the aquarium's fish (zoo.js): kept fish by the pack's
   // event (a tropical one as its named variety), everything else by its name
   const zooFolk = opts.zoo || [];
+  // an inmate that rides (the enderman, which cannot teleport out of a minecart):
+  // the minecart on its rail, the inmate, and the inmate set riding it
+  const inmateLines = (p, dx, dz) => {
+    if (!p.ride) return [hostLine(p, dx, dz)];
+    const X = rel(p.x - dx), Y = rel(p.y - GROUND_DROP), Z = rel(p.z - dz), at = `x=${X},y=${Y},z=${Z},r=2,c=1`;
+    return [`summon minecraft:${p.ride} ${X} ${Y} ${Z}`, hostLine(p, dx, dz),
+      `ride @e[type=${HOSTILE_KINDS[p.type].be},name=${p.name},${at}] start_riding @e[type=minecraft:${p.ride},${at}] teleport_rider`];
+  };
   const ZOO_KEEP = new Set(['cod', 'salmon', 'tropicalfish']);
   const zooLine = (p, dx, dz) => ZOO_KEEP.has(p.type)
     ? `summon minecraft:${p.type} ${rel(p.x - dx)} ${rel(p.y - GROUND_DROP)} ${rel(p.z - dz)} 0 0 polis:keep${p.variety ? '_' + p.variety : ''} ${p.name}`
@@ -511,7 +519,7 @@ export function functionFiles(tiles, world, opts = {}) {
     ...summoned.map((p) => sumLine(p, dx, dz)),
     ...(inPop ? [`say Polis: and ${hostiles.length} hostile mobs.`, ...hostiles.map((p) => hostLine(p, dx, dz)), ...hostileWarnings] : []),
     // the jail's inmates: always, they are locked up (named, so none despawns)
-    ...(inmates.length ? [`say Polis: and ${inmates.length} inmates for the jail.`, ...inmates.map((p) => hostLine(p, dx, dz)),
+    ...(inmates.length ? [`say Polis: and ${inmates.length} inmates for the jail.`, ...inmates.flatMap((p) => inmateLines(p, dx, dz)),
       'say Polis: the jail is empty on Peaceful: hostile mobs do not appear there.'] : []),
     ...(zooFolk.length ? [`say Polis: and ${zooFolk.length} animals and fish for the zoo and aquarium.`, ...zooFolk.map((p) => zooLine(p, dx, dz))] : []),
     ...areas.map((a) => `tickingarea remove ${a.name}`),
@@ -583,13 +591,13 @@ export function functionFiles(tiles, world, opts = {}) {
       { name: `functions/${ns}/${group}_centered.mcfunction`, fn: `${ns}/${group}_centered`, text: only(cx, cz, `Polis: ${noun} only (pairs with build_centered)`) });
   }
   // the jail and the zoo on their own, to fill them again (after the areas below)
-  for (const [group, list, line, noun] of [['jail', inmates, hostLine, 'inmates for the jail'], ['zoo', zooFolk, zooLine, 'animals and fish for the zoo and aquarium']]) {
+  for (const [group, list, line, noun] of [['jail', inmates, inmateLines, 'inmates for the jail'], ['zoo', zooFolk, (p, dx, dz) => [zooLine(p, dx, dz)], 'animals and fish for the zoo and aquarium']]) {
     if (!list.length) continue;
     const only = (dx, dz, title) => [
       `# ${title}`,
       '# Summons only reach loaded chunks: run areas (or areas_centered) first and wait a moment, or walk closer.',
       `say Polis: summoning ${list.length} ${noun}...`,
-      ...list.map((p) => line(p, dx, dz)),
+      ...list.flatMap((p) => line(p, dx, dz)),
       `say Polis: done. Any still missing: the city there was not loaded (walk closer and run this again).`,
     ].join('\n') + '\n';
     files.push(

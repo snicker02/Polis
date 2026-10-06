@@ -31,10 +31,10 @@ export const TROPICAL_VARIETIES = ['anenonme', 'black_tang', 'blue_dory', 'butte
   'red_snapper', 'threadfin', 'tomato_clown', 'triggerfish', 'yellow_tail_parrot', 'yellow_tang'];
 
 export const ZOO_PENS = [
-  { kinds: ['cow', 'sheep', 'pig', 'chicken', 'mooshroom'], name: 'Farm', ground: 'grass' },
+  { kinds: ['cow', 'sheep', 'pig', 'chicken', 'mooshroom'], name: 'Farm', ground: 'grass', big: true },
   { kinds: ['horse', 'donkey', 'mule'], name: 'Horses', ground: 'grass' },
-  { kinds: ['camel', 'llama', 'armadillo', 'sniffer', 'strider'], name: 'Drylands', ground: 'sand' },
-  { kinds: ['goat'], name: 'Goats', ground: 'stone' },
+  { kinds: ['camel', 'llama', 'armadillo', 'sniffer', 'strider'], name: 'Drylands', ground: 'sand', big: true },
+  { kinds: ['goat'], name: 'Goats', ground: 'stone', roof: true },   // (goats jump: roofed in glass)
   { kinds: ['polar_bear'], name: 'Polar bear', ground: 'snow' },
   { kinds: ['panda'], name: 'Pandas', ground: 'grass' },
   { kinds: ['cat', 'ocelot', 'fox'], name: 'Cats and fox', ground: 'grass' },
@@ -85,9 +85,15 @@ const GROUND = { grass: () => MAT.GRASS, sand: () => MAT.SAND, stone: () => MAT.
 
 // ---- the zoo ---------------------------------------------------------------------------
 export function zoo(world, lot, face, cfg, rng, G, signTags) {
-  const W_ = 15, D_ = 24;
-  const fr = lotFrame(lot, face, W_, D_);
+  // Twenty-eight deep where the lot allows: then the farm and the drylands, the
+  // two pens with the most in them, are two rows long (four by seven). On a lot
+  // only twenty-four deep, every pen one row.
+  const W_ = 15;
+  let D_ = 28, fr = lotFrame(lot, face, W_, 28);
+  if (!fr) { D_ = 24; fr = lotFrame(lot, face, W_, 24); }
   if (!fr) return null;
+  const rows = (D_ - 4) / 4;                                // 6 or 5 a side
+  const big = D_ === 28;
   const { at } = fr;
   const put = (u, v, y, id) => { const [x, z] = at(u, v); world.set(x, y, z, id); };
   const clear = (u, v, y) => { const [x, z] = at(u, v); world.clear(x, y, z); };
@@ -102,42 +108,62 @@ export function zoo(world, lot, face, cfg, rng, G, signTags) {
   for (let v = 0; v < D_ - 1; v++) for (let u = 6; u <= 8; u++) put(u, v, G, MAT.GRAVEL);      // the path
   for (let v = 0; v <= 2; v++) for (let u = 1; u < W_ - 1; u++) put(u, v, G, MAT.GRAVEL);      // the plaza at the gate
   // the front: fenced but for the gate in the middle
-  for (let u = 0; u < W_; u++) { if (u >= 6 && u <= 8) continue; for (let y = G + 1; y <= G + 1; y++) put(u, 0, y, MAT.FENCE); }
+  for (let u = 0; u < W_; u++) { if (u >= 6 && u <= 8) continue; put(u, 0, G + 1, MAT.FENCE); }
 
+  // which pens go where: each side filled in turn, the farm and the drylands two
+  // rows long either way. Twenty-eight deep, every pen its own; twenty-four
+  // deep, two pairs that get along share, to make the room: the horses join the
+  // drylands (grazers all), the polar bear and the pandas share the bears' pen.
+  const bySide = big
+    ? [['Farm', 'Goats', 'Polar bear', 'Cats and fox', 'Pond'], ['Drylands', 'Horses', 'Pandas', 'Wolves', 'Aviary']]
+    : [['Farm', 'Goats', 'Bears', 'Pond'], ['Drylands', 'Cats and fox', 'Wolves', 'Aviary']];
+  const penOf = (name) => {
+    if (name === 'Bears') return { ...ZOO_PENS.find((p) => p.name === 'Polar bear'), name: 'Bears', kinds: ['polar_bear', 'panda'] };
+    const p = ZOO_PENS.find((q) => q.name === name);
+    if (!big && name === 'Drylands') return { ...p, kinds: [...p.kinds, 'horse', 'donkey', 'mule'] };
+    return p;
+  };
   const animals = [], pens = [];
-  let next = 0;
-  for (let k = 0; k < 5; k++) for (const side of [0, 1]) {
-    const va = 4 + 4 * k, vb = va + 2;                    // interiors 4-6, 8-10, ... 20-22
-    const ua = side === 0 ? 1 : 10, ub = side === 0 ? 4 : 13;
-    const front = side === 0 ? 5 : 9;                     // the fence on the path
-    const pen = ZOO_PENS[next++];
-    if (!pen) continue;
-    // fences: the path side, and the row before and after (shared between pens)
-    for (let v = va - 1; v <= vb + 1; v++) for (let y = G + 1; y <= G + FENCE_H; y++) put(front, v, y, MAT.FENCE);
-    for (const v of [va - 1, vb + 1]) for (let u = ua; u <= ub; u++) for (let y = G + 1; y <= G + FENCE_H; y++) put(u, v, y, MAT.FENCE);
-    // the ground
-    for (let v = va; v <= vb; v++) for (let u = ua; u <= ub; u++) put(u, v, G, GROUND[pen.ground]());
-    if (pen.ground === 'pond') for (let v = va; v <= va + 1; v++) for (let u = ua + 1; u <= ua + 2; u++) put(u, v, G, MAT.WATER);
-    if (pen.roof) for (let v = va - 1; v <= vb + 1; v++) for (let u = ua - (side === 0 ? 1 : 0); u <= ub + (side === 1 ? 1 : 0); u++) put(u, v, G + FENCE_H + 1, MAT.GLASS);
-    if (pen.roof) for (let v = va - 1; v <= vb + 1; v++) for (const u of [front]) put(u, v, G + FENCE_H + 1, MAT.GLASS);
-    // the animals, a block apart, a block clear of the fence
-    pen.kinds.forEach((kind, i) => {
-      const u = side === 0 ? 1 + (i % 3) : 13 - (i % 3), v = va + Math.floor(i / 3) * 2;
-      const [x, z] = at(u, v);
-      animals.push({ type: kind, x: x + 0.5, y: G + 1, z: z + 0.5, name: niceName(kind), pen: pens.length });
-    });
-    // its sign: on the path, before the pen's middle, facing the path
-    const [sx, sz] = at(side === 0 ? 6 : 8, va + 1);
-    const facing = fr.nameOf(side === 0 ? [fr.across[0], fr.across[1]] : [-fr.across[0], -fr.across[1]]);
-    sign(world, sx, G + 1, sz, facing, pen.name, signTags);
-    pens.push({ side, u: [ua, ub], v: [va, vb], name: pen.name, kinds: pen.kinds });
+  for (const side of [0, 1]) {
+    let k = 0;
+    for (const name of bySide[side]) {
+      const pen = penOf(name);
+      const span = pen.big ? 2 : 1;
+      if (k + span > rows) break;
+      const va = 4 + 4 * k, vb = 4 + 4 * (k + span - 1) + 2;
+      k += span;
+      const ua = side === 0 ? 1 : 10, ub = side === 0 ? 4 : 13;
+      const front = side === 0 ? 5 : 9;                     // the fence on the path
+      // fences: the path side, and the row before and after (shared between pens)
+      for (let v = va - 1; v <= vb + 1; v++) for (let y = G + 1; y <= G + FENCE_H; y++) put(front, v, y, MAT.FENCE);
+      for (const v of [va - 1, vb + 1]) for (let u = ua; u <= ub; u++) for (let y = G + 1; y <= G + FENCE_H; y++) put(u, v, y, MAT.FENCE);
+      // inside a two-row pen, the old divider row is ground too
+      for (let v = va; v <= vb; v++) for (let u = ua; u <= ub; u++) { for (let y = G + 1; y <= G + FENCE_H; y++) clear(u, v, y); put(u, v, G, GROUND[pen.ground]()); }
+      if (pen.ground === 'pond') for (let v = va; v <= va + 1; v++) for (let u = ua + 1; u <= ua + 2; u++) put(u, v, G, MAT.WATER);
+      if (pen.roof) for (let v = va - 1; v <= vb + 1; v++) for (let u = Math.min(ua, front) - (side === 0 ? 1 : 0); u <= Math.max(ub, front) + (side === 1 ? 1 : 0); u++) put(u, v, G + FENCE_H + 1, MAT.GLASS);
+      // the animals spread through the pen, a block clear of the fence
+      const cols = side === 0 ? [1, 2, 3] : [13, 12, 11], len = vb - va + 1;
+      pen.kinds.forEach((kind, i) => {
+        const u = cols[i % 3], v = va + Math.min(len - 1, Math.floor(i / 3) * 2 + (span === 2 ? (i % 2) * 2 : 0));
+        const [x, z] = at(u, v);
+        animals.push({ type: kind, x: x + 0.5, y: G + 1, z: z + 0.5, name: niceName(kind), pen: pens.length });
+      });
+      // its sign: on the path, before the pen, facing the path
+      const [sx, sz] = at(side === 0 ? 6 : 8, va + 1);
+      const facing = fr.nameOf(side === 0 ? [fr.across[0], fr.across[1]] : [-fr.across[0], -fr.across[1]]);
+      sign(world, sx, G + 1, sz, facing, pen.name, signTags);
+      pens.push({ side, u: [ua, ub], v: [va, vb], name: pen.name, kinds: pen.kinds, roof: !!pen.roof });
+    }
   }
   // lanterns on posts along the path
   // (never on row 19: the aviary's glass roof runs over it, and a lantern there
   // would leave a gap a bee could leave by)
-  for (const v of [3, 11, 15]) for (const u of [5, 9]) put(u, v, G + FENCE_H + 1, MAT.LAMP);
+  for (const v of [3, 11, 15]) for (const u of [5, 9]) {
+    if (pens.some((p) => p.roof && v >= p.v[0] - 1 && v <= p.v[1] + 1 && (u === 5) === (p.side === 0))) continue;
+    put(u, v, G + FENCE_H + 1, MAT.LAMP);
+  }
   const door = at(7, -1);
-  return { kind: 'zoo', lot, animals, pens, sideways: fr.sideways, door: [door[0], G + 1, door[1]], frame: { at, W: W_, D: D_, FENCE_H } };
+  return { kind: 'zoo', lot, animals, pens, big, sideways: fr.sideways, door: [door[0], G + 1, door[1]], frame: { at, W: W_, D: D_, FENCE_H } };
 }
 
 // ---- the aquarium ----------------------------------------------------------------------

@@ -25,7 +25,7 @@
 // reaches fifty blocks), and the piglins and hoglins, which turn into other mobs
 // in the Overworld.
 
-import { MAT, stairId, WEIRDO, signId, SIGN_FACING } from './materials.js';
+import { MAT, stairId, WEIRDO, signId, SIGN_FACING, railId, RAIL } from './materials.js';
 import { OUTWARD } from './building.js';
 
 export const JAIL_SIZE = [15, 23];       // the building, across and deep (a row before it where the lot allows)
@@ -130,6 +130,16 @@ export function jail(world, lot, face, cfg, rng, G, signTags = null) {
         // spread along the cell, each in the middle of a block, a block clear of the bars
         const u = side === 0 ? 2 : 11, v = va + (i % 3);
         const [x, z] = at(u, v);
+        // An enderman teleports out of any cell; one riding a minecart cannot
+        // (found in the game, and saved as a structure). So its cell has a rail
+        // down the middle, and it is put in a minecart on it (populate: ride).
+        if (kind === 'enderman') {
+          const [mx, mz] = at(u, va + 1);
+          const alongZ = back[0] === 0;
+          world.set(mx, y0, mz, railId(alongZ ? RAIL.NS : RAIL.EW));
+          inmates.push({ type: kind, x: mx + 0.5, y: y0, z: mz + 0.5, name: 'Inmate', cell: cells.length - 1, ride: 'minecart' });
+          return;
+        }
         inmates.push({ type: kind, x: x + 0.5, y: y0, z: z + 0.5, name: 'Inmate', cell: cells.length - 1 });
       });
     }

@@ -24,7 +24,7 @@ function inspectJail(r) {
   const blockOf = (x, y, z) => { const id = w.get(x, y, z); return id < 0 ? 'air' : MATERIALS.def(id).block.replace('minecraft:', ''); };
   // what a mob can move through: air and water (not walls, bars, glass, fences, slabs, stairs)
   // (a lantern hangs in the air; a sea lantern is a whole block)
-  const open = (x, y, z) => { const b = blockOf(x, y, z); return b === 'air' || b === 'water' || b === 'lantern' || b === 'soul_lantern'; };
+  const open = (x, y, z) => { const b = blockOf(x, y, z); return b === 'air' || b === 'water' || b === 'lantern' || b === 'soul_lantern' || b === 'rail'; };
   const fill = (x, y, z, limit = 4000) => {
     const seen = new Set([x + ',' + y + ',' + z]), q = [[x, y, z]];
     while (q.length && seen.size < limit) {
@@ -127,12 +127,20 @@ export default async function run(ctx) {
   // the pack: every inmate summoned in populate, each by name (a named mob is kept)
   {
     const r = cities[0][1], w = r.world;
+    const blockOf = (x, y, z) => { const id = w.get(x, y, z); return id < 0 ? 'air' : MATERIALS.def(id).block.replace('minecraft:', ''); };
     const fns = functionFiles(buildStructures(w, {}), w, { namespace: 'test', spawns: r.spawns, inmates: r.inmates });
     const pop = fns.find((f) => /(^|\/)populate\.mcfunction$/.test(f.name));
     const text = !pop ? '' : typeof pop.data === 'string' ? pop.data : pop.data ? new TextDecoder().decode(pop.data) : (pop.text || '');
     const lines = text.split('\n');
     const summons = lines.filter((l) => /^summon minecraft:\S+ Inmate /.test(l));
     check('jail: populate summons every inmate, each named', summons.length === r.inmates.length && r.inmates.length > 0, `${summons.length} of ${r.inmates.length}`);
+    // the enderman in a minecart on its cell's rail (riding, it cannot teleport):
+    // the minecart, then it, then ride, in populate and in the jail's own function
+    const ender = r.inmates.find((m) => m.type === 'enderman');
+    const onRail = ender && blockOf(Math.floor(ender.x), ender.y, Math.floor(ender.z)) === 'rail';
+    const rideOk = (ls) => { const i = ls.findIndex((l) => /^summon minecraft:enderman Inmate /.test(l)); return i > 0 && /^summon minecraft:minecart /.test(ls[i - 1]) && /^ride @e\[type=minecraft:enderman,name=Inmate,.*\] start_riding @e\[type=minecraft:minecart,.*\] teleport_rider$/.test(ls[i + 1] || ''); };
+    const jf = fns.find((f) => /(^|\/)jail\.mcfunction$/.test(f.name));
+    check('jail: the enderman rides a minecart on its cell\'s rail (riding, it cannot teleport out)', ender && ender.ride === 'minecart' && onRail && rideOk(lines) && jf && rideOk((jf.text || '').split('\n')), `${!!onRail} on its rail, ride in populate ${rideOk(lines)}`);
     // every summon in every function names an entity /summon may create: one that
     // may not (zombie_villager_v2) and Bedrock loads none of populate. Checked
     // against Mojang's own files (tools/bedrock-summonable.json); one not listed

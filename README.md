@@ -1,4 +1,4 @@
-# Polis v0.40.3
+# Polis v0.40.4
 
 *Created with help from Claude AI.*
 
@@ -761,6 +761,25 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.40.4** — The enderman in a minecart; bigger farm and drylands; goats roofed.
+
+- The jail's enderman teleported out, as endermen do. One riding a minecart
+  cannot (found in the game and saved as a structure: a rail, a minecart, the
+  enderman riding it). Its cell now has a rail down the middle, and populate (and
+  jail) summon a minecart on it, then the enderman, then set it riding:
+  `ride @e[type=minecraft:enderman,...] start_riding @e[type=minecraft:minecart,...]`.
+- The farm and the drylands, the pens with the most in them, are two rows long
+  in every zoo: four by seven, not four by three. Twenty-eight deep where the lot
+  allows (a zoo prefers a lot that takes it), every pen its own; on a lot only
+  twenty-four deep, two pairs that get along share to make the room: the horses
+  join the drylands (grazers all) and the polar bear shares with the pandas.
+- The goats' pen is roofed in glass, like the aviary: goats jump.
+
+2zz checks the enderman on its cell's rail and the minecart, the enderman and the
+ride in order, in populate and in jail (11 checks); 2zza checks the goats' pen
+closed above and the farm and drylands four by seven in every zoo, every animal
+still in it (11).
 
 **0.40.3** — The jail and the zoo when the city is not all loaded.
 
