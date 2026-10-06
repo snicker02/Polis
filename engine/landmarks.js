@@ -83,7 +83,14 @@ export function chooseLandmarks(plan, cfg, hills = null, canal = null) {
   for (const kind of ['jail', 'zoo', 'aquarium']) {
     if (!cfg[kind === 'aquarium' ? 'zoo' : kind]) continue;
     // (the zoo on a lot that takes its big pens if there is one: 15 by 28)
-    const roomy = (c) => kind === 'zoo' && Math.min(c.a, c.b) >= 15 && Math.max(c.a, c.b) >= 28 ? 0 : 1;
+    // (the aquarium likewise on one that takes its big tanks: 15 by 25)
+    // (the zoo by how wide a zoo the lot takes: twenty-three, then nineteen)
+    const [rw, rd] = kind === 'zoo' ? [15, 28] : kind === 'aquarium' ? [15, 25] : [1e9, 1e9];
+    const roomy = (c) => {
+      const s = Math.min(c.a, c.b), l = Math.max(c.a, c.b);
+      if (kind === 'zoo') return s >= 23 && l >= 24 ? 0 : s >= 19 && l >= 24 ? 1 : s >= rw && l >= rd ? 2 : 3;
+      return s >= rw && l >= rd ? 0 : 1;
+    };
     const lots = all.filter((c) => fits(c, kind)).sort((p, q) => roomy(p) - roomy(q) || q.d - p.d);
     if (lots.length) { lots[0].l.landmark = kind; out.push(lots[0].l); }
   }

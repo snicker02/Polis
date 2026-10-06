@@ -24,7 +24,7 @@ function inspectZoo(r) {
     out.zoo = true;
     const fr = Z.frame;
     // the zoo's real ground: the gravel of the path
-    const [px, pz] = fr.at(7, 5); let G = null; for (let y = -8; y < 40; y++) if (blk(px, y, pz) === 'gravel' && blk(px, y + 1, pz) === 'air') { G = y; break; }
+    const [px, pz] = fr.at((fr.pathU || [6, 7, 8])[1], 5); let G = null; for (let y = -8; y < 40; y++) if (blk(px, y, pz) === 'gravel' && blk(px, y + 1, pz) === 'air') { G = y; break; }
     out.zooG = G;
     for (const pen of Z.pens) {
       // the ring round the pen: three solid high all round
@@ -35,6 +35,11 @@ function inspectZoo(r) {
         for (let y = G + 1; y <= G + 3; y++) if (!solid(blk(x, y, z))) gaps++;
       }
       if (gaps) out.problems.push(`pen ${pen.name}: ${gaps} gaps in its fence`);
+      if (pen.name === 'Pond') {
+        // frogs jump: the pond roofed, closed to one jumping
+        const m = Z.animals.find((a) => a.type === 'frog');
+        if (m) { const sp = fill(w, blk, Math.floor(m.x), m.y, Math.floor(m.z), (b) => b === 'air' || b === 'short_grass' || b === 'water'); if (sp.size >= 3000) out.problems.push(`pond: open above (${sp.size})`); }
+      }
       if (pen.name === 'Goats') {
         // goats jump: the pen roofed, closed to one jumping
         const m = Z.animals.find((a) => a.type === 'goat');
@@ -49,11 +54,20 @@ function inspectZoo(r) {
         out.aviary = sp.size;
       }
     }
+    // every animal's body inside its pen with room: half its width and a tenth
+    // clear of the fence on every side (one set against a fence is pushed out of it)
+    out.tight = [];
+    for (const a of Z.animals) {
+      const pen = Z.pens[a.pen], h = (inspectZoo.widths[a.type] || 0.6) / 2 + 0.1;
+      const xs = [], zs = []; for (const u of pen.u) for (const v of pen.v) { const [x, z] = fr.at(u, v); xs.push(x, x + 1); zs.push(z, z + 1); }
+      if (a.x - h < Math.min(...xs) || a.x + h > Math.max(...xs) || a.z - h < Math.min(...zs) || a.z + h > Math.max(...zs)) out.tight.push(`${a.type} in ${pen.name}`);
+    }
     out.animals = Z.animals.length; out.animalKinds = new Set(Z.animals.map((a) => a.type)).size;
     // animals on their feet: in air (or water) over ground
     out.animalsBad = Z.animals.filter((a) => solid(blk(Math.floor(a.x), a.y, Math.floor(a.z)))).map((a) => a.type);
     out.penCount = Z.pens.length;
-    out.zooSigns = Z.pens.filter((p) => { const [x, z] = fr.at(p.side === 0 ? 6 : 8, p.v[0] + 1); return /sign/.test(blk(x, G + 1, z)); }).length;
+    const pu = fr.pathU || [6, 7, 8];
+    out.zooSigns = Z.pens.filter((p) => { const [x, z] = fr.at(p.side === 0 ? pu[0] : pu[2], p.v[0] + 1); return /sign/.test(blk(x, G + 1, z)); }).length;
   }
   if (A) {
     out.aquarium = true;
@@ -81,7 +95,8 @@ export default async function run(ctx) {
   const { generateCity, DEFAULTS } = await import('../../engine/city.js');
   ({ MATERIALS } = await import('../../engine/materials.js'));
   const { buildStructures, functionFiles, fishEntityFiles } = await import('../../engine/export.js');
-  const { TROPICAL_VARIETIES, ZOO_PENS } = await import('../../engine/zoo.js');
+  const { TROPICAL_VARIETIES, ZOO_PENS, ANIMAL_WIDTH } = await import('../../engine/zoo.js');
+  inspectZoo.widths = ANIMAL_WIDTH;
   const L = { furnish: false, villagers: 0, fish: false };
   const fx = JSON.parse(readFileSync(new URL('./site-1004954.json', import.meta.url), 'utf8'));
   const ground = new Int16Array(Uint8Array.from(Buffer.from(fx.ground, 'base64')).buffer);
@@ -93,10 +108,10 @@ export default async function run(ctx) {
   ];
   check('defaults: no zoo unless asked', DEFAULTS.zoo === false);
   const animalKinds = new Set(ZOO_PENS.flatMap((p) => p.kinds)).size;
-  let zoos = 0, aquas = 0, problems = [], kindsAll = 0, varietiesAll = 0, dry = 0, unfooted = 0, signs = 0;
+  let zoos = 0, aquas = 0, problems = [], kindsAll = 0, varietiesAll = 0, dry = 0, unfooted = 0, signs = 0, tight = [], widths = [];
   for (const [name, r] of cities) {
     const t = inspectZoo(r);
-    if (t.zoo) { zoos++; if (t.animalKinds === animalKinds) kindsAll++; unfooted += t.animalsBad.length; if (t.zooSigns === t.penCount) signs++; }
+    if (t.zoo) { tight.push(...t.tight.map((q) => `${name}: ${q}`)); widths.push(r.landmarks.find((L) => L.kind === 'zoo').wide); zoos++; if (t.animalKinds === animalKinds) kindsAll++; unfooted += t.animalsBad.length; if (t.zooSigns === t.penCount) signs++; }
     if (t.aquarium) { aquas++; if (t.varieties === 22) varietiesAll++; dry += t.fishDry.length; }
     problems.push(...t.problems.map((p) => `${name}: ${p}`));
   }
@@ -106,6 +121,16 @@ export default async function run(ctx) {
   check('zoo and aquarium: no animal or fish can get out (pens fenced three high, aviary and tanks closed)', problems.length === 0, problems.slice(0, 3).join('; '));
   check('aquarium: every fish in water, all 22 named tropical fish in the reef', varietiesAll === aquas && dry === 0, `${varietiesAll} of ${aquas}, ${dry} dry`);
   check('zoo: a sign at every pen', signs === zoos, `${signs} of ${zoos}`);
+  check('zoo: every animal fits its pen with room, clear of the fence (none starts inside one)', tight.length === 0, tight.slice(0, 3).join('; '));
+  note(`zoo widths: ${widths.join(', ')} (pens ${widths.map((w) => (w - 7) / 2).join(', ')} deep)`);
+  // the aquarium's tanks: four deep, six long, water four deep where the lot
+  // allows (squid were cramped in two by four by three)
+  {
+    const as = cities.map(([, r]) => r.landmarks.find((L) => L.kind === 'aquarium')).filter(Boolean);
+    const bigOnes = as.filter((A) => A.big);
+    const roomy = bigOnes.every((A) => A.tanks.filter((t) => !t.reef).every((t) => t.u[1] - t.u[0] + 1 >= 4 && t.v[1] - t.v[0] + 1 >= 6 && t.water >= 4));
+    check('aquarium: where the lot allows, tanks four deep, six long, water four deep', bigOnes.length >= 1 && roomy, `${bigOnes.length} big of ${as.length}`);
+  }
   // the farm and the drylands the big pens (two rows long) in every zoo, deep
   // lot or not (on a shallower one, horses join the drylands, bears share)
   {

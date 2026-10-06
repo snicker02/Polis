@@ -1,4 +1,4 @@
-# Polis v0.40.5
+# Polis v0.40.7
 
 *Created with help from Claude AI.*
 
@@ -761,6 +761,36 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.40.7** — Bigger zoo pens; no animal set against a fence.
+
+A turtle ended up between two pens, and a frog got out. Pens were three wide and
+animals were set on their edge rows: a turtle (a block and a fifth across) began
+inside the fence, and the game pushes an animal out of a block it overlaps, not
+always back into its pen.
+
+- The zoo (zoo.js) is as wide as the lot allows, the pens deeper back from the
+  path: twenty-three across gives pens eight deep, nineteen six, fifteen four
+  (lots run wider than long). A zoo picks its lot by how wide a one it takes, and
+  before the aquarium. Every pen its own only where they are six deep or more.
+- Every animal is placed by its size: its body clear of every fence by half its
+  width and a tenth, the biggest first, on the rows furthest from the fences.
+- The pond is roofed in glass (frogs jump), like the goats and the aviary.
+
+2zza checks every animal's body inside its pen with room, and the pond closed
+above (13 checks).
+
+**0.40.6** — Bigger aquarium tanks.
+
+The squid were cramped: the side tanks were two deep, four long, water three
+deep. The aquarium (zoo.js) is fifteen by twenty-five where the lot allows: side
+tanks four deep, six long, water four deep (four times the water), a block of air
+over each; the reef thirteen across, five deep, water four deep; three of each
+squid. It prefers a lot that takes it; on a smaller one, the compact aquarium
+(eleven by twenty) as before. One floor still.
+
+2zza checks, where the lot allows, the tanks four deep, six long, water four deep
+(12 checks).
 
 **0.40.5** — Bigger jail cells, five floors; no inmate against a wall.
 
