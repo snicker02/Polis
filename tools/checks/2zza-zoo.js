@@ -107,6 +107,20 @@ export default async function run(ctx) {
     const lines = text.split('\n');
     const zl = r.zoo.filter((p) => lines.some((l) => l.includes(`minecraft:${p.type} `) && (p.variety ? l.includes('polis:keep_' + p.variety) : true)));
     check('zoo and aquarium: populate summons every animal and fish (a tropical fish as its variety)', zl.length === r.zoo.length && r.zoo.length > 0, `${zl.length} of ${r.zoo.length}`);
+    // the zoo and the jail on their own, and the city's ticking areas again: a
+    // summon reaches only loaded chunks, and a world holds ten ticking areas
+    {
+      const both = generateCity({ ...DEFAULTS, ...L, size: 256, seed: 7, zoo: true, jail: true });
+      const f2 = functionFiles(buildStructures(both.world, {}), both.world, { namespace: 'test', spawns: both.spawns, zoo: both.zoo, inmates: both.inmates });
+      const get = (n) => f2.find((f) => f.fn === 'test/' + n);
+      const names = ['zoo', 'zoo_centered', 'jail', 'jail_centered', 'areas', 'areas_centered'];
+      const have = names.filter((n) => get(n));
+      const zooAll = get('zoo') && get('zoo').text.split('\n').filter((l) => l.startsWith('summon ')).length === both.zoo.length;
+      const jailAll = get('jail') && get('jail').text.split('\n').filter((l) => / Inmate /.test(l)).length === both.inmates.length;
+      const b = get('build').text.split('\n');
+      const tidy = b.filter((l) => l.startsWith('tickingarea add')).every((l) => { const name = l.split(' ').pop(); const ia = b.indexOf(l), ir = b.indexOf('tickingarea remove ' + name); return ir >= 0 && ir < ia; });
+      check('zoo and jail: their own functions (zoo, jail, and areas to keep the city loaded), each summoning all of them; build clears its ticking areas before it makes them', have.length === names.length && zooAll && jailAll && tidy, `${have.length} of ${names.length}, zoo ${!!zooAll}, jail ${!!jailAll}, tidy ${tidy}`);
+    }
     const tf = JSON.parse(fishEntityFiles().find((f) => /tropicalfish/.test(f.name)).data);
     const ev = tf['minecraft:entity'].events;
     check('pack: the tropical fish carries a keep event for each of the 22 named ones', TROPICAL_VARIETIES.every((v) => ev['polis:keep_' + v] && ev['polis:keep_' + v].add.component_groups.includes('polis:kept')));

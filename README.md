@@ -1,4 +1,4 @@
-# Polis v0.40.2
+# Polis v0.40.3
 
 *Created with help from Claude AI.*
 
@@ -761,6 +761,29 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.40.3** — The jail and the zoo when the city is not all loaded.
+
+Villagers, golems and farm animals arrived and no inmate, zoo animal or fish did.
+The jail's, zoo's and aquarium's are summoned, and a summon reaches only loaded
+chunks (the others come in structures, which wait for theirs). Checked end to
+end on the player's own settings (city 1051122b): every summon lands in the
+clear, before the city's ticking areas come off. The likeliest cause: a world
+holds ten ticking areas at most, another city's (whose populate had never loaded)
+were still there, and most of this city's were never made.
+
+- build takes its own ticking areas off before it makes them (built again, it
+  never doubles them).
+- New functions: jail / jail_centered and zoo / zoo_centered summon just those,
+  to fill them again; areas / areas_centered make the city's ticking areas again
+  on their own (populate takes them off at its end). Each with its _from_mark.
+- populate, and the placement guide, say what to do when the jail, zoo or
+  aquarium stays empty: /tickingarea list, /tickingarea remove_all, then areas,
+  a moment, then jail and zoo.
+
+2zza checks those functions, each summoning all of its own, and build clearing
+its ticking areas before it makes them (10 checks). 2zp counts ticking areas as
+work for a centred function.
 
 **0.40.2** — populate loads again: a zombie villager /summon can create.
 

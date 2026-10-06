@@ -17,7 +17,7 @@ import { makeRng } from './rng.js';
 // Must match main.js VERSION, package.json and index.html data-version;
 // tools/validate.js fails if they drift. The app refuses to export when the
 // browser has mixed cached copies of old and new files.
-export const POLIS_VERSION = '0.40.2';
+export const POLIS_VERSION = '0.40.3';
 
 export const CHUNK = 64;          // Bedrock structure limit per horizontal axis
 export const GROUND_DROP = 2;     // base layer y=0 sits 2 below feet; surface y=1 replaces the block you stand on
@@ -474,6 +474,8 @@ export function functionFiles(tiles, world, opts = {}) {
     ...plugs.map((t) => load(t, dx, dz)),                                                     // the rooms under the city plugged first
     ...(world.dome ? tiles.map((t) => load({ ...t, name: t.name + '_d' }, dx, dz)) : []),   // drain the dome first
     ...tiles.map((t) => load(t, dx, dz)),
+    // (its own ticking areas taken off first: built again, it never doubles them)
+    ...areas.map((a) => `tickingarea remove ${a.name}`),
     ...areas.map((a) => `tickingarea add ${rel(a.x0 - dx)} ${rel(-GROUND_DROP)} ${rel(a.z0 - dz)} ${rel(a.x1 - dx)} ${rel(top)} ${rel(a.z1 - dz)} ${a.name}`),
     // the centred version marks this spot (an armor stand in the centre mark's
     // alcove), and the other centred functions run from it wherever you stand
@@ -516,6 +518,13 @@ export function functionFiles(tiles, world, opts = {}) {
     'say Polis: done. Villagers take jobs from the workstations and claim beds over the next few minutes.',
     ...(boats.length ? [`say Polis: any boat that did not appear, run /function ${ns}/${dx === wb.x0 ? 'boats' : 'boats_centered'} from beside the water.`] : []),
     ...(fish.length ? [`say Polis: if the ponds or canal look empty, run /function ${ns}/${dx === wb.x0 ? 'fish' : 'fish_centered'} from beside the water.`] : []),
+    // A summon only reaches loaded chunks (villagers and animals come in
+    // structures, which wait for theirs). The ticking areas keep the city loaded,
+    // but a world holds ten at most: another city's left behind, and these were
+    // never made, and the jail and zoo stayed empty.
+    ...(inmates.length || zooFolk.length ? [
+      `say Polis: if the ${[inmates.length ? 'jail' : '', zooFolk.length ? 'zoo or aquarium' : ''].filter(Boolean).join(' or ')} stays empty, part of the city was not loaded. A world holds ten ticking areas at most: see them with /tickingarea list, clear old ones with /tickingarea remove_all,`,
+      `say Polis: then from this spot run /function ${ns}/${dx === wb.x0 ? 'areas' : 'areas_centered'}, wait a moment, and run ${[inmates.length ? `/function ${ns}/${dx === wb.x0 ? 'jail' : 'jail_centered'}` : '', zooFolk.length ? `/function ${ns}/${dx === wb.x0 ? 'zoo' : 'zoo_centered'}` : ''].filter(Boolean).join(' and ')}.`] : []),
   ].join('\n') + '\n';
   const files = [
     { name: `functions/${ns}/build.mcfunction`, fn: `${ns}/build`,
@@ -572,6 +581,34 @@ export function functionFiles(tiles, world, opts = {}) {
     files.push(
       { name: `functions/${ns}/${group}.mcfunction`, fn: `${ns}/${group}`, text: only(wb.x0, wb.z0, `Polis: ${noun} only (pairs with build)`) },
       { name: `functions/${ns}/${group}_centered.mcfunction`, fn: `${ns}/${group}_centered`, text: only(cx, cz, `Polis: ${noun} only (pairs with build_centered)`) });
+  }
+  // the jail and the zoo on their own, to fill them again (after the areas below)
+  for (const [group, list, line, noun] of [['jail', inmates, hostLine, 'inmates for the jail'], ['zoo', zooFolk, zooLine, 'animals and fish for the zoo and aquarium']]) {
+    if (!list.length) continue;
+    const only = (dx, dz, title) => [
+      `# ${title}`,
+      '# Summons only reach loaded chunks: run areas (or areas_centered) first and wait a moment, or walk closer.',
+      `say Polis: summoning ${list.length} ${noun}...`,
+      ...list.map((p) => line(p, dx, dz)),
+      `say Polis: done. Any still missing: the city there was not loaded (walk closer and run this again).`,
+    ].join('\n') + '\n';
+    files.push(
+      { name: `functions/${ns}/${group}.mcfunction`, fn: `${ns}/${group}`, text: only(wb.x0, wb.z0, `Polis: ${noun} only (pairs with build)`) },
+      { name: `functions/${ns}/${group}_centered.mcfunction`, fn: `${ns}/${group}_centered`, text: only(cx, cz, `Polis: ${noun} only (pairs with build_centered)`) });
+  }
+  // the city's ticking areas made again, on their own (populate takes them off
+  // at its end; a world holds ten, so clear others first if they do not take)
+  if (areas.length) {
+    const areaFn = (dx, dz, title) => [
+      `# ${title}`,
+      '# A world holds ten ticking areas at most: /tickingarea list, and /tickingarea remove_all to clear old ones.',
+      ...areas.map((a) => `tickingarea remove ${a.name}`),
+      ...areas.map((a) => `tickingarea add ${rel(a.x0 - dx)} ${rel(-GROUND_DROP)} ${rel(a.z0 - dz)} ${rel(a.x1 - dx)} ${rel(top)} ${rel(a.z1 - dz)} ${a.name}`),
+      `say Polis: ${areas.length} ticking areas over the city. Give them a moment to load, then summon what is missing.`,
+    ].join('\n') + '\n';
+    files.push(
+      { name: `functions/${ns}/areas.mcfunction`, fn: `${ns}/areas`, text: areaFn(wb.x0, wb.z0, 'Polis: the city kept loaded (pairs with build)') },
+      { name: `functions/${ns}/areas_centered.mcfunction`, fn: `${ns}/areas_centered`, text: areaFn(cx, cz, 'Polis: the city kept loaded (pairs with build_centered)') });
   }
   // The centred functions run from where the player stands, as they always
   // have. build_centered leaves an armor stand on its spot, to come back to
@@ -640,6 +677,14 @@ export function placementGuide(tiles, opts = {}) {
   L.push(`Functions in this pack: ${ns}/build, build_centered, populate, populate_centered`);
   L.push('(plus minecarts / minecarts_centered on railway cities, to re-summon carts near you,');
   L.push(' boats / boats_centered for the dock, and fish / fish_centered for the ponds and canal).');
+  L.push('');
+  L.push('A JAIL, ZOO OR AQUARIUM EMPTY? Their animals are summoned, and a summon only reaches');
+  L.push('loaded chunks. The city is kept loaded by ticking areas, and a world holds ten at most:');
+  L.push('another city\'s left behind and these are never made. From the build spot:');
+  L.push('    /tickingarea list            (see them)');
+  L.push('    /tickingarea remove_all      (clear old ones)');
+  L.push(`    /function ${ns}/areas_centered   (this city's, again; then wait a moment)`);
+  L.push(`    /function ${ns}/jail_centered    and    /function ${ns}/zoo_centered`);
   L.push(`Made with Polis v${POLIS_VERSION}. If /function says one is "not found", an older`);
   L.push('Polis pack is probably still active on this world: remove old Polis packs.');
   L.push('');
