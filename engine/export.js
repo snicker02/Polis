@@ -17,7 +17,7 @@ import { makeRng } from './rng.js';
 // Must match main.js VERSION, package.json and index.html data-version;
 // tools/validate.js fails if they drift. The app refuses to export when the
 // browser has mixed cached copies of old and new files.
-export const POLIS_VERSION = '0.40.7';
+export const POLIS_VERSION = '0.40.8';
 
 export const CHUNK = 64;          // Bedrock structure limit per horizontal axis
 export const GROUND_DROP = 2;     // base layer y=0 sits 2 below feet; surface y=1 replaces the block you stand on
@@ -223,6 +223,29 @@ export function cityAir(world) {
 // component group that makes the fish persistent (and, to be sure, takes it off
 // distance despawning), and an event, polis:keep, that adds it. Polis summons its
 // fish with that event; a wild fish never gets it and despawns as it always has.
+// The jail's, zoo's and aquarium's mobs as the game defines them (mob-entities.js),
+// each with one thing added: polis:kept (persistent; where the mob has a despawn
+// rule, that rule kept off a persistent one) and polis:keep, which runs the game's
+// own spawn event (a cat's coat, a panda's gene, a baby or not) and then adds it.
+// Summoned with polis:keep, a mob never despawns. (Named by /summon, the
+// despawnable ones vanished once no player was near: the jail and most of the zoo
+// stood empty.)
+export function mobEntityFiles() {
+  return Object.entries(VANILLA_MOBS).map(([kind, def]) => {
+    const d = JSON.parse(JSON.stringify(def));
+    const e = d['minecraft:entity'];
+    const has = (name) => JSON.stringify(e).includes('"' + name + '"');
+    const kept = { 'minecraft:persistent': {} };
+    if (has('minecraft:despawn')) kept['minecraft:despawn'] = { despawn_from_distance: {}, filters: { test: 'is_persistent', value: false } };
+    e.component_groups = { ...(e.component_groups || {}), 'polis:kept': kept };
+    const spawned = e.events && e.events['minecraft:entity_spawned'];
+    e.events = { ...(e.events || {}), 'polis:keep': spawned
+      ? { sequence: [JSON.parse(JSON.stringify(spawned)), { add: { component_groups: ['polis:kept'] } }] }
+      : { add: { component_groups: ['polis:kept'] } } };
+    return { name: `entities/${kind}.json`, data: JSON.stringify(d, null, 2) };
+  });
+}
+
 export function fishEntityFiles() {
   const KEPT = {
     'minecraft:persistent': {},
@@ -401,6 +424,7 @@ export const SUMMON_IDS = { minecart: 'minecraft:minecart', boat: 'minecraft:boa
 // /summon is <entity> <name> <position>.
 export const FISH = new Set(['cod', 'salmon', 'tropicalfish']);
 import { HOSTILE_KINDS } from './hostiles.js';
+import { VANILLA_MOBS } from './mob-entities.js';
 import { domeAir } from './dome.js';
 import { inAirBox } from './underground.js';
 import { VANILLA_FISH } from './fish-entities.js';
@@ -439,16 +463,18 @@ export function functionFiles(tiles, world, opts = {}) {
   const zooFolk = opts.zoo || [];
   // an inmate that rides (the enderman, which cannot teleport out of a minecart):
   // the minecart on its rail, the inmate, and the inmate set riding it
+  // (each kept by the pack's polis:keep, named still: a name from /summon alone
+  // did not keep a mob)
+  const keptLine = (be, p, dx, dz) => `summon ${be} ${rel(p.x - dx)} ${rel(p.y - GROUND_DROP)} ${rel(p.z - dz)} 0 0 polis:keep ${p.name}`;
   const inmateLines = (p, dx, dz) => {
-    if (!p.ride) return [hostLine(p, dx, dz)];
+    const line = keptLine(HOSTILE_KINDS[p.type].be, p, dx, dz);
+    if (!p.ride) return [line];
     const X = rel(p.x - dx), Y = rel(p.y - GROUND_DROP), Z = rel(p.z - dz), at = `x=${X},y=${Y},z=${Z},r=2,c=1`;
-    return [`summon minecraft:${p.ride} ${X} ${Y} ${Z}`, hostLine(p, dx, dz),
+    return [`summon minecraft:${p.ride} ${X} ${Y} ${Z}`, line,
       `ride @e[type=${HOSTILE_KINDS[p.type].be},name=${p.name},${at}] start_riding @e[type=minecraft:${p.ride},${at}] teleport_rider`];
   };
   const ZOO_KEEP = new Set(['cod', 'salmon', 'tropicalfish']);
-  const zooLine = (p, dx, dz) => ZOO_KEEP.has(p.type)
-    ? `summon minecraft:${p.type} ${rel(p.x - dx)} ${rel(p.y - GROUND_DROP)} ${rel(p.z - dz)} 0 0 polis:keep${p.variety ? '_' + p.variety : ''} ${p.name}`
-    : `summon minecraft:${p.type} ${p.name} ${rel(p.x - dx)} ${rel(p.y - GROUND_DROP)} ${rel(p.z - dz)}`;
+  const zooLine = (p, dx, dz) => `summon minecraft:${p.type} ${rel(p.x - dx)} ${rel(p.y - GROUND_DROP)} ${rel(p.z - dz)} 0 0 polis:keep${p.variety ? '_' + p.variety : ''} ${p.name}`;
   const hostLine = (p, dx, dz) => `summon ${HOSTILE_KINDS[p.type].be} ${p.name} ${rel(p.x - dx)} ${rel(p.y - GROUND_DROP)} ${rel(p.z - dz)}`;
   const inPop = !!opts.hostilesInPopulate && hostiles.length > 0;
   const kindsIn = [...new Set(hostiles.map((p) => p.type))];
@@ -762,10 +788,14 @@ export async function exportPack(world, optsIn = {}) {
   const mobStructs = buildMobStructures(opts.spawns, opts);
   const guide = placementGuide(tiles, { ...opts, dome: !!world.dome, stilts: !!world.stiltGrid, floating: !!world.floating, plugs: !!(world.airBoxes && world.airBoxes.length) });
   const fns = functionFiles(tiles, world, { ...opts, mobTiles: mobStructs });
-  const hasFish = (opts.spawns || []).some((p) => FISH.has(p.type));
+  // the fish's definitions where there are fish to keep: the ponds' or the
+  // aquarium's (its fish are summoned with keep events these define); the mobs'
+  // where there is a jail or a zoo to keep
+  const hasFish = (opts.spawns || []).some((p) => FISH.has(p.type)) || (opts.zoo || []).some((p) => FISH.has(p.type) || p.type === 'tropicalfish');
+  const hasKept = (opts.inmates || []).length > 0 || (opts.zoo || []).length > 0;
   const data = await buildMcPack(structures.concat(mobStructs), {
     ...opts, guide,
-    files: fns.map((f) => ({ name: f.name, data: f.text })).concat(hasFish ? fishEntityFiles() : []),
+    files: fns.map((f) => ({ name: f.name, data: f.text })).concat(hasFish ? fishEntityFiles() : [], hasKept ? mobEntityFiles() : []),
   });
   return { data, structures, mobStructures: mobStructs, guide, functions: fns };
 }

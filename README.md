@@ -1,4 +1,4 @@
-# Polis v0.40.7
+# Polis v0.40.8
 
 *Created with help from Claude AI.*
 
@@ -761,6 +761,28 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.40.8** — The jail, zoo and aquarium kept: their mobs no longer despawn.
+
+The zoo's farm stayed full, the other pens and the jail and aquarium emptied.
+Checked against the player's own pack: every summon lands in the clear, and runs.
+The farm's are the animals the game never despawns; the rest can, and a hostile
+mob vanishes at once with no player within 128 blocks. A name given by /summon
+did not keep them, and the ticking areas, keeping those chunks running with the
+player away, are where the despawning happens.
+
+Now they are kept as the park fish are: the pack carries the game's own definition
+of each of the 60 mobs the jail, zoo and aquarium summon (mob-entities.js, from
+Mojang's bedrock-samples), with one thing added, polis:kept (persistent; a despawn
+rule, where the mob has one, kept off a persistent one) and polis:keep, which runs
+the game's own spawn event (a cat's coat, a panda's gene) and then adds it. Every
+inmate, animal and fish is summoned with polis:keep, and named. And the fish's
+definitions now come whenever there is an aquarium, not only pond fish: its fish
+are summoned with keep events those define.
+
+2zza checks every jail, zoo and aquarium summon kept, the pack carrying each
+mob's own definition with only the keep added, and the pack itself carrying the
+mobs' and fish's definitions for a jail, zoo or aquarium (15 checks).
 
 **0.40.7** — Bigger zoo pens; no animal set against a fence.
 

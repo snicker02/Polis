@@ -156,10 +156,46 @@ export default async function run(ctx) {
       const names = ['zoo', 'zoo_centered', 'jail', 'jail_centered', 'areas', 'areas_centered'];
       const have = names.filter((n) => get(n));
       const zooAll = get('zoo') && get('zoo').text.split('\n').filter((l) => l.startsWith('summon ')).length === both.zoo.length;
-      const jailAll = get('jail') && get('jail').text.split('\n').filter((l) => / Inmate /.test(l)).length === both.inmates.length;
+      const jailAll = get('jail') && get('jail').text.split('\n').filter((l) => / polis:keep Inmate$/.test(l)).length === both.inmates.length;
       const b = get('build').text.split('\n');
       const tidy = b.filter((l) => l.startsWith('tickingarea add')).every((l) => { const name = l.split(' ').pop(); const ia = b.indexOf(l), ir = b.indexOf('tickingarea remove ' + name); return ir >= 0 && ir < ia; });
       check('zoo and jail: their own functions (zoo, jail, and areas to keep the city loaded), each summoning all of them; build clears its ticking areas before it makes them', have.length === names.length && zooAll && jailAll && tidy, `${have.length} of ${names.length}, zoo ${!!zooAll}, jail ${!!jailAll}, tidy ${tidy}`);
+    }
+    // Kept: every jail, zoo and aquarium summon with the pack's polis:keep (a name
+    // from /summon did not keep them: away from a player they despawned), and the
+    // pack carrying, for every mob summoned, the game's own definition with only
+    // the keep group (persistent) and event (the game's own spawn event, then keep)
+    {
+      const { mobEntityFiles, exportPack } = await import('../../engine/export.js');
+      const { readZipEntries } = await import('../../engine/worldfile.js');
+      const { VANILLA_MOBS } = await import('../../engine/mob-entities.js');
+      const both = generateCity({ ...DEFAULTS, ...L, size: 256, seed: 7, zoo: true, jail: true });
+      const f3 = functionFiles(buildStructures(both.world, {}), both.world, { namespace: 'test', spawns: both.spawns, zoo: both.zoo, inmates: both.inmates });
+      const zl = [...(f3.find((f) => f.fn === 'test/zoo').text.split('\n')), ...(f3.find((f) => f.fn === 'test/jail').text.split('\n'))].filter((l) => l.startsWith('summon ') && !/minecart/.test(l));
+      const unkept = zl.filter((l) => !/ 0 0 polis:keep(_[a-z_]+)? [A-Za-z]+$/.test(l));
+      const mobs = mobEntityFiles();
+      const kinds = new Set(zl.map((l) => l.split(' ')[1].replace('minecraft:', '')));
+      const fishKinds = new Set(['cod', 'salmon', 'tropicalfish']);
+      const missingDef = [...kinds].filter((k) => !fishKinds.has(k) && !mobs.some((f) => f.name === `entities/${k}.json`));
+      let exact = true;
+      for (const f of mobs) {
+        const k = f.name.replace('entities/', '').replace('.json', ''), d = JSON.parse(f.data), e = d['minecraft:entity'];
+        const kept = e.component_groups['polis:kept'], ev = e.events['polis:keep'];
+        if (!kept || !kept['minecraft:persistent'] || !ev) { exact = false; continue; }
+        const game = VANILLA_MOBS[k]['minecraft:entity'];
+        const gs = (game.events || {})['minecraft:entity_spawned'];
+        if (gs && !(ev.sequence && JSON.stringify(ev.sequence[0]) === JSON.stringify(gs))) exact = false;
+        delete e.component_groups['polis:kept']; delete e.events['polis:keep'];
+        // (a section the game's file had empty or null, and only ours in it, back as it was)
+        if (Object.keys(e.component_groups).length === 0 && !(game.component_groups && Object.keys(game.component_groups).length)) e.component_groups = game.component_groups;
+        if (Object.keys(e.events).length === 0 && !(game.events && Object.keys(game.events).length)) e.events = game.events;
+        if (JSON.stringify(d) !== JSON.stringify(VANILLA_MOBS[k])) exact = false;
+      }
+      check('zoo and jail: every summon kept by the pack (polis:keep), the pack carrying each mob\'s own definition with only the keep added', unkept.length === 0 && missingDef.length === 0 && exact, `${unkept.length} unkept, missing ${missingDef.join(',')}, exact ${exact}`);
+      // and the pack itself: the mobs' and the fish's definitions in it when there is a jail, zoo or aquarium
+      const pk = await exportPack(both.world, { namespace: 'test', name: 'test', spawns: [], zoo: both.zoo, inmates: both.inmates });
+      const names = new Set(readZipEntries(pk.data).entries.map((e) => e.name.replace(/^.*?entities\//, 'entities/')));
+      check('pack: carries the mobs\' and the fish\'s definitions when the city has a jail, zoo or aquarium (even with no pond fish)', names.has('entities/goat.json') && names.has('entities/tropicalfish.json') && names.has('entities/zombie.json'), [...names].filter((n) => n.startsWith('entities/')).length + ' entity files');
     }
     const tf = JSON.parse(fishEntityFiles().find((f) => /tropicalfish/.test(f.name)).data);
     const ev = tf['minecraft:entity'].events;

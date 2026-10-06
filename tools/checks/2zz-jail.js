@@ -148,13 +148,13 @@ export default async function run(ctx) {
     const pop = fns.find((f) => /(^|\/)populate\.mcfunction$/.test(f.name));
     const text = !pop ? '' : typeof pop.data === 'string' ? pop.data : pop.data ? new TextDecoder().decode(pop.data) : (pop.text || '');
     const lines = text.split('\n');
-    const summons = lines.filter((l) => /^summon minecraft:\S+ Inmate /.test(l));
-    check('jail: populate summons every inmate, each named', summons.length === r.inmates.length && r.inmates.length > 0, `${summons.length} of ${r.inmates.length}`);
+    const summons = lines.filter((l) => /^summon minecraft:\S+ \S+ \S+ \S+ 0 0 polis:keep Inmate$/.test(l));
+    check('jail: populate summons every inmate, each kept by the pack (polis:keep) and named', summons.length === r.inmates.length && r.inmates.length > 0, `${summons.length} of ${r.inmates.length}`);
     // the enderman in a minecart on its cell's rail (riding, it cannot teleport):
     // the minecart, then it, then ride, in populate and in the jail's own function
     const ender = r.inmates.find((m) => m.type === 'enderman');
     const onRail = ender && blockOf(Math.floor(ender.x), ender.y, Math.floor(ender.z)) === 'rail';
-    const rideOk = (ls) => { const i = ls.findIndex((l) => /^summon minecraft:enderman Inmate /.test(l)); return i > 0 && /^summon minecraft:minecart /.test(ls[i - 1]) && /^ride @e\[type=minecraft:enderman,name=Inmate,.*\] start_riding @e\[type=minecraft:minecart,.*\] teleport_rider$/.test(ls[i + 1] || ''); };
+    const rideOk = (ls) => { const i = ls.findIndex((l) => /^summon minecraft:enderman \S+ \S+ \S+ 0 0 polis:keep Inmate$/.test(l)); return i > 0 && /^summon minecraft:minecart /.test(ls[i - 1]) && /^ride @e\[type=minecraft:enderman,name=Inmate,.*\] start_riding @e\[type=minecraft:minecart,.*\] teleport_rider$/.test(ls[i + 1] || ''); };
     const jf = fns.find((f) => /(^|\/)jail\.mcfunction$/.test(f.name));
     check('jail: the enderman rides a minecart on its cell\'s rail (riding, it cannot teleport out)', ender && ender.ride === 'minecart' && onRail && rideOk(lines) && jf && rideOk((jf.text || '').split('\n')), `${!!onRail} on its rail, ride in populate ${rideOk(lines)}`);
     // every summon in every function names an entity /summon may create: one that
