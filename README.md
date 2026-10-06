@@ -1,4 +1,4 @@
-# Polis v0.40.4
+# Polis v0.40.5
 
 *Created with help from Claude AI.*
 
@@ -761,6 +761,27 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.40.5** — Bigger jail cells, five floors; no inmate against a wall.
+
+Inmates escaped. The cells were three wide, and inmates were set on the cells'
+end rows: a wide one (a ravager nearly two blocks across, a slime or magma cube
+at its biggest just over two) began inside the wall, and the game pushes an
+entity out of a block it overlaps, not always back into the cell; four zombies
+crowded one cell. And a shulker teleports when hit, past any bars.
+
+The jail (jail.js) is rebuilt in the same fifteen by twenty-three: five floors a
+storey of five apart (four clear inside), two cells a side on each, each cell
+four deep, five wide and four high, twenty in all. One group a cell: the zombies
+now in two (zombies and husks; drowned and zombie villagers). Every inmate is set
+near its cell's middle, each a block clear of the walls. The shulker rides a
+minecart on a rail down its cell's middle, as the enderman does: riding, neither
+teleports. The halls (creepers, guardians, ghasts) stay at the back of the lower
+three floors; above them the back is walled up. A flight of five steps a floor,
+sides in turn; the corridor still a slab low its whole length.
+
+2zz checks every inmate's body inside its cell with a tenth to spare on every
+side, at its widest (12 checks); the corridor reached on all five floors.
 
 **0.40.4** — The enderman in a minecart; bigger farm and drylands; goats roofed.
 
