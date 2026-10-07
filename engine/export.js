@@ -17,7 +17,7 @@ import { makeRng } from './rng.js';
 // Must match main.js VERSION, package.json and index.html data-version;
 // tools/validate.js fails if they drift. The app refuses to export when the
 // browser has mixed cached copies of old and new files.
-export const POLIS_VERSION = '0.40.8';
+export const POLIS_VERSION = '0.41.0';
 
 export const CHUNK = 64;          // Bedrock structure limit per horizontal axis
 export const GROUND_DROP = 2;     // base layer y=0 sits 2 below feet; surface y=1 replaces the block you stand on
@@ -425,6 +425,7 @@ export const SUMMON_IDS = { minecart: 'minecraft:minecart', boat: 'minecraft:boa
 export const FISH = new Set(['cod', 'salmon', 'tropicalfish']);
 import { HOSTILE_KINDS } from './hostiles.js';
 import { VANILLA_MOBS } from './mob-entities.js';
+import { ARMOUR_SLOTS } from './museum.js';
 import { domeAir } from './dome.js';
 import { inAirBox } from './underground.js';
 import { VANILLA_FISH } from './fish-entities.js';
@@ -474,6 +475,15 @@ export function functionFiles(tiles, world, opts = {}) {
       `ride @e[type=${HOSTILE_KINDS[p.type].be},name=${p.name},${at}] start_riding @e[type=minecraft:${p.ride},${at}] teleport_rider`];
   };
   const ZOO_KEEP = new Set(['cod', 'salmon', 'tropicalfish']);
+  // the museum's armour stands: each summoned facing into its room, then dressed a
+  // piece at a time (standard item names only: one unknown and the function would
+  // not load)
+  const stands = opts.stands || [];
+  const standLines = (p, dx, dz) => {
+    const X = rel(p.x - dx), Y = rel(p.y - GROUND_DROP), Z = rel(p.z - dz), at = `x=${X},y=${Y},z=${Z},r=1,c=1`;
+    return [`summon minecraft:armor_stand ${X} ${Y} ${Z} ${p.yRot} 0`,
+      ...ARMOUR_SLOTS.map(([slot, piece]) => `replaceitem entity @e[type=minecraft:armor_stand,${at}] ${slot} 0 minecraft:${p.set}_${piece}`)];
+  };
   const zooLine = (p, dx, dz) => `summon minecraft:${p.type} ${rel(p.x - dx)} ${rel(p.y - GROUND_DROP)} ${rel(p.z - dz)} 0 0 polis:keep${p.variety ? '_' + p.variety : ''} ${p.name}`;
   const hostLine = (p, dx, dz) => `summon ${HOSTILE_KINDS[p.type].be} ${p.name} ${rel(p.x - dx)} ${rel(p.y - GROUND_DROP)} ${rel(p.z - dz)}`;
   const inPop = !!opts.hostilesInPopulate && hostiles.length > 0;
@@ -548,6 +558,7 @@ export function functionFiles(tiles, world, opts = {}) {
     ...(inmates.length ? [`say Polis: and ${inmates.length} inmates for the jail.`, ...inmates.flatMap((p) => inmateLines(p, dx, dz)),
       'say Polis: the jail is empty on Peaceful: hostile mobs do not appear there.'] : []),
     ...(zooFolk.length ? [`say Polis: and ${zooFolk.length} animals and fish for the zoo and aquarium.`, ...zooFolk.map((p) => zooLine(p, dx, dz))] : []),
+    ...(stands.length ? [`say Polis: and ${stands.length} suits of armour for the museum.`, ...stands.flatMap((p) => standLines(p, dx, dz))] : []),
     ...areas.map((a) => `tickingarea remove ${a.name}`),
     'say Polis: done. Villagers take jobs from the workstations and claim beds over the next few minutes.',
     ...(boats.length ? [`say Polis: any boat that did not appear, run /function ${ns}/${dx === wb.x0 ? 'boats' : 'boats_centered'} from beside the water.`] : []),
@@ -617,7 +628,7 @@ export function functionFiles(tiles, world, opts = {}) {
       { name: `functions/${ns}/${group}_centered.mcfunction`, fn: `${ns}/${group}_centered`, text: only(cx, cz, `Polis: ${noun} only (pairs with build_centered)`) });
   }
   // the jail and the zoo on their own, to fill them again (after the areas below)
-  for (const [group, list, line, noun] of [['jail', inmates, inmateLines, 'inmates for the jail'], ['zoo', zooFolk, (p, dx, dz) => [zooLine(p, dx, dz)], 'animals and fish for the zoo and aquarium']]) {
+  for (const [group, list, line, noun] of [['jail', inmates, inmateLines, 'inmates for the jail'], ['zoo', zooFolk, (p, dx, dz) => [zooLine(p, dx, dz)], 'animals and fish for the zoo and aquarium'], ['museum', stands, standLines, 'suits of armour for the museum']]) {
     if (!list.length) continue;
     const only = (dx, dz, title) => [
       `# ${title}`,

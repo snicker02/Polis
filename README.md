@@ -1,6 +1,16 @@
-# Polis v0.40.8
+# Polis v0.41.0
 
 *Created with help from Claude AI.*
+
+**Polis is a free Minecraft city generator that runs in your browser.** Pick a
+size and a style, and it plans a whole city — streets, furnished buildings with
+real stairs and rooms, railways, bridges, a metro, landmarks, even a jail, a zoo
+and an aquarium — then gives you a Minecraft Bedrock `.mcpack` (or a Java
+datapack) to build it with one command. It can also fit a city to the real
+ground of your own world.
+
+**Use it in your browser: https://snicker02.github.io/Polis/** (nothing to
+install).
 
 A procedural city generator that exports to **Minecraft Bedrock** and **Java
 Edition**. Plans a street grid, subdivides it into lots, raises buildings with
@@ -761,6 +771,47 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.41.0** — A museum.
+
+A new option, "A museum: fossils, minerals, armour, relics and art" (off by
+default), builds a museum landmark (museum.js): smooth quartz, a portico of
+quartz pillars before a doorway three wide, one storey six high inside. Nineteen
+across and twenty-four deep where the lot allows, fifteen across where it is
+narrower (the same rooms, the galleries narrower); it takes a lot early when asked
+for, preferring one for the wider.
+
+- The entrance hall: a reception desk with a lectern (a librarian's job), and the
+  relic wall, twelve item frames down the side walls (a trident, a totem of
+  undying, a heart of the sea, a nether star, an elytra, a mace, a spyglass, a
+  nautilus shell, a recovery compass, an echo shard, a goat horn, a music disc).
+- The fossil hall: a dinosaur's skeleton of 26 bone blocks (skull, neck, spine,
+  ribs, arms, legs, tail) on a polished andesite plinth, and along its outer wall
+  the gallery: real paintings, the motifs and sizes the buildings hang, on solid
+  wall.
+- The minerals gallery: twenty cases, each a quartz pedestal, the block and glass
+  over it: every ore, ancient debris, the raw metals, amethyst, diamond and
+  emerald blocks, copper in all four stages of weathering.
+- The armour room: six armour stands, leather, chainmail, iron, gold, diamond and
+  netherite, summoned in populate and dressed head to feet with replaceitem
+  (standard item names only), with museum / museum_centered to dress them again.
+
+A sign at every room; on fitted cities the paintings and stands ride up with the
+ground; the summary says when no lot could take it.
+
+New section 2zzb (10 checks): built on a wide lot, a narrow one and a player's
+fitted city; the skeleton, every case and frame; every painting on clear wall
+with wall behind; every stand on a floor; every room reached from the street;
+every mineral, relic and suit in it; populate dressing every stand with standard
+items; the museum's own functions; every block one of Bedrock's own states.
+
+**0.40.9** — Findable: a description for search engines and link previews.
+
+No change to the cities. The page now says what it is to search engines and to
+anything that previews a link (a description, keywords, Open Graph and Twitter
+tags, and a canonical address at https://snicker02.github.io/Polis/), and the
+repository carries robots.txt and sitemap.xml for the GitHub Pages site. The
+README opens with a plain description and the link to use it in a browser.
 
 **0.40.8** — The jail, zoo and aquarium kept: their mobs no longer despawn.
 

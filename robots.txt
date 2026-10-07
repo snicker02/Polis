@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://snicker02.github.io/Polis/sitemap.xml

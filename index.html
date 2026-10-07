@@ -4,6 +4,18 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Polis — Minecraft Bedrock city generator</title>
+<!-- for search engines and link previews -->
+<meta name="description" content="Polis is a free procedural city generator for Minecraft Bedrock (and Java). Generate a whole city in your browser — streets, furnished buildings, railways, bridges, a metro, a jail, a zoo and an aquarium — fit it to your own world, and download it as a .mcpack to build with one command.">
+<meta name="keywords" content="Minecraft city generator, Minecraft Bedrock city, mcpack, behavior pack, procedural city, Minecraft structure generator, Bedrock structures, Minecraft Java datapack, city builder, Minecraft town generator">
+<meta name="author" content="snicker02">
+<link rel="canonical" href="https://snicker02.github.io/Polis/">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Polis — Minecraft Bedrock city generator">
+<meta property="og:description" content="Generate a whole Minecraft city in your browser — furnished buildings, railways, bridges, a metro, a jail, a zoo — and download it as a .mcpack.">
+<meta property="og:url" content="https://snicker02.github.io/Polis/">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Polis — Minecraft Bedrock city generator">
+<meta name="twitter:description" content="Generate a whole Minecraft city in your browser and download it as a .mcpack.">
 <style>
   /* options a fitted city cannot have: marked once a site from the world is chosen */
   .fitnote { display: none; color: #d08a4a; font-size: 0.85em; margin-left: 0.4em; }
@@ -141,12 +153,12 @@
   }
 </style>
 </head>
-<body class="mode-city" data-version="0.40.8">
+<body class="mode-city" data-version="0.41.0">
 <div id="app">
   <div id="panel">
     <div id="panelScroll">
       <h1>PO<span>L</span>IS</h1>
-      <div class="sub">procedural city → Minecraft Bedrock · v0.40.8</div>
+      <div class="sub">procedural city → Minecraft Bedrock · v0.41.0</div>
 
       <fieldset>
         <legend>Mode</legend>
@@ -314,6 +326,7 @@
           <label class="chk city-only"><input type="checkbox" id="metro">Metro under the main streets</label>
           <label class="chk city-only"><input type="checkbox" id="jail">A jail holding every hostile mob</label>
           <label class="chk city-only"><input type="checkbox" id="zoo">A zoo and an aquarium with every animal and fish</label>
+          <label class="chk city-only"><input type="checkbox" id="museum">A museum: fossils, minerals, armour, relics and art</label>
           <label class="chk city-only"><input type="checkbox" id="hostiles">Hostile mobs arrive with populate</label>
         </div>
         <div class="row city-only"><label>Hostile mobs</label><input type="range" id="hostileCount" min="0" max="80" step="1" value="24"><span class="val" id="hostileCount_v"></span></div>
@@ -379,6 +392,6 @@
     <div id="busy">generating…</div>
   </div>
 </div>
-<script type="module" src="./main.js?v=0.40.8"></script>
+<script type="module" src="./main.js?v=0.41.0"></script>
 </body>
 </html>

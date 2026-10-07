@@ -17,7 +17,7 @@ import { buildPregenPack, pregenFileName, siteRegion, viewRegion, pregenCommand,
 import { decodeNbt } from './tools/nbt-read.js';
 import { THEMES } from './engine/materials.js';
 
-const VERSION = '0.40.8';
+const VERSION = '0.41.0';
 const $ = (id) => document.getElementById(id);
 const numVal = (id) => Number($(id).value);      // readCfg has its own local num()
 
@@ -27,7 +27,7 @@ const SLIDERS = {
   maxFloors: 0, pitch: 0, setbackEvery: 0, bw: 0, bd: 0, floors: 0, clip: 0,
   farmChance: 2, pondChance: 2, twistChance: 2, courtyardChance: 2, hostileCount: 0, villagers: 0, wallHeight: 0, foundation: 0, clearAbove: 0, hills: 0, golemsPer10: 0,
 };
-const CHECKS = ['setback', 'roofAccess', 'useStairs', 'lights', 'lamps', 'trees', 'markings', 'landmarks', 'canal', 'harbour', 'bridges', 'detail', 'streetSigns', 'fish', 'megaliths', 'hostiles', 'dome', 'stilts', 'floating', 'cliff', 'underground', 'metro', 'terrainBreaks', 'jail', 'zoo'];
+const CHECKS = ['setback', 'roofAccess', 'useStairs', 'lights', 'lamps', 'trees', 'markings', 'landmarks', 'canal', 'harbour', 'bridges', 'detail', 'streetSigns', 'fish', 'megaliths', 'hostiles', 'dome', 'stilts', 'floating', 'cliff', 'underground', 'metro', 'terrainBreaks', 'jail', 'zoo', 'museum'];
 
 let renderer = null;
 let result = null;       // { world, plan, buildings, cfg, stats }
@@ -457,6 +457,8 @@ function showStats(mesh, times) {
       const skipped = Object.keys(NOT_FITTED).filter((id) => $(id) && $(id).checked).map((id) => NOT_FITTED[id]);
       if (skipped.length) line('not on fitted ground', `${skipped.join(', ')}: a fitted city follows your world's own ground`);
     }
+    if (s.museumMissing) line('museum', s.museumMissing);
+    if (s.museum) line('museum', `${s.museum.relics} relics, ${s.museum.minerals} minerals, a skeleton of ${s.museum.bones} bones, ${s.museum.paintings} paintings, ${s.museum.armour} suits of armour`);
     if (s.zooMissing) line('zoo', s.zooMissing);
     if (s.jailMissing) line('jail', s.jailMissing);
     if (s.zoo) line('zoo and aquarium', `${s.zoo.animals} animals and ${s.zoo.fish} fish, ${s.zoo.kinds} kinds`);
@@ -902,7 +904,7 @@ async function doExport(kind) {
     const opts = {
       base: base(), namespace: cityNs, prefix: 'c', ...exportOpts(),
       seed: result.cfg.seed, spawns: result.spawns || [],
-      hostiles: result.hostiles || [], hostilesInPopulate: !!result.cfg.hostiles, inmates: result.inmates || [], zoo: result.zoo || [],
+      hostiles: result.hostiles || [], hostilesInPopulate: !!result.cfg.hostiles, inmates: result.inmates || [], zoo: result.zoo || [], stands: result.stands || [],
       summary: summaryLine(),
       packName: `Polis ${cityNs}`,
       description: `/function ${cityNs}/build_centered then populate_centered · Polis v${VERSION}`,
