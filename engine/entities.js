@@ -13,6 +13,7 @@
 
 import { GOLEM, VILLAGER, CAT, PANDA, CAT_COATS, COW, PIG, CHICKEN, SHEEP, SHEEP_COATS, PROFESSIONS, TIER_EXP, PAINTING, PAINTING_MOTIFS, hydrate } from './entity-templates.js';
 import { N } from './blockcore.js';
+import { MINECART_RIDER } from './rider-templates.js';
 
 let uidSeq = 0;
 function uniqueId(rng) {
@@ -25,7 +26,24 @@ function uniqueId(rng) {
 const floatList = (xs) => ({ t: 9, et: 5, keepEt: true, v: xs.map((x) => ({ t: 5, v: x })) });
 
 // kinds carried in mob structures (everything else is summoned)
-export const STRUCTURE_MOBS = new Set(['villager', 'golem', 'cat', 'panda', 'cow', 'pig', 'chicken', 'sheep', 'painting']);
+export const STRUCTURE_MOBS = new Set(['villager', 'golem', 'cat', 'panda', 'cow', 'pig', 'chicken', 'sheep', 'painting', 'ender_rider']);
+
+// The jail's enderman, riding a minecart (riding, an enderman cannot teleport):
+// the pair a player saved from their own trap (rider-templates.js), the minecart
+// and the enderman already riding it, put down on a rail at (x, y, z). Each pair
+// gets ids of its own, the minecart's link pointing at its own enderman, both at
+// the heights over the rail they were saved at. (Summoned, then set riding by
+// command, the enderman was not always in it, and teleported out of its cell.)
+export function makeRiderPair(x, y, z, rng, name = null) {
+  const cart = hydrate(MINECART_RIDER.cart), rider = hydrate(MINECART_RIDER.riderNbt);
+  const cid = uniqueId(rng), rid = uniqueId(rng);
+  cart.v.UniqueID = N.long(cid); rider.v.UniqueID = N.long(rid);
+  cart.v.Pos = floatList([x + 0.5, y + MINECART_RIDER.cartDy, z + 0.5]);
+  rider.v.Pos = floatList([x + 0.5, y + MINECART_RIDER.riderDy, z + 0.5]);
+  for (const link of cart.v.LinksTag.v) link.v.entityID = N.long(rid);
+  if (name) rider.v.CustomName = N.str(name);
+  return [cart, rider];
+}
 const TEMPLATE = { villager: VILLAGER, golem: GOLEM, cat: CAT, panda: PANDA, cow: COW, pig: PIG, chicken: CHICKEN, sheep: SHEEP, painting: PAINTING };
 export const PAINTINGS = PAINTING_MOTIFS;
 

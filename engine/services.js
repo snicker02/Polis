@@ -23,7 +23,7 @@ import { lotFrame } from './zoo.js';
 export const HOSPITAL_SIZE = [15, 23], FIRE_SIZE = [15, 20];   // (the fire station twelve across where the lot is narrower)
 
 // the shared helpers: a frame's put/clear, a sign, a bed, names of directions
-function helpers(world, fr, G, signTags) {
+export function helpers(world, fr, G, signTags) {
   const { at } = fr;
   const put = (u, v, y, id) => { const [x, z] = at(u, v); world.set(x, y, z, id); };
   const clear = (u, v, y) => { const [x, z] = at(u, v); world.clear(x, y, z); };

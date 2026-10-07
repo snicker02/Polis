@@ -388,6 +388,12 @@ Object.assign(MAT, {
   GLASS_WHITE:       A('GLASS_WHITE', 'minecraft:white_stained_glass', '#e8ecec', {}, { transparent: true }),
   GLASS_RED:         A('GLASS_RED', 'minecraft:red_stained_glass', '#a83030', {}, { transparent: true }),
   COAL:              A('COAL', 'minecraft:coal_block', '#1a1a1a'),
+  // the police station, the theatre and the hotel (civic.js)
+  NOTEBLOCK:         A('NOTEBLOCK', 'minecraft:noteblock', '#6a4a3a'),
+  RED_WOOL:          A('RED_WOOL', 'minecraft:red_wool', '#a02828'),
+  C_LBLUE:           A('C_LBLUE', 'minecraft:light_blue_concrete', '#3a9ad0'),
+  GLASS_BLUE:        A('GLASS_BLUE', 'minecraft:blue_stained_glass', '#3a4ea3', {}, { transparent: true }),
+  DARK_PLANKS:       A('DARK_PLANKS', 'minecraft:dark_oak_planks', '#4a3220'),
   FRAME_2:           A('FRAME_2', 'minecraft:frame', '#8a6a4a', { facing_direction: I(2), item_frame_map_bit: B(0), item_frame_photo_bit: B(0) }),
   FRAME_3:           A('FRAME_3', 'minecraft:frame', '#8a6a4a', { facing_direction: I(3), item_frame_map_bit: B(0), item_frame_photo_bit: B(0) }),
   FRAME_4:           A('FRAME_4', 'minecraft:frame', '#8a6a4a', { facing_direction: I(4), item_frame_map_bit: B(0), item_frame_photo_bit: B(0) }),

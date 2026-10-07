@@ -106,6 +106,9 @@ export const DEFAULTS = {
   museum: false,             // a museum: fossils, minerals, armour, relics, paintings (museum.js)
   hospital: false,           // a hospital: pharmacy, emergency room, ward, a helipad (services.js)
   firestation: false,        // a fire station: engines in their bays, a pole, a lookout tower (services.js)
+  police: false,             // a police station, next to the jail if there is one (civic.js)
+  theatre: false,            // a theatre: a stage with curtains, an orchestra pit, tiered seats (civic.js)
+  hotel: false,              // a hotel: a lobby and five storeys of rooms (civic.js)
   terrainBreaks: true,       // on fitted terrain, lots step at their own heights (retaining walls), held only to the street they face
   mixStyles: false,          // several styles, one to a district (districts.js)
   mixList: ['modern', 'medieval', 'eastasian', 'artdeco'],   // the styles ticked for mixing
@@ -885,7 +888,13 @@ export function generateCity(cfgIn, onProgress) {
   const shell = cfg.terrain ? terrainShell(plan, cfg.terrain, GROUND, cfg.cityStyle) : null;
   const stats = summarise(world, plan, buildings, cfg, { farms, beds, spawns, bell, transit, wall, ranches, landmarks, hills, stairRuns, reach, canal, centre, streets, harbour, skirt, cutFaces, bridges, megaliths, ponds, courtyards, hostiles, dome, canals, lighting, styleDistricts: SD, spawners, stilts, islands, cliffWays, rooms, metro, stepRails, unsupported: stats_unsupported });
   // the jail's inmates, summoned by populate (every one named, so none despawns)
-  const inmates = landmarks.flatMap((L) => L.inmates || []);
+  // (the enderman goes in the structures, already riding its minecart, with the
+  // villagers; the rest of the inmates are summoned)
+  const inmates = [];
+  for (const m of landmarks.flatMap((L) => L.inmates || [])) {
+    if (m.type === 'enderman' && m.ride) spawns.push({ type: 'ender_rider', x: Math.floor(m.x), y: m.y, z: Math.floor(m.z), name: m.name });
+    else inmates.push(m);
+  }
   if (inmates.length) stats.jail = { inmates: inmates.length, kinds: new Set(inmates.map((m) => m.type)).size };
   const stands = landmarks.flatMap((L) => (L.stands || []).filter((st) => st.type === 'armor_stand'));
   const M = landmarks.find((L) => L.kind === 'museum');
@@ -896,6 +905,13 @@ export function generateCity(cfgIn, onProgress) {
   if (cfg.hospital && !HOS) stats.hospitalMissing = 'no lot big enough for the hospital (it needs 15 by 23)';
   if (FS) stats.firestation = { engines: FS.engines.length, beds: FS.beds.length };
   if (cfg.firestation && !FS) stats.firestationMissing = 'no lot big enough for the fire station (it needs 12 by 20)';
+  for (const [kind, need, say] of [['police', '13 by 15', (L) => `a front desk, ${L.desks.length} desks, a holding cell${L.nearJail ? ', next to the jail' : ''}`],
+    ['theatre', '17 by 20', (L) => `${L.seats.length} seats, ${L.pit.length} note blocks in the pit, red curtains`],
+    ['hotel', '13 by 19', (L) => `${L.rooms.length} rooms on ${L.frame.FLOORS - 1} floors, a lobby`]]) {
+    const L = landmarks.find((q) => q.kind === kind);
+    if (L) stats[kind] = say(L);
+    else if (cfg[kind]) stats[kind + 'Missing'] = `no lot big enough for the ${kind === 'police' ? 'police station' : kind} (it needs ${need})`;
+  }
   const zoo = landmarks.flatMap((L) => [...(L.animals || []), ...(L.fish || [])]);
   // (asked for, but no lot big enough: said so, not left silent)
   if (cfg.zoo && !landmarks.some((L) => L.kind === 'zoo')) stats.zooMissing = 'no lot big enough for the zoo (it needs 15 by 24)';

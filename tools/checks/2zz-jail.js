@@ -150,13 +150,30 @@ export default async function run(ctx) {
     const lines = text.split('\n');
     const summons = lines.filter((l) => /^summon minecraft:\S+ \S+ \S+ \S+ 0 0 polis:keep Inmate$/.test(l));
     check('jail: populate summons every inmate, each kept by the pack (polis:keep) and named', summons.length === r.inmates.length && r.inmates.length > 0, `${summons.length} of ${r.inmates.length}`);
-    // the enderman in a minecart on its cell's rail (riding, it cannot teleport):
-    // the minecart, then it, then ride, in populate and in the jail's own function
-    const ender = r.inmates.find((m) => m.type === 'enderman');
-    const onRail = ender && blockOf(Math.floor(ender.x), ender.y, Math.floor(ender.z)) === 'rail';
-    const rideOk = (ls) => { const i = ls.findIndex((l) => /^summon minecraft:enderman \S+ \S+ \S+ 0 0 polis:keep Inmate$/.test(l)); return i > 0 && /^summon minecraft:minecart /.test(ls[i - 1]) && /^ride @e\[type=minecraft:enderman,name=Inmate,.*\] start_riding @e\[type=minecraft:minecart,.*\] teleport_rider$/.test(ls[i + 1] || ''); };
-    const jf = fns.find((f) => /(^|\/)jail\.mcfunction$/.test(f.name));
-    check('jail: the enderman rides a minecart on its cell\'s rail (riding, it cannot teleport out)', ender && ender.ride === 'minecart' && onRail && rideOk(lines) && jf && rideOk((jf.text || '').split('\n')), `${!!onRail} on its rail, ride in populate ${rideOk(lines)}`);
+    // The enderman in a minecart on its cell's rail (riding, it cannot teleport),
+    // placed as the pair a player saved from their own trap, in the structures with
+    // the villagers: the minecart's link naming that enderman, the enderman already
+    // riding (summoned and set riding by command, it was not always in it). Read
+    // from the structure the pack loads. No enderman summoned any more.
+    {
+      const { buildMobStructures } = await import('../../engine/export.js');
+      const { decodeNbt } = await import('../nbt-read.js');
+      const rider = r.spawns.find((p) => p.type === 'ender_rider');
+      const onRail = rider && blockOf(rider.x, rider.y, rider.z) === 'rail';
+      let linked = false, riding = false, kept = false;
+      if (rider) for (const t of buildMobStructures(r.spawns, { seed: 1 })) {
+        const ents = decodeNbt(t.data).root.structure.entities;
+        const ender = ents.find((e) => e.identifier === 'minecraft:enderman');
+        const cart = ents.find((e) => e.identifier === 'minecraft:minecart');
+        if (!ender || !cart) continue;
+        linked = (cart.LinksTag || []).some((l) => String(l.entityID) === String(ender.UniqueID));
+        riding = ender.definitions.includes('+minecraft:riding') && ender.definitions.includes('-minecraft:not_riding');
+        kept = ender.Persistent === 1 && ender.CustomName === 'Inmate'
+          && Math.floor(ender.Pos[0]) === rider.x && Math.floor(ender.Pos[2]) === rider.z && Math.floor(cart.Pos[0]) === rider.x;
+      }
+      const summoned = [...lines, ...((fns.find((f) => /(^|\/)jail\.mcfunction$/.test(f.name)) || {}).text || '').split('\n')].some((l) => /^summon minecraft:enderman /.test(l));
+      check('jail: the enderman rides a minecart on its cell\'s rail, placed riding (the trap a player saved), not summoned', onRail && linked && riding && kept && !summoned, `rail ${!!onRail}, linked ${linked}, riding ${riding}, kept ${kept}, summoned ${summoned}`);
+    }
     // every summon in every function names an entity /summon may create: one that
     // may not (zombie_villager_v2) and Bedrock loads none of populate. Checked
     // against Mojang's own files (tools/bedrock-summonable.json); one not listed

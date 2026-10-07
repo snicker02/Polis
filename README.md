@@ -1,4 +1,4 @@
-# Polis v0.42.1
+# Polis v0.43.0
 
 *Created with help from Claude AI.*
 
@@ -771,6 +771,51 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.43.0** — A police station, a theatre and a hotel.
+
+Three new options (off by default), three new landmarks (civic.js), each taking a
+lot early when asked for:
+
+- The police station, thirteen by fifteen, white with a band of light blue: a
+  blue lamp over the doorway; a front desk; the office, four desks with chairs and
+  lockers of barrels; a holding cell behind iron bars, a bed in it. Where the city
+  has a jail, it takes the lot nearest the jail.
+- The theatre, seventeen by twenty, dark oak, red trim over the door: a lobby with
+  a ticket booth; the stage against the lobby wall, raised two, red wool curtains
+  across its back and at its sides; the orchestra pit before it, note blocks along
+  it; six rows of seats rising a block a row to a gallery at the back, the aisles
+  climbing with them (every seat walked to); chandeliers.
+- The hotel, thirteen by nineteen, brick, five storeys: the lobby, a reception
+  desk, seats; a flight of stairs a floor up the front; on each floor above a
+  corridor and six rooms off it, each a bed, a window and a lantern: twenty-four
+  rooms.
+
+A sign at every room; the summary says when no lot could take one.
+
+New section 2zzd (9 checks): built on flat cities (the police station on a fitted
+one too); the police station's desks, lockers, cell and bed, its rooms reached, and
+within forty blocks of the jail; every theatre seat, the pit's note blocks, the
+curtains whole, every row's aisle reached; the hotel's twenty-four rooms, every
+bed whole, every room's door reached up the stairs; every block one of Bedrock's
+own states.
+
+**0.42.2** — The jail's enderman placed already riding its minecart.
+
+The enderman was often gone from its cell. It was summoned, a minecart summoned,
+and the enderman set riding by command, in the same moment; when that missed, it
+was never riding, and an enderman not riding teleports (the game's own: its
+not-riding group carries the teleport, its riding group does not). Now it goes in
+the structures with the villagers, as the pair a player saved from their own trap
+(tools/extract-rider.js, engine/rider-templates.js): the minecart, its link naming
+the enderman, and the enderman already riding, persistent, its riding group on.
+Each copy gets ids of its own and stands at the heights over the rail it was saved
+at (entities.js: makeRiderPair). A structure also waits for its chunks, where a
+summon does not. No enderman is summoned any more; the shulker still is.
+
+2zz reads the structure the pack loads: the enderman on its cell's rail, the
+minecart's link naming that enderman, the enderman riding, kept and named, and no
+enderman summoned (13 checks).
 
 **0.42.1** — populate loads again with a hospital and a museum.
 
