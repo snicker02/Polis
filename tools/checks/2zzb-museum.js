@@ -72,6 +72,19 @@ export default async function run(ctx) {
   check('museum: the skeleton, every mineral in its case under glass, every relic in its frame', built.every(([, , t]) => t.bonesOk && t.casesOk && t.framesOk), built.map(([n, , t]) => `${n}: ${t.bones} bones, ${t.cases} cases, ${t.frames} frames`).join('; '));
   check('museum: every painting on clear wall, solid wall behind every block of it', built.every(([, , t]) => t.paintCount >= 3 && t.paintBad === 0), built.map(([n, , t]) => `${n}: ${t.paintings}`).join('; '));
   check('museum: every armour stand on a floor, in the open', built.every(([, , t]) => t.standsOk));
+  // the skeleton whole, not a silhouette: three across (it read as a pillar seen
+  // end on from the doorway, one block thick), and the way in before it clear
+  {
+    const ok = built.every(([, r]) => {
+      const M = r.landmarks.find((Lm) => Lm.kind === 'museum'), fr = M.frame;
+      const across = (x, z) => { for (let u = 0; u < fr.W; u++) for (let v = 0; v < fr.D; v++) { const [ax, az] = fr.at(u, v); if (ax === x && az === z) return u; } return -1; };
+      const us = new Set(M.bones.map(([x, , z]) => across(x, z)));
+      const row = fr.HALL_END + 1, door = [fr.leftC - 1, fr.leftC, fr.leftC + 1];
+      const clear = door.every((u) => { const [x, z] = fr.at(u, row); return !M.bones.some(([bx, , bz]) => bx === x && bz === z); });
+      return us.size === 3 && M.bones.length >= 40 && clear;
+    });
+    check('museum: the skeleton whole, three across (skull, ribs both sides, two legs), the doorway before it clear', ok);
+  }
   check('museum: every room reached on foot from the street (hall, fossils, minerals, armour)', built.every(([, , t]) => Object.values(t.rooms).every(Boolean)), built.map(([n, , t]) => `${n}: ${JSON.stringify(t.rooms)}`).join('; '));
   {
     const M = built[1] ? built[1][1].landmarks.find((Lm) => Lm.kind === 'museum') : null;

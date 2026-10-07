@@ -1,4 +1,4 @@
-# Polis v0.41.0
+# Polis v0.41.1
 
 *Created with help from Claude AI.*
 
@@ -771,6 +771,20 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.41.1** — A whole dinosaur in the fossil hall.
+
+The skeleton was one block thick and ran straight away from the doorway: from
+the way in, only its skull on a column showed, and it read as a pillar. Now it is
+three across, 43 bones (museum.js): a skull with its mouth open, the neck and
+spine, a ribcage on both sides, little arms, a pelvis, two legs with their toes
+forward, and a tail coming down. Each bone lies the way its run goes: upright in
+a leg, lengthways along the spine and tail, crossways in the skull. It stands on
+a raised plinth a block high, two blocks back from the doorway, with a way past
+it on both sides.
+
+2zzb checks the skeleton three across, at least forty bones, and the doorway
+before it clear (11 checks).
 
 **0.41.0** — A museum.
 

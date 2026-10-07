@@ -34,20 +34,24 @@ export const ARMOUR_SLOTS = [['slot.armor.head', 'helmet'], ['slot.armor.chest',
 
 const D_ = 24, H = 6;
 
-// the dinosaur: its bones in its own frame (a along its body, from the head; h
-// up from the plinth), on the middle line of the fossil hall
-const SKELETON = [
-  // the skull and jaw
-  [0, 5], [0, 6], [1, 5], [1, 6], [1, 4],
-  // the neck, the spine, the tail coming down
-  [2, 5], [3, 5], [4, 4], [5, 4], [6, 4], [7, 4], [8, 4], [9, 4], [10, 3], [11, 3], [12, 2],
-  // the ribs under the spine
-  [5, 3], [6, 3], [7, 3], [6, 2],
-  // the little arms
-  [3, 3],
-  // the legs, to the plinth
-  [5, 2], [5, 1], [8, 3], [8, 2], [8, 1],
-];
+// The dinosaur, whole: its bones in its own frame (a along its body from the
+// head, h up from the hall's floor, the plinth at 1, s to either side of its
+// spine). Three across: a skull with an open mouth, a ribcage both sides, a
+// pelvis, two legs with their toes forward, little arms, a tail tapering down.
+// (Drawn one block thick, from the doorway it read as a pillar.)
+const SKELETON = [];
+{
+  const add = (a, h, ...ss) => { for (const sd of ss) SKELETON.push([a, h, sd]); };
+  // the skull: three across, two long, two high, its mouth open at the front
+  for (const a of [0, 1]) for (const h of [5, 6]) for (const sd of [-1, 0, 1]) if (!(a === 0 && h === 5 && sd === 0)) add(a, h, sd);
+  add(2, 5, 0);                                       // the neck
+  for (let a = 3; a <= 7; a++) add(a, 5, 0);          // the spine
+  for (let a = 4; a <= 6; a++) { add(a, 4, -1, 1); add(a, 3, -1, 1); }   // the ribs, both sides
+  add(3, 4, -1, 1);                                   // the arms
+  add(7, 4, -1, 0, 1);                                // the pelvis
+  add(7, 3, -1, 1); add(7, 2, -1, 1); add(6, 2, -1, 1);   // the legs, the toes forward
+  add(8, 5, 0); add(9, 4, 0); add(10, 3, 0);          // the tail, coming down
+}
 
 export function museum(world, lot, face, cfg, rng, G, signTags) {
   // nineteen across where the lot allows, else fifteen: the same rooms, the
@@ -111,14 +115,18 @@ export function museum(world, lot, face, cfg, rng, G, signTags) {
   sign(MID - 2, 3, neg(fr.back), 'Relics');
 
   // ---- the fossil hall: the skeleton on its plinth ----------------------------------------
-  const spineU = leftC, a0 = 10;                                 // its head at the hall's front
-  for (let v = a0; v <= a0 + 12; v++) for (let u = spineU - 1; u <= spineU + 1; u++) put(u, v, G, MAT.MUSEUM_PLINTH);
+  // (two blocks clear of the doorway, a raised plinth a block high under it, the
+  // visitors' way past it on both sides)
+  const spineU = leftC, a0 = HALL_END + 2;
+  for (let a = 0; a <= 10; a++) for (let sd = -1; sd <= 1; sd++) put(spineU + sd, a0 + a, G + 1, MAT.MUSEUM_PLINTH);
   const bones = [];
-  const along = fr.back[0] !== 0 ? MAT.BONE_X : MAT.BONE_Z;
-  for (const [a, h] of SKELETON) {
-    const [x, z] = at(spineU, a0 + a);
-    const upright = SKELETON.some(([b, k]) => b === a && (k === h + 1 || k === h - 1)) && !SKELETON.some(([b, k]) => k === h && (b === a + 1 || b === a - 1));
-    world.set(x, G + h, z, upright ? MAT.BONE_Y : along);
+  const has = (a, h, sd) => SKELETON.some(([b, k, t]) => b === a && k === h && t === sd);
+  const lengthways = fr.back[0] !== 0 ? MAT.BONE_X : MAT.BONE_Z, crossways = fr.across[0] !== 0 ? MAT.BONE_X : MAT.BONE_Z;
+  for (const [a, h, sd] of SKELETON) {
+    const [x, z] = at(spineU + sd, a0 + a);
+    // each bone lies the way its run goes: up a leg, along the spine, across the skull
+    const id = has(a, h + 1, sd) || has(a, h - 1, sd) ? MAT.BONE_Y : has(a + 1, h, sd) || has(a - 1, h, sd) ? lengthways : has(a, h, sd + 1) || has(a, h, sd - 1) ? crossways : MAT.BONE_Y;
+    world.set(x, G + h, z, id);
     bones.push([x, G + h, z]);
   }
   sign(Math.max(1, leftDoor - 1), HALL_END + 1, neg(fr.back), 'Fossils');
