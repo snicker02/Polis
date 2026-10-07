@@ -1,4 +1,4 @@
-# Polis v0.42.0
+# Polis v0.42.1
 
 *Created with help from Claude AI.*
 
@@ -771,6 +771,22 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.42.1** — populate loads again with a hospital and a museum.
+
+With both built, the game loaded none of populate, populate_centered, museum or
+museum_centered: three armour stands summoned at NaN. The hospital kept its
+brewing stands in a list called stands, and the city gathered every landmark's
+stands as armour stands to summon; the brewing stands had no x, y or z. Now the
+hospital's are its brewing (services.js), and the city takes only armour stands
+(city.js). And a safety net: the export leaves out any command with NaN or
+undefined in it, so one bad place can no longer stop a whole function loading,
+and keeps what it left out on the file.
+
+2zz checks a city with every landmark on at once (jail, zoo, aquarium, museum,
+hospital, fire station, metro, railway, hostiles): no NaN, undefined or Infinity
+in any command, and nothing left out by the net (13 checks). (The checks had built
+the hospital and the museum only in separate cities.)
 
 **0.42.0** — A hospital and a fire station.
 

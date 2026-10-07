@@ -172,6 +172,21 @@ export default async function run(ctx) {
       }
       check('functions: every summon names an entity Bedrock lets /summon create (Mojang\'s own is_summonable)', bad.size === 0, [...bad].join(', '));
     }
+    // and with everything on at once (the hospital's brewing stands, beside the
+    // museum, were taken for armour stands with no place: NaN in populate), every
+    // line of every function a number where a number goes: no NaN, undefined or
+    // Infinity in any command
+    {
+      const every = generateCity({ ...DEFAULTS, ...L, size: 320, seed: 12345, jail: true, zoo: true, museum: true, hospital: true, firestation: true, metro: true, transit: 'rails', hostiles: true, hostileCount: 20 });
+      const files = functionFiles(buildStructures(every.world, {}), every.world, { namespace: 'test', spawns: every.spawns, inmates: every.inmates, zoo: every.zoo, stands: every.stands, hostiles: every.hostiles, hostilesInPopulate: true });
+      const badLines = [];
+      // (the export leaves such a line out so the pack still loads, and keeps it on
+      // the file as dropped: any dropped here is a fault upstream, a stand or a mob
+      // with no place, and fails)
+      for (const f of files) for (const l of [...(f.text || '').split('\n'), ...(f.dropped || [])]) if (/NaN|undefined|Infinity|\[object/.test(l)) badLines.push(`${f.fn}: ${l.slice(0, 60)}`);
+      const built = ['jail', 'zoo', 'aquarium', 'museum', 'hospital', 'firestation'].filter((k) => every.landmarks.some((Lm) => Lm.kind === k));
+      check('functions: with every landmark on at once, no NaN, undefined or Infinity in any command', badLines.length === 0 && built.includes('museum') && built.includes('hospital'), badLines.slice(0, 2).join(' | ') + ` (built: ${built.join(', ')})`);
+    }
     note(`jail: ${r.inmates.length} inmates of ${new Set(r.inmates.map((m) => m.type)).size} kinds; ${cities.filter(([, c]) => c.landmarks.some((Lm) => Lm.kind === 'jail' && Lm.sideways)).length} of ${cities.length} jails turned sideways`);
   }
 }

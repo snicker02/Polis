@@ -17,7 +17,7 @@ import { makeRng } from './rng.js';
 // Must match main.js VERSION, package.json and index.html data-version;
 // tools/validate.js fails if they drift. The app refuses to export when the
 // browser has mixed cached copies of old and new files.
-export const POLIS_VERSION = '0.42.0';
+export const POLIS_VERSION = '0.42.1';
 
 export const CHUNK = 64;          // Bedrock structure limit per horizontal axis
 export const GROUND_DROP = 2;     // base layer y=0 sits 2 below feet; surface y=1 replaces the block you stand on
@@ -669,6 +669,17 @@ export function functionFiles(tiles, world, opts = {}) {
       `# Or go back to the spot yourself and run ${base}_centered: /tp @s @e[type=armor_stand,name=${anchor},c=1]`,
       `execute at @e[type=armor_stand,name=${anchor},c=1] run function ${ns}/${base}_centered`,
     ].join('\n') + '\n' });
+  }
+  // A safety net: a command with NaN or undefined in it would not parse, and
+  // Bedrock would load none of its function (three armour stands with no place
+  // took populate down). Such a line is left out, and said so on the console.
+  for (const f of out) {
+    if (!f.text) continue;
+    const bad = f.text.split('\n').filter((l) => /\bNaN\b|undefined|\[object /.test(l));
+    if (!bad.length) continue;
+    console.warn(`Polis: ${bad.length} malformed command(s) left out of ${f.fn || f.name}: ${bad[0]}`);
+    f.dropped = bad;              // (kept on the file: the checks fail on any, the net only keeps the pack loading)
+    f.text = f.text.split('\n').filter((l) => !/\bNaN\b|undefined|\[object /.test(l)).join('\n');
   }
   return out;
 }

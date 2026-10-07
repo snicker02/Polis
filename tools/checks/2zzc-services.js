@@ -33,7 +33,7 @@ function inspectServices(r) {
     const lift = liftOf(H, 'light_gray_concrete', 7, 3), fr = H.frame;
     const o = { lift };
     o.beds = H.beds.every((b) => blk(b.foot[0], b.foot[1] + lift, b.foot[2]) === 'bed' && blk(b.head[0], b.head[1] + lift, b.head[2]) === 'bed') ? H.beds.length : 'BROKEN';
-    o.stands = H.stands.every(([x, z]) => { const [fx, fz] = [x, z]; return blk(fx, H.door[1] + lift, fz) === 'brewing_stand'; }) ? H.stands.length : 'MISSING';
+    o.stands = H.brewing.every(([x, z]) => { const [fx, fz] = [x, z]; return blk(fx, H.door[1] + lift, fz) === 'brewing_stand'; }) ? H.brewing.length : 'MISSING';
     o.cross = H.cross.every(([x, z, y]) => blk(x, y + lift, z) === 'red_concrete');
     o.helipad = H.helipad.every(([x, z]) => blk(x, fr.ROOF + lift, z) === 'yellow_concrete') ? H.helipad.length : 'MISSING';
     const walk = walkFrom(H, lift), reach = (u, v) => { const [x, z] = fr.at(u, v); return walk.has(x + ',' + (H.door[1] + lift) + ',' + z); };
@@ -96,6 +96,19 @@ export default async function run(ctx) {
       for (const [k, v] of Object.entries(p.states)) { const sd = def[k]; const val = typeof v === 'object' ? v.value : v; if (!sd || (sd.v && !sd.v.includes(val) && !sd.v.includes(String(val)))) bad.add(`${n}.${k}=${val}`); }
     }
     check('hospital and fire station: every block one of Bedrock\'s own states (ladders, end rods, beds, lamps)', bad.size === 0, [...bad].slice(0, 4).join(', '));
+  }
+  // Everything at once (a jail, a zoo, a museum, a hospital, a fire station, a
+  // metro): every line of every function well formed. The hospital's brewing
+  // stands went into populate as armour stands with no place, NaN and undefined,
+  // and Bedrock loaded no populate; checked one landmark at a time, none showed it.
+  {
+    const { functionFiles: ff } = await import('../../engine/export.js');
+    const all = generateCity({ ...DEFAULTS, ...L, size: 320, seed: 12345, jail: true, zoo: true, museum: true, hospital: true, firestation: true, metro: true, transit: 'trams' });
+    const warn = console.warn; let warned = 0; console.warn = () => { warned++; };
+    const fns = ff(buildStructures(all.world, {}), all.world, { namespace: 'test', spawns: all.spawns, inmates: all.inmates, zoo: all.zoo, stands: all.stands });
+    console.warn = warn;
+    const bad = fns.flatMap((f) => (f.text || '').split('\n')).filter((l) => /\bNaN\b|undefined|\[object /.test(l));
+    check('everything at once: every command of every function well formed (no NaN, no undefined), none left out for it', bad.length === 0 && warned === 0 && all.stands.every((s2) => s2.type === 'armor_stand' && Number.isFinite(s2.x)), `${bad.length} bad, ${warned} left out`);
   }
   note(`fire stations: ${fs.map(([n, t]) => `${n} ${t.firestation.wide} wide`).join(', ')}`);
 }

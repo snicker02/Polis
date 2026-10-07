@@ -887,12 +887,12 @@ export function generateCity(cfgIn, onProgress) {
   // the jail's inmates, summoned by populate (every one named, so none despawns)
   const inmates = landmarks.flatMap((L) => L.inmates || []);
   if (inmates.length) stats.jail = { inmates: inmates.length, kinds: new Set(inmates.map((m) => m.type)).size };
-  const stands = landmarks.flatMap((L) => L.stands || []);
+  const stands = landmarks.flatMap((L) => (L.stands || []).filter((st) => st.type === 'armor_stand'));
   const M = landmarks.find((L) => L.kind === 'museum');
   if (M) stats.museum = { relics: M.frames.length, minerals: M.cases.length, bones: M.bones.length, paintings: M.paintings.length, armour: M.stands.length };
   if (cfg.museum && !M) stats.museumMissing = 'no lot big enough for the museum (it needs 15 by 24)';
   const HOS = landmarks.find((L) => L.kind === 'hospital'), FS = landmarks.find((L) => L.kind === 'firestation');
-  if (HOS) stats.hospital = { beds: HOS.beds.length, stands: HOS.stands.length };
+  if (HOS) stats.hospital = { beds: HOS.beds.length, stands: HOS.brewing.length };
   if (cfg.hospital && !HOS) stats.hospitalMissing = 'no lot big enough for the hospital (it needs 15 by 23)';
   if (FS) stats.firestation = { engines: FS.engines.length, beds: FS.beds.length };
   if (cfg.firestation && !FS) stats.firestationMissing = 'no lot big enough for the fire station (it needs 12 by 20)';

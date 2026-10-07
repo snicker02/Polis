@@ -85,8 +85,10 @@ export function hospital(world, lot, face, cfg, rng, G, signTags) {
   sign(7, 1, G + 1, neg(back), 'Reception');
 
   // the pharmacy: brewing stands and cauldrons down the outer wall
-  const stands = [];
-  for (const v of [9, 11, 13]) { put(1, v, G + 1, MAT.BREWING); stands.push(at(1, v)); }
+  // (called brewing, not stands: the city gathers every landmark's stands as
+  // armour stands for populate, and these went in as three with no place)
+  const brewing = [];
+  for (const v of [9, 11, 13]) { put(1, v, G + 1, MAT.BREWING); brewing.push(at(1, v)); }
   for (const v of [8, 10, 12]) put(1, v, G + 1, MAT.CAULDRON_FULL);
   sign(3, HALL_END + 1, G + 1, neg(back), 'Pharmacy');
 
@@ -101,7 +103,7 @@ export function hospital(world, lot, face, cfg, rng, G, signTags) {
   sign(5, WARD + 1, G + 1, neg(back), 'Ward');
 
   const door = at(7, -1);
-  return { kind: 'hospital', lot, beds: h.beds, stands, cross: cross.map(([u, y]) => [...at(u, 0), y]), helipad, sideways: fr.sideways,
+  return { kind: 'hospital', lot, beds: h.beds, brewing, cross: cross.map(([u, y]) => [...at(u, 0), y]), helipad, sideways: fr.sideways,
     door: [door[0], G + 1, door[1]], frame: { at, W: W_, D: D_, H, HALL_END, WARD, ROOF } };
 }
 
