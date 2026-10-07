@@ -144,7 +144,9 @@ export function lightUp(world, inside, opts = {}) {
   // height solid) that is not furniture, a workstation, a light, gold, a door, a
   // stair or a slab. A post, a lintel, a merlon, a finial or a counter top stands
   // proud of what is round it, and keeps its block.
-  const KEEP = /barrel|crafting|furnace|smoker|chest|bookshelf|loom|table|anvil|lectern|stand|cauldron|composter|jukebox|gold_block|lantern|glowstone|shroomlight|bed|hay|beehive|pumpkin|melon|bell|door|stairs|slab|campfire|grindstone|stonecutter|smithing|planter|quartz_pillar|chiseled|gilded|crying/;
+  // (and what makes a mark or a display: a light set in its place left a hole in
+  // a helipad's H, and would in a red cross, a fire engine, a skeleton, a case)
+  const KEEP = /barrel|crafting|furnace|smoker|chest|bookshelf|loom|table|anvil|lectern|stand|cauldron|composter|jukebox|gold_block|lantern|glowstone|shroomlight|bed|hay|beehive|pumpkin|melon|bell|door|stairs|slab|campfire|grindstone|stonecutter|smithing|planter|quartz_pillar|chiseled|gilded|crying|yellow_concrete|red_concrete|coal_block|bone_block|_ore$|ancient_debris|raw_|amethyst_block|diamond_block|emerald_block|netherite_block/;
   const floorBlock = (x, y, z) => {
     const id = world.get(x, y, z);
     if (id === -1 || !opaque[id] || KEEP.test(MATERIALS.def(id).block)) return false;

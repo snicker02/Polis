@@ -104,6 +104,8 @@ export const DEFAULTS = {
   jail: false,               // a jail landmark holding every hostile mob that can be held (jail.js)
   zoo: false,                // a zoo with every land animal and an aquarium with every fish (zoo.js)
   museum: false,             // a museum: fossils, minerals, armour, relics, paintings (museum.js)
+  hospital: false,           // a hospital: pharmacy, emergency room, ward, a helipad (services.js)
+  firestation: false,        // a fire station: engines in their bays, a pole, a lookout tower (services.js)
   terrainBreaks: true,       // on fitted terrain, lots step at their own heights (retaining walls), held only to the street they face
   mixStyles: false,          // several styles, one to a district (districts.js)
   mixList: ['modern', 'medieval', 'eastasian', 'artdeco'],   // the styles ticked for mixing
@@ -889,6 +891,11 @@ export function generateCity(cfgIn, onProgress) {
   const M = landmarks.find((L) => L.kind === 'museum');
   if (M) stats.museum = { relics: M.frames.length, minerals: M.cases.length, bones: M.bones.length, paintings: M.paintings.length, armour: M.stands.length };
   if (cfg.museum && !M) stats.museumMissing = 'no lot big enough for the museum (it needs 15 by 24)';
+  const HOS = landmarks.find((L) => L.kind === 'hospital'), FS = landmarks.find((L) => L.kind === 'firestation');
+  if (HOS) stats.hospital = { beds: HOS.beds.length, stands: HOS.stands.length };
+  if (cfg.hospital && !HOS) stats.hospitalMissing = 'no lot big enough for the hospital (it needs 15 by 23)';
+  if (FS) stats.firestation = { engines: FS.engines.length, beds: FS.beds.length };
+  if (cfg.firestation && !FS) stats.firestationMissing = 'no lot big enough for the fire station (it needs 12 by 20)';
   const zoo = landmarks.flatMap((L) => [...(L.animals || []), ...(L.fish || [])]);
   // (asked for, but no lot big enough: said so, not left silent)
   if (cfg.zoo && !landmarks.some((L) => L.kind === 'zoo')) stats.zooMissing = 'no lot big enough for the zoo (it needs 15 by 24)';

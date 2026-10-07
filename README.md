@@ -1,4 +1,4 @@
-# Polis v0.41.1
+# Polis v0.42.0
 
 *Created with help from Claude AI.*
 
@@ -771,6 +771,35 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.42.0** — A hospital and a fire station.
+
+Two new options (off by default), two new landmarks (services.js), each taking a
+lot early when asked for:
+
+- The hospital, fifteen by twenty-three, white concrete, one storey five high: a
+  red cross over the doorway, a helipad (a yellow H in a ring) on the roof. The
+  entrance hall with a reception desk and oak benches facing it; the pharmacy,
+  three brewing stands (a cleric's job) and cauldrons of water; the emergency
+  room, two beds behind a glass curtain; the ward, eight beds down both walls,
+  glass curtains between them.
+- The fire station, brick, two storeys, fifteen across where the lot allows and
+  twelve where it is narrower: two engine bays open on the street, a fire engine
+  in each (built of blocks: black wheels, a red body, a glass windscreen, a light
+  on the cab, a ladder rack), a bell between them; upstairs a bunk room of six
+  beds, a pole down through the floor to the bays and a ladder beside it; at the
+  back the lookout tower, a ladder up inside it to a railed platform.
+
+A sign at every room; the summary says when no lot could take either. And the
+lighting no longer sets a light in place of a mark or a display (it left a hole in
+the helipad's H): not yellow or red concrete, coal, bone, or the museum's ores and
+gems.
+
+New section 2zzc (10 checks): built on flat cities and a fitted one (the fire
+station at both widths); every bed whole; the brewing stands, the red cross, the
+helipad whole; both engines, the bell, the bunks; the pole unbroken, every ladder
+rung, the tower's top to step off onto; every room and bay reached from the
+street; every block one of Bedrock's own states.
 
 **0.41.1** — A whole dinosaur in the fossil hall.
 
