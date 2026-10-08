@@ -46,7 +46,7 @@ export default async function run(ctx) {
   let workOk = true, extraOk = true;
   for (const f of centred) {
     const base = f.fn.slice(ns.length + 1, -'_centered'.length);
-    if (!/^(structure load|summon|setblock|tickingarea add) /m.test(f.text) || /execute at/.test(f.text)) workOk = false;   // (rails_centered sets rails; areas_centered makes the ticking areas)
+    if (!/^(structure load|summon|setblock|tickingarea add|tickingarea remove) /m.test(f.text) || /execute at/.test(f.text)) workOk = false;   // (rails_centered sets rails; areas_centered makes the ticking areas, release_centered takes them off)
     const fm = fn(`${base}_from_mark`);
     if (!fm || !fm.text.includes(`execute at @e[type=armor_stand,name=${anchor},c=1] run function ${ns}/${base}_centered`)) extraOk = false;
   }

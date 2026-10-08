@@ -1,4 +1,4 @@
-# Polis v0.43.0
+# Polis v0.43.1
 
 *Created with help from Claude AI.*
 
@@ -771,6 +771,27 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.43.1** — populate keeps the city loaded.
+
+The jail and the museum's armour room stayed empty while the zoo filled. Checked
+against the player's own pack: every inmate and armour stand lands in the clear;
+the zoo is within twenty blocks of the build spot, the museum eighty and the jail
+two hundred, and a summon reaches only loaded chunks. A city's ticking areas keep
+it loaded, a world holds ten, and another city's (its populate had never loaded)
+were still there. And populate took its own ticking areas off at its end, so any
+later run, or jail, zoo or museum, found the far side unloaded and summoned
+nothing there.
+
+Now populate makes its ticking areas again at its start and leaves them on; new
+functions release / release_centered take them off when everything is in.
+populate's message and the placement guide say what to do when the jail, zoo,
+aquarium or the museum's armour room stays empty (/tickingarea remove_all, areas,
+a moment, then jail, zoo or museum), and name release.
+
+2zza checks populate making its ticking areas before any summon and leaving them
+on, and release taking every one off (16 checks); 2zp, 2zy and 2zi follow
+populate's ticking areas as they now are.
 
 **0.43.0** — A police station, a theatre and a hotel.
 

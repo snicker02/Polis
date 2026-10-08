@@ -159,6 +159,18 @@ export default async function run(ctx) {
       const jailAll = get('jail') && get('jail').text.split('\n').filter((l) => / polis:keep Inmate$/.test(l)).length === both.inmates.length;
       const b = get('build').text.split('\n');
       const tidy = b.filter((l) => l.startsWith('tickingarea add')).every((l) => { const name = l.split(' ').pop(); const ia = b.indexOf(l), ir = b.indexOf('tickingarea remove ' + name); return ir >= 0 && ir < ia; });
+      // populate keeps the city loaded: its ticking areas made before any summon and
+      // left on (taken off at its end, a later run, or jail, zoo or museum, found the
+      // far side unloaded and summoned nothing there); release takes them off
+      {
+        const pop = get('populate').text.split('\n');
+        const firstAdd = pop.findIndex((l) => l.startsWith('tickingarea add')), firstSummon = pop.findIndex((l) => l.startsWith('summon '));
+        const removesAfter = pop.slice(firstAdd + 1).some((l) => l.startsWith('tickingarea remove'));
+        const names = b.filter((l) => l.startsWith('tickingarea add')).map((l) => l.split(' ').pop());
+        const rel = get('release'), relC = get('release_centered');
+        const relAll = rel && relC && names.every((n) => rel.text.includes('tickingarea remove ' + n) && relC.text.includes('tickingarea remove ' + n));
+        check('populate keeps the city loaded: its ticking areas made before any summon and left on; release (and release_centered) take every one off', firstAdd >= 0 && firstAdd < firstSummon && !removesAfter && relAll, `made first ${firstAdd >= 0 && firstAdd < firstSummon}, removed after ${removesAfter}, release ${!!relAll}`);
+      }
       check('zoo and jail: their own functions (zoo, jail, and areas to keep the city loaded), each summoning all of them; build clears its ticking areas before it makes them', have.length === names.length && zooAll && jailAll && tidy, `${have.length} of ${names.length}, zoo ${!!zooAll}, jail ${!!jailAll}, tidy ${tidy}`);
     }
     // Kept: every jail, zoo and aquarium summon with the pack's polis:keep (a name

@@ -77,8 +77,11 @@ export default async function run(ctx) {
   const offPack = await pack(false), onPack = await pack(true);
   check('bedrock: by default populate summons no hostile mob', hostileLines(fn(offPack, 'populate').text).length === 0 && hostileLines(fn(offPack, 'populate_centered').text).length === 0);
   check('bedrock: with the option on, populate summons every one (while its ticking areas hold the city)',
-    hostileLines(fn(onPack, 'populate_centered').text).length === r.hostiles.length &&
-    fn(onPack, 'populate_centered').text.indexOf('summon ') < fn(onPack, 'populate_centered').text.indexOf('tickingarea remove'));
+    hostileLines(fn(onPack, 'populate_centered').text).length === r.hostiles.length && (() => {
+      // (the city held: its ticking areas made before the first summon, none taken off after it)
+      const t = fn(onPack, 'populate_centered').text, firstSummon = t.indexOf('\nsummon ');
+      return t.lastIndexOf('\ntickingarea add') < firstSummon && t.indexOf('\ntickingarea remove', firstSummon) < 0;
+    })());
   const hc = fn(offPack, 'hostiles_centered'), hh = fn(offPack, 'hostiles'), clr = fn(offPack, 'hostiles_clear');
   check('bedrock: hostiles and hostiles_centered are in the pack either way, each summoning every mob by name',
     hc && hh && fn(offPack, 'hostiles_centered') && hostileLines(hc.text).length === r.hostiles.length && hostileLines(hh.text).length === r.hostiles.length &&

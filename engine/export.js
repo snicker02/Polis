@@ -17,7 +17,7 @@ import { makeRng } from './rng.js';
 // Must match main.js VERSION, package.json and index.html data-version;
 // tools/validate.js fails if they drift. The app refuses to export when the
 // browser has mixed cached copies of old and new files.
-export const POLIS_VERSION = '0.43.0';
+export const POLIS_VERSION = '0.43.1';
 
 export const CHUNK = 64;          // Bedrock structure limit per horizontal axis
 export const GROUND_DROP = 2;     // base layer y=0 sits 2 below feet; surface y=1 replaces the block you stand on
@@ -549,6 +549,12 @@ export function functionFiles(tiles, world, opts = {}) {
       `arrive inside ${mobs.length} mob structure${mobs.length === 1 ? '' : 's'}` +
       (summoned.length ? `; ${summonedNote()} are summoned.` : '.'),
     '# Run ONCE, from the same spot you ran build from, after the city has appeared.',
+    // (its ticking areas made again first, in case they went: a summon reaches only
+    // loaded chunks. They stay on after: populate used to take them off at its end,
+    // and then any later run, or jail, zoo or museum, found the far side unloaded and
+    // summoned nothing there. release takes them off.)
+    ...areas.map((a) => `tickingarea remove ${a.name}`),
+    ...areas.map((a) => `tickingarea add ${rel(a.x0 - dx)} ${rel(-GROUND_DROP)} ${rel(a.z0 - dz)} ${rel(a.x1 - dx)} ${rel(top)} ${rel(a.z1 - dz)} ${a.name}`),
     `say Polis: bringing in ${villagers} villagers, ${golems} golems, ${cats} cats, ${pandas} pandas, ` +
       `${animals.length} farm animals` + (summoned.length ? `, ${summonedNote()}...` : '...'),
     ...mobs.map((t) => load(t, dx, dz)),
@@ -560,7 +566,6 @@ export function functionFiles(tiles, world, opts = {}) {
       'say Polis: the jail is empty on Peaceful: hostile mobs do not appear there.'] : []),
     ...(zooFolk.length ? [`say Polis: and ${zooFolk.length} animals and fish for the zoo and aquarium.`, ...zooFolk.map((p) => zooLine(p, dx, dz))] : []),
     ...(stands.length ? [`say Polis: and ${stands.length} suits of armour for the museum.`, ...stands.flatMap((p) => standLines(p, dx, dz))] : []),
-    ...areas.map((a) => `tickingarea remove ${a.name}`),
     'say Polis: done. Villagers take jobs from the workstations and claim beds over the next few minutes.',
     ...(boats.length ? [`say Polis: any boat that did not appear, run /function ${ns}/${dx === wb.x0 ? 'boats' : 'boats_centered'} from beside the water.`] : []),
     ...(fish.length ? [`say Polis: if the ponds or canal look empty, run /function ${ns}/${dx === wb.x0 ? 'fish' : 'fish_centered'} from beside the water.`] : []),
@@ -568,9 +573,10 @@ export function functionFiles(tiles, world, opts = {}) {
     // structures, which wait for theirs). The ticking areas keep the city loaded,
     // but a world holds ten at most: another city's left behind, and these were
     // never made, and the jail and zoo stayed empty.
-    ...(inmates.length || zooFolk.length ? [
-      `say Polis: if the ${[inmates.length ? 'jail' : '', zooFolk.length ? 'zoo or aquarium' : ''].filter(Boolean).join(' or ')} stays empty, part of the city was not loaded. A world holds ten ticking areas at most: see them with /tickingarea list, clear old ones with /tickingarea remove_all,`,
-      `say Polis: then from this spot run /function ${ns}/${dx === wb.x0 ? 'areas' : 'areas_centered'}, wait a moment, and run ${[inmates.length ? `/function ${ns}/${dx === wb.x0 ? 'jail' : 'jail_centered'}` : '', zooFolk.length ? `/function ${ns}/${dx === wb.x0 ? 'zoo' : 'zoo_centered'}` : ''].filter(Boolean).join(' and ')}.`] : []),
+    ...(inmates.length || zooFolk.length || stands.length ? [
+      `say Polis: if the ${[inmates.length ? 'jail' : '', zooFolk.length ? 'zoo or aquarium' : '', stands.length ? 'museum\'s armour room' : ''].filter(Boolean).join(' or ')} stays empty, part of the city was not loaded. A world holds ten ticking areas at most: see them with /tickingarea list, clear old ones with /tickingarea remove_all,`,
+      `say Polis: then from this spot run /function ${ns}/${dx === wb.x0 ? 'areas' : 'areas_centered'}, wait a moment, and run ${[inmates.length ? `/function ${ns}/${dx === wb.x0 ? 'jail' : 'jail_centered'}` : '', zooFolk.length ? `/function ${ns}/${dx === wb.x0 ? 'zoo' : 'zoo_centered'}` : '', stands.length ? `/function ${ns}/${dx === wb.x0 ? 'museum' : 'museum_centered'}` : ''].filter(Boolean).join(' and ')}.`] : []),
+    ...(areas.length ? [`say Polis: the city's ticking areas stay on (the whole city kept running). When everything is in, run /function ${ns}/${dx === wb.x0 ? 'release' : 'release_centered'} to take them off.`] : []),
   ].join('\n') + '\n';
   const files = [
     { name: `functions/${ns}/build.mcfunction`, fn: `${ns}/build`,
@@ -655,6 +661,12 @@ export function functionFiles(tiles, world, opts = {}) {
     files.push(
       { name: `functions/${ns}/areas.mcfunction`, fn: `${ns}/areas`, text: areaFn(wb.x0, wb.z0, 'Polis: the city kept loaded (pairs with build)') },
       { name: `functions/${ns}/areas_centered.mcfunction`, fn: `${ns}/areas_centered`, text: areaFn(cx, cz, 'Polis: the city kept loaded (pairs with build_centered)') });
+    // and taking them off, when everything is in (populate leaves them on)
+    const releaseFn = (title) => [`# ${title}`, ...areas.map((a) => `tickingarea remove ${a.name}`),
+      `say Polis: the city's ${areas.length} ticking areas are off. It runs only near players now, as the rest of the world does.`].join('\n') + '\n';
+    files.push(
+      { name: `functions/${ns}/release.mcfunction`, fn: `${ns}/release`, text: releaseFn('Polis: the city\'s ticking areas taken off (pairs with build)') },
+      { name: `functions/${ns}/release_centered.mcfunction`, fn: `${ns}/release_centered`, text: releaseFn('Polis: the city\'s ticking areas taken off (pairs with build_centered)') });
   }
   // The centred functions run from where the player stands, as they always
   // have. build_centered leaves an armor stand on its spot, to come back to
@@ -741,7 +753,9 @@ export function placementGuide(tiles, opts = {}) {
   L.push('    /tickingarea list            (see them)');
   L.push('    /tickingarea remove_all      (clear old ones)');
   L.push(`    /function ${ns}/areas_centered   (this city's, again; then wait a moment)`);
-  L.push(`    /function ${ns}/jail_centered    and    /function ${ns}/zoo_centered`);
+  L.push(`    /function ${ns}/jail_centered, /function ${ns}/zoo_centered, /function ${ns}/museum_centered`);
+  L.push('populate leaves the ticking areas on (the whole city kept running, so a later run still');
+  L.push(`reaches every part). When everything is in:   /function ${ns}/release_centered`);
   L.push(`Made with Polis v${POLIS_VERSION}. If /function says one is "not found", an older`);
   L.push('Polis pack is probably still active on this world: remove old Polis packs.');
   L.push('');

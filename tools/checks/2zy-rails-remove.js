@@ -46,7 +46,11 @@ export default async function run(ctx) {
       const t = fns.find((f) => f.fn === 'test/' + name).text.split('\n');
       const firstSet = t.findIndex((l) => l.startsWith('setblock ')), lastSet = t.map((l, i) => (l.startsWith('setblock ') ? i : -1)).reduce((a, b) => Math.max(a, b), -1);
       const lastMob = t.map((l, i) => (/^structure load \S+:m_/.test(l) ? i : -1)).reduce((a, b) => Math.max(a, b), -1);
-      const firstCart = t.findIndex((l) => l.startsWith('summon minecraft:minecart')), firstArea = t.findIndex((l) => l.startsWith('tickingarea remove'));
+      // (letting the city unload: a ticking area taken off after the last one made;
+      // populate now makes them again at its start and leaves them on)
+      const lastAdd = t.map((l, i) => (l.startsWith('tickingarea add') ? i : -1)).reduce((a, b) => Math.max(a, b), -1);
+      const firstCart = t.findIndex((l) => l.startsWith('summon minecraft:minecart'));
+      const firstArea = t.findIndex((l, i) => i > lastAdd && l.startsWith('tickingarea remove'));
       if (t.filter((l) => l.startsWith('setblock ')).length !== n || firstSet < lastMob || (firstCart >= 0 && lastSet > firstCart) || (firstArea >= 0 && lastSet > firstArea)) popBad++;
     }
     if (!fns.some((f) => f.fn === 'test/rails') || !fns.some((f) => f.fn === 'test/rails_centered')) popBad++;
