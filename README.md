@@ -1,4 +1,4 @@
-# Polis v0.44.0
+# Polis v0.45.0
 
 *Created with help from Claude AI.*
 
@@ -771,6 +771,40 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.45.0** — A factory, with working redstone.
+
+A new option, "A factory with working redstone" (off by default), builds a
+factory (factory.js): stone brick, a saw-tooth roof of skylights, two chimneys
+smoking; nineteen by twenty-five where the lot allows, fifteen by twenty-two where
+it is smaller. Each machine built the plainest way that works:
+
+- The control room: four levers on the wall, each on a wall block with a redstone
+  lamp set in above it (the lever powers its block, the lamp beside it lights);
+  the master switch, a lever on a console beside a bench of lamps with redstone
+  dust along their tops (the whole bench lights).
+- The doors: a double iron door, a pressure plate before it on each side.
+- The assembly line: a raised channel, a water source at its head and flowing
+  water down it over a hopper that feeds a chest; a smoker, a blast furnace, a
+  smithing table and a stonecutter along it (villagers' jobs).
+- The freight siding: a short track with an empty minecart on it (the player's
+  saved minecart, in the factory's own structure), a detector rail on a redstone
+  lamp with another beside it, a loading chest. On a fitted city the transit's own
+  pass cleared every rail and laid the railway again; the siding is now laid again
+  after it.
+
+The lighting keeps off every lever, redstone block, plate, iron door, hopper and
+rail.
+
+New section 2zze (10 checks), with a small redstone simulator (one source on at a
+time: a lever powers its block, a plate or detector the block under it; dust takes
+fifteen and loses one a block; a lamp or door works beside a source or a strongly
+powered block, or under powered dust): each panel lever lights its own lamp only;
+the master switch the whole bench; every plate opens a door; a cart on the detector
+lights both lamps; the line's water a level deeper each block, held in, over the
+hopper facing the chest; the chimneys; every part reached through the doors; the
+minecart in its structure; every block one of Bedrock's own states. On wide,
+narrow and fitted lots.
 
 **0.44.0** — The jail, zoo, aquarium and museum arrive in structures, as the enderman does.
 

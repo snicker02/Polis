@@ -65,6 +65,7 @@ export const SECTIONS = [
   { id: '2zzb', file: '2zzb-museum.js',                        group: 'fast' },
   { id: '2zzc', file: '2zzc-services.js',                      group: 'fast' },
   { id: '2zzd', file: '2zzd-civic.js',                         group: 'fast' },
+  { id: '2zze', file: '2zze-factory.js',                       group: 'fast' },
   { id: '2v', file: '2v-java-worlds.js',                      group: 'fast' },
   { id: '2w', file: '2w-square-stadium-cemetery-allotments.js', group: 'slow' },
   { id: '2x', file: '2x-village-style.js',                    group: 'fast' },

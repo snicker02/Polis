@@ -11,13 +11,13 @@
 
 import { splitWorld, writeMcStructure, buildMcPack, makeZip, crc32, VoxelWorld } from './blockcore.js';
 import { MATERIALS, MAT } from './materials.js';
-import { makeEntity, STRUCTURE_MOBS, makeRiderPair } from './entities.js';
+import { makeEntity, STRUCTURE_MOBS, makeRiderPair, makeCart } from './entities.js';
 import { makeRng } from './rng.js';
 
 // Must match main.js VERSION, package.json and index.html data-version;
 // tools/validate.js fails if they drift. The app refuses to export when the
 // browser has mixed cached copies of old and new files.
-export const POLIS_VERSION = '0.44.0';
+export const POLIS_VERSION = '0.45.0';
 
 export const CHUNK = 64;          // Bedrock structure limit per horizontal axis
 export const GROUND_DROP = 2;     // base layer y=0 sits 2 below feet; surface y=1 replaces the block you stand on
@@ -387,6 +387,7 @@ export function buildMobStructures(spawns, opts = {}) {
   return mobTiles(spawns, opts).map((t) => {
     // (a rider is two entities: the minecart and the enderman riding it)
     const entities = t.mobs.flatMap((p) => p.type === 'ender_rider' ? makeRiderPair(p.x, p.y, p.z, rng, p.name)
+      : p.type === 'cart' ? [makeCart(p.x, p.y, p.z, rng)]
       : p.type === 'mob' ? (p.ride ? mobInMinecart(p.kind, p.x, p.y, p.z, rng, p) : [mobNbt(p.kind, p.x, p.y, p.z, rng, p)])
       : [makeEntity(p.type, p.x, p.y, p.z, rng, { profession: p.profession, tier: p.tier, motif: p.motif, direction: p.direction, pos: p.pos })]);
     const res = writeMcStructure([], [], t.box, MATERIALS, { entities, placeholderId: MAT.AIR });

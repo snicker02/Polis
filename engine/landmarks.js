@@ -32,6 +32,7 @@ import { zoo, aquarium } from './zoo.js';
 import { museum } from './museum.js';
 import { hospital, fireStation } from './services.js';
 import { policeStation, theatre, hotel } from './civic.js';
+import { factory } from './factory.js';
 
 export const LANDMARKS = ['townhall', 'clocktower', 'library', 'market', 'church', 'mansion', 'school', 'lighthouse', 'castle',
   'townsquare', 'stadium', 'cemetery', 'allotments', 'bandstand'];
@@ -39,7 +40,7 @@ const NEED = {                       // [shorter side, longer side] of the lot
   townhall: [13, 15], clocktower: [9, 9], library: [11, 12], market: [12, 12],
   church: [13, 15], mansion: [15, 20], school: [17, 25], lighthouse: [9, 9], castle: [13, 13],
   townsquare: [13, 13], stadium: [17, 21], cemetery: [12, 14], allotments: [13, 13], bandstand: [9, 9],
-  jail: [15, 23], zoo: [15, 24], aquarium: [11, 20], museum: [15, 24], hospital: [15, 23], firestation: [12, 20], police: [13, 15], theatre: [17, 20], hotel: [13, 19],
+  jail: [15, 23], zoo: [15, 24], aquarium: [11, 20], museum: [15, 24], hospital: [15, 23], firestation: [12, 20], police: [13, 15], theatre: [17, 20], hotel: [13, 19], factory: [15, 22],
 };
 
 // Mark the lots, each kind at most once:
@@ -83,12 +84,12 @@ export function chooseLandmarks(plan, cfg, hills = null, canal = null) {
   // fit far smaller ones. Toward the edge of town where it can be.
   // (and the zoo and aquarium, when asked for, next: the zoo as big as the jail,
   // the aquarium smaller)
-  for (const kind of ['jail', 'zoo', 'aquarium', 'museum', 'hospital', 'firestation', 'police', 'theatre', 'hotel']) {
+  for (const kind of ['jail', 'zoo', 'aquarium', 'museum', 'hospital', 'firestation', 'police', 'theatre', 'hotel', 'factory']) {
     if (!cfg[kind === 'aquarium' ? 'zoo' : kind]) continue;
     // (the zoo on a lot that takes its big pens if there is one: 15 by 28)
     // (the aquarium likewise on one that takes its big tanks: 15 by 25)
     // (the zoo by how wide a zoo the lot takes: twenty-three, then nineteen)
-    const [rw, rd] = kind === 'zoo' ? [15, 28] : kind === 'aquarium' ? [15, 25] : kind === 'museum' ? [19, 24] : kind === 'firestation' ? [15, 20] : [1e9, 1e9];
+    const [rw, rd] = kind === 'zoo' ? [15, 28] : kind === 'aquarium' ? [15, 25] : kind === 'museum' ? [19, 24] : kind === 'firestation' ? [15, 20] : kind === 'factory' ? [19, 25] : [1e9, 1e9];
     const roomy = (c) => {
       const s = Math.min(c.a, c.b), l = Math.max(c.a, c.b);
       if (kind === 'zoo') return s >= 23 && l >= 24 ? 0 : s >= 19 && l >= 24 ? 1 : s >= rw && l >= rd ? 2 : 3;
@@ -796,10 +797,11 @@ const BUILDERS = { townhall: townHall, clocktower: clockTower, library, market, 
   firestation: (w, l, f, c, r, G) => fireStation(w, l, f, c, r, G, signTags),
   police: (w, l, f, c, r, G) => policeStation(w, l, f, c, r, G, signTags),
   theatre: (w, l, f, c, r, G) => theatre(w, l, f, c, r, G, signTags),
-  hotel: (w, l, f, c, r, G) => hotel(w, l, f, c, r, G, signTags) };
+  hotel: (w, l, f, c, r, G) => hotel(w, l, f, c, r, G, signTags),
+  factory: (w, l, f, c, r, G) => factory(w, l, f, c, r, G, signTags) };
 export const LANDMARK_NAMES = { townhall: 'Town Hall', clocktower: 'Clock Tower', library: 'Library', market: 'Market',
   church: 'Church', school: 'School', lighthouse: 'Lighthouse', castle: 'Castle', mansion: 'Mansion',
-  townsquare: 'Town Square', stadium: 'Stadium', cemetery: 'Cemetery', allotments: 'Allotments', bandstand: 'Bandstand', jail: 'Jail', zoo: 'Zoo', aquarium: 'Aquarium', museum: 'Museum', hospital: 'Hospital', firestation: 'Fire Station', police: 'Police Station', theatre: 'Theatre', hotel: 'Hotel' };
+  townsquare: 'Town Square', stadium: 'Stadium', cemetery: 'Cemetery', allotments: 'Allotments', bandstand: 'Bandstand', jail: 'Jail', zoo: 'Zoo', aquarium: 'Aquarium', museum: 'Museum', hospital: 'Hospital', firestation: 'Fire Station', police: 'Police Station', theatre: 'Theatre', hotel: 'Hotel', factory: 'Factory' };
 
 export function buildLandmark(world, lot, face, cfg, rng, G) {
   const L = BUILDERS[lot.landmark](world, lot, face, cfg, rng, G);

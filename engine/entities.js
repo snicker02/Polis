@@ -26,7 +26,17 @@ function uniqueId(rng) {
 const floatList = (xs) => ({ t: 9, et: 5, keepEt: true, v: xs.map((x) => ({ t: 5, v: x })) });
 
 // kinds carried in mob structures (everything else is summoned)
-export const STRUCTURE_MOBS = new Set(['villager', 'golem', 'cat', 'panda', 'cow', 'pig', 'chicken', 'sheep', 'painting', 'ender_rider', 'mob']);
+export const STRUCTURE_MOBS = new Set(['villager', 'golem', 'cat', 'panda', 'cow', 'pig', 'chicken', 'sheep', 'painting', 'ender_rider', 'mob', 'cart']);
+
+// An empty minecart standing on a rail at (x, y, z): the player's saved minecart
+// (rider-templates.js) with its rider link taken off (the factory's siding).
+export function makeCart(x, y, z, rng) {
+  const cart = hydrate(MINECART_RIDER.cart);
+  cart.v.UniqueID = N.long(uniqueId(rng));
+  cart.v.Pos = floatList([x + 0.5, y + MINECART_RIDER.cartDy, z + 0.5]);
+  delete cart.v.LinksTag;
+  return cart;
+}
 
 // The jail's enderman, riding a minecart (riding, an enderman cannot teleport):
 // the pair a player saved from their own trap (rider-templates.js), the minecart
