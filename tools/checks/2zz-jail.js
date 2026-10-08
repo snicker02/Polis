@@ -148,8 +148,21 @@ export default async function run(ctx) {
     const pop = fns.find((f) => /(^|\/)populate\.mcfunction$/.test(f.name));
     const text = !pop ? '' : typeof pop.data === 'string' ? pop.data : pop.data ? new TextDecoder().decode(pop.data) : (pop.text || '');
     const lines = text.split('\n');
-    const summons = lines.filter((l) => /^summon minecraft:\S+ \S+ \S+ \S+ 0 0 polis:keep Inmate$/.test(l));
-    check('jail: populate summons every inmate, each kept by the pack (polis:keep) and named', summons.length === r.inmates.length && r.inmates.length > 0, `${summons.length} of ${r.inmates.length}`);
+    // every inmate in the jail's own structure tiles, as the game saves it (summoned
+    // by command they kept failing to appear): its kind, named, kept, at its place;
+    // the shulker in a minecart linked to it
+    const { buildMobStructures } = await import('../../engine/export.js');
+    const { decodeNbt } = await import('../nbt-read.js');
+    const jailEnts = buildMobStructures(r.spawns, { seed: 1 }).filter((t) => t.name.startsWith('m_jail_')).flatMap((t) => decodeNbt(t.data).root.structure.entities);
+    const placed = r.inmates.filter((m) => !(m.type === 'enderman' && m.ride)).filter((m) => {
+      const be = HOSTILE_KINDS[m.type] ? HOSTILE_KINDS[m.type].be : 'minecraft:' + m.type;
+      return jailEnts.some((e) => e.identifier === be && e.CustomName === 'Inmate' && e.Persistent === 1 && e.definitions.includes('+polis:kept')
+        && Math.floor(e.Pos[0]) === Math.floor(m.x) && Math.floor(e.Pos[2]) === Math.floor(m.z));
+    }).length;
+    const shulker = jailEnts.find((e) => e.identifier === 'minecraft:shulker'), carts = jailEnts.filter((e) => e.identifier === 'minecraft:minecart');
+    const shulkerRides = !!shulker && carts.some((c) => (c.LinksTag || []).some((l) => String(l.entityID) === String(shulker.UniqueID)));
+    const wanted = r.inmates.filter((m) => !(m.type === 'enderman' && m.ride)).length;
+    check('jail: every inmate in the jail\'s own structures, as the game saves it: its kind, named, kept, in its cell; the shulker in a minecart', placed === wanted && wanted > 0 && shulkerRides, `${placed} of ${wanted}, shulker riding ${shulkerRides}`);
     // The enderman in a minecart on its cell's rail (riding, it cannot teleport),
     // placed as the pair a player saved from their own trap, in the structures with
     // the villagers: the minecart's link naming that enderman, the enderman already

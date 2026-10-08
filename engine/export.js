@@ -17,7 +17,7 @@ import { makeRng } from './rng.js';
 // Must match main.js VERSION, package.json and index.html data-version;
 // tools/validate.js fails if they drift. The app refuses to export when the
 // browser has mixed cached copies of old and new files.
-export const POLIS_VERSION = '0.43.2';
+export const POLIS_VERSION = '0.44.0';
 
 export const CHUNK = 64;          // Bedrock structure limit per horizontal axis
 export const GROUND_DROP = 2;     // base layer y=0 sits 2 below feet; surface y=1 replaces the block you stand on
@@ -360,20 +360,22 @@ export function mobTiles(spawns, opts = {}) {
   for (const p of spawns || []) {
     if (!STRUCTURE_MOBS.has(p.type)) continue;
     const cx = Math.floor(p.x / size), cz = Math.floor(p.z / size);
-    const k = cx + ',' + cz;
-    if (!groups.has(k)) groups.set(k, { cx, cz, mobs: [] });
+    // (a landmark's mobs in tiles of their own: jail, zoo, museum load just theirs)
+    const k = cx + ',' + cz + ',' + (p.group || '');
+    if (!groups.has(k)) groups.set(k, { cx, cz, group: p.group || '', mobs: [] });
     groups.get(k).mobs.push(p);
   }
-  return [...groups.values()].sort((a, b) => a.cz - b.cz || a.cx - b.cx).map((g) => {
+  return [...groups.values()].sort((a, b) => a.group.localeCompare(b.group) || a.cz - b.cz || a.cx - b.cx).map((g) => {
     const box = { x0: Infinity, y0: Infinity, z0: Infinity, x1: -Infinity, y1: -Infinity, z1: -Infinity };
     for (const p of g.mobs) {
-      box.x0 = Math.min(box.x0, p.x); box.x1 = Math.max(box.x1, p.x);
-      box.z0 = Math.min(box.z0, p.z); box.z1 = Math.max(box.z1, p.z);
-      const tall = p.type === 'golem' ? 2 : p.type === 'painting' ? (p.h || 1) : 1;
-      box.y0 = Math.min(box.y0, p.y); box.y1 = Math.max(box.y1, p.y + tall);   // cats, pandas fit in 2; a painting is as tall as it is
+      const bx = Math.floor(p.x), bz = Math.floor(p.z), by = Math.floor(p.y);
+      box.x0 = Math.min(box.x0, bx); box.x1 = Math.max(box.x1, bx);
+      box.z0 = Math.min(box.z0, bz); box.z1 = Math.max(box.z1, bz);
+      const tall = p.type === 'golem' ? 2 : p.type === 'painting' ? (p.h || 1) : p.type === 'mob' ? (p.kind === 'ghast' ? 4 : 3) : 1;
+      box.y0 = Math.min(box.y0, by); box.y1 = Math.max(box.y1, by + tall);   // cats, pandas fit in 2; a painting is as tall as it is
     }
     return {
-      name: `m_x${g.cx}_z${g.cz}`, box, mobs: g.mobs,
+      name: g.group ? `m_${g.group}_x${g.cx}_z${g.cz}` : `m_x${g.cx}_z${g.cz}`, box, mobs: g.mobs, group: g.group,
       offset: [box.x0, box.y0, box.z0],
       size: [box.x1 - box.x0 + 1, box.y1 - box.y0 + 1, box.z1 - box.z0 + 1],
     };
@@ -384,8 +386,9 @@ export function buildMobStructures(spawns, opts = {}) {
   const rng = makeRng(((opts.seed | 0) ^ 0x6d0b5) >>> 0);
   return mobTiles(spawns, opts).map((t) => {
     // (a rider is two entities: the minecart and the enderman riding it)
-    const entities = t.mobs.flatMap((p) => p.type === 'ender_rider' ? makeRiderPair(p.x, p.y, p.z, rng, p.name) : [makeEntity(p.type, p.x, p.y, p.z, rng,
-      { profession: p.profession, tier: p.tier, motif: p.motif, direction: p.direction, pos: p.pos })]);
+    const entities = t.mobs.flatMap((p) => p.type === 'ender_rider' ? makeRiderPair(p.x, p.y, p.z, rng, p.name)
+      : p.type === 'mob' ? (p.ride ? mobInMinecart(p.kind, p.x, p.y, p.z, rng, p) : [mobNbt(p.kind, p.x, p.y, p.z, rng, p)])
+      : [makeEntity(p.type, p.x, p.y, p.z, rng, { profession: p.profession, tier: p.tier, motif: p.motif, direction: p.direction, pos: p.pos })]);
     const res = writeMcStructure([], [], t.box, MATERIALS, { entities, placeholderId: MAT.AIR });
     return {
       name: t.name, data: res.data, box: t.box, size: res.size, offset: t.offset,
@@ -427,6 +430,7 @@ export const FISH = new Set(['cod', 'salmon', 'tropicalfish']);
 import { HOSTILE_KINDS } from './hostiles.js';
 import { VANILLA_MOBS } from './mob-entities.js';
 import { ARMOUR_SLOTS } from './museum.js';
+import { mobNbt, mobInMinecart } from './mob-nbt.js';
 import { domeAir } from './dome.js';
 import { inAirBox } from './underground.js';
 import { VANILLA_FISH } from './fish-entities.js';
@@ -562,10 +566,12 @@ export function functionFiles(tiles, world, opts = {}) {
     ...summoned.map((p) => sumLine(p, dx, dz)),
     ...(inPop ? [`say Polis: and ${hostiles.length} hostile mobs.`, ...hostiles.map((p) => hostLine(p, dx, dz)), ...hostileWarnings] : []),
     // the jail's inmates: always, they are locked up (named, so none despawns)
-    ...(inmates.length ? [`say Polis: and ${inmates.length} inmates for the jail.`, ...inmates.flatMap((p) => inmateLines(p, dx, dz)),
-      'say Polis: the jail is empty on Peaceful: hostile mobs do not appear there.'] : []),
-    ...(zooFolk.length ? [`say Polis: and ${zooFolk.length} animals and fish for the zoo and aquarium.`, ...zooFolk.map((p) => zooLine(p, dx, dz))] : []),
-    ...(stands.length ? [`say Polis: and ${stands.length} suits of armour for the museum.`, ...stands.flatMap((p) => standLines(p, dx, dz))] : []),
+
+
+
+    // (the jail's inmates, the zoo's and aquarium's animals and fish and the museum's
+    // armour stands came in the structures above, in tiles of their own)
+    ...(inmates.length ? ['say Polis: the jail\'s inmates came in with the rest; on Peaceful the game takes hostile mobs away.'] : []),
     'say Polis: done. Villagers take jobs from the workstations and claim beds over the next few minutes.',
     ...(boats.length ? [`say Polis: any boat that did not appear, run /function ${ns}/${dx === wb.x0 ? 'boats' : 'boats_centered'} from beside the water.`] : []),
     ...(fish.length ? [`say Polis: if the ponds or canal look empty, run /function ${ns}/${dx === wb.x0 ? 'fish' : 'fish_centered'} from beside the water.`] : []),
@@ -635,14 +641,17 @@ export function functionFiles(tiles, world, opts = {}) {
       { name: `functions/${ns}/${group}_centered.mcfunction`, fn: `${ns}/${group}_centered`, text: only(cx, cz, `Polis: ${noun} only (pairs with build_centered)`) });
   }
   // the jail and the zoo on their own, to fill them again (after the areas below)
-  for (const [group, list, line, noun] of [['jail', inmates, inmateLines, 'inmates for the jail'], ['zoo', zooFolk, (p, dx, dz) => [zooLine(p, dx, dz)], 'animals and fish for the zoo and aquarium'], ['museum', stands, standLines, 'suits of armour for the museum']]) {
-    if (!list.length) continue;
+  // each landmark's mobs again on their own: its own structure tiles loaded (a
+  // structure waits for its chunks, as a summon does not)
+  for (const [group, noun] of [['jail', 'inmates for the jail'], ['zoo', 'animals and fish for the zoo and aquarium'], ['museum', 'suits of armour for the museum']]) {
+    const tiles = mobs.filter((t) => t.group === group);
+    if (!tiles.length) continue;
     const only = (dx, dz, title) => [
       `# ${title}`,
-      '# Summons only reach loaded chunks: run areas (or areas_centered) first and wait a moment, or walk closer.',
-      `say Polis: summoning ${list.length} ${noun}...`,
-      ...list.flatMap((p) => line(p, dx, dz)),
-      `say Polis: done. Any still missing: the city there was not loaded (walk closer and run this again).`,
+      `# The ${noun}, in ${tiles.length} structure${tiles.length === 1 ? '' : 's'} of their own. Run once: each run brings another set.`,
+      `say Polis: bringing in the ${noun}...`,
+      ...tiles.map((t) => load(t, dx, dz)),
+      `say Polis: done (a structure goes in when its part of the world loads).`,
     ].join('\n') + '\n';
     files.push(
       { name: `functions/${ns}/${group}.mcfunction`, fn: `${ns}/${group}`, text: only(wb.x0, wb.z0, `Polis: ${noun} only (pairs with build)`) },

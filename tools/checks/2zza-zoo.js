@@ -145,8 +145,19 @@ export default async function run(ctx) {
     const pf = fns.find((f) => /(^|\/)populate\.mcfunction$/.test(f.name));
     const text = pf ? (pf.text || pf.data || '') : '';
     const lines = text.split('\n');
-    const zl = r.zoo.filter((p) => lines.some((l) => l.includes(`minecraft:${p.type} `) && (p.variety ? l.includes('polis:keep_' + p.variety) : true)));
-    check('zoo and aquarium: populate summons every animal and fish (a tropical fish as its variety)', zl.length === r.zoo.length && r.zoo.length > 0, `${zl.length} of ${r.zoo.length}`);
+    // every animal and fish in the zoo's own structure tiles, as the game saves it
+    // (summoned by command they kept failing to appear): its kind, kept, at its
+    // place, a tropical fish carrying its variety's own groups; and populate loads them
+    const { buildMobStructures } = await import('../../engine/export.js');
+    const { decodeNbt } = await import('../nbt-read.js');
+    const { startingGroups } = await import('../../engine/mob-nbt.js');
+    const zooTiles = buildMobStructures(r.spawns, { seed: 1 }).filter((t) => t.name.startsWith('m_zoo_'));
+    const zooEnts = zooTiles.flatMap((t) => decodeNbt(t.data).root.structure.entities);
+    const zl = r.zoo.filter((p) => zooEnts.some((e) => e.identifier === 'minecraft:' + p.type && e.Persistent === 1 && e.definitions.includes('+polis:kept')
+      && Math.floor(e.Pos[0]) === Math.floor(p.x) && Math.floor(e.Pos[2]) === Math.floor(p.z)
+      && (!p.variety || [...startingGroups('tropicalfish', 'minecraft:become_' + p.variety)].every((g) => e.definitions.includes('+' + g)))));
+    const loaded = zooTiles.every((t) => lines.some((l) => l.startsWith('structure load ') && l.includes(':' + t.name + ' ')));
+    check('zoo and aquarium: every animal and fish in the zoo\'s own structures, as the game saves it (a tropical fish as its variety), loaded by populate', zl.length === r.zoo.length && r.zoo.length > 0 && loaded, `${zl.length} of ${r.zoo.length}, loaded ${loaded}`);
     // the zoo and the jail on their own, and the city's ticking areas again: a
     // summon reaches only loaded chunks, and a world holds ten ticking areas
     {
@@ -155,8 +166,11 @@ export default async function run(ctx) {
       const get = (n) => f2.find((f) => f.fn === 'test/' + n);
       const names = ['zoo', 'zoo_centered', 'jail', 'jail_centered', 'areas', 'areas_centered'];
       const have = names.filter((n) => get(n));
-      const zooAll = get('zoo') && get('zoo').text.split('\n').filter((l) => l.startsWith('summon ')).length === both.zoo.length;
-      const jailAll = get('jail') && get('jail').text.split('\n').filter((l) => / polis:keep Inmate$/.test(l)).length === both.inmates.length;
+      // (each loads its own landmark's structure tiles, every one of them)
+      const { mobTiles } = await import('../../engine/export.js');
+      const tilesOf = (g) => mobTiles(both.spawns).filter((t) => t.group === g).map((t) => t.name);
+      const loadsAll = (fn, g) => { const f = get(fn); const names = tilesOf(g); return !!f && names.length > 0 && names.every((n) => f.text.includes(':' + n + ' ')) && f.text.split('\n').filter((l) => l.startsWith('structure load')).length === names.length; };
+      const zooAll = loadsAll('zoo', 'zoo'), jailAll = loadsAll('jail', 'jail');
       const b = get('build').text.split('\n');
       const tidy = b.filter((l) => l.startsWith('tickingarea add')).every((l) => { const name = l.split(' ').pop(); const ia = b.indexOf(l), ir = b.indexOf('tickingarea remove ' + name); return ir >= 0 && ir < ia; });
       // populate keeps the city loaded: its ticking areas made before any summon and
@@ -184,8 +198,12 @@ export default async function run(ctx) {
       const { VANILLA_MOBS } = await import('../../engine/mob-entities.js');
       const both = generateCity({ ...DEFAULTS, ...L, size: 256, seed: 7, zoo: true, jail: true });
       const f3 = functionFiles(buildStructures(both.world, {}), both.world, { namespace: 'test', spawns: both.spawns, zoo: both.zoo, inmates: both.inmates });
-      const zl = [...(f3.find((f) => f.fn === 'test/zoo').text.split('\n')), ...(f3.find((f) => f.fn === 'test/jail').text.split('\n'))].filter((l) => l.startsWith('summon ') && !/minecart/.test(l));
-      const unkept = zl.filter((l) => !/ 0 0 polis:keep(_[a-z_]+)? [A-Za-z]+$/.test(l));
+      // (the mobs in the jail's and zoo's structures, every one of them carrying +polis:kept)
+      const { buildMobStructures: bms } = await import('../../engine/export.js');
+      const { decodeNbt: dn } = await import('../nbt-read.js');
+      const landEnts = bms(both.spawns, { seed: 1 }).filter((t) => /^m_(zoo|jail)_/.test(t.name)).flatMap((t) => dn(t.data).root.structure.entities).filter((e) => e.identifier !== 'minecraft:minecart');
+      const zl = landEnts.map((e) => `summon ${e.identifier}`);
+      const unkept = landEnts.filter((e) => !e.definitions.includes('+polis:kept') && !(e.identifier === 'minecraft:enderman'));
       const mobs = mobEntityFiles();
       const kinds = new Set(zl.map((l) => l.split(' ')[1].replace('minecraft:', '')));
       const fishKinds = new Set(['cod', 'salmon', 'tropicalfish']);
@@ -204,7 +222,7 @@ export default async function run(ctx) {
         if (Object.keys(e.events).length === 0 && !(game.events && Object.keys(game.events).length)) e.events = game.events;
         if (JSON.stringify(d) !== JSON.stringify(VANILLA_MOBS[k])) exact = false;
       }
-      check('zoo and jail: every summon kept by the pack (polis:keep), the pack carrying each mob\'s own definition with only the keep added', unkept.length === 0 && missingDef.length === 0 && exact, `${unkept.length} unkept, missing ${missingDef.join(',')}, exact ${exact}`);
+      check('zoo and jail: every mob kept (+polis:kept), the pack carrying each mob\'s own definition with only the keep added', unkept.length === 0 && missingDef.length === 0 && exact, `${unkept.length} unkept, missing ${missingDef.join(',')}, exact ${exact}`);
       // and the pack itself: the mobs' and the fish's definitions in it when there is a jail, zoo or aquarium
       const pk = await exportPack(both.world, { namespace: 'test', name: 'test', spawns: [], zoo: both.zoo, inmates: both.inmates });
       const names = new Set(readZipEntries(pk.data).entries.map((e) => e.name.replace(/^.*?entities\//, 'entities/')));

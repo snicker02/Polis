@@ -96,12 +96,17 @@ export default async function run(ctx) {
     const structs = buildStructures(w, {});
     const fns = functionFiles(structs, w, { namespace: 'test', spawns: r.spawns, stands: r.stands });
     const pop = fns.find((f) => f.fn === 'test/populate').text.split('\n');
+    // every stand in the museum's own structures, dressed head to feet (summoned and
+    // dressed by command, they never appeared): standard item names only, loaded by populate
+    const { buildMobStructures } = await import('../../engine/export.js');
     const items = new Set(ARMOUR.flatMap((a) => ARMOUR_SLOTS.map(([, p]) => `minecraft:${a}_${p}`)));
-    const summons = pop.filter((l) => /^summon minecraft:armor_stand \S+ \S+ \S+ -?\d+ 0$/.test(l)).length;
-    const dressed = pop.filter((l) => /^replaceitem entity @e\[type=minecraft:armor_stand,[^\]]+\] slot\.armor\.(head|chest|legs|feet) 0 (\S+)$/.test(l));
-    const odd = dressed.filter((l) => !items.has(l.split(' ').pop()));
-    check('museum: populate summons every stand and dresses it, head to feet, standard item names only', summons === r.stands.length && dressed.length === r.stands.length * 4 && odd.length === 0, `${summons} stands, ${dressed.length} pieces, ${odd.length} odd`);
-    check('museum: its own functions (museum, museum_centered) to dress them again', !!fns.find((f) => f.fn === 'test/museum') && !!fns.find((f) => f.fn === 'test/museum_centered'));
+    const mt = buildMobStructures(r.spawns, { seed: 1 }).filter((t) => t.name.startsWith('m_museum_'));
+    const standsIn = mt.flatMap((t) => decodeNbt(t.data).root.structure.entities).filter((e) => e.identifier === 'minecraft:armor_stand');
+    const dressed = standsIn.filter((e) => e.Armor && e.Armor.length === 4 && e.Armor.every((a) => items.has(a.Name)) && e.Persistent === 1);
+    const loaded = mt.length > 0 && mt.every((t) => pop.some((l) => l.includes(':' + t.name + ' ')));
+    check('museum: every stand in the museum\'s own structures, dressed head to feet, standard item names only, loaded by populate', standsIn.length === r.stands.length && dressed.length === r.stands.length && loaded, `${standsIn.length} stands, ${dressed.length} dressed, loaded ${loaded}`);
+    const mf = fns.find((f) => f.fn === 'test/museum_centered');
+    check('museum: its own functions (museum, museum_centered) loading its structures', !!fns.find((f) => f.fn === 'test/museum') && !!mf && mt.every((t) => mf.text.includes(':' + t.name + ' ')));
     // every block it writes one of Bedrock's own states
     const states = JSON.parse(readFileSync(new URL('../bedrock-states.json', import.meta.url), 'utf8'))['1.21.60'];
     const bad = new Set();

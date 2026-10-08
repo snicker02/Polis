@@ -24,6 +24,7 @@ import { buildMetro } from './metro.js';
 import { megalith } from './megaliths.js';
 import { fishSpawns } from './fish.js';
 import { generatePlan, frontage, USE } from './plan.js';
+import { HOSTILE_KINDS } from './hostiles.js';
 import { MAT, THEMES, stairId, WEIRDO } from './materials.js';
 import { makeBuilding, OUTWARD } from './building.js';
 import { doorId, DIR, MATERIALS } from './materials.js';
@@ -890,10 +891,19 @@ export function generateCity(cfgIn, onProgress) {
   // the jail's inmates, summoned by populate (every one named, so none despawns)
   // (the enderman goes in the structures, already riding its minecart, with the
   // villagers; the rest of the inmates are summoned)
-  const inmates = [];
-  for (const m of landmarks.flatMap((L) => L.inmates || [])) {
-    if (m.type === 'enderman' && m.ride) spawns.push({ type: 'ender_rider', x: Math.floor(m.x), y: m.y, z: Math.floor(m.z), name: m.name });
-    else inmates.push(m);
+  // The jail's inmates, the zoo's and aquarium's animals and fish, the museum's
+  // armour stands: all in the structures, as the game saves them (mob-nbt.js), in
+  // tiles of their own landmark's. (Summoned by command, they kept failing to
+  // appear; the villagers, golems and the enderman, in structures, always came.)
+  // The enderman is the player's own saved pair, riding its minecart.
+  const inmates = landmarks.flatMap((L) => L.inmates || []);
+  for (const m of inmates) {
+    if (m.type === 'enderman' && m.ride) spawns.push({ type: 'ender_rider', x: Math.floor(m.x), y: m.y, z: Math.floor(m.z), name: m.name, group: 'jail' });
+    else {
+      const kind = (HOSTILE_KINDS[m.type] ? HOSTILE_KINDS[m.type].be : 'minecraft:' + m.type).replace('minecraft:', '');
+      spawns.push(m.ride ? { type: 'mob', kind, x: Math.floor(m.x), y: m.y, z: Math.floor(m.z), name: m.name, ride: true, group: 'jail' }
+        : { type: 'mob', kind, x: m.x, y: m.y, z: m.z, name: m.name, group: 'jail' });
+    }
   }
   if (inmates.length) stats.jail = { inmates: inmates.length, kinds: new Set(inmates.map((m) => m.type)).size };
   const stands = landmarks.flatMap((L) => (L.stands || []).filter((st) => st.type === 'armor_stand'));
@@ -913,6 +923,9 @@ export function generateCity(cfgIn, onProgress) {
     else if (cfg[kind]) stats[kind + 'Missing'] = `no lot big enough for the ${kind === 'police' ? 'police station' : kind} (it needs ${need})`;
   }
   const zoo = landmarks.flatMap((L) => [...(L.animals || []), ...(L.fish || [])]);
+  for (const a of zoo) spawns.push({ type: 'mob', kind: a.type, x: a.x, y: a.y, z: a.z, name: a.name, variety: a.variety, group: 'zoo' });
+  for (const st of stands) spawns.push({ type: 'mob', kind: 'armor_stand', x: st.x, y: st.y, z: st.z, yRot: st.yRot, group: 'museum',
+    armour: ['helmet', 'chestplate', 'leggings', 'boots'].map((p) => `minecraft:${st.set}_${p}`) });
   // (asked for, but no lot big enough: said so, not left silent)
   if (cfg.zoo && !landmarks.some((L) => L.kind === 'zoo')) stats.zooMissing = 'no lot big enough for the zoo (it needs 15 by 24)';
   if (cfg.jail && !landmarks.some((L) => L.kind === 'jail')) stats.jailMissing = 'no lot big enough for the jail (it needs 15 by 23)';

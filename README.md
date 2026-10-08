@@ -1,4 +1,4 @@
-# Polis v0.43.2
+# Polis v0.44.0
 
 *Created with help from Claude AI.*
 
@@ -771,6 +771,33 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.44.0** — The jail, zoo, aquarium and museum arrive in structures, as the enderman does.
+
+What came in structures always appeared (the villagers, golems, farm animals, and
+the enderman since it rode in on the player's own saved minecart); what was
+summoned by command kept failing. Now every inmate, zoo animal, aquarium fish and
+armour stand comes in structures too, in tiles of their own landmark's (m_jail_,
+m_zoo_, m_museum_): a structure waits for its part of the world to load, and runs
+no command that can fail.
+
+Polis has saved copies of only a few mobs, so each is made (mob-nbt.js) from the
+cow's (every field the game writes for a mob), changed to be the mob wanted: its
+identifier; its definitions, its starting groups followed from its own spawn event
+in the game's definition, the likeliest branch at every choice (an adult), and
+kept; its health, movement, follow range and knockback from its components; its
+variant, marking and colours where its groups set them (a tropical fish as its
+named variety, the random ones left out); persistent, named, a fresh id; an
+armour stand's four pieces. The shulker rides a minecart (the player's saved one,
+linked to it); the enderman is the player's own saved pair.
+
+populate loads them with the rest; jail, zoo and museum load only their own tiles.
+
+2zz, 2zza and 2zzb read the structures the pack loads: every inmate, animal, fish
+and armour stand there as the game saves it, kept and named, in its place, a
+tropical fish carrying its variety's groups, every stand dressed head to feet,
+the shulker in its minecart, populate and each landmark's own function loading
+its tiles.
 
 **0.43.2** — populate leaves the ticking areas alone.
 
