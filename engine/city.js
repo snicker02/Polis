@@ -921,7 +921,7 @@ export function generateCity(cfgIn, onProgress) {
   for (const [kind, need, say] of [['police', '13 by 15', (L) => `a front desk, ${L.desks.length} desks, a holding cell${L.nearJail ? ', next to the jail' : ''}`],
     ['theatre', '17 by 20', (L) => `${L.seats.length} seats, ${L.pit.length} note blocks in the pit, red curtains`],
     ['hotel', '13 by 19', (L) => `${L.rooms.length} rooms on ${L.frame.FLOORS - 1} floors, a lobby`],
-    ['factory', '15 by 22', (L) => `a control room of ${L.panel.length} switches and a master switch, an assembly line, a freight siding`]]) {
+    ['factory', '13 by 18', (L) => `a control room of ${L.panel.length} switches and a master switch, an assembly line, a freight siding`]]) {
     const L = landmarks.find((q) => q.kind === kind);
     if (L) stats[kind] = say(L);
     else if (cfg[kind]) stats[kind + 'Missing'] = `no lot big enough for the ${kind === 'police' ? 'police station' : kind} (it needs ${need})`;

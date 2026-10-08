@@ -26,7 +26,7 @@ import { MAT, MATERIALS, B, I, S, chestId, smokerId, stonecutterId, furnaceId, r
 import { lotFrame } from './zoo.js';
 import { helpers } from './services.js';
 
-export const FACTORY_SIZE = [19, 25];   // (fifteen by twenty-two where the lot is smaller: the same machines)
+export const FACTORY_SIZE = [19, 25];   // (fifteen by twenty-two, or thirteen by eighteen, where the lot is smaller: the same machines)
 
 // the redstone blocks, as Bedrock has them
 const LAMP = () => MATERIALS.add(null, 'minecraft:redstone_lamp', '#8a5a3a', {});
@@ -43,9 +43,13 @@ const FACING_NUM = { north: 2, south: 3, west: 4, east: 5 };
 export function factory(world, lot, face, cfg, rng, G, signTags) {
   // nineteen by twenty-five where the lot allows, else fifteen by twenty-two (the
   // bench shorter, the siding nearer in)
-  let W = 19, D = 25, fr = lotFrame(lot, face, 19, 25);
-  if (!fr) { W = 15; D = 22; fr = lotFrame(lot, face, 15, 22); }
+  // (and thirteen by eighteen, the line shorter and its workstations side by side:
+  // a city of small blocks seldom has a lot of fifteen by twenty-two, and a ticked
+  // factory found no lot at all)
+  let W = 0, D = 0, fr = null;
+  for (const [w, d] of [[19, 25], [15, 22], [13, 18]]) { fr = lotFrame(lot, face, w, d); if (fr) { W = w; D = d; break; } }
   if (!fr) return null;
+  const small = W === 13;
   const H = 6, TOP = G + H + 1, FRONT = 1, mid = (W - 1) / 2;
   const h = helpers(world, fr, G, signTags);
   const { at, put, clear, neg, sign, nameOf } = h;
@@ -91,7 +95,7 @@ export function factory(world, lot, face, cfg, rng, G, signTags) {
     panel.push({ lever: pos(1, v, G + 2), block: pos(0, v, G + 2), lamp: pos(0, v, G + 3) });
   }
   // the master switch: a lever on a console, beside a bench of lamps with dust along their tops
-  const BENCH_V = FRONT + 8, bench = [];
+  const BENCH_V = FRONT + (small ? 7 : 8), bench = [];
   put(2, BENCH_V, G + 1, MAT.SMOOTH_QUARTZ);
   put(2, BENCH_V, G + 2, lever(back[0] !== 0 ? 'up_east_west' : 'up_north_south'));
   for (let u = 3; u <= W - 6; u++) { put(u, BENCH_V, G + 1, LAMP()); put(u, BENCH_V, G + 2, DUST()); bench.push({ lamp: pos(u, BENCH_V, G + 1), dust: pos(u, BENCH_V, G + 2) }); }
@@ -99,7 +103,7 @@ export function factory(world, lot, face, cfg, rng, G, signTags) {
   sign(3, FRONT + 2, G + 1, neg(back), 'Control room');
 
   // ---- the assembly line: a raised channel of flowing water over a hopper into a chest ----
-  const LU = 3, L0 = BENCH_V + 3, L1 = L0 + 7;            // its head and end
+  const LU = 3, L0 = BENCH_V + 3, L1 = L0 + (small ? 4 : 7);   // its head and end
   const line = [];
   for (let v = L0 - 1; v <= L1 + 1; v++) {
     put(LU, v, G + 1, MAT.SMOOTH);                        // its bed
@@ -113,7 +117,8 @@ export function factory(world, lot, face, cfg, rng, G, signTags) {
   const hop = pos(LU, L1, G + 1), chest = pos(LU, L1 + 1, G + 1);
   // the workstations along it
   const stations = [];
-  for (const [v, id] of [[L0 + 1, smokerId(nameOf(neg(across)))], [L0 + 3, furnaceId('blast', nameOf(neg(across)))], [L0 + 5, MAT.SMITHING], [L0 + 7, stonecutterId(nameOf(neg(across)))]]) {
+  const sv = small ? [L0, L0 + 1, L0 + 2, L0 + 3] : [L0 + 1, L0 + 3, L0 + 5, L0 + 7];
+  for (const [v, id] of [[sv[0], smokerId(nameOf(neg(across)))], [sv[1], furnaceId('blast', nameOf(neg(across)))], [sv[2], MAT.SMITHING], [sv[3], stonecutterId(nameOf(neg(across)))]]) {
     put(LU + 2, v, G + 1, id); stations.push(pos(LU + 2, v, G + 1));
   }
   sign(LU + 2, L0 - 1, G + 1, neg(back), 'Assembly line');

@@ -40,7 +40,7 @@ const NEED = {                       // [shorter side, longer side] of the lot
   townhall: [13, 15], clocktower: [9, 9], library: [11, 12], market: [12, 12],
   church: [13, 15], mansion: [15, 20], school: [17, 25], lighthouse: [9, 9], castle: [13, 13],
   townsquare: [13, 13], stadium: [17, 21], cemetery: [12, 14], allotments: [13, 13], bandstand: [9, 9],
-  jail: [15, 23], zoo: [15, 24], aquarium: [11, 20], museum: [15, 24], hospital: [15, 23], firestation: [12, 20], police: [13, 15], theatre: [17, 20], hotel: [13, 19], factory: [15, 22],
+  jail: [15, 23], zoo: [15, 24], aquarium: [11, 20], museum: [15, 24], hospital: [15, 23], firestation: [12, 20], police: [13, 15], theatre: [17, 20], hotel: [13, 19], factory: [13, 18],
 };
 
 // Mark the lots, each kind at most once:

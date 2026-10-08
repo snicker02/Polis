@@ -101,8 +101,14 @@ export default async function run(ctx) {
     ["a player's fitted city", generateCity({ ...DEFAULTS, ...fx.settings, ...L, terrain: { ground, water, baseY: fx.baseY } })],
   ];
   check('defaults: no factory unless asked', DEFAULTS.factory === false);
+  // a city of small blocks has few big lots: the factory still found one (it had
+  // none at fifteen by twenty-two, and a ticked factory was not built)
+  {
+    const got = [1, 7, 42].map((seed) => !!generateCity({ ...DEFAULTS, ...L, size: 256, seed, minBlock: 10 }).landmarks.find((Lm) => Lm.kind === 'factory'));
+    check('factory: built in cities of small blocks too (256 across, blocks from ten)', got.every(Boolean), got.join(', '));
+  }
   const ts = cities.map(([n, r]) => [n, r, inspectFactory(r)]);
-  check('factory: built when asked, nineteen across and fifteen (on smaller lots), flat and fitted', ts.every(([, , t]) => t.built) && new Set(ts.map(([, , t]) => t.wide)).size === 2, ts.map(([n, , t]) => `${n}: ${t.wide}`).join(', '));
+  check('factory: built when asked, nineteen across, fifteen or thirteen (on smaller lots), flat and fitted', ts.every(([, , t]) => t.built) && new Set(ts.map(([, , t]) => t.wide)).size >= 2, ts.map(([n, , t]) => `${n}: ${t.wide}`).join(', '));
   const all = (f) => ts.every(([, , t]) => t.built && f(t));
   check('factory: each panel lever lights its own lamp and no other (simulated)', all((t) => t.panel));
   check('factory: the master switch lights the whole bench of lamps along its dust (simulated)', all((t) => t.master && t.benchSignalMin >= 1), ts.map(([, , t]) => t.benchSignalMin).join(', '));

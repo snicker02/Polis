@@ -1,4 +1,4 @@
-# Polis v0.45.0
+# Polis v0.45.1
 
 *Created with help from Claude AI.*
 
@@ -771,6 +771,19 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.45.1** — The factory fits small-block cities.
+
+A ticked factory was not built: even the compact one needed a lot fifteen by
+twenty-two, and a city of small blocks (blocks from ten) seldom has one; at 256
+across it never did. Now a third, small factory, thirteen by eighteen (factory.js):
+the same machines, the master switch's bench shorter, the assembly line shorter
+with its four workstations side by side. It fits nearly every city: at blocks from
+ten, 256 to 384 across now always, 192 across nearly always.
+
+2zze checks the factory built in cities of small blocks (256 across, blocks from
+ten, three seeds), and the redstone simulator passes on all three sizes (11
+checks).
 
 **0.45.0** — A factory, with working redstone.
 
