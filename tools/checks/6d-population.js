@@ -67,8 +67,12 @@ refreshWalkThrough();
   check('populate: farm animals are no longer summoned (they travel in structures)', wantA > 0 &&
     !lines(popul).some((l) => /^summon minecraft:(cow|sheep|pig|chicken) /.test(l)));
   const adds = lines(build).filter((l) => l.startsWith('tickingarea add '));
-  const removes = lines(popul).filter((l) => l.startsWith('tickingarea remove '));
-  check('ticking areas: build adds them, populate removes the same ones', adds.length > 0 && adds.length <= 10 &&
+  // (populate leaves them alone, so the city stays loaded for any later run, or
+  // jail, zoo or museum; release takes them off)
+  const release = text(`functions/${ns}/release_centered.mcfunction`) || '';
+  const removes = lines(release).filter((l) => l.startsWith('tickingarea remove '));
+  check('ticking areas: build adds them, populate leaves them alone, release removes the same ones', adds.length > 0 && adds.length <= 10 &&
+    !lines(popul).some((l) => l.startsWith('tickingarea')) &&
     removes.length === adds.length && adds.every((l) => removes.includes('tickingarea remove ' + l.split(' ').pop())));
   const areaOk = adds.every((l) => {
     const m = l.match(/^tickingarea add (~-?\d*) (~-?\d*) (~-?\d*) (~-?\d*) (~-?\d*) (~-?\d*) [a-z0-9_]+$/);

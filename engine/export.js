@@ -17,7 +17,7 @@ import { makeRng } from './rng.js';
 // Must match main.js VERSION, package.json and index.html data-version;
 // tools/validate.js fails if they drift. The app refuses to export when the
 // browser has mixed cached copies of old and new files.
-export const POLIS_VERSION = '0.43.1';
+export const POLIS_VERSION = '0.43.2';
 
 export const CHUNK = 64;          // Bedrock structure limit per horizontal axis
 export const GROUND_DROP = 2;     // base layer y=0 sits 2 below feet; surface y=1 replaces the block you stand on
@@ -549,12 +549,12 @@ export function functionFiles(tiles, world, opts = {}) {
       `arrive inside ${mobs.length} mob structure${mobs.length === 1 ? '' : 's'}` +
       (summoned.length ? `; ${summonedNote()} are summoned.` : '.'),
     '# Run ONCE, from the same spot you ran build from, after the city has appeared.',
-    // (its ticking areas made again first, in case they went: a summon reaches only
-    // loaded chunks. They stay on after: populate used to take them off at its end,
-    // and then any later run, or jail, zoo or museum, found the far side unloaded and
-    // summoned nothing there. release takes them off.)
-    ...areas.map((a) => `tickingarea remove ${a.name}`),
-    ...areas.map((a) => `tickingarea add ${rel(a.x0 - dx)} ${rel(-GROUND_DROP)} ${rel(a.z0 - dz)} ${rel(a.x1 - dx)} ${rel(top)} ${rel(a.z1 - dz)} ${a.name}`),
+    // (The ticking areas build made hold the city loaded while this runs, and stay on
+    // after: populate leaves them alone. Taken off at its end, a later run, or jail,
+    // zoo or museum, found the far side unloaded; taken off and made again at its
+    // start, the far side was unloaded at that very moment, still loading again
+    // while every summon and rail ran, and none of them reached it. release takes
+    // them off; areas makes them again, run on its own and a moment let pass.)
     `say Polis: bringing in ${villagers} villagers, ${golems} golems, ${cats} cats, ${pandas} pandas, ` +
       `${animals.length} farm animals` + (summoned.length ? `, ${summonedNote()}...` : '...'),
     ...mobs.map((t) => load(t, dx, dz)),

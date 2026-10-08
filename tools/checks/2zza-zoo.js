@@ -163,13 +163,14 @@ export default async function run(ctx) {
       // left on (taken off at its end, a later run, or jail, zoo or museum, found the
       // far side unloaded and summoned nothing there); release takes them off
       {
-        const pop = get('populate').text.split('\n');
-        const firstAdd = pop.findIndex((l) => l.startsWith('tickingarea add')), firstSummon = pop.findIndex((l) => l.startsWith('summon '));
-        const removesAfter = pop.slice(firstAdd + 1).some((l) => l.startsWith('tickingarea remove'));
+        // (populate touches no ticking area at all: build's hold the city while it
+        // runs; taken off at its start, even to be made again, the far side was
+        // unloaded the moment every summon ran, and only the villagers came)
+        const touches = ['populate', 'populate_centered'].some((n) => get(n).text.split('\n').some((l) => l.startsWith('tickingarea')));
         const names = b.filter((l) => l.startsWith('tickingarea add')).map((l) => l.split(' ').pop());
         const rel = get('release'), relC = get('release_centered');
-        const relAll = rel && relC && names.every((n) => rel.text.includes('tickingarea remove ' + n) && relC.text.includes('tickingarea remove ' + n));
-        check('populate keeps the city loaded: its ticking areas made before any summon and left on; release (and release_centered) take every one off', firstAdd >= 0 && firstAdd < firstSummon && !removesAfter && relAll, `made first ${firstAdd >= 0 && firstAdd < firstSummon}, removed after ${removesAfter}, release ${!!relAll}`);
+        const relAll = names.length > 0 && rel && relC && names.every((n) => rel.text.includes('tickingarea remove ' + n) && relC.text.includes('tickingarea remove ' + n));
+        check('populate leaves the ticking areas build made alone (no tickingarea command in it); release (and release_centered) take every one off', !touches && relAll, `populate touches them ${touches}, release ${!!relAll}`);
       }
       check('zoo and jail: their own functions (zoo, jail, and areas to keep the city loaded), each summoning all of them; build clears its ticking areas before it makes them', have.length === names.length && zooAll && jailAll && tidy, `${have.length} of ${names.length}, zoo ${!!zooAll}, jail ${!!jailAll}, tidy ${tidy}`);
     }

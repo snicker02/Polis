@@ -1,4 +1,4 @@
-# Polis v0.43.1
+# Polis v0.43.2
 
 *Created with help from Claude AI.*
 
@@ -771,6 +771,22 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.43.2** — populate leaves the ticking areas alone.
+
+0.43.1 made populate take the city's ticking areas off at its start and make them
+again, in case they were missing. Taking them off unloads the far side at that
+moment, and making them again only starts it loading: every summon and every rail
+in populate ran into unloaded ground, and only the villagers and golems came (a
+structure waits for its chunks; a summon does not). Now populate holds no
+tickingarea command at all: build makes them, they hold the city while populate
+runs and stay on after (for any later run, or jail, zoo or museum), and release
+takes them off. Where they are missing, areas makes them again, run on its own
+with a moment let pass before anything is summoned.
+
+2zza checks populate holding no tickingarea command, and release taking off every
+one build made (16 checks); 6d checks build adding them, populate leaving them
+alone and release removing the same ones.
 
 **0.43.1** — populate keeps the city loaded.
 
