@@ -1,4 +1,4 @@
-# Polis v0.49.1
+# Polis v0.50.0
 
 *Created with help from Claude AI.*
 
@@ -771,6 +771,43 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.50.0** — A botanical garden.
+
+A new option, "A botanical garden" (off by default), builds a glass hall of
+plants from every biome (garden.js), nineteen by twenty-three (ten beds) or
+fifteen by nineteen (eight) as the lot allows: a stone brick plinth two high with
+steps up to the door, glass walls, a glass roof on stone brick ribs, a path down
+the middle and a bed of each biome either side, a sign at each. Each plant on the
+soil the game needs for it:
+
+- Desert: sand, cacti two high with air all round, dead bushes.
+- Jungle: podzol, bamboo four high with leaves at the top, saplings, a melon.
+- Swamp: a pool with lily pads, sugar cane at its edge, blue orchids.
+- Mushroom fields: mycelium, red and brown mushrooms.
+- Nether: soul sand with nether wart, crimson and warped nylium with their fungi
+  and roots.
+- Lush caves: moss, azaleas, flowering azaleas, moss carpet.
+- Ocean: a basin two deep over sand, kelp, seagrass and sea pickles.
+- Taiga: podzol, sweet berry bushes, ferns, large ferns, spruce saplings.
+- Meadow and the End (the larger garden): every flower on grass; chorus plants on
+  end stone.
+
+Kelp, seagrass and sea pickles stand in water: a structure now writes water in a
+cell's second layer where a landmark marks it so (blockcore.js: opts.wet;
+world.wet, filled by the city from each landmark's wetAt after the lift with the
+ground). The garden lights itself with lanterns from its ribs, and the city's
+lighting keeps out of a landmark that does (noLighting): a light set in a bed
+would take a plant's place, or a cactus's air. The whole garden stands at or over
+the ground, so on a fitted city it is lifted whole (dug below it, the ocean basin
+came apart).
+
+New section 2zzh (10 checks): every plant there and whole, on a soil it may stand
+on; every cactus with air all round; every sugar cane with water at its foot;
+every waterlogged plant in water and marked, and in the pack its second layer
+water; the water held in; the city's lighting kept out and every bed lit; every
+bed reached from the door; every block one of Bedrock's own states. On flat,
+fitted and small-block cities, at both sizes.
 
 **0.49.1** — The boat slide wide enough for a boat.
 

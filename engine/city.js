@@ -113,6 +113,7 @@ export const DEFAULTS = {
   factory: false,            // a factory: working redstone, an assembly line, a freight siding (factory.js)
   park: false,               // an amusement park: a roller coaster to ride, a Ferris wheel, stalls (park.js)
   waterpark: false,          // a water park: pools, a bubble lift, a boat slide, a kids' pool (waterpark.js)
+  garden: false,             // a botanical garden: a glass hall of plants from every biome (garden.js)
   terrainBreaks: true,       // on fitted terrain, lots step at their own heights (retaining walls), held only to the street they face
   mixStyles: false,          // several styles, one to a district (districts.js)
   mixList: ['modern', 'medieval', 'eastasian', 'artdeco'],   // the styles ticked for mixing
@@ -605,6 +606,7 @@ export function generateCity(cfgIn, onProgress) {
       if (L.siding) L.siding.cart[1] += elevAt(L.siding.cart[0], L.siding.cart[2]);                    // the factory's minecart
       for (const rb of L.railBlocks || []) rb[1] += elevAt(rb[0], rb[2]);                                // and its siding's rails
       for (const c of L.carts || []) c[1] += elevAt(c[0], c[2]);                                           // the park's minecarts
+      for (const w of L.wetAt || []) w[1] += elevAt(w[0], w[2]);                                           // the garden's waterlogged plants
       if (L.belfryBell) L.belfryBell[1] += elevAt(L.belfryBell[0], L.belfryBell[2]);
       if (L.faces) for (const f of L.faces) f.centre[1] += elevAt(f.centre[0], f.centre[2]);
       // every point a landmark records rides up with the ground under it —
@@ -852,7 +854,11 @@ export function generateCity(cfgIn, onProgress) {
     const graded = world.cutFaces || null;
     const inCity = (x, z) => inPlan(x, z) && !(graded && graded.has(x + ',' + z));
     const inside = dome ? (x, z) => (x - dome.cx) ** 2 + (z - dome.cz) ** 2 < dome.R * dome.R : inCity;
-    const keep = dome ? (x, y, z) => ((x - dome.cx) ** 2 + (z - dome.cz) ** 2) / dome.R ** 2 + ((y - GROUND) / dome.c) ** 2 < 1 : () => true;
+    const keepDome = dome ? (x, y, z) => ((x - dome.cx) ** 2 + (z - dome.cz) ** 2) / dome.R ** 2 + ((y - GROUND) / dome.c) ** 2 < 1 : () => true;
+    // (and never in a landmark that lights itself: the botanical garden, where a
+    // light set in a bed would take a plant's place, or a cactus's air)
+    const unlit = landmarks.filter((L) => L.noLighting).map((L) => L.lot);
+    const keep = (x, y, z) => keepDome(x, y, z) && !unlit.some((l) => x >= l.x0 && x <= l.x1 && z >= l.z0 && z <= l.z1);
     // inside a building (below its roof) a spot wants a properly lit room; outside, any light at all
     // which columns lie inside a building, and between what heights (a grid: asked
     // of every one of a city's spawn spots, scanning the buildings was slow)
@@ -925,16 +931,20 @@ export function generateCity(cfgIn, onProgress) {
     ['theatre', '17 by 20', (L) => `${L.seats.length} seats, ${L.pit.length} note blocks in the pit, red curtains`],
     ['hotel', '13 by 19', (L) => `${L.rooms.length} rooms on ${L.frame.FLOORS - 1} floors, a lobby`],
     ['factory', '13 by 18', (L) => `a control room of ${L.panel.length} switches and a master switch, an assembly line, a freight siding`],
+    ['garden', '15 by 19', (L) => `a glass hall of ${L.beds.length} biomes, ${L.plants.length} plants each on its own soil`],
     ['lazyriver', '14 by 15', (L) => `a ring of four runs, each a step down, and a bubble lift back up`],
     ['waterpark', '15 by 19', (L) => `pools, a bubble lift ${L.frame.H} high, a boat slide of ${L.slide.length} blocks of blue ice, a kids' pool with a waterfall`],
     ['park', '15 by 19', (L) => `a roller coaster of ${L.rails.length} rails rising ${L.frame.R}, a Ferris wheel of ${L.wheel.cabins.length} cabins, ${L.stalls.length} stalls`],
     ['workshop', '13 by 15', (L) => `${L.smelters.length} automatic smelters, ${L.presses.length} presses, an instrument bench of ${L.notes.length}, night lights`]]) {
     const L = landmarks.find((q) => q.kind === kind);
     if (L) stats[kind] = say(L);
-    else if (cfg[kind] || (kind === 'workshop' && cfg.factory && landmarks.some((q) => q.kind === 'factory')) || (kind === 'lazyriver' && cfg.waterpark && landmarks.some((q) => q.kind === 'waterpark'))) stats[kind + 'Missing'] = `no lot big enough for the ${kind === 'police' ? 'police station' : kind === 'park' ? 'amusement park' : kind === 'waterpark' ? 'water park' : kind === 'lazyriver' ? 'lazy river' : kind} (it needs ${need})`;
+    else if (cfg[kind] || (kind === 'workshop' && cfg.factory && landmarks.some((q) => q.kind === 'factory')) || (kind === 'lazyriver' && cfg.waterpark && landmarks.some((q) => q.kind === 'waterpark'))) stats[kind + 'Missing'] = `no lot big enough for the ${kind === 'police' ? 'police station' : kind === 'park' ? 'amusement park' : kind === 'waterpark' ? 'water park' : kind === 'lazyriver' ? 'lazy river' : kind === 'garden' ? 'botanical garden' : kind} (it needs ${need})`;
   }
   const zoo = landmarks.flatMap((L) => [...(L.animals || []), ...(L.fish || [])]);
   for (const a of zoo) spawns.push({ type: 'mob', kind: a.type, x: a.x, y: a.y, z: a.z, name: a.name, variety: a.variety, group: 'zoo' });
+  // the cells whose plant stands in water (the garden's kelp, seagrass, sea pickles):
+  // their second layer is written as water (blockcore.js: writeMcStructure, opts.wet)
+  world.wet = new Set(landmarks.flatMap((L) => (L.wetAt || []).map(([x, y, z]) => VoxelWorld.key(x, y, z))));
   for (const F of landmarks.filter((L) => L.kind === 'factory')) spawns.push({ type: 'cart', x: F.siding.cart[0], y: F.siding.cart[1], z: F.siding.cart[2], group: 'factory' });
   for (const P of landmarks.filter((L) => L.kind === 'park')) for (const c of P.carts) spawns.push({ type: 'cart', x: c[0], y: c[1], z: c[2], group: 'park' });
   for (const st of stands) spawns.push({ type: 'mob', kind: 'armor_stand', x: st.x, y: st.y, z: st.z, yRot: st.yRot, group: 'museum',

@@ -335,6 +335,17 @@ export function writeMcStructure(keys, ids, box, materials, opts = {}) {
           if (opts.airAt(x, y, z)) layer1[((x - box.x0) * sy + (y - box.y0)) * sz + (z - box.z0)] = domeAirSlot;
   }
 
+  // opts.wet: cells (world keys) whose block stands in water, a waterlogged plant
+  // (kelp, seagrass, a sea pickle): their second layer is water, or they break
+  if (opts.wet && opts.wet.size && opts.waterId !== undefined) {
+    const waterSlot = slot(opts.waterId);
+    for (const k of opts.wet) {
+      const [x, y, z] = VoxelWorld.unkey(k);
+      if (x < box.x0 || x > box.x1 || y < box.y0 || y > box.y1 || z < box.z0 || z > box.z1) continue;
+      layer1[((x - box.x0) * sy + (y - box.y0)) * sz + (z - box.z0)] = waterSlot;
+    }
+  }
+
   // block entities (bed colours, sign text): keyed by the flattened layer index
   const posData = {};
   let posCount = 0;
