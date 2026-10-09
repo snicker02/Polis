@@ -1,4 +1,4 @@
-# Polis v0.46.1
+# Polis v0.47.0
 
 *Created with help from Claude AI.*
 
@@ -771,6 +771,35 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.47.0** — An amusement park: a roller coaster you can ride, a Ferris wheel, stalls.
+
+A new option, "An amusement park" (off by default), builds a park (park.js),
+fenced with a gate, twenty-three by twenty-seven, nineteen by twenty-three or
+fifteen by nineteen as the lot allows (the biggest it takes):
+
+- The roller coaster: a loop round the park inside the fence, laid by the
+  railway's own rules (a block of rise a rail, a curve only on the level). The
+  station on a hump on the front run: a powered rail climbing to its top, and on
+  the far side the station rail, a powered rail with nothing powering it, which
+  holds a cart; a button on a post beside it powers it and the cart rolls off.
+  The lift hill up the next side, every rail of the climb powered on a block of
+  redstone; the high run along the back, boosted; the drop down the last side and
+  home. Every raised rail on a pillar, three clear above it. Two minecarts, one
+  in the station. The rails and the blocks under them laid again last (on a
+  fitted city the transit's pass clears every rail and beds rails in gravel).
+- The Ferris wheel: a ring in a vertical plane, spokes to an iron axle, eight
+  cabins of coloured concrete, legs either side.
+- Stalls: popcorn, candy floss, lemonade, prizes, each a counter under a striped
+  awning of wool with its sign.
+
+New section 2zzf (10 checks): the coaster one closed loop a minecart can ride
+(railgraph.js: every rail joined to two of it, all reached from the station),
+three clear above every rail, every raised rail supported, every powered rail on
+redstone, the lift powered all the way, the station a brake with its button; the
+wheel and stalls; both minecarts in the park's structure; everything reached from
+the gate; every block one of Bedrock's own states. On flat, fitted and small-block
+cities, at more than one size.
 
 **0.46.1** — The instrument bench plays.
 

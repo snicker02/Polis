@@ -111,6 +111,7 @@ export const DEFAULTS = {
   theatre: false,            // a theatre: a stage with curtains, an orchestra pit, tiered seats (civic.js)
   hotel: false,              // a hotel: a lobby and five storeys of rooms (civic.js)
   factory: false,            // a factory: working redstone, an assembly line, a freight siding (factory.js)
+  park: false,               // an amusement park: a roller coaster to ride, a Ferris wheel, stalls (park.js)
   terrainBreaks: true,       // on fitted terrain, lots step at their own heights (retaining walls), held only to the street they face
   mixStyles: false,          // several styles, one to a district (districts.js)
   mixList: ['modern', 'medieval', 'eastasian', 'artdeco'],   // the styles ticked for mixing
@@ -602,6 +603,7 @@ export function generateCity(cfgIn, onProgress) {
       for (const st of L.stands || []) st.y += elevAt(Math.floor(st.x), Math.floor(st.z));              // and its armour stands
       if (L.siding) L.siding.cart[1] += elevAt(L.siding.cart[0], L.siding.cart[2]);                    // the factory's minecart
       for (const rb of L.railBlocks || []) rb[1] += elevAt(rb[0], rb[2]);                                // and its siding's rails
+      for (const c of L.carts || []) c[1] += elevAt(c[0], c[2]);                                           // the park's minecarts
       if (L.belfryBell) L.belfryBell[1] += elevAt(L.belfryBell[0], L.belfryBell[2]);
       if (L.faces) for (const f of L.faces) f.centre[1] += elevAt(f.centre[0], f.centre[2]);
       // every point a landmark records rides up with the ground under it —
@@ -922,14 +924,16 @@ export function generateCity(cfgIn, onProgress) {
     ['theatre', '17 by 20', (L) => `${L.seats.length} seats, ${L.pit.length} note blocks in the pit, red curtains`],
     ['hotel', '13 by 19', (L) => `${L.rooms.length} rooms on ${L.frame.FLOORS - 1} floors, a lobby`],
     ['factory', '13 by 18', (L) => `a control room of ${L.panel.length} switches and a master switch, an assembly line, a freight siding`],
+    ['park', '15 by 19', (L) => `a roller coaster of ${L.rails.length} rails rising ${L.frame.R}, a Ferris wheel of ${L.wheel.cabins.length} cabins, ${L.stalls.length} stalls`],
     ['workshop', '13 by 15', (L) => `${L.smelters.length} automatic smelters, ${L.presses.length} presses, an instrument bench of ${L.notes.length}, night lights`]]) {
     const L = landmarks.find((q) => q.kind === kind);
     if (L) stats[kind] = say(L);
-    else if (cfg[kind] || (kind === 'workshop' && cfg.factory && landmarks.some((q) => q.kind === 'factory'))) stats[kind + 'Missing'] = `no lot big enough for the ${kind === 'police' ? 'police station' : kind} (it needs ${need})`;
+    else if (cfg[kind] || (kind === 'workshop' && cfg.factory && landmarks.some((q) => q.kind === 'factory'))) stats[kind + 'Missing'] = `no lot big enough for the ${kind === 'police' ? 'police station' : kind === 'park' ? 'amusement park' : kind} (it needs ${need})`;
   }
   const zoo = landmarks.flatMap((L) => [...(L.animals || []), ...(L.fish || [])]);
   for (const a of zoo) spawns.push({ type: 'mob', kind: a.type, x: a.x, y: a.y, z: a.z, name: a.name, variety: a.variety, group: 'zoo' });
   for (const F of landmarks.filter((L) => L.kind === 'factory')) spawns.push({ type: 'cart', x: F.siding.cart[0], y: F.siding.cart[1], z: F.siding.cart[2], group: 'factory' });
+  for (const P of landmarks.filter((L) => L.kind === 'park')) for (const c of P.carts) spawns.push({ type: 'cart', x: c[0], y: c[1], z: c[2], group: 'park' });
   for (const st of stands) spawns.push({ type: 'mob', kind: 'armor_stand', x: st.x, y: st.y, z: st.z, yRot: st.yRot, group: 'museum',
     armour: ['helmet', 'chestplate', 'leggings', 'boots'].map((p) => `minecraft:${st.set}_${p}`) });
   // (asked for, but no lot big enough: said so, not left silent)
@@ -939,7 +943,7 @@ export function generateCity(cfgIn, onProgress) {
     kinds: new Set(zoo.map((m) => m.variety || m.type)).size };
   // the factory's siding laid again last (on a fitted city a transit pass clears every
   // rail and lays the railway again from its plan, and took the siding with it)
-  for (const F of landmarks.filter((L) => L.kind === 'factory')) for (const [x, y, z, id] of F.railBlocks || []) world.set(x, y, z, id);
+  for (const F of landmarks.filter((L) => L.railBlocks)) for (const [x, y, z, id] of F.railBlocks) world.set(x, y, z, id);   // (the park's coaster too)
   return { world, plan, buildings, cfg, stats, shell, bridges, farms, ranches, spawns, bell, transit, wall, landmarks, canal, centre, streets, harbour, harbourPlan, megaliths, ponds, courtyards, hostiles, inmates, zoo, stands, dome, canals, lighting, styleDistricts: SD, spawners, stilts, islands, cliffWays, rooms, metro, hills, stepRails,
     hills, stairRuns, reach, groundAt: (x, z) => GROUND + elevAt(x, z) };
 }

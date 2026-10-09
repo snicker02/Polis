@@ -17,7 +17,7 @@ import { buildPregenPack, pregenFileName, siteRegion, viewRegion, pregenCommand,
 import { decodeNbt } from './tools/nbt-read.js';
 import { THEMES } from './engine/materials.js';
 
-const VERSION = '0.46.1';
+const VERSION = '0.47.0';
 const $ = (id) => document.getElementById(id);
 const numVal = (id) => Number($(id).value);      // readCfg has its own local num()
 
@@ -27,7 +27,7 @@ const SLIDERS = {
   maxFloors: 0, pitch: 0, setbackEvery: 0, bw: 0, bd: 0, floors: 0, clip: 0,
   farmChance: 2, pondChance: 2, twistChance: 2, courtyardChance: 2, hostileCount: 0, villagers: 0, wallHeight: 0, foundation: 0, clearAbove: 0, hills: 0, golemsPer10: 0,
 };
-const CHECKS = ['setback', 'roofAccess', 'useStairs', 'lights', 'lamps', 'trees', 'markings', 'landmarks', 'canal', 'harbour', 'bridges', 'detail', 'streetSigns', 'fish', 'megaliths', 'hostiles', 'dome', 'stilts', 'floating', 'cliff', 'underground', 'metro', 'terrainBreaks', 'jail', 'zoo', 'museum', 'hospital', 'firestation', 'police', 'theatre', 'hotel', 'factory'];
+const CHECKS = ['setback', 'roofAccess', 'useStairs', 'lights', 'lamps', 'trees', 'markings', 'landmarks', 'canal', 'harbour', 'bridges', 'detail', 'streetSigns', 'fish', 'megaliths', 'hostiles', 'dome', 'stilts', 'floating', 'cliff', 'underground', 'metro', 'terrainBreaks', 'jail', 'zoo', 'museum', 'hospital', 'firestation', 'police', 'theatre', 'hotel', 'factory', 'park'];
 
 let renderer = null;
 let result = null;       // { world, plan, buildings, cfg, stats }
@@ -457,7 +457,7 @@ function showStats(mesh, times) {
       const skipped = Object.keys(NOT_FITTED).filter((id) => $(id) && $(id).checked).map((id) => NOT_FITTED[id]);
       if (skipped.length) line('not on fitted ground', `${skipped.join(', ')}: a fitted city follows your world's own ground`);
     }
-    for (const [k, label] of [['police', 'police station'], ['theatre', 'theatre'], ['hotel', 'hotel'], ['factory', 'factory'], ['workshop', 'workshop']]) {
+    for (const [k, label] of [['police', 'police station'], ['theatre', 'theatre'], ['hotel', 'hotel'], ['factory', 'factory'], ['workshop', 'workshop'], ['park', 'amusement park']]) {
       if (s[k + 'Missing']) line(label, s[k + 'Missing']);
       if (s[k]) line(label, s[k]);
     }
