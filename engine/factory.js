@@ -171,7 +171,8 @@ export function factory(world, lot, face, cfg, rng, G, signTags) {
 //   lever on the console beside it (it holds), one by a button (a stamp);
 // - the instrument bench: note blocks, each on the block that gives its sound
 //   (bass drum, snare, hat, bass, bell, flute, chime, guitar, xylophone, iron
-//   xylophone), a button on top of each;
+//   xylophone), each played by a button on a key block before it (a note block
+//   sounds only with air above it);
 // - night lights: inverted daylight sensors on the roof over lamps set in it.
 export const WORKSHOP_SIZE = [13, 15];
 const STONE = () => MATERIALS.add(null, 'minecraft:stone', '#7d7d7d', {});
@@ -218,10 +219,15 @@ export function workshop(world, lot, face, cfg, rng, G, signTags) {
   const sounds = [['bass drum', STONE()], ['snare', MAT.SAND], ['hat', MAT.GLASS], ['bass', MAT.OAK], ['bell', MAT.GOLD],
     ['flute', MAT.CLAY], ['chime', MAT.PACKED_ICE], ['guitar', WOOL()], ['xylophone', MAT.BONE_Y], ['iron xylophone', MAT.IRON]];
   const notes = [];
+  // (a note block sounds only with air above it: a button on top of it took that
+  // space, and the bench was silent. So each has a key block in front of it, on the
+  // player's side, the button on the key: the button powers the key, the key the
+  // note block beside it; no key touches another note block)
   sounds.forEach(([name, under], i) => {
     const u = 1 + i;
-    put(u, 3, G, under); put(u, 3, G + 1, NOTE()); put(u, 3, G + 2, buttonUp());
-    notes.push({ name, under: pos(u, 3, G), note: pos(u, 3, G + 1), button: pos(u, 3, G + 2) });
+    put(u, 3, G, under); put(u, 3, G + 1, NOTE());
+    put(u, 2, G + 1, MAT.SMOOTH_QUARTZ); put(u, 2, G + 2, buttonUp());
+    notes.push({ name, under: pos(u, 3, G), note: pos(u, 3, G + 1), key: pos(u, 2, G + 1), button: pos(u, 2, G + 2) });
   });
   sign(11, 2, G + 1, neg(back), 'Instruments');
   // the night lights: lamps in the roof, inverted daylight sensors on them

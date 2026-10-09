@@ -1,4 +1,4 @@
-# Polis v0.46.0
+# Polis v0.46.1
 
 *Created with help from Claude AI.*
 
@@ -771,6 +771,17 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.46.1** — The instrument bench plays.
+
+The note blocks made no sound: a note block sounds only with air above it, and
+each had its button on top. Now each note block has a key block in front of it,
+on the player's side, with the button on the key (factory.js): the button powers
+the key, the key the note block beside it, the space above the note block left
+open; no key touches another note block.
+
+2zze checks air above every note block, and each button playing its own note
+block and no other (18 checks).
 
 **0.46.0** — The factory's workshop: more machines.
 

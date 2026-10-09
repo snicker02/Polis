@@ -122,7 +122,11 @@ function inspectWorkshop(r) {
     && blk(L(s.input)[0], L(s.input)[1] + 1, L(s.input)[2]) === 'air');
   out.presses = K.presses.every((p) => { const powered = simulate(L(p.control)); return blk(...L(p.piston)) === 'sticky_piston' && st(...L(p.piston), 'facing_direction') === 1 && blk(...L(p.block)) === 'iron_block'
     && blk(L(p.block)[0], L(p.block)[1] + 1, L(p.block)[2]) === 'air' && (p.button ? blk(...L(p.control)) === 'wooden_button' : blk(...L(p.control)) === 'lever') && powered(L(p.piston)); });
-  out.notes = K.notes.every((n) => { const powered = simulate(L(n.button)); return blk(...L(n.note)) === 'noteblock' && blk(...L(n.button)) === 'wooden_button' && powered(L(n.note)) && blk(...L(n.under)) !== 'air'; });
+  // (and air above each note block: one sounds only so, and a button on top of it
+  // silenced the bench; each key powering its own note block and no other)
+  out.notes = K.notes.every((n) => { const powered = simulate(L(n.button)); const [x, y, z] = L(n.note);
+    return blk(x, y, z) === 'noteblock' && blk(x, y + 1, z) === 'air' && blk(...L(n.button)) === 'wooden_button' && powered(L(n.note)) && blk(...L(n.under)) !== 'air'
+      && K.notes.every((m) => m === n || !powered(L(m.note))); });
   out.sounds = new Set(K.notes.map((n) => blk(...L(n.under)))).size;
   out.nightLights = K.nightLights.every((n) => blk(...L(n.sensor)) === 'daylight_detector_inverted' && blk(...L(n.lamp)) === 'redstone_lamp' && simulate(L(n.sensor))(L(n.lamp)));
   // on foot: to the smelters, the presses, the bench
@@ -135,7 +139,7 @@ function inspectWorkshop(r) {
   const [dx0, dz0] = fr.at(fr.mid, 0), s0 = [dx0, K.door[1] + lift, dz0], walk = new Set([key(s0)]), q = [s0];
   while (q.length && walk.size < 20000) { const [a, b, c] = q.pop(); for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) for (const dy of [0, 1, -1]) { const n = [a + dx, b + dy, c + dz]; if (walk.has(key(n)) || !stand(...n)) continue; walk.add(key(n)); q.push(n); } }
   const reach = (u, v) => { const [x, z] = fr.at(u, v); return walk.has(key([x, K.door[1] + lift, z])); };
-  out.reach = { smelters: reach(6, fr.D - 3), presses: reach(6, 7), bench: reach(5, 2) };
+  out.reach = { smelters: reach(6, fr.D - 3), presses: reach(6, 7), bench: reach(5, 1) };   // (in front of the keys, where a player plays them)
   if (F) { const mid = (l) => [(l.x0 + l.x1) / 2, (l.z0 + l.z1) / 2]; out.nearFactory = Math.round(Math.hypot(mid(K.lot)[0] - mid(F.lot)[0], mid(K.lot)[1] - mid(F.lot)[1])); }
   return out;
 }
@@ -179,7 +183,7 @@ export default async function run(ctx) {
     check('workshop: built with the factory, near it (flat, fitted, small blocks)', ws.every(([, w]) => w.built && w.nearFactory !== undefined && w.nearFactory <= 100), ws.map(([n, w]) => `${n}: ${w.nearFactory}`).join(', '));
     check('workshop: three smelters, each a chest, a hopper down, the furnace, a hopper down, a chest, room to open the top one', ws.every(([, w]) => w.smelters));
     check('workshop: both presses, a sticky piston up with its iron block, worked by its lever and its button (simulated)', ws.every(([, w]) => w.presses));
-    check('workshop: ten note blocks on ten different sounding blocks, each played by its button (simulated)', ws.every(([, w]) => w.notes && w.sounds === 10));
+    check('workshop: ten note blocks on ten different sounding blocks, air above each (one sounds only so), each played by its own button and no other (simulated)', ws.every(([, w]) => w.notes && w.sounds === 10));
     check('workshop: the night lights, each sensor lighting the lamp under it (simulated); every machine reached on foot', ws.every(([, w]) => w.nightLights && Object.values(w.reach).every(Boolean)), ws.map(([n, w]) => `${n}: ${JSON.stringify(w.reach)}`).join('; '));
   }
   {
