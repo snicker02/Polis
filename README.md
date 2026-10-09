@@ -1,4 +1,4 @@
-# Polis v0.47.0
+# Polis v0.49.0
 
 *Created with help from Claude AI.*
 
@@ -771,6 +771,72 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.49.0** — The lazy river.
+
+With the water park comes a lazy river (waterpark.js), on the nearest lot that
+takes it (fourteen by fifteen): a deck four high, steps up from the street, and in
+it a ring of river ten by ten round an island with an umbrella. Water runs seven
+blocks from a source and pushes both ways from it, so a flat loop with sources
+along it would fight itself: the river is four straight runs, each a step lower
+than the last, a source at each run's head with the step behind it (so it runs
+only on) and the water a level more each block down the run, falling over the
+step into the next; and at the fourth run's end a bubble column two by two over
+soul sand carries swimmers the three blocks back up to the first run's head.
+Round and round. Two wide, a block deep, held in the deck; jump in from the front.
+
+2zzg checks the lazy river built near the water park; every block of it held in
+(a run's end falling into the next is held); the four runs, each a source and a
+level more each block, open above, a step lower than the last and touching it;
+the loop closed by the lift; the first run level with the deck and reached up the
+steps (13 checks).
+
+**0.48.0** — A water park.
+
+A new option, "A water park" (off by default), builds a water park
+(waterpark.js), nineteen by twenty-three or fifteen by nineteen as the lot allows.
+All of it above the ground: a deck three high, white concrete on top, a railing
+round it, steps up from the gate, and every pool carved down into the deck, so
+every drop of water is held by blocks laid there (on a fitted city the ground
+under a lot may hide a cave).
+
+- The big pool, three deep, its floor lit with sea lanterns.
+- The bubble lift: a glass tube from the big pool's back corner, soul sand under
+  it and a bubble column all the way up: swim into the corner and it carries you
+  to a platform over the deep end, the high dive and the boat slide's top.
+- The boat slide: blue ice in a channel walled with glass, winding round the park
+  a block down at a time (never at a turn), to the splash pool, its last block
+  level with the water. A chest of boats on the platform.
+- The splash pool, two deep; the kids' pool, one deep, a waterfall falling inside
+  a glass column.
+- Loungers under beach umbrellas, a snack stall, lanterns.
+
+The lighting keeps off ice, soul sand and bubble columns (a light set in the slide
+would stop the boats).
+
+New section 2zzg (8 checks): every block of water held in (water or solid on its
+four sides and under it); the lift's soul sand, its column all the way up, the
+tube closed, the platform to step out on; the slide's ice, its steps, no drop at a
+turn, its walls and headroom, from the platform down level with the splash pool;
+the pools at their depths, the waterfall, the chest; the deck reached up the
+steps; every block one of Bedrock's own states. On flat, fitted and small-block
+cities, at both sizes.
+
+**0.47.1** — The Ferris wheel whole.
+
+The wheel looked broken: its rim, picked block by block near the circle, met only
+at corners and showed holes; its spokes were iron bars, which join only
+sideways, so a sloping spoke stood in separate posts; its legs stepped out in
+front of it; and on the diagonals a cabin, one past the rim, rounded back on to
+the ring and took a piece of the white. Now every line of it is joined block to
+block by a face (park.js): the rim a closed ring of white concrete stepped round
+the circle, eight spokes of light grey concrete from the axle, eight cabins two
+high pushed out until they are clear of the ring, and a straight leg either side
+down to the ground.
+
+2zzf checks the rim one unbroken ring (every block touching exactly two others by
+a face), every spoke a face-joined line from the axle, every cabin two high (11
+checks).
 
 **0.47.0** — An amusement park: a roller coaster you can ride, a Ferris wheel, stalls.
 

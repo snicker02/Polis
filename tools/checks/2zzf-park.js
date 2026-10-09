@@ -53,7 +53,16 @@ function inspectPark(r) {
   // the wheel, the stalls, the carts
   // (its rim round, as many blocks as a ring of its size has: about five to a block of radius)
   const rr = P.wide === 23 ? 6 : P.wide === 19 ? 5 : 3;
-  out.wheel = P.wheel.rim.filter((p) => blk(...L(p)) === 'white_concrete').length >= Math.floor(4.5 * rr) && P.wheel.cabins.every((p) => /concrete/.test(blk(...L(p)))) && P.wheel.cabins.length === 8 && blk(...L(P.wheel.axle)) === 'iron_block';
+  // the ring closed: every rim block touching exactly two others by a face (one
+  // unbroken circle); every spoke a face-joined line of solid blocks; cabins two high
+  {
+    const R = new Set(P.wheel.rim.map((p) => key(L(p))));
+    const faceN = (p) => { const [x, y, z] = L(p); return [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]].filter(([a, b, c]) => R.has(key([x + a, y + b, z + c]))).length; };
+    out.ring = P.wheel.rim.every((p) => faceN(p) === 2 && blk(...L(p)) === 'white_concrete');
+    out.spokes = P.wheel.spokes.every((sp) => sp.every((p) => blk(...L(p)) === 'light_gray_concrete') && sp.every((p, i) => i === 0 || Math.abs(p[0] - sp[i - 1][0]) + Math.abs(p[1] - sp[i - 1][1]) + Math.abs(p[2] - sp[i - 1][2]) === 1));
+    out.cabinsTall = P.wheel.cabins.every((c) => c.every((p) => /concrete/.test(blk(...L(p)))));
+  }
+  out.wheel = P.wheel.rim.filter((p) => blk(...L(p)) === 'white_concrete').length >= Math.floor(4.5 * rr) && P.wheel.cabins.length === 8 && blk(...L(P.wheel.axle)) === 'iron_block';
   out.stalls = P.stalls.length >= 2 && P.stalls.every((s) => /sign/.test(blk(...L(s.sign))) && blk(...L(s.counter)) !== 'air');
   out.carts = r.spawns.filter((p) => p.type === 'cart' && p.group === 'park').length;
   // on foot from the gate: the station post's side, each stall's front, the wheel's foot
@@ -66,7 +75,6 @@ function inspectPark(r) {
   out.reach = { station: at0(fr.u0 + 6, fr.v0 + 2), stalls: P.stalls.every((s) => { const [x, , z] = s.sign; return [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dz]) => walk.has(key([x + dx, P.door[1] + lift, z + dz]))); }), wheel: at0(fr.mid, fr.v1 - 8) };
   return out;
 }
-
 export default async function run(ctx) {
   const { check, note } = ctx;
   const { generateCity, DEFAULTS } = await import('../../engine/city.js');
@@ -92,6 +100,7 @@ export default async function run(ctx) {
   check('park: every powered rail on a block of redstone; the lift hill powered all the way up', all((t) => t.powered && t.liftRails >= 7), ts.map(([n, , t]) => `${n}: ${t.liftRails}`).join(', '));
   check('park: the station rail a brake (an unpowered powered rail), a button on a post beside it to send a cart off', all((t) => t.station));
   check('park: the Ferris wheel (its rim, eight cabins, the axle) and the stalls with their signs', all((t) => t.wheel && t.stalls));
+  check('park: the Ferris wheel whole: its rim one unbroken ring (every block touching two by a face: picked near the circle, it met at corners and showed holes), every spoke a face-joined line from the axle, every cabin two high and off the ring', all((t) => t.ring && t.spokes && t.cabinsTall));
   check('park: two minecarts, one in the station; the station, every stall and the wheel reached on foot from the gate', all((t) => t.carts === 2 && Object.values(t.reach).every(Boolean)), ts.map(([n, , t]) => `${n}: ${JSON.stringify(t.reach)}`).join('; '));
   {
     const r = cities[1][1];

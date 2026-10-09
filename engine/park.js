@@ -122,24 +122,58 @@ export function amusementPark(world, lot, face, cfg, rng, G, signTags) {
   const carts = [[...stationAt.rail], pos(s - 2, v0, G + 1)];
 
   // ---- the Ferris wheel: a ring, spokes, an axle, eight cabins, legs ------------------
+  // Every line of it joined block to block by a face (a ring picked block by block
+  // near the circle met only at corners, and showed holes; iron bars join only
+  // sideways, and a sloping spoke of them stood in posts): a closed ring of white
+  // concrete, eight spokes of light grey concrete from the axle to it, eight cabins
+  // two high just outside it, a straight leg either side down to the ground.
   const r = W === 23 ? 6 : W === 19 ? 5 : 3, cu = mid, cv = v1 - 5, cy = G + r + 3;
-  const wheel = { rim: [], cabins: [], axle: pos(cu, cv, cy) };
-  for (let dx = -r; dx <= r; dx++) for (let dy = -r; dy <= r; dy++) {
-    const d = Math.hypot(dx, dy);
-    if (Math.abs(d - r) < 0.5) { put(cu + dx, cv, cy + dy, MAT.C_WHITE); wheel.rim.push(pos(cu + dx, cv, cy + dy)); }
+  const line4 = (a, b) => {                      // a line from a to b, each step a face away
+    const out = [[a[0], a[1]]]; let [x, y] = a;
+    const n = Math.max(Math.abs(b[0] - a[0]), Math.abs(b[1] - a[1])) * 4 || 1;
+    for (let t = 1; t <= n; t++) {
+      const tx = Math.round(a[0] + ((b[0] - a[0]) * t) / n), ty = Math.round(a[1] + ((b[1] - a[1]) * t) / n);
+      if (tx === x && ty === y) continue;
+      if (tx !== x && ty !== y) out.push([tx, y]);   // (the corner filled: a face step, then the next)
+      out.push([tx, ty]); x = tx; y = ty;
+    }
+    return out;
+  };
+  const wheel = { rim: [], spokes: [], cabins: [], axle: pos(cu, cv, cy), r, plane: { cu, cv, cy } };
+  // the ring: the circle stepped round, every diagonal step filled to a face step
+  const ring = [];
+  for (let k = 0; k < 720; k++) {
+    const a = (k * Math.PI) / 360, p = [Math.round(r * Math.cos(a)), Math.round(r * Math.sin(a))];
+    const last = ring[ring.length - 1];
+    if (last && last[0] === p[0] && last[1] === p[1]) continue;
+    if (last && last[0] !== p[0] && last[1] !== p[1]) ring.push([p[0], last[1]]);
+    if (!(ring.length && ring[0][0] === p[0] && ring[0][1] === p[1])) ring.push(p);
   }
+  const ringSet = new Set(ring.map(([a, b]) => a + ',' + b));
+  for (const [dx, dy] of [...ringSet].map((k) => k.split(',').map(Number))) { put(cu + dx, cv, cy + dy, MAT.C_WHITE); wheel.rim.push(pos(cu + dx, cv, cy + dy)); }
   const COLOURS = [MAT.C_RED, MAT.C_BLUE, MAT.LINE, MAT.C_LBLUE || MAT.C_BLUE];
   for (let k = 0; k < 8; k++) {
     const a = (k * Math.PI) / 4, ex = Math.cos(a), ey = Math.sin(a);
-    for (let t = 1; t < r; t++) put(cu + Math.round(ex * t), cv, cy + Math.round(ey * t), MAT.BARS);   // a spoke
-    const [x, y] = [cu + Math.round(ex * (r + 1)), cy + Math.round(ey * (r + 1))];
-    put(x, cv, y, COLOURS[k % COLOURS.length]); wheel.cabins.push(pos(x, cv, y));                 // its cabin
+    const end = [Math.round(ex * r), Math.round(ey * r)];
+    const spoke = line4([0, 0], end).filter(([a2, b2]) => !(a2 === 0 && b2 === 0) && !ringSet.has(a2 + ',' + b2));
+    for (const [dx, dy] of spoke) put(cu + dx, cv, cy + dy, MAT.C_LGRAY);
+    wheel.spokes.push(spoke.map(([dx, dy]) => pos(cu + dx, cv, cy + dy)));
+    // its cabin, two high, hanging just outside the ring where the spoke meets it
+    // (out past the ring until neither of its blocks is on it: one past the rim on a
+    // diagonal rounds back on to the ring, and its colour took a piece of the white)
+    let t = r + 1, cx = Math.round(ex * t), cyy = Math.round(ey * t);
+    while (ringSet.has(cx + ',' + cyy) || ringSet.has(cx + ',' + (cyy - 1))) { t += 0.5; cx = Math.round(ex * t); cyy = Math.round(ey * t); }
+    const [x, y] = [cu + cx, cy + cyy];
+    put(x, cv, y, COLOURS[k % COLOURS.length]); put(x, cv, y - 1, COLOURS[k % COLOURS.length]);
+    wheel.cabins.push([pos(x, cv, y), pos(x, cv, y - 1)]);
   }
   for (const dv of [-1, 0, 1]) put(cu, cv + dv, cy, MAT.IRON);                                     // the axle
-  for (const dv of [-1, 1]) for (let t = 0; t <= r + 1; t++) {                                      // the legs, either side
-    const y = G + 1 + t, off = Math.round(((r + 1 - t) * 4) / (r + 1));
-    if (y >= cy) break;
-    put(cu - off, cv + dv, y, MAT.STONEBRICK); put(cu + off, cv + dv, y, MAT.STONEBRICK);
+  // the legs: straight, from the ground out to the axle's ends, either side of the wheel
+  wheel.legs = [];
+  for (const dv of [-1, 1]) for (const side of [-1, 1]) {
+    const leg = line4([side * (r - 1), G + 1], [0, cy - 1]);
+    for (const [dx, y] of leg) put(cu + dx, cv + dv, y, MAT.STONEBRICK);
+    wheel.legs.push(leg.map(([dx, y]) => pos(cu + dx, cv + dv, y)));
   }
   sign(cu, cv - 3, G + 1, neg(back), 'Ferris wheel');
 
