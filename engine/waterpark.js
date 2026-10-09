@@ -10,7 +10,7 @@
 // - The bubble lift: a glass tube from the big pool's back corner, soul sand under
 //   it, a bubble column all the way up (swim into the corner, and up you go) to a
 //   platform hanging over the deep pool: the high dive, and the boat slide's top.
-// - The boat slide: blue ice in a channel walled with glass, winding round the park
+// - The boat slide: blue ice two lanes wide in a channel walled with glass, winding round the park
 //   a block down at a time (never at a corner), from the platform to the splash
 //   pool, its last rail level with the water. A chest of boats on the platform.
 // - The splash pool, two deep; the kids' pool, one deep, with a waterfall falling
@@ -69,7 +69,7 @@ export function waterPark(world, lot, face, cfg, rng, G, signTags) {
     return { u: [ua, ub], v: [va, vb], depth, cells };
   };
   const big = pool(2, mid - 2, 5, lv, 3);
-  const splash = pool(mid + 2, W - 3, 5, 8, 2);
+  const splash = pool(mid + 2, W - 2, 5, 8, 2);      // (out to the slide's outer lane)
   const kids = W >= 19 ? pool(mid + 2, W - 4, 11, 14, 1) : pool(mid + 2, W - 4, 10, 12, 1);
 
   // ---- the bubble lift: soul sand under the big pool's back corner, a column up a glass tube
@@ -93,35 +93,45 @@ export function waterPark(world, lot, face, cfg, rng, G, signTags) {
   sign(3, lv + 1, DECK + 1, neg(back), 'Lift: swim into the corner');
 
   // ---- the boat slide: from the platform round to the splash pool -------------------------
+  // Two lanes wide (a boat is a block and a half across: in one, between glass, it
+  // stuck): each step of the route is a pair of blocks side by side, both at the
+  // same height, the glass walls outside the pair; a square two by two at the turn.
   const route = [];
-  for (let u = 6; u <= W - 3; u++) route.push([u, lv]);
-  for (let v = lv - 1; v >= 9; v--) route.push([W - 3, v]);
-  const corner = W - 3 - 6;                                          // the turn's index
-  const can = []; for (let i = 1; i < route.length; i++) if (i !== corner && i - 1 !== corner) can.push(i);
+  for (let u = 6; u <= W - 2; u++) route.push([[u, lv - 1], [u, lv]]);
+  for (let v = lv - 2; v >= 9; v--) route.push([[W - 3, v], [W - 2, v]]);
+  const lenA = W - 2 - 6 + 1;
+  const turn = new Set([lenA - 2, lenA - 1, lenA, lenA + 1]);      // (the turn's square, and two steps out of it, straight, before any drop)
+  const can = []; for (let i = 1; i < route.length; i++) if (!turn.has(i)) can.push(i);
   const drops = new Set(); for (let k = 0; k < H; k++) drops.add(can[Math.floor(((k + 0.5) * can.length) / H)]);
   const slide = [];
   let y = TOP;
-  route.forEach(([u, v], i) => {
+  route.forEach((pair, i) => {
     if (drops.has(i)) y--;
-    for (let yy = DECK + 1; yy < y; yy++) put(u, v, yy, MAT.SMOOTH_QUARTZ);       // its pillar
-    put(u, v, y, BLUE_ICE());
-    slide.push({ u, v, floor: pos(u, v, y) });
+    const floors = pair.map(([u, v]) => {
+      for (let yy = DECK + 1; yy < y; yy++) put(u, v, yy, MAT.SMOOTH_QUARTZ);     // its pillar
+      put(u, v, y, BLUE_ICE());
+      return pos(u, v, y);
+    });
+    slide.push({ floors, floor: floors[0] });
   });
-  // its walls: glass a block high either side, wherever the next or last cell is not
-  const onRoute = new Set(route.map(([u, v]) => u + ',' + v));
-  slide.forEach(({ u, v, floor }, i) => {
+  // its walls: glass a block high round the outside of the two lanes
+  const onRoute = new Set(route.flat().map(([u, v]) => u + ',' + v));
+  route.forEach((pair, i) => pair.forEach(([u, v]) => {
+    const fy = slide[i].floors[0][1];
     for (const [du, dv] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
       const nu = u + du, nv = v + dv;
       if (onRoute.has(nu + ',' + nv)) continue;
       if (i === 0 && nu === 5) continue;                              // the platform it starts from
-      if (i === slide.length - 1 && nv === 8) continue;               // the splash pool it ends in
-      put(nu, nv, floor[1] + 1, MAT.GLASS);
+      if (i === route.length - 1 && nv === 8) continue;               // the splash pool it ends in
+      put(nu, nv, fy + 1, MAT.GLASS);
     }
-  });
-  sign(mid + 2, 9, DECK + 1, neg(back), 'Boat slide splash pool');
+  }));
+  sign(mid + 1, 9, DECK + 1, neg(back), 'Boat slide splash pool');
 
   // ---- the kids' pool's waterfall: falling inside a glass column -------------------------
-  const [wu, wv] = [kids.u[0], kids.v[1]];
+  // (at the kids' pool's front corner: at its back one, on the smaller park, its
+  // glass fell on the slide's back run)
+  const [wu, wv] = [kids.u[0], kids.v[0]];
   const falls = [];
   for (let yy = DECK + 1; yy <= DECK + 3; yy++) {
     put(wu, wv, yy, yy === DECK + 3 ? MAT.WATER : FALLING()); falls.push(pos(wu, wv, yy));

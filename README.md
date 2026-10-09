@@ -1,4 +1,4 @@
-# Polis v0.49.0
+# Polis v0.49.1
 
 *Created with help from Claude AI.*
 
@@ -771,6 +771,21 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.49.1** — The boat slide wide enough for a boat.
+
+A boat is a block and a half across, and the slide was one block wide between its
+glass walls: the boat stuck. Now it is two lanes wide (waterpark.js): each step a
+pair of blocks of blue ice side by side, both at one height, the glass outside
+the pair, a square two by two at the turn and two straight steps after it before
+any drop; the splash pool runs out under both lanes. The kids' waterfall moved to
+the pool's front corner (at its back one, on the smaller park, its glass fell on
+the slide).
+
+2zzg checks the slide two lanes wide, both ice, side by side, level, clear above
+and both running into the splash pool, every step a pair touching the last, and
+no drop at a turn (judged by each pair's middle, the way the boat goes) (14
+checks).
 
 **0.49.0** — The lazy river.
 

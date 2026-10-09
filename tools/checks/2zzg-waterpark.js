@@ -42,18 +42,28 @@ function inspectWaterPark(r) {
   // the slide: ice the whole way, a face step each cell, down at most one, never at a corner, walled, clear above; level with the pool at its end
   {
     const S = P.slide.map((s) => L(s.floor));
-    const okSteps = S.every((p, i) => i === 0 || (Math.abs(p[0] - S[i - 1][0]) + Math.abs(p[2] - S[i - 1][2]) === 1 && (p[1] === S[i - 1][1] || p[1] === S[i - 1][1] - 1)));
-    const dirs = S.map((p, i) => (i === 0 ? null : [p[0] - S[i - 1][0], p[2] - S[i - 1][2]]));
-    const turn = (i) => i > 0 && i < S.length - 1 && (dirs[i][0] !== dirs[i + 1][0] || dirs[i][1] !== dirs[i + 1][1]);
-    const noDropAtTurn = S.every((p, i) => i === 0 || p[1] === S[i - 1][1] || (!turn(i) && !turn(i - 1)));
+    // (each step a pair, touching the pair before it by a face, level with it or a block down)
+    const Pr = P.slide.map((st) => (st.floors || [st.floor]).map(L));
+    const okSteps = Pr.every((pr, i) => i === 0 || (pr.some((a) => Pr[i - 1].some((b) => Math.abs(a[0] - b[0]) + Math.abs(a[2] - b[2]) === 1)) && (pr[0][1] === Pr[i - 1][0][1] || pr[0][1] === Pr[i - 1][0][1] - 1)));
+    // (a turn judged by each pair's middle, the way the boat goes)
+    const C = Pr.map((pr) => [pr.reduce((a, q) => a + q[0], 0) / pr.length, pr.reduce((a, q) => a + q[2], 0) / pr.length]);
+    const dirs = C.map((c, i) => (i === 0 ? null : [Math.sign(c[0] - C[i - 1][0]), Math.sign(c[1] - C[i - 1][1])]));
+    const turn = (i) => i > 0 && i < C.length - 1 && (dirs[i][0] !== dirs[i + 1][0] || dirs[i][1] !== dirs[i + 1][1]);
+    const noDropAtTurn = Pr.every((pr, i) => i === 0 || pr[0][1] === Pr[i - 1][0][1] || (!turn(i) && !turn(i - 1)));
     const ice = S.every((p) => blk(...p) === 'blue_ice');
     const clear = S.every(([x, y, z]) => blk(x, y + 1, z) === 'air' && blk(x, y + 2, z) === 'air');
-    const onRoute = new Set(S.map(([x, , z]) => x + ',' + z));
+    const onRoute = new Set(P.slide.flatMap((st) => (st.floors || [st.floor]).map(L)).map(([x, , z]) => x + ',' + z));
     const walled = S.every(([x, y, z], i) => [[1, 0], [-1, 0], [0, 1], [0, -1]].every(([a, c]) => { const k = (x + a) + ',' + (z + c); if (onRoute.has(k)) return true; const n = blk(x + a, y + 1, z + c); return n === 'glass' || (i === 0 || i === S.length - 1); }));
     const last = S[S.length - 1], first = S[0];
     const intoPool = [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([a, c]) => WET(blk(last[0] + a, last[1], last[2] + c))) && last[1] === fr.DECK + lift;
     const fromTop = first[1] === fr.TOP + lift;
-    out.slide = { okSteps, noDropAtTurn, ice, clear, walled, intoPool, fromTop, length: S.length };
+    // two lanes wide (a boat is a block and a half across): both lanes ice, side by
+    // side, the same height, clear above; and into the splash pool both lanes
+    const lanes = P.slide.every((st) => st.floors && st.floors.length === 2 && (() => { const [a, b] = st.floors.map(L);
+      return a[1] === b[1] && Math.abs(a[0] - b[0]) + Math.abs(a[2] - b[2]) === 1 && [a, b].every(([x, y, z]) => blk(x, y, z) === 'blue_ice' && blk(x, y + 1, z) === 'air' && blk(x, y + 2, z) === 'air'); })());
+    const lastPair = P.slide[P.slide.length - 1].floors.map(L);
+    const bothIn = lastPair.every(([x, y, z]) => [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([a, c]) => WET(blk(x + a, y, z + c))));
+    out.slide = { okSteps, noDropAtTurn, ice, clear, walled, intoPool, fromTop, length: S.length, lanes, bothIn };
   }
   out.chest = blk(...L(P.chest)) === 'chest';
   out.pools = ['big', 'splash', 'kids'].every((k) => { const pl = P.pools[k], [u, v] = pl.cells[0], [x, z] = fr.at(u, v); return [...Array(pl.depth).keys()].every((d) => blk(x, fr.DECK - d + lift, z) === 'water') && SOLID(blk(x, fr.DECK - pl.depth + lift, z)); });
@@ -140,6 +150,7 @@ export default async function run(ctx) {
   check('water park: every block of water held in (water or a solid block on its four sides and under it)', all((t) => t.held), ts.map(([n, t]) => `${n}: ${t.wet} wet ${t.leakEg}`).join('; '));
   check('water park: the lift, soul sand and a bubble column all the way up, the tube closed, the platform to step out on', all((t) => t.liftOk));
   check('water park: the boat slide blue ice, a face step a block, down at most one and never at a turn, walled, clear above', all((t) => t.slide.ice && t.slide.okSteps && t.slide.noDropAtTurn && t.slide.walled && t.slide.clear));
+  check('water park: the boat slide two lanes wide (a boat is a block and a half across: one lane, it stuck), both lanes ice, side by side, level, clear, both running into the splash pool', all((t) => t.slide.lanes && t.slide.bothIn));
   check('water park: the slide from the platform\'s height down level with the splash pool', all((t) => t.slide.fromTop && t.slide.intoPool));
   check('water park: the pools at their depths, the waterfall, the chest of boats; the deck reached up the steps', all((t) => t.pools && t.falls && t.chest && t.reachDeck));
   // the lazy river, beside the water park
