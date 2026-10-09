@@ -523,6 +523,19 @@ export function doorId(kind, dir, upper, hinge = 0) {
   }, { passable: true });
 }
 
+// An iron door, the same facing and hinge rules as every door (the cardinal a
+// quarter turn on from the Java facing): opens only with redstone (the factory's
+// pressure plates). Written with its facing unrotated, the factory's doors stood
+// a quarter turn out: shut, they looked open, and opened, they came apart.
+export function ironDoorId(dir, upper, hinge = 0) {
+  return MATERIALS.add(null, 'minecraft:iron_door', '#c8c8c8', {
+    'minecraft:cardinal_direction': S(DOOR_CARDINAL[dir & 3]),
+    door_hinge_bit: B(hinge),
+    open_bit: B(0),
+    upper_block_bit: B(upper ? 1 : 0),
+  }, { passable: true });
+}
+
 // ---- stairs ----------------------------------------------------------------
 // Bedrock stairs states: weirdo_direction (0=east,1=west,2=south,3=north),
 // upside_down_bit.

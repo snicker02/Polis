@@ -58,6 +58,20 @@ function inspectFactory(r) {
   // the doors: every plate opens a door beside it
   out.doors = F.plates.every((p) => { const s = simulate(L(p)); return blk(...L(p)) === 'stone_pressure_plate' && F.doors.some((d) => blk(...L(d)) === 'iron_door' && s.powered(L(d))); });
   // the siding: a cart on the detector lights its lamp underneath and the one beside
+  // the shuttle: at both ends a solid stop, and powered rails before it on blocks of redstone
+  out.shuttle = F.siding.stops.length === 2 && F.siding.stops.every((p) => SOLID(blk(...L(p))))
+    && F.siding.boosters.length === 4 && F.siding.boosters.every((p) => blk(...L(p)) === 'golden_rail' && blk(L(p)[0], L(p)[1] - 1, L(p)[2]) === 'redstone_block');
+  // the doors: the facing written as every building's is (a quarter turn on: north
+  // is "east"), out to the street; the same facing both; the hinges opposite, on the outer edges
+  {
+    const CARD = { north: 'east', south: 'west', east: 'south', west: 'north' };
+    const [d0, d1] = F.doors.map(L), out0 = st(...d0, 'minecraft:cardinal_direction'), out1 = st(...d1, 'minecraft:cardinal_direction');
+    const [bx, bz] = fr.at(fr.mid, 0), [fx, fz] = fr.at(fr.mid, 2), street = bz < fz ? 'north' : bz > fz ? 'south' : bx < fx ? 'west' : 'east';
+    const CW = { north: [1, 0], east: [0, 1], south: [-1, 0], west: [0, -1] }[street];
+    const along = (d1[0] - d0[0]) * CW[0] + (d1[2] - d0[2]) * CW[1];
+    const h0 = st(...d0, 'door_hinge_bit'), h1 = st(...d1, 'door_hinge_bit');
+    out.doorFacing = out0 === CARD[street] && out1 === CARD[street] && h0 !== h1 && (along > 0 ? h1 === 1 : h0 === 1);
+  }
   { const s = simulate(L(F.siding.detector)); out.siding = blk(...L(F.siding.detector)) === 'detector_rail' && s.powered(L(F.siding.under)) && s.powered(L(F.siding.beside)) && blk(...L(F.siding.under)) === 'redstone_lamp' && blk(...L(F.siding.beside)) === 'redstone_lamp'; }
   // the assembly line: the water a step deeper each block from its source, held in, over the hopper into the chest
   {
@@ -82,6 +96,47 @@ function inspectFactory(r) {
     out.wide = F.wide;
     out.reach = { controlRoom: reach(2, fr.FRONT + 4), line: reach(fr.LU + 3, fr.L0 + 2), siding: reach(fr.TU - 1, fr.DET) };
   }
+  return out;
+}
+function inspectWorkshop(r) {
+  const K = r.landmarks.find((L) => L.kind === 'workshop'), F = r.landmarks.find((L) => L.kind === 'factory');
+  if (!K) return { built: false, factory: !!F };
+  const w = r.world, fr = K.frame;
+  const def = (x, y, z) => { const id = w.get(x, y, z); return id < 0 ? null : MATERIALS.def(id); };
+  const blk = (x, y, z) => { const d = def(x, y, z); return d ? d.block.replace('minecraft:', '') : 'air'; };
+  const st = (x, y, z, k) => { const d = def(x, y, z); const v = d && d.states && d.states[k]; return v === undefined ? undefined : (v.value ?? v); };
+  const [hx, hz] = fr.at(2, 8); let lift = 0; for (let d = -3; d <= 8; d++) if (blk(hx, K.door[1] - 1 + d, hz) === 'smooth_stone' && blk(hx, K.door[1] + d, hz) === 'air') { lift = d; break; }
+  const L = ([x, y, z]) => [x, y + lift, z];
+  const key = (p) => p.join(','), N6 = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
+  const SOLID = (b) => !['air', 'water'].includes(b) && !/lever|button|redstone_wire|pressure_plate|rail|door|torch|lantern|sign|daylight/.test(b);
+  // one source on: a lever or button powers the block it is on (here: under it); a
+  // sensor is a source; a mechanism works beside a source or a strongly powered block
+  const simulate = (src) => {
+    const strong = new Set(), under = [src[0], src[1] - 1, src[2]];
+    if (SOLID(blk(...under))) strong.add(key(under));
+    return (p) => N6.some(([a, b, c]) => { const n = key([p[0] + a, p[1] + b, p[2] + c]); return n === key(src) || strong.has(n); }) || strong.has(key(p));
+  };
+  const out = { built: true, lift };
+  out.smelters = K.smelters.every((s) => blk(...L(s.out)) === 'chest' && blk(...L(s.down)) === 'hopper' && st(...L(s.down), 'facing_direction') === 0
+    && /furnace|smoker/.test(blk(...L(s.furnace))) && blk(...L(s.feed)) === 'hopper' && st(...L(s.feed), 'facing_direction') === 0 && blk(...L(s.input)) === 'chest'
+    && blk(L(s.input)[0], L(s.input)[1] + 1, L(s.input)[2]) === 'air');
+  out.presses = K.presses.every((p) => { const powered = simulate(L(p.control)); return blk(...L(p.piston)) === 'sticky_piston' && st(...L(p.piston), 'facing_direction') === 1 && blk(...L(p.block)) === 'iron_block'
+    && blk(L(p.block)[0], L(p.block)[1] + 1, L(p.block)[2]) === 'air' && (p.button ? blk(...L(p.control)) === 'wooden_button' : blk(...L(p.control)) === 'lever') && powered(L(p.piston)); });
+  out.notes = K.notes.every((n) => { const powered = simulate(L(n.button)); return blk(...L(n.note)) === 'noteblock' && blk(...L(n.button)) === 'wooden_button' && powered(L(n.note)) && blk(...L(n.under)) !== 'air'; });
+  out.sounds = new Set(K.notes.map((n) => blk(...L(n.under)))).size;
+  out.nightLights = K.nightLights.every((n) => blk(...L(n.sensor)) === 'daylight_detector_inverted' && blk(...L(n.lamp)) === 'redstone_lamp' && simulate(L(n.sensor))(L(n.lamp)));
+  // on foot: to the smelters, the presses, the bench
+  const pass = (b) => b === 'air' || /sign|lantern/.test(b);
+  // (kept within the workshop's lot: let out on to the pavement, a walk can wander
+  // the city's streets and run out of steps before it goes in)
+  const inLot = (x, z) => x >= K.lot.x0 && x <= K.lot.x1 && z >= K.lot.z0 && z <= K.lot.z1;
+  const stand = (x, y, z) => inLot(x, z) && pass(blk(x, y, z)) && pass(blk(x, y + 1, z)) && SOLID(blk(x, y - 1, z));
+  // (from the doorway itself: the pavement outside it may hold a lamp post or a tree)
+  const [dx0, dz0] = fr.at(fr.mid, 0), s0 = [dx0, K.door[1] + lift, dz0], walk = new Set([key(s0)]), q = [s0];
+  while (q.length && walk.size < 20000) { const [a, b, c] = q.pop(); for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) for (const dy of [0, 1, -1]) { const n = [a + dx, b + dy, c + dz]; if (walk.has(key(n)) || !stand(...n)) continue; walk.add(key(n)); q.push(n); } }
+  const reach = (u, v) => { const [x, z] = fr.at(u, v); return walk.has(key([x, K.door[1] + lift, z])); };
+  out.reach = { smelters: reach(6, fr.D - 3), presses: reach(6, 7), bench: reach(5, 2) };
+  if (F) { const mid = (l) => [(l.x0 + l.x1) / 2, (l.z0 + l.z1) / 2]; out.nearFactory = Math.round(Math.hypot(mid(K.lot)[0] - mid(F.lot)[0], mid(K.lot)[1] - mid(F.lot)[1])); }
   return out;
 }
 
@@ -113,9 +168,20 @@ export default async function run(ctx) {
   check('factory: each panel lever lights its own lamp and no other (simulated)', all((t) => t.panel));
   check('factory: the master switch lights the whole bench of lamps along its dust (simulated)', all((t) => t.master && t.benchSignalMin >= 1), ts.map(([, , t]) => t.benchSignalMin).join(', '));
   check('factory: every pressure plate opens an iron door beside it (simulated)', all((t) => t.doors));
+  check('factory: the doors faced as every building\'s (the cardinal a quarter turn on: they stood a quarter turn out), the hinges on the outer edges', all((t) => t.doorFacing));
+  check('factory: the siding shuttles: a stop at each end, two powered rails before it on blocks of redstone (on a fitted city too)', all((t) => t.shuttle));
   check('factory: a cart on the detector rail lights the lamp under it and the one beside (simulated), on a fitted city too', all((t) => t.siding));
   check('factory: the assembly line\'s water a level deeper each block from its source, held in, over a hopper facing into the chest; four workstations', all((t) => t.line.stepping && t.line.held && t.line.hopper && t.line.stations === 4));
   check('factory: both chimneys smoking; the control room, the line and the siding reached on foot through the doors', all((t) => t.chimneys && Object.values(t.reach).every(Boolean)), ts.map(([n, , t]) => `${n}: ${JSON.stringify(t.reach)}`).join('; '));
+  // the workshop, beside the factory: its machines (simulated as the factory's)
+  {
+    const ws = [...ts.map(([n, r]) => [n, inspectWorkshop(r)]), ['small blocks', inspectWorkshop(generateCity({ ...DEFAULTS, ...L, size: 256, seed: 1, minBlock: 10 }))]];
+    check('workshop: built with the factory, near it (flat, fitted, small blocks)', ws.every(([, w]) => w.built && w.nearFactory !== undefined && w.nearFactory <= 100), ws.map(([n, w]) => `${n}: ${w.nearFactory}`).join(', '));
+    check('workshop: three smelters, each a chest, a hopper down, the furnace, a hopper down, a chest, room to open the top one', ws.every(([, w]) => w.smelters));
+    check('workshop: both presses, a sticky piston up with its iron block, worked by its lever and its button (simulated)', ws.every(([, w]) => w.presses));
+    check('workshop: ten note blocks on ten different sounding blocks, each played by its button (simulated)', ws.every(([, w]) => w.notes && w.sounds === 10));
+    check('workshop: the night lights, each sensor lighting the lamp under it (simulated); every machine reached on foot', ws.every(([, w]) => w.nightLights && Object.values(w.reach).every(Boolean)), ws.map(([n, w]) => `${n}: ${JSON.stringify(w.reach)}`).join('; '));
+  }
   {
     const r = cities[1][1];
     const ft = buildMobStructures(r.spawns, { seed: 1 }).filter((t) => t.name.startsWith('m_factory_'));

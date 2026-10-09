@@ -1,4 +1,4 @@
-# Polis v0.45.1
+# Polis v0.46.0
 
 *Created with help from Claude AI.*
 
@@ -771,6 +771,50 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.46.0** — The factory's workshop: more machines.
+
+With the factory comes a workshop (factory.js), on the nearest lot that takes it
+(thirteen by fifteen), brick, six clear inside. Its machines face straight up or
+down wherever a facing matters, since a sideways facing is where a block can
+stand a quarter turn out (as the factory's doors did):
+
+- Three automatic smelters on the back wall, a furnace, a blast furnace and a
+  smoker: a chest, a hopper down into the furnace, the furnace, a hopper down out
+  of it, a chest. Ore or food in the top chest, fuel in the furnace, the smelted
+  out at the bottom.
+- Two presses: a sticky piston facing up with an iron block on it, one worked by
+  a lever on the console beside it (it holds), one by a button (a stamp).
+- The instrument bench: ten note blocks, each on the block that gives its sound
+  (bass drum, snare, hat, bass, bell, flute, chime, guitar, xylophone, iron
+  xylophone), a button on top of each.
+- Night lights: inverted daylight sensors on the roof over lamps set in it.
+
+The lighting keeps off pistons, buttons, note blocks and daylight sensors.
+
+2zze checks the workshop built near the factory on flat, fitted and small-block
+cities; every smelter's stack, both presses, all ten notes on ten sounds and the
+night lights through the redstone simulator; every machine reached on foot (18
+checks).
+
+**0.45.2** — The factory's doors the right way round; the siding shuttles.
+
+- The factory's iron doors stood a quarter turn out: shut, they looked open, and
+  when a plate opened them they swung into the doorway and did not meet. A
+  Bedrock door's cardinal direction is a quarter turn on from its facing (north
+  is "east"), as Polis has written every building's door since 0.1.8; the
+  factory's skipped it. Now ironDoorId (materials.js) writes them by the same
+  table, both facing the street, the hinges on the outer edges as every double
+  door's.
+- The freight siding shuttles: at each end a stone brick stop and two powered
+  rails before it on blocks of redstone. A cart runs into a stop, comes back, and
+  the powered rails send it to the other end, past the detector each time. On a
+  fitted city the transit's pass bedded the rails in gravel, which took the
+  redstone blocks: they are laid again with the rails, last.
+
+2zze checks the doors faced as every building's with the hinges outside, and the
+shuttle's stops, powered rails and redstone blocks, on a fitted city too (13
+checks).
 
 **0.45.1** — The factory fits small-block cities.
 
