@@ -1,4 +1,4 @@
-# Polis v0.50.0
+# Polis v0.51.0
 
 *Created with help from Claude AI.*
 
@@ -771,6 +771,34 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.51.0** — A railway station on the line.
+
+A new option, "A railway station on the line" (off by default; it needs Transit
+set to Railway or Trams), builds a station (station.js) where the railway really
+runs: on a lot whose street front a line runs along, straight and at grade,
+facing that line, by a line's stop where there is one (landmarks.js: railFront
+finds the side, the rail's cells and the stop; stationFit, shared with the
+builder, takes only a lot the rail runs along the hall's whole front). Fifteen by
+thirteen, or eleven by eleven, brick on a stone brick course:
+
+- the front on the platform, a doorway three wide and tall windows, and over the
+  door a clock tower: a ring of quartz round a dark face, a real clock in an item
+  frame on it (it shows the game's time of day);
+- the platform canopy, from the front out over the pavement and the track to a
+  block past the rail, five over the ground so a rider has room, lanterns under it
+  over the pavement and never over the track; laid only where the street has
+  nothing already;
+- benches before the front facing the track, and inside the booking hall rows of
+  benches facing the platform doors, the ticket counter, a departures board.
+
+With roads only, the summary says a station needs a railway or trams.
+
+New section 2zzi (9 checks): built with the railway, with trams and on a fitted
+city, by a line's stop; the rail along its whole front still there; the canopy
+over the track with nothing in the three cells over the rail; the clock; benches;
+the counter reached on foot from the platform; none with roads only, and the
+summary saying why; every block one of Bedrock's own states.
 
 **0.50.0** — A botanical garden.
 

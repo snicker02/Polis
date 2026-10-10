@@ -32,6 +32,7 @@ import { zoo, aquarium } from './zoo.js';
 import { museum } from './museum.js';
 import { hospital, fireStation } from './services.js';
 import { policeStation, theatre, hotel } from './civic.js';
+import { trainStation, stationFit } from './station.js';
 import { factory, workshop } from './factory.js';
 import { amusementPark } from './park.js';
 import { waterPark, lazyRiver } from './waterpark.js';
@@ -43,7 +44,7 @@ const NEED = {                       // [shorter side, longer side] of the lot
   townhall: [13, 15], clocktower: [9, 9], library: [11, 12], market: [12, 12],
   church: [13, 15], mansion: [15, 20], school: [17, 25], lighthouse: [9, 9], castle: [13, 13],
   townsquare: [13, 13], stadium: [17, 21], cemetery: [12, 14], allotments: [13, 13], bandstand: [9, 9],
-  jail: [15, 23], zoo: [15, 24], aquarium: [11, 20], museum: [15, 24], hospital: [15, 23], firestation: [12, 20], police: [13, 15], theatre: [17, 20], hotel: [13, 19], factory: [13, 18], workshop: [13, 15], park: [15, 19], waterpark: [15, 19], lazyriver: [14, 15], garden: [15, 19],
+  jail: [15, 23], zoo: [15, 24], aquarium: [11, 20], museum: [15, 24], hospital: [15, 23], firestation: [12, 20], police: [13, 15], theatre: [17, 20], hotel: [13, 19], factory: [13, 18], workshop: [13, 15], park: [15, 19], waterpark: [15, 19], lazyriver: [14, 15], garden: [15, 19], station: [11, 11],
 };
 
 // Mark the lots, each kind at most once:
@@ -51,7 +52,53 @@ const NEED = {                       // [shorter side, longer side] of the lot
 //   school      halfway out towards the edge
 //   lighthouse  beside the canal (or, with no canal, out at the edge)
 //   castle      on the highest hill
-export function chooseLandmarks(plan, cfg, hills = null, canal = null) {
+// The street side of a lot along which a railway (or tram) line runs straight and
+// at grade, near enough to board from the lot's front: which side, how far out the
+// rail lies, its cells, and whether a line's stop (where its cart turns) is by it.
+// The station is built facing it, its platform canopy reaching out over the track.
+export function railFront(plan, lot, transit, minRun = 11) {
+  if (!transit || !transit.lines || !transit.lines.length) return null;
+  const cells = new Map(), ends = new Set();
+  for (const l of transit.lines) {
+    if (l.axis !== 'x' && l.axis !== 'z') continue;
+    const y0 = Math.min(...l.cells.map((c) => c[1]));
+    for (const [x, y, z] of l.cells) if (y === y0) cells.set(x + ',' + z, l.axis);
+    for (const [x, , z] of l.stations || []) ends.add(x + ',' + z);
+  }
+  const { W, use } = plan;
+  const street = (x, z) => { const u = use[z * W + x]; return u === USE.ROAD || u === USE.SIDEWALK; };
+  let best = null;
+  for (const side of ['north', 'south', 'west', 'east']) {
+    const alongX = side === 'north' || side === 'south';
+    const [a0, a1] = alongX ? [lot.x0, lot.x1] : [lot.z0, lot.z1];
+    for (let k = 2; k <= 6; k++) {
+      const row = side === 'north' ? lot.z0 - k : side === 'south' ? lot.z1 + k : side === 'west' ? lot.x0 - k : lot.x1 + k;
+      const at = (a) => (alongX ? [a, row] : [row, a]);
+      // the longest straight run of one line's rail along this side
+      let run = null, cur = null;
+      for (let a = a0; a <= a1; a++) {
+        const [x, z] = at(a);
+        const ok = cells.get(x + ',' + z) === (alongX ? 'x' : 'z');
+        if (ok) { cur = cur ? { a: cur.a, b: a } : { a, b: a }; if (!run || cur.b - cur.a > run.b - run.a) run = cur; } else cur = null;
+      }
+      if (!run || run.b - run.a + 1 < minRun) continue;
+      // between the lot and the rail only street (no other lot in the way)
+      let clear = true;
+      for (let a = run.a; a <= run.b && clear; a++) for (let d = 1; d < k; d++) {
+        const [x, z] = alongX ? [a, side === 'north' ? lot.z0 - d : lot.z1 + d] : [side === 'west' ? lot.x0 - d : lot.x1 + d, a];
+        if (!street(x, z)) { clear = false; break; }
+      }
+      if (!clear) continue;
+      const stop = [...Array(run.b - run.a + 1).keys()].some((i) => { const [x, z] = at(run.a + i); return ends.has(x + ',' + z); });
+      const r = { side, k, a: run.a, b: run.b, len: run.b - run.a + 1, stop, cells: [...Array(run.b - run.a + 1).keys()].map((i) => at(run.a + i)) };
+      if (!best || (r.stop && !best.stop) || (r.stop === best.stop && r.len > best.len)) best = r;
+      break;
+    }
+  }
+  return best;
+}
+
+export function chooseLandmarks(plan, cfg, hills = null, canal = null, transit = null) {
   if (!cfg.landmarks) return [];
   const [fx, fz] = plan.focal;
   const reach = Math.max(plan.W, plan.D) * 0.45;
@@ -110,6 +157,14 @@ export function chooseLandmarks(plan, cfg, hills = null, canal = null) {
     const nearJail = (c) => { if (!jailLot) return 0; const [a, b] = mid(c.l), [j, k] = mid(jailLot); return Math.hypot(a - j, b - k); };
     const lots = all.filter((c) => fits(c, kind)).sort((p, q) => (jailLot ? nearJail(p) - nearJail(q) : 0) || roomy(p) - roomy(q) || q.d - p.d);
     if (lots.length) { lots[0].l.landmark = kind; out.push(lots[0].l); }
+  }
+  // the station: a lot with a railway (or tram) line running along its street
+  // front, by a line's stop where there is one
+  if (cfg.station) {
+    const cands = all.filter((c) => !c.l.landmark && c.a >= 11 && c.b >= 11)
+      .map((c) => ({ c, r: railFront(plan, c.l, transit) })).filter((x) => x.r && stationFit(x.c.l, x.r))
+      .sort((p, q) => (q.r.stop - p.r.stop) || (q.r.len - p.r.len) || p.c.d - q.c.d);
+    if (cands.length) { const { c, r } = cands[0]; c.l.landmark = 'station'; c.l.rail = r; out.push(c.l); }
   }
   const downtown = all.filter((c) => c.l.style !== 'house' && c.d <= reach).sort((p, q) => p.d - q.d);
   // a walled fortress town: the keep takes the heart of the town first, the
@@ -812,10 +867,11 @@ const BUILDERS = { townhall: townHall, clocktower: clockTower, library, market, 
   park: (w, l, f, c, r, G) => amusementPark(w, l, f, c, r, G, signTags),
   waterpark: (w, l, f, c, r, G) => waterPark(w, l, f, c, r, G, signTags),
   lazyriver: (w, l, f, c, r, G) => lazyRiver(w, l, f, c, r, G, signTags),
-  garden: (w, l, f, c, r, G) => botanicalGarden(w, l, f, c, r, G, signTags) };
+  garden: (w, l, f, c, r, G) => botanicalGarden(w, l, f, c, r, G, signTags),
+  station: (w, l, f, c, r, G) => trainStation(w, l, f, c, r, G, signTags) };
 export const LANDMARK_NAMES = { townhall: 'Town Hall', clocktower: 'Clock Tower', library: 'Library', market: 'Market',
   church: 'Church', school: 'School', lighthouse: 'Lighthouse', castle: 'Castle', mansion: 'Mansion',
-  townsquare: 'Town Square', stadium: 'Stadium', cemetery: 'Cemetery', allotments: 'Allotments', bandstand: 'Bandstand', jail: 'Jail', zoo: 'Zoo', aquarium: 'Aquarium', museum: 'Museum', hospital: 'Hospital', firestation: 'Fire Station', police: 'Police Station', theatre: 'Theatre', hotel: 'Hotel', factory: 'Factory', workshop: 'Workshop', park: 'Amusement Park', waterpark: 'Water Park', lazyriver: 'Lazy River', garden: 'Botanical Garden' };
+  townsquare: 'Town Square', stadium: 'Stadium', cemetery: 'Cemetery', allotments: 'Allotments', bandstand: 'Bandstand', jail: 'Jail', zoo: 'Zoo', aquarium: 'Aquarium', museum: 'Museum', hospital: 'Hospital', firestation: 'Fire Station', police: 'Police Station', theatre: 'Theatre', hotel: 'Hotel', factory: 'Factory', workshop: 'Workshop', park: 'Amusement Park', waterpark: 'Water Park', lazyriver: 'Lazy River', garden: 'Botanical Garden', station: 'Station' };
 
 export function buildLandmark(world, lot, face, cfg, rng, G) {
   const L = BUILDERS[lot.landmark](world, lot, face, cfg, rng, G);

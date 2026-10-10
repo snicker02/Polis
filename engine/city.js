@@ -114,6 +114,7 @@ export const DEFAULTS = {
   park: false,               // an amusement park: a roller coaster to ride, a Ferris wheel, stalls (park.js)
   waterpark: false,          // a water park: pools, a bubble lift, a boat slide, a kids' pool (waterpark.js)
   garden: false,             // a botanical garden: a glass hall of plants from every biome (garden.js)
+  station: false,            // a railway station on the line: a hall, a platform canopy, a clock (station.js)
   terrainBreaks: true,       // on fitted terrain, lots step at their own heights (retaining walls), held only to the street they face
   mixStyles: false,          // several styles, one to a district (districts.js)
   mixList: ['modern', 'medieval', 'eastasian', 'artdeco'],   // the styles ticked for mixing
@@ -344,7 +345,7 @@ export function generateCity(cfgIn, onProgress) {
     }
     for (const k of harbourPlan.cells) { const [hx, hz] = k.split(',').map(Number); hills.elev[hz * W + hx] = 0; }
   }
-  chooseLandmarks(plan, cfg, hills, canal);
+  chooseLandmarks(plan, cfg, hills, canal, transit);
   const landmarks = [];
 
   // ---- lots ----------------------------------------------------------------
@@ -380,7 +381,8 @@ export function generateCity(cfgIn, onProgress) {
   }
   for (const lot of plan.lots) {
     if (lot.landmark) {
-      const L = buildLandmark(world, lot, frontage(plan, lot).side, cfg, rng, GROUND);
+      // (the station faces its railway, whatever street the lot's front is on)
+      const L = buildLandmark(world, lot, lot.rail ? lot.rail.side : frontage(plan, lot).side, cfg, rng, GROUND);
       if (L) {
         landmarks.push(L);
         // a landmark can be more than one building (the mansion's wings): every
@@ -931,6 +933,7 @@ export function generateCity(cfgIn, onProgress) {
     ['theatre', '17 by 20', (L) => `${L.seats.length} seats, ${L.pit.length} note blocks in the pit, red curtains`],
     ['hotel', '13 by 19', (L) => `${L.rooms.length} rooms on ${L.frame.FLOORS - 1} floors, a lobby`],
     ['factory', '13 by 18', (L) => `a control room of ${L.panel.length} switches and a master switch, an assembly line, a freight siding`],
+    ['station', '11 by 11 beside a railway', (L) => `a hall on the line${L.stop ? ' at its stop' : ''}, a platform canopy of ${L.canopy.length} blocks over the track, a clock, ${L.benches.length} benches`],
     ['garden', '15 by 19', (L) => `a glass hall of ${L.beds.length} biomes, ${L.plants.length} plants each on its own soil`],
     ['lazyriver', '14 by 15', (L) => `a ring of four runs, each a step down, and a bubble lift back up`],
     ['waterpark', '15 by 19', (L) => `pools, a bubble lift ${L.frame.H} high, a boat slide of ${L.slide.length} blocks of blue ice, a kids' pool with a waterfall`],
@@ -940,6 +943,10 @@ export function generateCity(cfgIn, onProgress) {
     if (L) stats[kind] = say(L);
     else if (cfg[kind] || (kind === 'workshop' && cfg.factory && landmarks.some((q) => q.kind === 'factory')) || (kind === 'lazyriver' && cfg.waterpark && landmarks.some((q) => q.kind === 'waterpark'))) stats[kind + 'Missing'] = `no lot big enough for the ${kind === 'police' ? 'police station' : kind === 'park' ? 'amusement park' : kind === 'waterpark' ? 'water park' : kind === 'lazyriver' ? 'lazy river' : kind === 'garden' ? 'botanical garden' : kind} (it needs ${need})`;
   }
+  // (a station needs a line to stand on: say so, not that there was no lot)
+  if (cfg.station && !landmarks.some((q) => q.kind === 'station')) stats.stationMissing = !transit || !transit.lines || !transit.lines.length
+    ? 'a station needs a railway or trams to stand by: set Transit to Railway or Trams'
+    : 'no lot beside a straight stretch of the railway (eleven along it) for the station';
   const zoo = landmarks.flatMap((L) => [...(L.animals || []), ...(L.fish || [])]);
   for (const a of zoo) spawns.push({ type: 'mob', kind: a.type, x: a.x, y: a.y, z: a.z, name: a.name, variety: a.variety, group: 'zoo' });
   // the cells whose plant stands in water (the garden's kelp, seagrass, sea pickles):
