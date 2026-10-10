@@ -162,7 +162,9 @@ export default async function run(ctx) {
     // summon reaches only loaded chunks, and a world holds ten ticking areas
     {
       const both = generateCity({ ...DEFAULTS, ...L, size: 256, seed: 7, zoo: true, jail: true });
-      const f2 = functionFiles(buildStructures(both.world, {}), both.world, { namespace: 'test', spawns: both.spawns, zoo: both.zoo, inmates: both.inmates });
+      // (with the mob structures handed in as exportPack hands them: their groups kept)
+      const { buildMobStructures: bms } = await import('../../engine/export.js');
+      const f2 = functionFiles(buildStructures(both.world, {}), both.world, { namespace: 'test', spawns: both.spawns, zoo: both.zoo, inmates: both.inmates, mobTiles: bms(both.spawns, {}) });
       const get = (n) => f2.find((f) => f.fn === 'test/' + n);
       const names = ['zoo', 'zoo_centered', 'jail', 'jail_centered', 'areas', 'areas_centered'];
       const have = names.filter((n) => get(n));

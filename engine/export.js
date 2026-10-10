@@ -17,7 +17,7 @@ import { makeRng } from './rng.js';
 // Must match main.js VERSION, package.json and index.html data-version;
 // tools/validate.js fails if they drift. The app refuses to export when the
 // browser has mixed cached copies of old and new files.
-export const POLIS_VERSION = '0.51.0';
+export const POLIS_VERSION = '0.52.0';
 
 export const CHUNK = 64;          // Bedrock structure limit per horizontal axis
 export const GROUND_DROP = 2;     // base layer y=0 sits 2 below feet; surface y=1 replaces the block you stand on
@@ -393,7 +393,8 @@ export function buildMobStructures(spawns, opts = {}) {
       : [makeEntity(p.type, p.x, p.y, p.z, rng, { profession: p.profession, tier: p.tier, motif: p.motif, direction: p.direction, pos: p.pos })]);
     const res = writeMcStructure([], [], t.box, MATERIALS, { entities, placeholderId: MAT.AIR });
     return {
-      name: t.name, data: res.data, box: t.box, size: res.size, offset: t.offset,
+      // (its landmark's group kept: the jail, zoo, museum and mall functions load their own tiles by it)
+      name: t.name, group: t.group, data: res.data, box: t.box, size: res.size, offset: t.offset,
       cells: 0, paletteSize: 0, entities: 0, mobs: res.mobs,
       villagers: t.mobs.filter((p) => p.type === 'villager').length,
       golems: t.mobs.filter((p) => p.type === 'golem').length,
@@ -645,7 +646,7 @@ export function functionFiles(tiles, world, opts = {}) {
   // the jail and the zoo on their own, to fill them again (after the areas below)
   // each landmark's mobs again on their own: its own structure tiles loaded (a
   // structure waits for its chunks, as a summon does not)
-  for (const [group, noun] of [['jail', 'inmates for the jail'], ['zoo', 'animals and fish for the zoo and aquarium'], ['museum', 'suits of armour for the museum']]) {
+  for (const [group, noun] of [['jail', 'inmates for the jail'], ['zoo', 'animals and fish for the zoo and aquarium'], ['museum', 'suits of armour for the museum'], ['mall', 'shopkeepers for the mall']]) {
     const tiles = mobs.filter((t) => t.group === group);
     if (!tiles.length) continue;
     const only = (dx, dz, title) => [
@@ -679,6 +680,16 @@ export function functionFiles(tiles, world, opts = {}) {
       { name: `functions/${ns}/release.mcfunction`, fn: `${ns}/release`, text: releaseFn('Polis: the city\'s ticking areas taken off (pairs with build)') },
       { name: `functions/${ns}/release_centered.mcfunction`, fn: `${ns}/release_centered`, text: releaseFn('Polis: the city\'s ticking areas taken off (pairs with build_centered)') });
   }
+  // goto_<kind>: to each landmark, from the spot build_centered marked, wherever you
+  // stand (the city's ticking areas keep the marker loaded), facing its front
+  for (const P of placeOffsets(world, opts)) {
+    const r = (a) => `~${a || ''}`;
+    files.push({ name: `functions/${ns}/goto_${P.id}.mcfunction`, fn: `${ns}/goto_${P.id}`, text: [
+      `# Polis: to the ${P.name}, ${P.words} of the build_centered spot. Or from that spot: /tp @s ${r(P.rel[0])} ${r(P.rel[1])} ${r(P.rel[2])}`,
+      `execute at @e[type=armor_stand,name=${anchor},c=1] run tp @s ${r(P.rel[0])} ${r(P.rel[1])} ${r(P.rel[2])} facing ${r(P.look[0])} ${r(P.look[1])} ${r(P.look[2])}`,
+      `say Polis: the ${P.name}.`,
+    ].join('\n') + '\n' });
+  }
   // The centred functions run from where the player stands, as they always
   // have. build_centered leaves an armor stand on its spot, to come back to
   // (/tp @s @e[type=armor_stand,name=<city id>_centre,c=1]), and each centred
@@ -706,6 +717,20 @@ export function functionFiles(tiles, world, opts = {}) {
     f.text = f.text.split('\n').filter((l) => !/\bNaN\b|undefined|\[object /.test(l)).join('\n');
   }
   return out;
+}
+
+// Where each landmark is from the build_centered spot (city.js: landmarkPlaces): the
+// offsets a /tp from that spot takes, and in words ("171 west, 98 north").
+export function placeOffsets(world, opts = {}) {
+  const wb = world.box, mid = opts.centre || world.centre;
+  const cx = mid ? mid[0] : Math.floor((wb.x0 + wb.x1 + 1) / 2);
+  const cz = mid ? mid[1] : Math.floor((wb.z0 + wb.z1 + 1) / 2);
+  return (opts.places || []).filter((P) => P && P.at && P.at.every(Number.isFinite)).map((P) => {
+    const rel = [P.at[0] - cx, P.at[1] - GROUND_DROP, P.at[2] - cz];
+    const look = [P.look[0] - cx, P.look[1] - GROUND_DROP, P.look[2] - cz];
+    const words = [rel[0] && `${Math.abs(rel[0])} ${rel[0] > 0 ? 'east' : 'west'}`, rel[2] && `${Math.abs(rel[2])} ${rel[2] > 0 ? 'south' : 'north'}`].filter(Boolean).join(', ') || 'right here';
+    return { ...P, rel, look, words };
+  });
 }
 
 // the name of the armor stand build_centered leaves on its spot
@@ -758,6 +783,15 @@ export function placementGuide(tiles, opts = {}) {
   L.push('(plus minecarts / minecarts_centered on railway cities, to re-summon carts near you,');
   L.push(' boats / boats_centered for the dock, and fish / fish_centered for the ponds and canal).');
   L.push('');
+  const places = opts.world ? placeOffsets(opts.world, opts) : [];
+  if (places.length) {
+    L.push('WHERE THINGS ARE (from the build_centered spot; north is -Z). To go to one:');
+    L.push(`    /function ${ns}/goto_<name>     e.g. /function ${ns}/goto_${places[0].id}`);
+    L.push('  (it takes you there from the marker build_centered left, wherever you are)');
+    const w = Math.max(...places.map((P) => P.name.length));
+    for (const P of places) L.push(`  ${P.name.padEnd(w)}  ${P.words.padEnd(20)}  goto_${P.id}`);
+    L.push('');
+  }
   L.push('A JAIL, ZOO OR AQUARIUM EMPTY? Their animals are summoned, and a summon only reaches');
   L.push('loaded chunks. The city is kept loaded by ticking areas, and a world holds ten at most:');
   L.push('another city\'s left behind and these are never made. From the build spot:');
@@ -765,6 +799,7 @@ export function placementGuide(tiles, opts = {}) {
   L.push('    /tickingarea remove_all      (clear old ones)');
   L.push(`    /function ${ns}/areas_centered   (this city's, again; then wait a moment)`);
   L.push(`    /function ${ns}/jail_centered, /function ${ns}/zoo_centered, /function ${ns}/museum_centered`);
+  if ((opts.spawns || []).some((p) => p.group === 'mall')) L.push(`    /function ${ns}/mall_centered   (the mall's shopkeepers, if their booths are empty)`);
   L.push('populate leaves the ticking areas on (the whole city kept running, so a later run still');
   L.push(`reaches every part). When everything is in:   /function ${ns}/release_centered`);
   L.push(`Made with Polis v${POLIS_VERSION}. If /function says one is "not found", an older`);
@@ -834,7 +869,7 @@ export async function exportPack(world, optsIn = {}) {
   const tiles = tileList(world, opts);
   const structures = buildStructures(world, opts).concat(buildDrainStructures(world, opts), buildPlugStructures(world, opts), buildRemoveStructures(world, opts));
   const mobStructs = buildMobStructures(opts.spawns, opts);
-  const guide = placementGuide(tiles, { ...opts, dome: !!world.dome, stilts: !!world.stiltGrid, floating: !!world.floating, plugs: !!(world.airBoxes && world.airBoxes.length) });
+  const guide = placementGuide(tiles, { ...opts, world, dome: !!world.dome, stilts: !!world.stiltGrid, floating: !!world.floating, plugs: !!(world.airBoxes && world.airBoxes.length) });
   const fns = functionFiles(tiles, world, { ...opts, mobTiles: mobStructs });
   // the fish's definitions where there are fish to keep: the ponds' or the
   // aquarium's (its fish are summoned with keep events these define); the mobs'
@@ -852,7 +887,7 @@ export async function exportStructuresZip(world, opts = {}) {
   const tiles = tileList(world, opts);
   const structures = buildStructures(world, opts).concat(buildDrainStructures(world, opts), buildPlugStructures(world, opts), buildRemoveStructures(world, opts));
   const mobStructs = buildMobStructures(opts.spawns, opts);
-  const guide = placementGuide(tiles, { ...opts, dome: !!world.dome, stilts: !!world.stiltGrid, floating: !!world.floating, plugs: !!(world.airBoxes && world.airBoxes.length) });
+  const guide = placementGuide(tiles, { ...opts, world, dome: !!world.dome, stilts: !!world.stiltGrid, floating: !!world.floating, plugs: !!(world.airBoxes && world.airBoxes.length) });
   const fns = functionFiles(tiles, world, { ...opts, mobTiles: mobStructs });
   const files = structures.concat(mobStructs).map((s) => ({ name: `${s.name}.mcstructure`, data: s.data }));
   for (const f of fns) files.push({ name: f.name, data: new TextEncoder().encode(f.text) });

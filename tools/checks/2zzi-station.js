@@ -7,7 +7,8 @@
 // frame holding a clock on a dark face in its quartz ring; benches; the booking
 // hall's counter reached on foot from the platform, through the doorway. With the
 // railway, with trams, on a fitted city; with roads only, no station and the
-// summary saying it needs a railway. Every block one of Bedrock's own states.
+// summary saying it needs a railway. Found in the game: a goto_station function and
+// the guide's list of where every landmark is. Every block one of Bedrock's own states.
 
 import { readFileSync } from 'node:fs';
 
@@ -84,6 +85,29 @@ export default async function run(ctx) {
   {
     const r = generateCity({ ...DEFAULTS, ...L, size: 256, seed: 7, transit: 'roads' });
     check('station: with roads only, none, and the summary says it needs a railway or trams', !r.landmarks.some((Lm) => Lm.kind === 'station') && /railway or trams/.test(r.stats.stationMissing || ''));
+  }
+  // found in the game: every landmark a spot on the street before it to stand on
+  // (two air over something solid, never water or a rail), a goto_<kind> function to
+  // it from build_centered's marker, and the guide's list naming where it is
+  {
+    const { functionFiles, placementGuide, tileList } = await import('../../engine/export.js');
+    const bad = [];
+    for (const [n, r] of cities) {
+      const w = r.world, blk = (x, y, z) => { const i = w.get(x, y, z); return i < 0 ? 'air' : MATERIALS.def(i).block.replace('minecraft:', ''); };
+      if (!r.places || r.places.length !== r.landmarks.length) { bad.push(`${n}: ${r.places ? r.places.length : 0} places for ${r.landmarks.length} landmarks`); continue; }
+      for (const P of r.places) {
+        const [x, y, z] = P.at, under = blk(x, y - 1, z);
+        if (blk(x, y, z) !== 'air' || blk(x, y + 1, z) !== 'air' || /air|water|rail|lava/.test(under)) bad.push(`${n} ${P.id}: on ${under}`);
+      }
+      const opts = { namespace: 'chk', places: r.places, spawns: r.spawns, centre: r.world.centre, world: r.world };
+      const tiles = tileList(r.world, opts);
+      const fns = functionFiles(tiles, r.world, opts), guide = placementGuide(tiles, opts);
+      const go = fns.find((f) => f.fn === 'chk/goto_station');
+      if (!go || !/^execute at @e\[type=armor_stand,name=chk_centre,c=1\] run tp @s ~-?\d* ~-?\d* ~-?\d* facing ~-?\d* ~-?\d* ~-?\d*$/m.test(go.text)) bad.push(`${n}: no goto_station`);
+      if (!/WHERE THINGS ARE[\s\S]*Station\s+\d+ (east|west)/.test(guide)) bad.push(`${n}: the guide does not say where the station is`);
+      if (new Set(r.places.map((P) => P.id)).size !== r.places.length) bad.push(`${n}: two places with one name`);
+    }
+    check('station (and every landmark): a spot before it to stand on, a goto function to it, the guide saying where it is', bad.length === 0, bad.slice(0, 4).join('; '));
   }
   {
     const states = JSON.parse(readFileSync(new URL('../bedrock-states.json', import.meta.url), 'utf8'))['1.21.60'];

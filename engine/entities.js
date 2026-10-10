@@ -61,10 +61,26 @@ export const PAINTINGS = PAINTING_MOTIFS;
 export const PROFESSION_NAMES = Object.keys(PROFESSIONS);
 export const LEVELS = ['novice', 'apprentice', 'journeyman', 'expert', 'master'];
 
+// Four trades Polis has no saved villager of (the mall's shopkeepers: mall.js),
+// made from the fletcher's, which has every field a working villager saves: its
+// trade's component group, its look (Variant) and its trade table its own, and no
+// offers (the game draws them from the table when it is first traded with, as it
+// does for any villager that has not traded yet). [Variant, group, trade table]
+export const MADE_PROFESSIONS = { librarian: [5, 'librarian', 'librarian'], fisherman: [2, 'fisherman', 'fisherman'],
+  shepherd: [3, 'shepherd', 'shepherd'], weaponsmith: [9, 'weaponsmith', 'weapon_smith'] };
+
 export function makeEntity(kind, x, y, z, rng, opts = {}) {
-  const pro = kind === 'villager' && opts.profession && PROFESSIONS[opts.profession];
+  const made = kind === 'villager' && opts.profession && !PROFESSIONS[opts.profession] && MADE_PROFESSIONS[opts.profession];
+  const pro = kind === 'villager' && opts.profession && (PROFESSIONS[opts.profession] || (made && PROFESSIONS.fletcher));
   const e = hydrate(pro || TEMPLATE[kind]);
   const v = e.v;
+  if (made) {
+    const [variant, group, table] = made;
+    v.definitions = { t: 9, et: 8, keepEt: true, v: v.definitions.v.map((d) => (d.v === '+fletcher' ? { t: 8, v: '+' + group } : d)) };
+    v.Variant = { t: v.Variant.t, v: variant };
+    v.TradeTablePath = { t: v.TradeTablePath.t, v: `trading/economy_trades/${table}_trades.json` };
+    delete v.Offers;
+  }
   delete v.DwellingUniqueID;                        // never tied to the village it was copied from
   v.Pos = floatList([x + 0.5, y, z + 0.5]);
   v.Rotation = floatList([Math.floor(rng() * 360) - 180, 0]);

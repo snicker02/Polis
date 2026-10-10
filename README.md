@@ -1,4 +1,4 @@
-# Polis v0.51.0
+# Polis v0.52.0
 
 *Created with help from Claude AI.*
 
@@ -771,6 +771,50 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.52.0** — A shopping mall, its shopkeepers trading.
+
+A new option, "A shopping mall" (off by default), builds a mall (mall.js): two
+floors of shops either side of a glass-roofed atrium, a balcony along each upper
+row with an iron railing, a bridge across at the front, stairs up the middle at the
+back, planters and benches down the ground floor. Sixteen shops where the lot takes
+it (25 or 21 across by 26 deep), twelve on a smaller lot (21 or 17 by 20).
+
+Each of the thirteen trades has a shop (Bookshop, Armourer, Tool Shop, Weapons,
+Pharmacy, Greengrocer, Butcher, Fishmonger, Map Shop, Archery, Leather Goods, Wool
+Shop, Stonemason), plus a cafe, a toy shop and a florist on the larger mall. The
+shopkeeper is a villager of that trade at master level (every trade unlocked),
+standing in a booth behind a counter that is its own workstation. A canopy three
+blocks over the floor stops it climbing onto the counter, so it stays put while
+you trade with it over the counter. The mall has no workstation except the
+counters, so no city villager can take a shopkeeper's job block. The librarian,
+fisherman, shepherd and weaponsmith are made from the saved fletcher, with their own
+trade group, look and trade table, and no offers yet (the game draws them when you
+first trade). The shopkeepers come in structures with the rest of populate, and
+`/function <city>/mall_centered` brings them in again.
+
+Also fixed: packs had no `jail`, `zoo` or `museum` functions, although the guide
+told you to run them. The exported mob structures lost their landmark group, so
+the function writer found none. Check 2zza now goes through the real export path.
+
+Check 2zzj: at every size, on a hill and turned. It checks that each shopkeeper
+matches its shop's trade behind the right workstation, that no shopkeeper can leave
+(walked as a villager steps and jumps), that a player from the street reaches every
+shop (upstairs by the stairs) and every shopkeeper over the counter, that there are
+no stray workstations, that every shop has its lantern, the villager records in the
+pack, and that the mall function is there.
+
+**0.51.1** — Finding the landmarks in the game.
+
+A city of 512 can hold thirty landmarks, and a station 170 blocks from the centre
+is easy to miss (it was in both packs reported missing: built and exported, just
+not found). Now every exported pack has a `goto_<name>` function for each landmark
+(`/function <city>/goto_station`): from the armor stand build_centered left, it
+takes you to the street before the landmark's front, facing it. The placement
+guide lists every landmark and how far east/west and north/south of the
+build_centered spot it is, and the app's summary says where the asked-for ones are.
+Check 2zzi: every landmark has a spot to stand on before it (two air over solid
+ground, not water or a rail), a goto function, and a line in the guide.
 
 **0.51.0** — A railway station on the line.
 

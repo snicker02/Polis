@@ -33,7 +33,7 @@ import { layTransit, trimOverRails, sweepStrandedRails, edgeDistance } from './t
 import { planCanal, planCanals, buildCanal, USE_CANAL, WATER_HI } from './water.js';
 import { planHarbour, buildHarbour, harbourSidings } from './harbour.js';
 import { planBridges, buildBridges, bridgeRails } from './bridges.js';
-import { chooseLandmarks, buildLandmark } from './landmarks.js';
+import { chooseLandmarks, buildLandmark, LANDMARK_NAMES } from './landmarks.js';
 import { planHills, liftBlocks, cutStairs, shiftBuilding, walkCity } from './terrain.js';
 import { styleOf, remapTable, STYLES } from './styles.js';
 import { signTags } from './landmarks.js';
@@ -113,6 +113,7 @@ export const DEFAULTS = {
   factory: false,            // a factory: working redstone, an assembly line, a freight siding (factory.js)
   park: false,               // an amusement park: a roller coaster to ride, a Ferris wheel, stalls (park.js)
   waterpark: false,          // a water park: pools, a bubble lift, a boat slide, a kids' pool (waterpark.js)
+  mall: false,               // a shopping mall: two floors of shops, each shopkeeper a villager of its trade (mall.js)
   garden: false,             // a botanical garden: a glass hall of plants from every biome (garden.js)
   station: false,            // a railway station on the line: a hall, a platform canopy, a clock (station.js)
   terrainBreaks: true,       // on fitted terrain, lots step at their own heights (retaining walls), held only to the street they face
@@ -382,8 +383,10 @@ export function generateCity(cfgIn, onProgress) {
   for (const lot of plan.lots) {
     if (lot.landmark) {
       // (the station faces its railway, whatever street the lot's front is on)
-      const L = buildLandmark(world, lot, lot.rail ? lot.rail.side : frontage(plan, lot).side, cfg, rng, GROUND);
+      const face = lot.rail ? lot.rail.side : frontage(plan, lot).side;
+      const L = buildLandmark(world, lot, face, cfg, rng, GROUND);
       if (L) {
+        L.face = face;
         landmarks.push(L);
         // a landmark can be more than one building (the mansion's wings): every
         // one gets furnished, lifted with its terrace and verified like the rest
@@ -602,6 +605,7 @@ export function generateCity(cfgIn, onProgress) {
     for (const L of landmarks) {
       if (L.bell) L.bell[1] += elevAt(L.bell[0], L.bell[2]);
       for (const m of L.inmates || []) m.y += elevAt(Math.floor(m.x), Math.floor(m.z));   // the jail's inmates ride up with it
+      for (const m of L.keepers || []) m.y += elevAt(m.x, m.z);                           // the mall's shopkeepers
       for (const m of [...(L.animals || []), ...(L.fish || [])]) m.y += elevAt(Math.floor(m.x), Math.floor(m.z));   // the zoo's too
       for (const p of L.paintings || []) { const e = elevAt(p.x, p.z); p.y += e; p.pos[1] += e; }      // the museum's paintings,
       for (const st of L.stands || []) st.y += elevAt(Math.floor(st.x), Math.floor(st.z));              // and its armour stands
@@ -934,6 +938,7 @@ export function generateCity(cfgIn, onProgress) {
     ['hotel', '13 by 19', (L) => `${L.rooms.length} rooms on ${L.frame.FLOORS - 1} floors, a lobby`],
     ['factory', '13 by 18', (L) => `a control room of ${L.panel.length} switches and a master switch, an assembly line, a freight siding`],
     ['station', '11 by 11 beside a railway', (L) => `a hall on the line${L.stop ? ' at its stop' : ''}, a platform canopy of ${L.canopy.length} blocks over the track, a clock, ${L.benches.length} benches`],
+    ['mall', '17 by 20', (L) => `${L.shops.length} shops on two floors round a glass-roofed atrium, ${L.keepers.length} shopkeepers each a villager of its trade`],
     ['garden', '15 by 19', (L) => `a glass hall of ${L.beds.length} biomes, ${L.plants.length} plants each on its own soil`],
     ['lazyriver', '14 by 15', (L) => `a ring of four runs, each a step down, and a bubble lift back up`],
     ['waterpark', '15 by 19', (L) => `pools, a bubble lift ${L.frame.H} high, a boat slide of ${L.slide.length} blocks of blue ice, a kids' pool with a waterfall`],
@@ -941,13 +946,15 @@ export function generateCity(cfgIn, onProgress) {
     ['workshop', '13 by 15', (L) => `${L.smelters.length} automatic smelters, ${L.presses.length} presses, an instrument bench of ${L.notes.length}, night lights`]]) {
     const L = landmarks.find((q) => q.kind === kind);
     if (L) stats[kind] = say(L);
-    else if (cfg[kind] || (kind === 'workshop' && cfg.factory && landmarks.some((q) => q.kind === 'factory')) || (kind === 'lazyriver' && cfg.waterpark && landmarks.some((q) => q.kind === 'waterpark'))) stats[kind + 'Missing'] = `no lot big enough for the ${kind === 'police' ? 'police station' : kind === 'park' ? 'amusement park' : kind === 'waterpark' ? 'water park' : kind === 'lazyriver' ? 'lazy river' : kind === 'garden' ? 'botanical garden' : kind} (it needs ${need})`;
+    else if (cfg[kind] || (kind === 'workshop' && cfg.factory && landmarks.some((q) => q.kind === 'factory')) || (kind === 'lazyriver' && cfg.waterpark && landmarks.some((q) => q.kind === 'waterpark'))) stats[kind + 'Missing'] = `no lot big enough for the ${kind === 'police' ? 'police station' : kind === 'park' ? 'amusement park' : kind === 'waterpark' ? 'water park' : kind === 'lazyriver' ? 'lazy river' : kind === 'garden' ? 'botanical garden' : kind === 'mall' ? 'shopping mall' : kind} (it needs ${need})`;
   }
   // (a station needs a line to stand on: say so, not that there was no lot)
   if (cfg.station && !landmarks.some((q) => q.kind === 'station')) stats.stationMissing = !transit || !transit.lines || !transit.lines.length
     ? 'a station needs a railway or trams to stand by: set Transit to Railway or Trams'
     : 'no lot beside a straight stretch of the railway (eleven along it) for the station';
   const zoo = landmarks.flatMap((L) => [...(L.animals || []), ...(L.fish || [])]);
+  // the mall's shopkeepers: villagers of their trades, in the structures with the rest
+  for (const L of landmarks) for (const k of L.keepers || []) spawns.push({ type: 'villager', x: k.x, y: k.y, z: k.z, profession: k.profession, tier: k.tier, group: 'mall' });
   for (const a of zoo) spawns.push({ type: 'mob', kind: a.type, x: a.x, y: a.y, z: a.z, name: a.name, variety: a.variety, group: 'zoo' });
   // the cells whose plant stands in water (the garden's kelp, seagrass, sea pickles):
   // their second layer is written as water (blockcore.js: writeMcStructure, opts.wet)
@@ -964,7 +971,10 @@ export function generateCity(cfgIn, onProgress) {
   // the factory's siding laid again last (on a fitted city a transit pass clears every
   // rail and lays the railway again from its plan, and took the siding with it)
   for (const F of landmarks.filter((L) => L.railBlocks)) for (const [x, y, z, id] of F.railBlocks) world.set(x, y, z, id);   // (the park's coaster too)
-  return { world, plan, buildings, cfg, stats, shell, bridges, farms, ranches, spawns, bell, transit, wall, landmarks, canal, centre, streets, harbour, harbourPlan, megaliths, ponds, courtyards, hostiles, inmates, zoo, stands, dome, canals, lighting, styleDistricts: SD, spawners, stilts, islands, cliffWays, rooms, metro, hills, stepRails,
+  // where each landmark is, to find it in the game (export.js: the guide's list and
+  // a goto_<kind> function for each): a spot to stand on the street before its front
+  const places = landmarkPlaces(world, landmarks, (x, z) => GROUND + elevAt(x, z));
+  return { world, plan, buildings, cfg, stats, shell, bridges, farms, ranches, spawns, bell, transit, wall, landmarks, places, canal, centre, streets, harbour, harbourPlan, megaliths, ponds, courtyards, hostiles, inmates, zoo, stands, dome, canals, lighting, styleDistricts: SD, spawners, stilts, islands, cliffWays, rooms, metro, hills, stepRails,
     hills, stairRuns, reach, groundAt: (x, z) => GROUND + elevAt(x, z) };
 }
 
@@ -2664,4 +2674,34 @@ function summarise(world, plan, buildings, cfg, life = {}) {
     wallHeight: life.wall ? life.wall.height : 0,
     gates: life.wall ? life.wall.gates.length : 0,
   };
+}
+
+// ---- where the landmarks are ----------------------------------------------------
+// For each landmark a spot a player can stand on, on the street before its front
+// (the middle of its front, a few blocks out: two air over something solid, never
+// on water or a rail), and the point to face (the front's middle). The lowest such
+// spot from a little under the ground up, so under a canopy rather than on it.
+export function landmarkPlaces(world, landmarks, groundAt) {
+  const OUT = { north: [0, -1], south: [0, 1], west: [-1, 0], east: [1, 0] };
+  const nameOf = (i) => i < 0 ? 'minecraft:air' : MATERIALS.def(i).block;
+  const free = (x, y, z) => { const b = nameOf(world.get(x, y, z)); return b === 'minecraft:air' || /sign|lantern|torch|carpet|button|pressure_plate|flower|grass$|fern/.test(b) && !/grass_block/.test(b); };
+  const floor = (x, y, z) => { const i = world.get(x, y, z); if (i < 0) return false; const b = nameOf(i); return !/water|lava|rail|air|sign|lantern|torch|leaves|fence|wall|magma|campfire|cactus/.test(b); };
+  const seen = new Map(), out = [];
+  for (const L of landmarks) {
+    const lot = L.lot; if (!lot || !L.kind) continue;
+    const side = L.face || 'south', [dx, dz] = OUT[side] || [0, 1];
+    const mx = Math.floor((lot.x0 + lot.x1) / 2), mz = Math.floor((lot.z0 + lot.z1) / 2);
+    const ex = dx > 0 ? lot.x1 : dx < 0 ? lot.x0 : mx, ez = dz > 0 ? lot.z1 : dz < 0 ? lot.z0 : mz;
+    let at = null;
+    for (let k = 1; k <= 8 && !at; k++) for (const s of [0, 1, -1, 2, -2, 3, -3]) {
+      const x = ex + dx * k + (dz ? s : 0), z = ez + dz * k + (dx ? s : 0);
+      const g = groundAt(x, z);
+      for (let y = g - 3; y <= g + 8; y++) if (floor(x, y - 1, z) && free(x, y, z) && free(x, y + 1, z)) { at = [x, y, z]; break; }
+      if (at) break;
+    }
+    if (!at) { const g = groundAt(ex + dx * 3, ez + dz * 3); at = [ex + dx * 3, g + 1, ez + dz * 3]; }
+    const n = (seen.get(L.kind) || 0) + 1; seen.set(L.kind, n);
+    out.push({ kind: L.kind, id: n > 1 ? `${L.kind}_${n}` : L.kind, name: (L.name || LANDMARK_NAMES[L.kind] || L.kind), at, look: [ex, at[1] + 1, ez], side });
+  }
+  return out;
 }
