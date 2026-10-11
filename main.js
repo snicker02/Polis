@@ -7,7 +7,7 @@ import { verifyAll } from './engine/verify.js';
 import { buildMesh } from './engine/mesher.js';
 import { VoxelWorld } from './engine/blockcore.js';
 import { Renderer } from './engine/renderer.js';
-import { exportPack, exportStructuresZip, tileList, commandList, cityId, exportSalt, POLIS_VERSION, placeOffsets } from './engine/export.js';
+import { exportPack, exportStructuresZip, tileList, commandList, cityId, exportSalt, POLIS_VERSION, placeOffsets, GROUND_DROP } from './engine/export.js';
 import { readWorld, readLevelDat, siteGround, findSites, SEA_LEVEL, worldReport } from './engine/worldfile.js';
 import { javaTiles, javaPackFiles } from './engine/export-java.js';
 import { readJavaWorld, readJavaLevelDat, worldKind } from './engine/javaworld.js';
@@ -17,7 +17,7 @@ import { buildPregenPack, pregenFileName, siteRegion, viewRegion, pregenCommand,
 import { decodeNbt } from './tools/nbt-read.js';
 import { THEMES } from './engine/materials.js';
 
-const VERSION = '0.52.0';
+const VERSION = '0.52.1';
 const $ = (id) => document.getElementById(id);
 const numVal = (id) => Number($(id).value);      // readCfg has its own local num()
 
@@ -90,6 +90,7 @@ function boot() {
   });
   $('gen').addEventListener('click', generate);
   $('reset').addEventListener('click', () => { renderer.frameAll(); });
+  initFind();
   $('mcpack').addEventListener('click', () => doExport('mcpack'));
   $('mcstruct').addEventListener('click', () => doExport('zip'));
   $('copycmd').addEventListener('click', copyCommands);
@@ -312,6 +313,7 @@ function generate() {
       renderer.frameAll();
       applyClip();
       const t3 = performance.now();
+      refreshFind();
       drawMap();
       showStats(mesh, [t1 - t0, t2 - t1, t3 - t2]);
       refreshCommands();
@@ -390,6 +392,17 @@ function drawMap() {
     ctx.lineWidth = Math.max(1, W / 160);
     for (const l of result.landmarks) ctx.strokeRect(l.lot.x0 + 0.5, l.lot.z0 + 0.5, l.lot.x1 - l.lot.x0, l.lot.z1 - l.lot.z0);
   }
+  // the landmark picked in Find a landmark: a bright outline and a mark where to stand
+  const found = foundPlace();
+  if (found) {
+    const lot = found.lot;
+    ctx.strokeStyle = '#3ee0f2';
+    ctx.lineWidth = Math.max(2, W / 70);
+    if (lot) ctx.strokeRect(lot.x0 - 1.5, lot.z0 - 1.5, lot.x1 - lot.x0 + 3, lot.z1 - lot.z0 + 3);
+    ctx.beginPath();
+    ctx.arc(found.at[0] + 0.5, found.at[2] + 0.5, Math.max(3, W * 0.03), 0, Math.PI * 2);
+    ctx.stroke();
+  }
   // focal marker
   if ($('mode').value === 'city') {
     const fx = focal[0] * W, fz = focal[1] * D;
@@ -403,6 +416,97 @@ function drawMap() {
     ctx.moveTo(fx, fz - 4); ctx.lineTo(fx, fz + 4);
     ctx.stroke();
   }
+}
+
+// ---- find a landmark ---------------------------------------------------------
+// Every landmark of the city, where it is from the build spot, and (given where you
+// stood to build it) its exact coordinates in your world and a /tp to it. A city
+// fitted to your world already knows where it is.
+const FIND_KEY = 'polis-find-spot';
+function findPlaces() {
+  if (!result || !result.places || !result.places.length) return [];
+  return placeOffsets(result.world, { places: result.places, centre: exportOpts().centre });
+}
+function foundPlace() {
+  const id = $('findSel') && $('findSel').value;
+  return id ? findPlaces().find((P) => P.id === id) || null : null;
+}
+function fittedSite() { return world && world.site && result && result.cfg.terrain ? world.site : null; }
+function findSpot() {
+  const v = ['findX', 'findY', 'findZ'].map((id) => $(id).value.trim());
+  if (v.some((s) => s === '' || !Number.isFinite(Number(s)))) return null;
+  return v.map((s) => Math.floor(Number(s)));
+}
+// a city point [x, y, z] in your world's coordinates, or null without a spot to start from
+function findAbs(p) {
+  const site = fittedSite();
+  if (site) return [site.x0 + p[0], site.baseY + p[1] - 1, site.z0 + p[2]];
+  const s = findSpot();
+  if (!s) return null;
+  const wb = result.world.box, c = exportOpts().centre || result.world.centre;
+  const [ox, oz] = $('findFrom').value === 'corner' ? [wb.x0, wb.z0] : [c[0], c[1]];
+  return [s[0] + p[0] - ox, s[1] + p[1] - GROUND_DROP, s[2] + p[2] - oz];
+}
+function tpOf(P) {
+  const a = findAbs(P.at), l = findAbs(P.look);
+  if (a) return `/tp @s ${a.join(' ')} facing ${l.join(' ')}`;
+  if ($('findFrom').value === 'corner') return null;
+  const r = (n) => `~${n || ''}`;
+  return `/tp @s ${r(P.rel[0])} ${r(P.rel[1])} ${r(P.rel[2])}`;
+}
+function refreshFind() {
+  const sel = $('findSel'), ps = findPlaces(), keep = sel.value;
+  const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  sel.innerHTML = ps.length
+    ? '<option value="">— pick a landmark —</option>' + ps.slice().sort((p, q) => p.name.localeCompare(q.name)).map((P) => `<option value="${P.id}">${esc(P.name)}</option>`).join('')
+    : `<option value="">${result ? '(no landmarks in this city)' : '(generate a city first)'}</option>`;
+  if (ps.some((P) => P.id === keep)) sel.value = keep;
+  const site = fittedSite();
+  for (const id of ['findFrom', 'findX', 'findY', 'findZ']) $(id).disabled = !!site;
+  $('findSpotLabel').textContent = site ? 'Fitted to your world: coordinates are exact' : ($('findFrom').value === 'corner' ? 'Where you stood for build: X / Y / Z' : 'Where you stood for build_centered: X / Y / Z');
+  updateFind();
+}
+function updateFind() {
+  const P = foundPlace(), ps = findPlaces();
+  $('findAll').disabled = !ps.length;
+  $('findCopy').disabled = $('findShow').disabled = !P;
+  if (!P) { $('findOut').textContent = ps.length ? `${ps.length} landmarks. Pick one to see where it is.` : ''; return; }
+  const a = findAbs(P.at), tp = tpOf(P);
+  const from = fittedSite() ? 'the city centre' : $('findFrom').value === 'corner' ? 'the build spot' : 'the build_centered spot';
+  const lines = [`${P.name}: ${P.words} of ${fittedSite() ? 'the centre monument' : from}.`];
+  if (a) lines.push(`Stand at X ${a[0]}, Y ${a[1]}, Z ${a[2]} (the street before its front).`);
+  else lines.push('Type where you stood when you built the city for its exact coordinates.');
+  if (tp) lines.push(tp + (a ? '' : '   (run from the build_centered spot)'));
+  $('findOut').textContent = lines.join('\n');
+  $('findOut').style.whiteSpace = 'pre-wrap';
+}
+// the 3D view over the landmark's lot, from high enough to see it whole
+function showFound() {
+  const P = foundPlace();
+  if (!P) return;
+  const l = P.lot || { x0: P.at[0], x1: P.at[0], z0: P.at[2], z1: P.at[2] };
+  const span = Math.max(l.x1 - l.x0, l.z1 - l.z0) + 1;
+  renderer.focus((l.x0 + l.x1 + 1) / 2, P.at[1] + 4, (l.z0 + l.z1 + 1) / 2, Math.max(70, span * 3.2));
+}
+function initFind() {
+  try { const s = JSON.parse(localStorage.getItem(FIND_KEY) || 'null'); if (s) { $('findX').value = s.x ?? ''; $('findY').value = s.y ?? ''; $('findZ').value = s.z ?? ''; if (s.from) $('findFrom').value = s.from; } } catch (e) { /* storage off */ }
+  const save = () => { try { localStorage.setItem(FIND_KEY, JSON.stringify({ x: $('findX').value, y: $('findY').value, z: $('findZ').value, from: $('findFrom').value })); } catch (e) { /* storage off */ } };
+  $('findSel').addEventListener('change', () => { updateFind(); drawMap(); showFound(); });
+  $('findFrom').addEventListener('change', () => { save(); refreshFind(); });
+  for (const id of ['findX', 'findY', 'findZ']) $(id).addEventListener('input', () => { save(); updateFind(); });
+  // (a whole F3 line pasted into X fills all three)
+  $('findX').addEventListener('paste', (e) => {
+    const t = (e.clipboardData || window.clipboardData).getData('text');
+    const n = (t.match(/-?\d+(\.\d+)?/g) || []).map(Number);
+    if (n.length >= 3) { e.preventDefault(); $('findX').value = n[0]; $('findY').value = n[1]; $('findZ').value = n[2]; save(); updateFind(); }
+  });
+  $('findCopy').addEventListener('click', () => { const P = foundPlace(); const tp = P && tpOf(P); if (tp) copyText(tp, `Copied the /tp to the ${P.name}`); });
+  $('findShow').addEventListener('click', showFound);
+  $('findAll').addEventListener('click', () => {
+    const ps = findPlaces().slice().sort((p, q) => p.name.localeCompare(q.name));
+    const text = ps.map((P) => { const a = findAbs(P.at); return `${P.name}: ${P.words}${a ? `   X ${a[0]} Y ${a[1]} Z ${a[2]}` : ''}   ${tpOf(P) || ''}`; }).join('\n');
+    copyText(text, `Copied ${ps.length} landmarks`);
+  });
 }
 
 // ---- stats ------------------------------------------------------------------

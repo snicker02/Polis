@@ -38,7 +38,10 @@ export default async function run(ctx) {
   const bc = fn('build_centered').text.split('\n').filter(Boolean);
   const killAt = bc.indexOf(`kill @e[type=armor_stand,name=${anchor}]`), sumAt = bc.indexOf(`summon armor_stand ${anchor} ~ ~ ~`);
   const lastLoad = bc.map((l, i) => (l.startsWith('structure load') ? i : -1)).reduce((a, b) => Math.max(a, b), -1);
-  check('build_centered: marks its spot last (the old marker taken away, a new one at your feet, after the city)', killAt > lastLoad && sumAt === killAt + 1);
+  // (the old marker taken away by its name and by the city's tag, the new one summoned and tagged)
+  const { layoutTag } = await import('../../engine/export.js');
+  const tagLine = bc.indexOf(`tag @e[type=armor_stand,name=${anchor},r=2] add ${layoutTag(r.world)}`);
+  check('build_centered: marks its spot last (the old marker taken away, a new one at your feet, after the city, tagged as this city\'s)', killAt > lastLoad && sumAt > killAt && sumAt - killAt <= 2 && tagLine === sumAt + 1);
   check('build (the corner version): no marker', !/armor_stand/.test(fn('build').text));
   // the centred functions run from where you stand, as they always did (their
   // work in them, untouched); each has an optional <name>_from_mark beside it

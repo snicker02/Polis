@@ -90,7 +90,7 @@ export default async function run(ctx) {
   // (two air over something solid, never water or a rail), a goto_<kind> function to
   // it from build_centered's marker, and the guide's list naming where it is
   {
-    const { functionFiles, placementGuide, tileList } = await import('../../engine/export.js');
+    const { functionFiles, placementGuide, tileList, layoutTag } = await import('../../engine/export.js');
     const bad = [];
     for (const [n, r] of cities) {
       const w = r.world, blk = (x, y, z) => { const i = w.get(x, y, z); return i < 0 ? 'air' : MATERIALS.def(i).block.replace('minecraft:', ''); };
@@ -102,12 +102,22 @@ export default async function run(ctx) {
       const opts = { namespace: 'chk', places: r.places, spawns: r.spawns, centre: r.world.centre, world: r.world };
       const tiles = tileList(r.world, opts);
       const fns = functionFiles(tiles, r.world, opts), guide = placementGuide(tiles, opts);
+      // (the marker found by the city's own tag: the same for every export of this
+      // city, whatever its pack's name or version; build_centered and mark_centre tag it)
+      const tag = layoutTag(r.world);
       const go = fns.find((f) => f.fn === 'chk/goto_station');
-      if (!go || !/^execute at @e\[type=armor_stand,name=chk_centre,c=1\] run tp @s ~-?\d* ~-?\d* ~-?\d* facing ~-?\d* ~-?\d* ~-?\d*$/m.test(go.text)) bad.push(`${n}: no goto_station`);
+      const re = new RegExp(`^execute at @e\\[type=armor_stand,tag=${tag},c=1\\] run tp @s ~-?\\d* ~-?\\d* ~-?\\d* facing ~-?\\d* ~-?\\d* ~-?\\d*$`, 'm');
+      if (!go || !re.test(go.text) || !new RegExp(`^execute unless entity @e\\[type=armor_stand,tag=${tag}\\] run say .*mark_centre`, 'm').test(go.text)) bad.push(`${n}: no goto_station`);
+      const bc = fns.find((f) => f.fn === 'chk/build_centered'), mk = fns.find((f) => f.fn === 'chk/mark_centre');
+      const tagsIt = (f) => !!f && f.text.includes('summon armor_stand chk_centre ~ ~ ~') && f.text.includes(`tag @e[type=armor_stand,name=chk_centre,r=2] add ${tag}`);
+      if (!tagsIt(bc) || !tagsIt(mk)) bad.push(`${n}: the centre marker not tagged by build_centered and mark_centre`);
+      const other = functionFiles(tiles, r.world, { ...opts, namespace: 'other_name' }).find((f) => f.fn === 'other_name/goto_station');
+      if (!other || !other.text.includes(`tag=${tag},c=1`)) bad.push(`${n}: another export's goto looks for another marker`);
+      if (layoutTag(r.world) !== tag || !/^polis_c_[0-9a-f]{8}$/.test(tag)) bad.push(`${n}: tag ${tag}`);
       if (!/WHERE THINGS ARE[\s\S]*Station\s+\d+ (east|west)/.test(guide)) bad.push(`${n}: the guide does not say where the station is`);
       if (new Set(r.places.map((P) => P.id)).size !== r.places.length) bad.push(`${n}: two places with one name`);
     }
-    check('station (and every landmark): a spot before it to stand on, a goto function to it, the guide saying where it is', bad.length === 0, bad.slice(0, 4).join('; '));
+    check('station (and every landmark): a spot before it to stand on, a goto function to it (by the city\'s own marker tag, mark_centre to set it again), the guide saying where it is', bad.length === 0, bad.slice(0, 4).join('; '));
   }
   {
     const states = JSON.parse(readFileSync(new URL('../bedrock-states.json', import.meta.url), 'utf8'))['1.21.60'];

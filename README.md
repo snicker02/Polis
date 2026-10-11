@@ -1,4 +1,4 @@
-# Polis v0.52.0
+# Polis v0.52.1
 
 *Created with help from Claude AI.*
 
@@ -771,6 +771,23 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.52.1** — goto fixed; Find a landmark in the app.
+
+The goto functions found the city's centre marker by the pack's own name, and every
+export has a new name (each version, each export setting), so a goto from a newer
+pack found no marker in a city built by an older one, and did nothing. The marker
+is now tagged with the city's own tag, made from its blocks alone (the same for
+every export of the same city), and goto looks for that. A city built from a pack
+older than 0.52.1 has an untagged marker: stand where you ran build_centered and
+run `/function <city>/mark_centre` once. goto now says so when it finds no marker
+(rather than nothing at all).
+
+A new panel, "Find a landmark": pick a landmark and it is outlined on the plan and
+the 3D view goes to it; type where you stood when you ran build_centered (or build)
+— a whole F3 line pasted into X fills all three — and it gives the landmark's
+exact coordinates in your world and a /tp to it (Copy /tp; Copy all for every
+landmark). A city fitted to your world knows where it is: no coordinates needed.
 
 **0.52.0** — A shopping mall, its shopkeepers trading.
 

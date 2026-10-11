@@ -166,6 +166,14 @@ export class Renderer {
     this._dirty = true;
   }
 
+  // look at one spot from close by (the Find a landmark panel)
+  focus(x, y, z, dist = 70) {
+    this.pan = [x - this.center[0], y - this.center[1], z - this.center[2]];
+    this.dist = dist;
+    this.pitch = 1.05;
+    this._dirty = true;
+  }
+
   setClip(y) { this.clipY = y; this._dirty = true; }
   invalidate() { this._dirty = true; }
 

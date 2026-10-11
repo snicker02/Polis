@@ -2701,7 +2701,8 @@ export function landmarkPlaces(world, landmarks, groundAt) {
     }
     if (!at) { const g = groundAt(ex + dx * 3, ez + dz * 3); at = [ex + dx * 3, g + 1, ez + dz * 3]; }
     const n = (seen.get(L.kind) || 0) + 1; seen.set(L.kind, n);
-    out.push({ kind: L.kind, id: n > 1 ? `${L.kind}_${n}` : L.kind, name: (L.name || LANDMARK_NAMES[L.kind] || L.kind), at, look: [ex, at[1] + 1, ez], side });
+    out.push({ kind: L.kind, id: n > 1 ? `${L.kind}_${n}` : L.kind, name: (L.name || LANDMARK_NAMES[L.kind] || L.kind), at, look: [ex, at[1] + 1, ez], side,
+      lot: { x0: lot.x0, z0: lot.z0, x1: lot.x1, z1: lot.z1 } });
   }
   return out;
 }

@@ -17,7 +17,7 @@ import { makeRng } from './rng.js';
 // Must match main.js VERSION, package.json and index.html data-version;
 // tools/validate.js fails if they drift. The app refuses to export when the
 // browser has mixed cached copies of old and new files.
-export const POLIS_VERSION = '0.52.0';
+export const POLIS_VERSION = '0.52.1';
 
 export const CHUNK = 64;          // Bedrock structure limit per horizontal axis
 export const GROUND_DROP = 2;     // base layer y=0 sits 2 below feet; surface y=1 replaces the block you stand on
@@ -65,6 +65,15 @@ function cellHash(world) {
     b = (b + Math.imul(h, 0x27d4eb2f)) >>> 0;
   }
   return (a ^ (b >>> 7)) >>> 0;
+}
+
+// The city's own tag, from its blocks alone (no version, no export settings): the
+// same city exported again, by this version or another, carries the same tag, so a
+// goto from a newer pack finds the centre marker an older pack's build_centered left.
+export function layoutTag(world) {
+  let h = hashCache.get(world);
+  if (!h || h.size !== world.size) { h = { size: world.size, v: cellHash(world) }; hashCache.set(world, h); }
+  return 'polis_c_' + (h.v >>> 0).toString(16).padStart(8, '0');
 }
 
 // Tile layout without encoding anything — cheap enough to call on every UI change.
@@ -515,6 +524,7 @@ export function functionFiles(tiles, world, opts = {}) {
     `structure load ${ns}:${t.name} ${rel(t.offset[0] - dx)} ${rel(t.offset[1] - GROUND_DROP)} ${rel(t.offset[2] - dz)}`;
   // the armor stand build_centered leaves on its spot: this city's own name
   const anchor = centreAnchor(ns);
+  const ctag = layoutTag(world);
   // the plugs for the rooms under the city: which tiles have one (same names, _p)
   const plugTiles = new Set(buildPlugStructures(world, opts).map((p) => p.name));
   const plugs = tiles.filter((t) => plugTiles.has(t.name + '_p')).map((t) => ({ ...t, name: t.name + '_p' }));
@@ -531,7 +541,7 @@ export function functionFiles(tiles, world, opts = {}) {
     ...areas.map((a) => `tickingarea add ${rel(a.x0 - dx)} ${rel(-GROUND_DROP)} ${rel(a.z0 - dz)} ${rel(a.x1 - dx)} ${rel(top)} ${rel(a.z1 - dz)} ${a.name}`),
     // the centred version marks this spot (an armor stand in the centre mark's
     // alcove), and the other centred functions run from it wherever you stand
-    ...(pop === 'populate_centered' ? [`kill @e[type=armor_stand,name=${anchor}]`, `summon armor_stand ${anchor} ~ ~ ~`] : []),
+    ...(pop === 'populate_centered' ? [`kill @e[type=armor_stand,name=${anchor}]`, `kill @e[type=armor_stand,tag=${ctag}]`, `summon armor_stand ${anchor} ~ ~ ~`, `tag @e[type=armor_stand,name=${anchor},r=2] add ${ctag}`] : []),
     `say Polis: city placed. When it has finished appearing, run /function ${ns}/${pop} from this same spot.`,
     ...(pop === 'populate_centered' ? [`say Polis: this spot is marked by an armor stand. To come back to it: /tp @s @e[type=armor_stand,name=${anchor},c=1]`] : []),
   ].join('\n') + '\n';
@@ -682,14 +692,28 @@ export function functionFiles(tiles, world, opts = {}) {
   }
   // goto_<kind>: to each landmark, from the spot build_centered marked, wherever you
   // stand (the city's ticking areas keep the marker loaded), facing its front
-  for (const P of placeOffsets(world, opts)) {
+  // (the marker found by the city's own tag, not this pack's name: a city built from
+  // an older pack, or an earlier export of this one, has a marker of another name.
+  // One built before the tag existed is marked again with mark_centre.)
+  const places = placeOffsets(world, opts);
+  for (const P of places) {
     const r = (a) => `~${a || ''}`;
     files.push({ name: `functions/${ns}/goto_${P.id}.mcfunction`, fn: `${ns}/goto_${P.id}`, text: [
       `# Polis: to the ${P.name}, ${P.words} of the build_centered spot. Or from that spot: /tp @s ${r(P.rel[0])} ${r(P.rel[1])} ${r(P.rel[2])}`,
-      `execute at @e[type=armor_stand,name=${anchor},c=1] run tp @s ${r(P.rel[0])} ${r(P.rel[1])} ${r(P.rel[2])} facing ${r(P.look[0])} ${r(P.look[1])} ${r(P.look[2])}`,
-      `say Polis: the ${P.name}.`,
+      `execute at @e[type=armor_stand,tag=${ctag},c=1] run tp @s ${r(P.rel[0])} ${r(P.rel[1])} ${r(P.rel[2])} facing ${r(P.relLook[0])} ${r(P.relLook[1])} ${r(P.relLook[2])}`,
+      `execute if entity @e[type=armor_stand,tag=${ctag}] run say Polis: the ${P.name}.`,
+      `execute unless entity @e[type=armor_stand,tag=${ctag}] run say Polis: the city's centre marker was not found (a city built from an older pack has none, or you are too far away for it to be loaded). Stand exactly where you ran build_centered, run /function ${ns}/mark_centre, then try again. Or use Find a landmark in the Polis app for the coordinates.`,
     ].join('\n') + '\n' });
   }
+  if (places.length) files.push({ name: `functions/${ns}/mark_centre.mcfunction`, fn: `${ns}/mark_centre`, text: [
+    `# Polis: mark this spot as the city's centre, for the goto functions. Stand exactly where you ran build_centered`,
+    `# (in the centre monument's alcove, under its sign). Needed only for a city built from a pack older than 0.52.1.`,
+    `kill @e[type=armor_stand,tag=${ctag}]`,
+    `kill @e[type=armor_stand,name=${anchor}]`,
+    `summon armor_stand ${anchor} ~ ~ ~`,
+    `tag @e[type=armor_stand,name=${anchor},r=2] add ${ctag}`,
+    `say Polis: this spot is marked as the city's centre. /function ${ns}/goto_<name> now works from anywhere in the city.`,
+  ].join('\n') + '\n' });
   // The centred functions run from where the player stands, as they always
   // have. build_centered leaves an armor stand on its spot, to come back to
   // (/tp @s @e[type=armor_stand,name=<city id>_centre,c=1]), and each centred
@@ -727,9 +751,9 @@ export function placeOffsets(world, opts = {}) {
   const cz = mid ? mid[1] : Math.floor((wb.z0 + wb.z1 + 1) / 2);
   return (opts.places || []).filter((P) => P && P.at && P.at.every(Number.isFinite)).map((P) => {
     const rel = [P.at[0] - cx, P.at[1] - GROUND_DROP, P.at[2] - cz];
-    const look = [P.look[0] - cx, P.look[1] - GROUND_DROP, P.look[2] - cz];
+    const relLook = [P.look[0] - cx, P.look[1] - GROUND_DROP, P.look[2] - cz];
     const words = [rel[0] && `${Math.abs(rel[0])} ${rel[0] > 0 ? 'east' : 'west'}`, rel[2] && `${Math.abs(rel[2])} ${rel[2] > 0 ? 'south' : 'north'}`].filter(Boolean).join(', ') || 'right here';
-    return { ...P, rel, look, words };
+    return { ...P, rel, relLook, words };      // (look stays the city point it was)
   });
 }
 
@@ -787,7 +811,10 @@ export function placementGuide(tiles, opts = {}) {
   if (places.length) {
     L.push('WHERE THINGS ARE (from the build_centered spot; north is -Z). To go to one:');
     L.push(`    /function ${ns}/goto_<name>     e.g. /function ${ns}/goto_${places[0].id}`);
-    L.push('  (it takes you there from the marker build_centered left, wherever you are)');
+    L.push('  (it takes you there from the marker build_centered left, wherever you are in the city.');
+    L.push(`  A city built from a pack older than 0.52.1 has no such marker: stand exactly where you ran`);
+    L.push(`  build_centered and run /function ${ns}/mark_centre once. The Polis app's Find a landmark panel`);
+    L.push('  also gives each landmark\'s coordinates from your build spot.)');
     const w = Math.max(...places.map((P) => P.name.length));
     for (const P of places) L.push(`  ${P.name.padEnd(w)}  ${P.words.padEnd(20)}  goto_${P.id}`);
     L.push('');
