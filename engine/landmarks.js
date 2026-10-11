@@ -128,7 +128,7 @@ export function chooseLandmarks(plan, cfg, hills = null, canal = null, transit =
   // (names typed in for the cemetery's stones: the cemetery always, if a lot takes it)
   const named = /\S/.test(cfg.memorial || '') || /\S/.test(cfg.graveNames || '');
   const take = (kind, list) => {
-    if (!CORE.has(kind) && !(kind === 'cemetery' && named) && out.length >= budget) return;
+    if (!CORE.has(kind) && !(kind === 'cemetery' && named) && !(kind === 'stadium' && cfg.bouts) && out.length >= budget) return;
     const pick = list.find((c) => fits(c, kind)) || list.find((c) => fitsLoose(c, kind));
     if (pick) { pick.l.landmark = kind; out.push(pick.l); }
   };
@@ -170,6 +170,9 @@ export function chooseLandmarks(plan, cfg, hills = null, canal = null, transit =
       .sort((p, q) => (q.r.stop - p.r.stop) || (q.r.len - p.r.len) || p.c.d - q.c.d);
     if (cands.length) { const { c, r } = cands[0]; c.l.landmark = 'station'; c.l.rail = r; out.push(c.l); }
   }
+  // (the stadium with its bouts, asked for: its lot first, before the mansion and the
+  // school take the big ones; the roomiest away from the very middle)
+  if (cfg.bouts) take('stadium', all.slice().sort((p, q) => (q.a * q.b) - (p.a * p.b)));
   const downtown = all.filter((c) => c.l.style !== 'house' && c.d <= reach).sort((p, q) => p.d - q.d);
   // a walled fortress town: the keep takes the heart of the town first, the
   // market square the next nearest lot
@@ -214,7 +217,7 @@ export function chooseLandmarks(plan, cfg, hills = null, canal = null, transit =
   // the bandstand likes a small open lot, a little way out from the square
   take('bandstand', all.slice().sort((p, q) => Math.abs(p.d - maxD * 0.35) - Math.abs(q.d - maxD * 0.35)));
   // the stadium needs room, so it takes the biggest lot left, out of the centre
-  take('stadium', all.slice().filter((c) => c.d > maxD * 0.3).sort((p, q) => (q.a * q.b) - (p.a * p.b)));
+  if (!out.some((l) => l.landmark === 'stadium')) take('stadium', all.slice().filter((c) => c.d > maxD * 0.3).sort((p, q) => (q.a * q.b) - (p.a * p.b)));
   // the cemetery and the allotments sit out towards the edge, where the
   // ground is cheap and quiet
   const outskirts = all.slice().sort((p, q) => q.d - p.d);
@@ -855,7 +858,8 @@ function mansion(world, lot, face, cfg, rng, G) {
 }
 
 const BUILDERS = { townhall: townHall, clocktower: clockTower, library, market, church, mansion, school, lighthouse, castle,
-  townsquare: townSquare, stadium, allotments, bandstand,
+  townsquare: townSquare, allotments, bandstand,
+  stadium: (w, l, f, c, r, G) => stadium(w, l, f, c, r, G, signTags),   // (its bouts have signs)
   // (the cemetery puts the names typed in for it on signs)
   cemetery: (w, l, f, c, r, G) => cemetery(w, l, f, c, r, G, signTags),
   // (the jail, zoo and aquarium put up signs: they are handed signTags)

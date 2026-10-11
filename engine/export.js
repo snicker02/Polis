@@ -9,7 +9,7 @@
 //
 // Both put the city's ground layer where the block under your feet is.
 
-import { splitWorld, writeMcStructure, buildMcPack, makeZip, crc32, VoxelWorld } from './blockcore.js';
+import { splitWorld, writeMcStructure, buildMcPack, makeZip, crc32, VoxelWorld, N } from './blockcore.js';
 import { MATERIALS, MAT } from './materials.js';
 import { makeEntity, STRUCTURE_MOBS, makeRiderPair, makeCart } from './entities.js';
 import { makeRng } from './rng.js';
@@ -17,7 +17,7 @@ import { makeRng } from './rng.js';
 // Must match main.js VERSION, package.json and index.html data-version;
 // tools/validate.js fails if they drift. The app refuses to export when the
 // browser has mixed cached copies of old and new files.
-export const POLIS_VERSION = '0.53.0';
+export const POLIS_VERSION = '0.54.0';
 
 export const CHUNK = 64;          // Bedrock structure limit per horizontal axis
 export const GROUND_DROP = 2;     // base layer y=0 sits 2 below feet; surface y=1 replaces the block you stand on
@@ -397,6 +397,19 @@ export function mobTiles(spawns, opts = {}) {
   });
 }
 
+// tags, status effects and a name a spawn asks for, put on its entity as the game
+// saves them (the stadium's fighters: tagged, Resistance V)
+function entityOf(p, e) { const pos = e.v.Pos && e.v.Pos.v; return !!pos && (p.tags || p.effects) && Math.floor(pos[0].v) === Math.floor(p.x) && Math.floor(pos[2].v) === Math.floor(p.z); }
+function withExtras(e, p) {
+  if (!p || !(p.tags || p.effects)) return e;
+  if (p.tags) e.v.Tags = N.list(8, p.tags.map((t) => N.str(t)));
+  if (p.effects) e.v.ActiveEffects = N.list(10, p.effects.map((f) => N.comp({
+    Ambient: N.byte(0), Amplifier: N.byte(f.amp), DisplayOnScreenTextureAnimation: N.byte(0), Duration: N.int(f.ticks),
+    DurationEasy: N.int(f.ticks), DurationHard: N.int(f.ticks), DurationNormal: N.int(f.ticks), Id: N.byte(f.id), ShowParticles: N.byte(0) })));
+  if (p.name && p.type === 'golem') e.v.CustomName = N.str(p.name);
+  return e;
+}
+
 export function buildMobStructures(spawns, opts = {}) {
   const rng = makeRng(((opts.seed | 0) ^ 0x6d0b5) >>> 0);
   return mobTiles(spawns, opts).map((t) => {
@@ -404,7 +417,7 @@ export function buildMobStructures(spawns, opts = {}) {
     const entities = t.mobs.flatMap((p) => p.type === 'ender_rider' ? makeRiderPair(p.x, p.y, p.z, rng, p.name)
       : p.type === 'cart' ? [makeCart(p.x, p.y, p.z, rng)]
       : p.type === 'mob' ? (p.ride ? mobInMinecart(p.kind, p.x, p.y, p.z, rng, p) : [mobNbt(p.kind, p.x, p.y, p.z, rng, p)])
-      : [makeEntity(p.type, p.x, p.y, p.z, rng, { profession: p.profession, tier: p.tier, motif: p.motif, direction: p.direction, pos: p.pos })]);
+      : [makeEntity(p.type, p.x, p.y, p.z, rng, { profession: p.profession, tier: p.tier, motif: p.motif, direction: p.direction, pos: p.pos })]).map((e) => withExtras(e, t.mobs.find((p) => entityOf(p, e)) || null));
     const res = writeMcStructure([], [], t.box, MATERIALS, { entities, placeholderId: MAT.AIR });
     return {
       // (its landmark's group kept: the jail, zoo, museum and mall functions load their own tiles by it)
@@ -661,7 +674,7 @@ export function functionFiles(tiles, world, opts = {}) {
   // the jail and the zoo on their own, to fill them again (after the areas below)
   // each landmark's mobs again on their own: its own structure tiles loaded (a
   // structure waits for its chunks, as a summon does not)
-  for (const [group, noun] of [['jail', 'inmates for the jail'], ['zoo', 'animals and fish for the zoo and aquarium'], ['museum', 'suits of armour for the museum'], ['mall', 'shopkeepers for the mall']]) {
+  for (const [group, noun] of [['jail', 'inmates for the jail'], ['zoo', 'animals and fish for the zoo and aquarium'], ['museum', 'suits of armour for the museum'], ['mall', 'shopkeepers for the mall'], ['stadium', 'fighters for the stadium\'s bouts']]) {
     const tiles = mobs.filter((t) => t.group === group);
     if (!tiles.length) continue;
     const only = (dx, dz, title) => [
@@ -712,7 +725,7 @@ export function functionFiles(tiles, world, opts = {}) {
   }
   if (places.length) files.push({ name: `functions/${ns}/mark_centre.mcfunction`, fn: `${ns}/mark_centre`, text: [
     `# Polis: mark this spot as the city's centre, for the goto functions. Stand exactly where you ran build_centered`,
-    `# (in the centre monument's alcove, under its sign). Needed only for a city built from a pack older than 0.53.0.`,
+    `# (in the centre monument's alcove, under its sign). Needed only for a city built from a pack older than 0.54.0.`,
     `kill @e[type=armor_stand,tag=${ctag}]`,
     `kill @e[type=armor_stand,name=${anchor}]`,
     `summon armor_stand ${anchor} ~ ~ ~`,
@@ -817,7 +830,7 @@ export function placementGuide(tiles, opts = {}) {
     L.push('WHERE THINGS ARE (from the build_centered spot; north is -Z). To go to one:');
     L.push(`    /function ${ns}/goto_<name>     e.g. /function ${ns}/goto_${places[0].id}`);
     L.push('  (it takes you there from the marker build_centered left, wherever you are in the city.');
-    L.push(`  A city built from a pack older than 0.53.0 has no such marker: stand exactly where you ran`);
+    L.push(`  A city built from a pack older than 0.54.0 has no such marker: stand exactly where you ran`);
     L.push(`  build_centered and run /function ${ns}/mark_centre once. The Polis app's Find a landmark panel`);
     L.push('  also gives each landmark\'s coordinates from your build spot.)');
     const w = Math.max(...places.map((P) => P.name.length));
@@ -828,6 +841,12 @@ export function placementGuide(tiles, opts = {}) {
     L.push('THE AIRPORT\'S LAUNCH PADS run command blocks: take an elytra and rockets from the chest beside a');
     L.push('  pad, put the elytra on, step on the plate; it lifts you high and slows your fall, so open the elytra');
     L.push('  (jump in the air). If a pad does nothing: /gamerule commandblocksenabled true (cheats must be on).');
+    L.push('');
+  }
+  if ((opts.spawns || []).some((p) => p.group === 'stadium')) {
+    L.push('THE STADIUM\'S BOUTS: the fighters come with populate (or /function ' + ns + '/stadium_centered). A repeating');
+    L.push('  command block under the pits keeps them from being hurt; it needs command blocks on:');
+    L.push('  /gamerule commandblocksenabled true (cheats on). The bouts run while you are near enough for the stadium to be simulated.');
     L.push('');
   }
   L.push('A JAIL, ZOO OR AQUARIUM EMPTY? Their animals are summoned, and a summon only reaches');

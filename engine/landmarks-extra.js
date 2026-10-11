@@ -13,6 +13,8 @@
 import { MAT, FLOWERS, stairId, WEIRDO, DIR, cropId, CROP_KINDS, signId, SIGN_FACING, WOOLS } from './materials.js';
 import { styleOf } from './styles.js';
 import { OUTWARD } from './building.js';
+import { commandBlock } from './airport.js';
+import { MATERIALS, I as INT, B as BYTE } from './materials.js';
 
 const right = (face) => { const [fx, fz] = OUTWARD[face]; return [fz, -fx]; };
 
@@ -103,7 +105,18 @@ export function townSquare(world, lot, face, cfg, rng, G) {
 // ---- stadium -------------------------------------------------------------
 // A pitch in a bowl: three rows of terraced seating round a grass field, with
 // floodlights at the corners and a gap for the players to come out.
-export function stadium(world, lot, face, cfg, rng, G) {
+//
+// With exhibition bouts (cfg.bouts): on the pitch, two pits side by side, walled and
+// roofed in glass (the fans in the stands see in, nothing gets out, a golem's throw
+// included), each with an iron golem and a challenger, a vindicator in one, a husk
+// in the other, which fight on and on and never die. Every fighter is tagged
+// polis_fighter and comes with Resistance V (in Bedrock, no damage at all) for an
+// hour; a repeating command block under the pits gives every polis_fighter it again
+// twice a second, so the bout never ends. An announcer's sign at the players' tunnel
+// and a card on each pit.
+export const BOUTS = [{ challenger: 'vindicator', name: 'Golem v Vindicator' }, { challenger: 'husk', name: 'Golem v Husk' }];
+export const FIGHTER_TAG = 'polis_fighter';
+export function stadium(world, lot, face, cfg, rng, G, signTags = null) {
   const LP = styleOf(cfg.cityStyle).landmark;
   pave(world, lot, G, () => LP.hallFloor);
   const I = { x0: lot.x0 + 1, z0: lot.z0 + 1, x1: lot.x1 - 1, z1: lot.z1 - 1 };
@@ -127,11 +140,52 @@ export function stadium(world, lot, face, cfg, rng, G) {
       world.set(x, G, z, MAT.GRASS);
       for (let y = G + 1; y <= G + 6; y++) world.clear(x, y, z);
     }
-  // the halfway line and the goals
+  // ---- exhibition bouts: two glass pits on the pitch, side by side along its length
+  const pw = P.x1 - P.x0 + 1, pd = P.z1 - P.z0 + 1;
+  const along = pd >= pw ? 'z' : 'x';                      // (the pits end to end along the longer side)
+  const longN = along === 'z' ? pd : pw, shortN = along === 'z' ? pw : pd;
+  let bouts = null;
+  if (cfg.bouts && signTags && longN >= 13 && shortN >= 9) {
+    const cx = Math.floor((P.x0 + P.x1) / 2), cz = Math.floor((P.z0 + P.z1) / 2);
+    // a cell by (a along the length from the middle, b across)
+    const cell = (a, b) => along === 'z' ? [cx + b, cz + a] : [cx + a, cz + b];
+    // eleven along by seven across, walls included: a walk of a block at least all
+    // round them on the smallest pitch (nine by thirteen), the tunnel coming out on it
+    const A0 = -5, A1 = 5, B0 = -3, B1 = 3;
+    const SAND = MAT.SAND, GLASS = MAT.GLASS;
+    for (let a = A0; a <= A1; a++) for (let b = B0; b <= B1; b++) {
+      const [x, z] = cell(a, b);
+      world.set(x, G, z, SAND);
+      const wall = a === A0 || a === A1 || a === 0 || b === B0 || b === B1;
+      for (let y = G + 1; y <= G + 3; y++) wall ? world.set(x, y, z, GLASS) : world.clear(x, y, z);
+      world.set(x, G + 4, z, GLASS);
+    }
+    // the command block that keeps them fighting, under the wall between the pits
+    const REPEAT = MATERIALS.add(null, 'minecraft:repeating_command_block', '#6b4fa0', { conditional_bit: BYTE(0), facing_direction: INT(1) });
+    const [kx, kz] = cell(0, 0);
+    world.set(kx, G, kz, REPEAT);
+    world.setData(kx, G, kz, commandBlock(`effect @e[tag=${FIGHTER_TAG}] resistance 3 4 true`, { mode: 'repeat', delay: 10 }));
+    const fighters = [], pits = [];
+    BOUTS.forEach((bout, i) => {
+      const s = i === 0 ? -1 : 1;                          // (the first pit before the middle wall, the second after)
+      const inner = [s * 1, s * 4].sort((p, q) => p - q);
+      const [gx, gz] = cell(s * 1, -1), [hx, hz] = cell(s * 4, 1);
+      fighters.push({ type: 'golem', x: gx, y: G + 1, z: gz, name: 'Champion', bout: i });
+      fighters.push({ type: 'mob', kind: bout.challenger, x: hx, y: G + 1, z: hz, name: 'Challenger', bout: i });
+      pits.push({ name: bout.name, a0: inner[0], a1: inner[1], cells: (() => { const c = []; for (let a = inner[0]; a <= inner[1]; a++) for (let b = B0 + 1; b <= B1 - 1; b++) c.push(cell(a, b)); return c; })() });
+    });
+    // the cards: one on each pit's far end, one at the tunnel
+    const card = (x, z, text) => { if (world.has(x, G + 1, z)) return null; world.set(x, G + 1, z, signId(SIGN_FACING[face])); world.setData(x, G + 1, z, { id: 'Sign', tags: signTags(text) }); return [x, G + 1, z]; };
+    const cards = [];
+    BOUTS.forEach((bout, i) => { const s = i === 0 ? -1 : 1; const [x, z] = cell(s * 3, B1 + 1); const c = card(x, z, `Bout ${i + 1}\n${bout.name}`); if (c) cards.push(c); });
+    const inPits = (x, z) => { for (let a = A0; a <= A1; a++) for (let b = B0; b <= B1; b++) { const [px, pz] = cell(a, b); if (px === x && pz === z) return true; } return false; };
+    bouts = { fighters, pits, command: [kx, G, kz], cards, along, cell, inPits, box: { A0, A1, B0, B1 } };
+  }
+  // the halfway line and the goals (on the pitch the pits leave)
   const mz = Math.floor((P.z0 + P.z1) / 2);
-  for (let x = P.x0; x <= P.x1; x++) world.set(x, G, mz, MAT.C_WHITE);
+  if (!bouts) for (let x = P.x0; x <= P.x1; x++) world.set(x, G, mz, MAT.C_WHITE);
   const goals = [];
-  for (const z of [P.z0, P.z1]) {
+  for (const z of (bouts ? [] : [P.z0, P.z1])) {
     const gx = Math.floor((P.x0 + P.x1) / 2);
     for (let dx = -1; dx <= 1; dx++) {
       world.set(gx + dx, G + 1, z, MAT.FENCE);
@@ -157,7 +211,29 @@ export function stadium(world, lot, face, cfg, rng, G) {
     world.set(x, G, z, LP.hallFloor);
     tunnel.push([x, G + 1, z]);
   }
-  return { kind: 'stadium', lot, pitch: P, goals, lights, tunnel, rec: null, topY: G + 9 };
+  // steps up into the stands from the pitch, at the middle of each side the goals are
+  // not on (the first row of seats stands a block and a half over the pitch: no one
+  // climbs that without a step)
+  const steps = [];
+  for (const [x, z, d] of [[P.x0, mz, WEIRDO.west], [P.x1, mz, WEIRDO.east]]) {
+    if (bouts && bouts.inPits(x, z)) continue;
+    if (world.has(x, G + 1, z)) continue;
+    world.set(x, G + 1, z, stairId(LP.hallStair, d)); steps.push([x, G + 1, z]);
+  }
+  // the announcer, near the tunnel's end on the pitch
+  if (bouts) {
+    const [tx, , tz] = tunnel[tunnel.length - 1];
+    const spots = [];
+    for (let x = P.x0; x <= P.x1; x++) for (let z = P.z0; z <= P.z1; z++) spots.push([x, z, Math.abs(x - tx) + Math.abs(z - tz)]);
+    spots.sort((p, q) => p[2] - q[2]);
+    for (const [x, z, d] of spots) {
+      if (d < 2 || bouts.inPits(x, z) || world.has(x, G + 1, z) || !world.has(x, G, z) || tunnel.some((c) => c[0] === x && c[2] === z)) continue;
+      world.set(x, G + 1, z, signId(SIGN_FACING[face])); world.setData(x, G + 1, z, { id: 'Sign', tags: signTags('Tonight!\n' + BOUTS.map((b) => b.name).join('\n') + '\nNo one gets hurt') });
+      bouts.announcer = [x, G + 1, z];
+      break;
+    }
+  }
+  return { kind: 'stadium', lot, pitch: P, goals, lights, tunnel, steps, rec: null, topY: G + 9, bouts, fighters: bouts ? bouts.fighters : [] };
 }
 
 // ---- cemetery ------------------------------------------------------------

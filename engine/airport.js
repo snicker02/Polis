@@ -40,6 +40,8 @@ export function airportRoute(plan, world, GROUND, elevAt) {
   const { W, D, use } = plan;
   const at = (x, z) => use[z * W + x];
   const water = (x, z) => { const y = GROUND + elevAt(x, z); const i = world.get(x, y, z); return i >= 0 && /water/.test(MATERIALS.def(i).block); };
+  // something standing on the street a player could not walk through (the wall); a rail is walked over
+  const blocked = (x, z) => { const y = GROUND + elevAt(x, z); return [1, 2].some((d) => { const i = world.get(x, y + d, z); return i >= 0 && !/rail/.test(MATERIALS.def(i).block); }); };
   let best = null;
   for (const side of ['north', 'south', 'west', 'east']) {
     const [fx, fz] = OUT[side];
@@ -47,18 +49,21 @@ export function airportRoute(plan, world, GROUND, elevAt) {
     for (let t = 6; t < along - 6; t++) {
       // (from the edge in: x, z of the k-th cell in, s across)
       const cellOf = (k, s) => fx ? [fx > 0 ? W - 1 - k : k, t + s] : [t + s, fz > 0 ? D - 1 - k : k];
+      // in to the first stretch of street open to walk on: a street the city's wall
+      // stands on (where the outline runs along its end) is gone through, the wall
+      // cut, to the open street beyond it
       let k = 0, ok = false;
       for (; k < Math.min(W, D) / 3; k++) {
         const row = [-1, 0, 1].map((s) => cellOf(k, s));
         if (row.some(([x, z]) => !ALLOWED.has(at(x, z)) || water(x, z))) break;
-        if (at(...row[1]) === USE.ROAD) { ok = true; break; }
+        if (at(...row[1]) === USE.ROAD && !blocked(...row[1])) { ok = true; break; }
       }
       if (!ok) continue;
-      // (a street on the edge itself, as a square city's ring road: the way out is
-      // through the wall standing on it, its one row)
+      // (a street on the edge itself, open, as a square city's ring road with its wall
+      // beside it: the way out its one row)
       const n = Math.max(1, k);
       const score = k + 0.04 * Math.abs(t - along / 2);
-      if (!best || score < best.score) best = { side, t, k, score, cells: [...Array(n).keys()].map((j) => [-1, 0, 1].map((s) => cellOf(n - 1 - j, s))) };
+      if (!best || score < best.score) best = { side, t, k, score, street: cellOf(k, 0), cells: [...Array(n).keys()].map((j) => [-1, 0, 1].map((s) => cellOf(n - 1 - j, s))) };
     }
   }
   return best;          // cells: rows from the street outward, each three across
@@ -68,6 +73,7 @@ export function buildAirport(world, plan, cfg, ctx) {
   const { GROUND, elevAt, signTags } = ctx;
   const route = airportRoute(plan, world, GROUND, elevAt);
   if (!route) return { missing: 'no street leads straight out of the city across open ground for the airport\'s road' };
+  const across0 = (i) => (OUT[route.side][0] ? [0, 1] : [1, 0])[i];
   const { W, D } = plan;
   const side = route.side, F = OUT[side], inward = [-F[0], -F[1]];
   const outName = side, inName = NAME(inward);
@@ -86,15 +92,43 @@ export function buildAirport(world, plan, cfg, ctx) {
   const road = [];
   let y = null;
   const inCity = (x, z) => !plan.mask || plan.mask[z * W + x] === 1;
+  const isRail = (x, yy, z) => { const i = world.get(x, yy, z); return i >= 0 && /rail/.test(MATERIALS.def(i).block); };
+  let gateRow = null;
   for (const row of route.cells) {
     const [cx, cz] = row[1];
     if (inCity(cx, cz) || y === null) y = GROUND + elevAt(cx, cz);
     for (const [x, z] of row) {
-      for (let yy = y + 1; yy <= y + 16; yy++) world.clear(x, yy, z);
+      if (world.has(x, y + 1, z) && !isRail(x, y + 1, z)) gateRow = row;      // (the wall, cut here)
+      for (let yy = y + 1; yy <= y + 16; yy++) if (!isRail(x, yy, z)) world.clear(x, yy, z);   // (a tram's rails kept)
       for (let yy = GROUND - 2; yy < y; yy++) if (!world.has(x, yy, z)) world.set(x, yy, z, MAT.BASE);
       world.set(x, y, z, TARMAC);
       road.push([x, y, z]);
     }
+  }
+  // the gateway: a quartz post each side where the wall goes on, a lamp on each, and
+  // a sign on the street pointing the way
+  const gate = [];
+  if (gateRow) {
+    const [a, b] = [gateRow[0], gateRow[2]];
+    for (const [x, z] of [[2 * a[0] - gateRow[1][0], 2 * a[1] - gateRow[1][1]], [2 * b[0] - gateRow[1][0], 2 * b[1] - gateRow[1][1]]]) {
+      const gy = GROUND + elevAt(x, z);
+      if (!world.has(x, gy + 1, z) || isRail(x, gy + 1, z)) continue;          // (no wall there to stand a post in)
+      for (let yy = gy + 1; yy <= gy + 4; yy++) world.set(x, yy, z, MAT.QUARTZ_PILLAR);
+      world.set(x, gy + 5, z, MAT.LAMP);
+      gate.push([x, gy + 1, z]);
+    }
+  }
+  const [stx, stz] = route.street;
+  const signSpots = [2, -2, 3, -3].map((d) => [stx + d * across0(0), stz + d * across0(1)]);
+  let streetSign = null;
+  for (const [x, z] of signSpots) {
+    if (x < 0 || z < 0 || x >= W || z >= D) continue;
+    const sy = GROUND + elevAt(x, z);
+    if (!world.has(x, sy, z) || world.has(x, sy + 1, z) || world.has(x, sy + 2, z)) continue;
+    world.set(x, sy + 1, z, signId(SIGN_FACING[NAME([-OUT[route.side][0], -OUT[route.side][1]])]));
+    world.setData(x, sy + 1, z, { id: 'Sign', tags: signTags('Airport\nthis way') });
+    streetSign = [x, sy + 1, z];
+    break;
   }
   const YA = y;                                            // the airfield's surface
   const put = (u, v, yy, id) => { const [x, z] = at(u, v); world.set(x, yy, z, id); };
@@ -289,7 +323,7 @@ export function buildAirport(world, plan, cfg, ctx) {
   const roadRect = { x0: Math.min(...rx), x1: Math.max(...rx), z0: Math.min(...rz), z1: Math.max(...rz) };
   const [vx, vz] = at(0, 4), [lx, lz] = at(0, T.v0);
   return {
-    kind: 'airport', lot: rect, roadRect, side, ground: YA, noLighting: true, rec: null,
+    kind: 'airport', lot: rect, roadRect, side, street: [route.street[0], GROUND + elevAt(...route.street), route.street[1]], gate, streetSign, ground: YA, noLighting: true, rec: null,
     road, runway: { ...runway, length: runway.u1 - runway.u0 + 1, width: RW.v1 - RW.v0 + 1, cells: (u, v) => pos(u, v, YA) }, lights,
     terminal: { ...T, doors, desks, seats }, tower: { ...TW, ladder, consoles, top: TW.cab + 5, door: pos(tu, TW.v0, YA + 1) },
     pads, planes, hangar, fence, lamps, sock,
@@ -299,12 +333,15 @@ export function buildAirport(world, plan, cfg, ctx) {
   };
 }
 
-// a command block's own data, as the game saves one (an impulse block run by the
-// plate above it; a chain block after it, always active)
-function commandBlock(command, chain) {
+// a command block's own data, as the game saves one: an impulse block run by redstone
+// (the airport's plates), a chain block after one, always active, or a repeating block
+// always active, every delay ticks (the stadium's)
+export function commandBlock(command, chainOrOpts) {
+  const o = typeof chainOrOpts === 'object' ? chainOrOpts : { mode: chainOrOpts ? 'chain' : 'impulse' };
+  const mode = o.mode || 'impulse', auto = mode !== 'impulse';
   return { id: 'CommandBlock', tags: {
-    Command: N.str(command), CustomName: N.str(''), ExecuteOnFirstTick: N.byte(0), LPCommandMode: N.int(chain ? 2 : 0),
-    LPCondionalMode: N.byte(0), LPRedstoneMode: N.byte(chain ? 1 : 0), LastExecution: N.long(0n), LastOutput: N.str(''),
-    LastOutputParams: N.list(8, []), SuccessCount: N.int(0), TickDelay: N.int(0), TrackOutput: N.byte(1), Version: N.int(36),
-    auto: N.byte(chain ? 1 : 0), conditionMet: N.byte(0), conditionalMode: N.byte(0), powered: N.byte(0) } };
+    Command: N.str(command), CustomName: N.str(''), ExecuteOnFirstTick: N.byte(mode === 'repeat' ? 1 : 0), LPCommandMode: N.int(mode === 'chain' ? 2 : mode === 'repeat' ? 1 : 0),
+    LPCondionalMode: N.byte(0), LPRedstoneMode: N.byte(auto ? 1 : 0), LastExecution: N.long(0n), LastOutput: N.str(''),
+    LastOutputParams: N.list(8, []), SuccessCount: N.int(0), TickDelay: N.int(o.delay | 0), TrackOutput: N.byte(1), Version: N.int(36),
+    auto: N.byte(auto ? 1 : 0), conditionMet: N.byte(0), conditionalMode: N.byte(0), powered: N.byte(0) } };
 }

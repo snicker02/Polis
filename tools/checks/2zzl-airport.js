@@ -50,11 +50,13 @@ export default async function run(ctx) {
     const floor = (b) => b !== 'air' && !pass(b) && !/fence|bars|water|lava/.test(b);
     const stand = (x, y, z) => (pass(blk(x, y, z)) || ladder(blk(x, y, z))) && (pass(blk(x, y + 1, z)) || ladder(blk(x, y + 1, z))) && (floor(blk(x, y - 1, z)) || ladder(blk(x, y, z)) || ladder(blk(x, y - 1, z)));
     const key = (p) => p.join(',');
-    const [sx, sy, sz] = A.road[1];                       // (the street end of the road)
+    // (from the city's own street, open to walk on, the road leaves from: not the road's
+    // own first cell, which once lay beyond a wall still standing on the street's end)
+    const [sx, sy, sz] = A.street;
     let s0 = null; for (let d = 0; d <= 4 && !s0; d++) if (stand(sx, sy + 1 + d - 1, sz)) s0 = [sx, sy + d, sz];
     if (!s0) for (let d = -2; d <= 4 && !s0; d++) if (stand(sx, sy + d, sz)) s0 = [sx, sy + d, sz];
     const seen = new Set(s0 ? [key(s0)] : []), q = s0 ? [s0] : [];
-    const lo = { x0: Math.min(A.lot.x0, A.roadRect.x0) - 2, x1: Math.max(A.lot.x1, A.roadRect.x1) + 2, z0: Math.min(A.lot.z0, A.roadRect.z0) - 2, z1: Math.max(A.lot.z1, A.roadRect.z1) + 2 };
+    const lo = { x0: Math.min(A.lot.x0, A.roadRect.x0) - 40, x1: Math.max(A.lot.x1, A.roadRect.x1) + 40, z0: Math.min(A.lot.z0, A.roadRect.z0) - 40, z1: Math.max(A.lot.z1, A.roadRect.z1) + 40 };
     while (q.length && seen.size < 200000) {
       const [a, b, c] = q.pop();
       const moves = [];
@@ -68,7 +70,9 @@ export default async function run(ctx) {
     }
     const reached = (p) => seen.has(key(p));
     const near = (p) => [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dz]) => seen.has(key([p[0] + dx, p[1], p[2] + dz])));
-    out.walk = { start: !!s0, door: reached(A.terminal.doors[0]), apron: A.terminal.doors.slice(1).every(reached),
+    // the street a part of the city's streets: from it, on foot, thirty and more into the city
+    const intoCity = [...seen].some((k) => { const [x, , z] = k.split(',').map(Number); return x >= 0 && z >= 0 && x < W && z < D && Math.abs(x - sx) + Math.abs(z - sz) >= 30 && !A.road.some((p) => p[0] === x && p[2] === z); });
+    out.walk = { start: !!s0 && intoCity, door: reached(A.terminal.doors[0]), apron: A.terminal.doors.slice(1).every(reached),
       plates: A.pads.every((p) => reached(p.plate)), chests: A.pads.every((p) => near(p.chest)),
       cab: [...seen].some((k) => { const [x, y, z] = k.split(',').map(Number); return y === A.tower.cab + 1 && x >= F.at(A.tower.u0, A.tower.v0)[0] - 8 && Math.abs(x - A.tower.door[0]) <= 4 && Math.abs(z - A.tower.door[2]) <= 6 && blk(x, y - 1, z) === 'smooth_quartz'; }) };
     // the runway
@@ -111,7 +115,15 @@ export default async function run(ctx) {
   const all = (f) => ts.every(([, , t]) => t.built && f(t));
   check('airport: built beside the city (outside its square), on hills, small blocks, a square city', all((t) => t.outside), ts.map(([n, , t]) => `${n}: ${t.built ? t.side : 'none'}`).join(', '));
   check('airport: its road leaves the city over street, pavement, park or open ground only (no lot touched)', all((t) => t.roadOk));
-  check('airport: walked from the city\'s street to the terminal, through it onto the apron', all((t) => t.walk.start && t.walk.door && t.walk.apron), ts.map(([n, , t]) => `${n}: ${JSON.stringify(t.walk)}`).join(' | '));
+  {
+    // the city of the report: the city's wall standing on the street's end, a tram
+    // loop there (the road once began beyond the wall, a dead end)
+    const J = JSON.parse(readFileSync(new URL('./settings-109947.json', import.meta.url), 'utf8'));
+    const r = generateCity({ ...DEFAULTS, ...J, ...L });
+    const t = inspect(r);
+    check('airport: through the wall where it stands on the street\'s end (the city of the report), a gate post where the wall goes on', t.built && t.walk.start && t.walk.door && r.landmarks.find((q) => q.kind === 'airport').gate.length >= 1, JSON.stringify(t.walk || {}));
+  }
+  check('airport: walked from the city\'s street (one of its streets, open, the wall cut where it stood on it) to the terminal, through it onto the apron', all((t) => t.walk.start && t.walk.door && t.walk.apron), ts.map(([n, , t]) => `${n}: ${JSON.stringify(t.walk)}`).join(' | '));
   check('airport: every launch pad\'s plate stood on, every chest reached', all((t) => t.walk.plates && t.walk.chests));
   check('airport: the control tower climbed by its ladder into the cab', all((t) => t.walk.cab));
   check('airport: the runway over a hundred long, nine wide, black and white, lit along both edges, nothing over it', all((t) => t.runway.length >= 100 && t.runway.width === 9 && t.runway.bad === 0 && t.runway.over === 0 && t.runway.lights >= 40), ts.map(([n, , t]) => `${n}: ${JSON.stringify(t.runway)}`).join(' | '));

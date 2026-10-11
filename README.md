@@ -1,4 +1,4 @@
-# Polis v0.53.0
+# Polis v0.54.0
 
 *Created with help from Claude AI.*
 
@@ -771,6 +771,41 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.54.0** — Exhibition bouts in the stadium.
+
+A new option, "Exhibition bouts in the stadium" (off by default). With it the city
+always has its stadium (where a lot takes it: its lot chosen early, before the
+mansion and the school take the big ones). On the pitch stand two pits, walled and
+roofed in glass, eleven by seven with a walkway round them:
+
+- an iron golem against a vindicator in one, an iron golem against a husk (a zombie
+  that does not burn by day) in the other;
+- every fighter is tagged `polis_fighter` and comes with Resistance V, which in
+  Bedrock means no damage at all. A repeating command block under the pits gives
+  them it again twice a second, so they swing, knock each other about and flash
+  red, and no one ever goes down. The glass roof keeps in what a golem throws;
+- an announcer's sign by the tunnel, a card on each pit.
+
+The fighters come in the stadium's own structures with populate;
+`/function <city>/stadium_centered` brings them again. Like the airport's pads, the
+command block needs command blocks on (`/gamerule commandblocksenabled true`).
+
+Also: every stadium now has a step up into the stands at the middle of each side
+(the first row of seats stood a block and a half over the pitch, too high to climb).
+Check 2zzm.
+
+**0.53.1** — A gate from the city to the airport.
+
+Where the city's outline runs along the end of a street, its wall stands on the
+street's last cells. The airport's road took that walled cell for the street and
+began just beyond it, so it led up to the wall from outside and never through it
+(a dead end at the wall, the tram loop beside it). The road now goes in until it
+reaches street that is actually open to walk on, cutting through the wall where it
+stands (the tram's rails kept). There is a quartz gate post with a lamp where the
+wall carries on, and an "Airport this way" sign on the street. Check 2zzl walks from
+the city's own street (and from it thirty blocks and more into the city), and has
+the reported city among its cases.
 
 **0.53.0** — An airport.
 
