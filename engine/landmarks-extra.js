@@ -162,7 +162,15 @@ export function stadium(world, lot, face, cfg, rng, G) {
 
 // ---- cemetery ------------------------------------------------------------
 // Walled ground with rows of headstones, a path up the middle and a gate.
-export function cemetery(world, lot, face, cfg, rng, G) {
+// The names typed in for the cemetery (cfg.memorial, cfg.graveNames): one person a
+// line; a ' / ' in a line starts a new line on the stone's sign. Only what was typed.
+export function namesOf(text, max = 64) {
+  return String(text || '').split(/\r?\n/).map((l) => l.replace(/[\u0000-\u001f\u007f]/g, '').trim()).filter(Boolean).slice(0, max)
+    .map((l) => l.slice(0, 90));
+}
+export const signLines = (entry) => entry.split(/\s*\/\s*/).filter(Boolean).slice(0, 4).join('\n');
+
+export function cemetery(world, lot, face, cfg, rng, G, signTags = null) {
   const LP = styleOf(cfg.cityStyle).landmark;
   pave(world, lot, G, () => MAT.GRASS);
   const I = { x0: lot.x0 + 1, z0: lot.z0 + 1, x1: lot.x1 - 1, z1: lot.z1 - 1 };
@@ -206,7 +214,77 @@ export function cemetery(world, lot, face, cfg, rng, G) {
       if (rng.chance(0.3)) world.set(x + 1 <= I.x1 ? x + 1 : x - 1, G + 1, z, rng.pick(FLOWERS));
       graves.push([x, G + 1, z]);
     }
-  return { kind: 'cemetery', lot, gate, graves, path, rec: null, topY: G + 5 };
+  const sign = (x, y, z, text) => { world.set(x, y, z, signId(SIGN_FACING[face])); world.setData(x, y, z, { id: 'Sign', tags: signTags(text) }); };
+
+  // ---- the memorial: the people named for it side by side at the far end of the
+  // path, under a cherry tree, a lantern between them, flowers round, a bench to sit
+  // and look at them. A cell by how far it is from the far wall (k) and how far to
+  // one side of the path (s).
+  const people = signTags ? namesOf(cfg.memorial, 3) : [];
+  let memorial = null;
+  const cell = (k, s2) => Fx ? [(Fx > 0 ? I.x0 : I.x1) + Fx * k, gateZ + Rz * s2] : [gateX + Rx * s2, (Fz > 0 ? I.z0 : I.z1) + Fz * k];
+  const inside = (x, z) => x > I.x0 && x < I.x1 && z > I.z0 && z < I.z1;
+  if (people.length && [[1, -3], [1, 3], [6, -3], [6, 3]].every(([k, s2]) => inside(...cell(k, s2)))) {
+    // the ground cleared (the graves there moved off), grass but for the path's last stretch
+    for (let k = 1; k <= 6; k++) for (let s2 = -3; s2 <= 3; s2++) {
+      const [x, z] = cell(k, s2);
+      for (let y = G + 1; y <= G + 3; y++) world.clear(x, y, z);
+      world.set(x, G, z, s2 === 0 && k >= 3 ? MAT.PATH : MAT.GRASS);
+      const gi = graves.findIndex((g) => g[0] === x && g[2] === z);
+      if (gi >= 0) graves.splice(gi, 1);
+    }
+    const at = people.length === 1 ? [0] : people.length === 2 ? [-1, 1] : [-2, 0, 2];
+    const stones = [], signs = [];
+    people.forEach((who, i) => {
+      const [x, z] = cell(2, at[i]);
+      world.set(x, G + 1, z, MAT.QUARTZ_PILLAR); world.set(x, G + 2, z, MAT.CHISELED_QUARTZ);
+      stones.push([x, G + 1, z]);
+      const [sx, sz] = cell(3, at[i]);
+      const lines = who.includes('/') ? signLines(who) : 'In loving memory\n' + who;
+      sign(sx, G + 1, sz, lines); signs.push({ at: [sx, G + 1, sz], text: lines, name: who.split('/')[0].trim() });
+    });
+    // the cherry tree behind them
+    const [tx, tz] = cell(1, 0);
+    for (let y = G + 1; y <= G + 4; y++) world.set(tx, y, tz, MAT.CHERRY_LOG);
+    for (let y = G + 4; y <= G + 6; y++) for (let a2 = -2; a2 <= 2; a2++) for (let b2 = -2; b2 <= 2; b2++) {
+      const r = Math.abs(a2) + Math.abs(b2) + (y === G + 6 ? 1 : 0);
+      if (r > 3 || (a2 === 0 && b2 === 0 && y === G + 4)) continue;
+      if (!world.has(tx + a2, y, tz + b2)) world.set(tx + a2, y, tz + b2, MAT.CHERRY_LEAF);
+    }
+    // a lantern between them (or beside one alone), flowers round them
+    const lampS = people.length === 2 ? 0 : people.length === 1 ? 2 : null;
+    let lantern = null;
+    if (lampS !== null) { const [lx, lz] = cell(2, lampS); world.set(lx, G + 1, lz, MAT.LAMP); lantern = [lx, G + 1, lz]; }
+    const flowers = [];
+    for (const [k, s2, f] of [[2, -3, MAT.TULIP_PINK], [2, 3, MAT.TULIP_PINK], [3, -2, MAT.LILY_VALLEY], [3, 2, MAT.LILY_VALLEY], [1, -2, MAT.LILY_VALLEY], [1, 2, MAT.LILY_VALLEY], [3, -3, MAT.TULIP_PINK], [3, 3, MAT.TULIP_PINK]]) {
+      const [x, z] = cell(k, s2);
+      if (!world.has(x, G + 1, z)) { world.set(x, G + 1, z, f); flowers.push([x, G + 1, z]); }
+    }
+    // the bench, either side of the path, looking at them
+    const bench = [];
+    for (const s2 of [-1, 1]) { const [x, z] = cell(5, s2); world.set(x, G + 1, z, stairId('oak', WEIRDO[face])); bench.push([x, G + 1, z]); }
+    const [ax, az] = cell(4, 0), [mx, mz] = cell(2, 0);
+    memorial = { people, stones, signs, tree: [tx, G + 1, tz], lantern, flowers, bench, stand: [ax, G + 1, az], look: [mx, G + 2, mz] };
+  }
+
+  // ---- names on the other gravestones: a sign before each stone, on its gate side,
+  // the graves nearest the gate first
+  const named = [];
+  const names = signTags ? namesOf(cfg.graveNames) : [];
+  if (names.length) {
+    const order = graves.slice().sort((p, q) => (Math.abs(p[0] - gateX) + Math.abs(p[2] - gateZ)) - (Math.abs(q[0] - gateX) + Math.abs(q[2] - gateZ)));
+    for (const g of order) {
+      if (named.length >= names.length) break;
+      const x = g[0] + Fx, z = g[2] + Fz;
+      if (!inside(x, z) || world.get(x, G, z) === MAT.PATH) continue;
+      if (world.has(x, G + 1, z)) { if (FLOWERS.includes(world.get(x, G + 1, z))) world.clear(x, G + 1, z); else continue; }
+      if (world.has(x, G + 2, z)) continue;
+      const text = signLines(names[named.length]);
+      sign(x, G + 1, z, text);
+      named.push({ grave: g, at: [x, G + 1, z], text });
+    }
+  }
+  return { kind: 'cemetery', lot, gate, graves, path, rec: null, topY: G + 5, memorial, named };
 }
 
 // ---- allotments ----------------------------------------------------------

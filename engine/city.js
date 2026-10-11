@@ -34,6 +34,7 @@ import { planCanal, planCanals, buildCanal, USE_CANAL, WATER_HI } from './water.
 import { planHarbour, buildHarbour, harbourSidings } from './harbour.js';
 import { planBridges, buildBridges, bridgeRails } from './bridges.js';
 import { chooseLandmarks, buildLandmark, LANDMARK_NAMES } from './landmarks.js';
+import { namesOf } from './landmarks-extra.js';
 import { planHills, liftBlocks, cutStairs, shiftBuilding, walkCity } from './terrain.js';
 import { styleOf, remapTable, STYLES } from './styles.js';
 import { signTags } from './landmarks.js';
@@ -113,6 +114,8 @@ export const DEFAULTS = {
   factory: false,            // a factory: working redstone, an assembly line, a freight siding (factory.js)
   park: false,               // an amusement park: a roller coaster to ride, a Ferris wheel, stalls (park.js)
   waterpark: false,          // a water park: pools, a bubble lift, a boat slide, a kids' pool (waterpark.js)
+  memorial: '',              // names for a memorial in the cemetery, side by side (one a line; ' / ' a new line on the sign)
+  graveNames: '',            // names for the cemetery's other gravestones (one a line)
   mall: false,               // a shopping mall: two floors of shops, each shopkeeper a villager of its trade (mall.js)
   garden: false,             // a botanical garden: a glass hall of plants from every biome (garden.js)
   station: false,            // a railway station on the line: a hall, a platform canopy, a clock (station.js)
@@ -615,6 +618,9 @@ export function generateCity(cfgIn, onProgress) {
       for (const w of L.wetAt || []) w[1] += elevAt(w[0], w[2]);                                           // the garden's waterlogged plants
       if (L.belfryBell) L.belfryBell[1] += elevAt(L.belfryBell[0], L.belfryBell[2]);
       if (L.faces) for (const f of L.faces) f.centre[1] += elevAt(f.centre[0], f.centre[2]);
+      // the cemetery's memorial and named stones
+      if (L.memorial) { const M = L.memorial; for (const p of [M.stand, M.look, M.tree, M.lantern, ...M.stones, ...M.flowers, ...M.bench, ...M.signs.map((q) => q.at)]) if (p) p[1] += elevAt(p[0], p[2]); }
+      for (const n of L.named || []) n.at[1] += elevAt(n.at[0], n.at[2]);
       // every point a landmark records rides up with the ground under it —
       // single spots and lists of them alike, so nothing is left pointing at
       // where the block used to be
@@ -947,6 +953,13 @@ export function generateCity(cfgIn, onProgress) {
     const L = landmarks.find((q) => q.kind === kind);
     if (L) stats[kind] = say(L);
     else if (cfg[kind] || (kind === 'workshop' && cfg.factory && landmarks.some((q) => q.kind === 'factory')) || (kind === 'lazyriver' && cfg.waterpark && landmarks.some((q) => q.kind === 'waterpark'))) stats[kind + 'Missing'] = `no lot big enough for the ${kind === 'police' ? 'police station' : kind === 'park' ? 'amusement park' : kind === 'waterpark' ? 'water park' : kind === 'lazyriver' ? 'lazy river' : kind === 'garden' ? 'botanical garden' : kind === 'mall' ? 'shopping mall' : kind} (it needs ${need})`;
+  }
+  // the names typed in for the cemetery: where they went, or why they could not
+  if (namesOf(cfg.memorial).length || namesOf(cfg.graveNames).length) {
+    const CEM = landmarks.find((q) => q.kind === 'cemetery');
+    if (!CEM) stats.cemeteryMissing = cfg.landmarks ? 'no lot for the cemetery (it needs 12 by 14), so the names have nowhere to go' : 'the names go in the cemetery, a landmark: tick Landmarks';
+    else stats.cemetery = [CEM.memorial ? `a memorial to ${CEM.memorial.signs.map((q) => q.name).join(' and ')} under a cherry tree` : (namesOf(cfg.memorial).length ? 'no room in the cemetery for the memorial' : ''),
+      CEM.named.length ? `${CEM.named.length} named gravestone${CEM.named.length > 1 ? 's' : ''}${CEM.named.length < namesOf(cfg.graveNames).length ? ` (of ${namesOf(cfg.graveNames).length}: no more graves)` : ''}` : ''].filter(Boolean).join(', ');
   }
   // (a station needs a line to stand on: say so, not that there was no lot)
   if (cfg.station && !landmarks.some((q) => q.kind === 'station')) stats.stationMissing = !transit || !transit.lines || !transit.lines.length
@@ -2703,6 +2716,9 @@ export function landmarkPlaces(world, landmarks, groundAt) {
     const n = (seen.get(L.kind) || 0) + 1; seen.set(L.kind, n);
     out.push({ kind: L.kind, id: n > 1 ? `${L.kind}_${n}` : L.kind, name: (L.name || LANDMARK_NAMES[L.kind] || L.kind), at, look: [ex, at[1] + 1, ez], side,
       lot: { x0: lot.x0, z0: lot.z0, x1: lot.x1, z1: lot.z1 } });
+    // the cemetery's memorial, a place of its own: before the stones, looking at them
+    if (L.memorial) out.push({ kind: 'memorial', id: 'memorial', name: 'Memorial: ' + L.memorial.signs.map((q) => q.name).join(' & '),
+      at: L.memorial.stand.slice(), look: L.memorial.look.slice(), side, lot: { x0: lot.x0, z0: lot.z0, x1: lot.x1, z1: lot.z1 } });
   }
   return out;
 }

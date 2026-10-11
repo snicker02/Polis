@@ -94,7 +94,7 @@ export default async function run(ctx) {
     const bad = [];
     for (const [n, r] of cities) {
       const w = r.world, blk = (x, y, z) => { const i = w.get(x, y, z); return i < 0 ? 'air' : MATERIALS.def(i).block.replace('minecraft:', ''); };
-      if (!r.places || r.places.length !== r.landmarks.length) { bad.push(`${n}: ${r.places ? r.places.length : 0} places for ${r.landmarks.length} landmarks`); continue; }
+      if (!r.places || r.places.filter((P) => P.kind !== 'memorial').length !== r.landmarks.length) { bad.push(`${n}: ${r.places ? r.places.length : 0} places for ${r.landmarks.length} landmarks`); continue; }
       for (const P of r.places) {
         const [x, y, z] = P.at, under = blk(x, y - 1, z);
         if (blk(x, y, z) !== 'air' || blk(x, y + 1, z) !== 'air' || /air|water|rail|lava/.test(under)) bad.push(`${n} ${P.id}: on ${under}`);

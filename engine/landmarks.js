@@ -125,8 +125,10 @@ export function chooseLandmarks(plan, cfg, hills = null, canal = null, transit =
   // ones — square, stadium, cemetery, allotments, bandstand — are rationed
   const CORE = new Set(['townhall', 'clocktower', 'library', 'market', 'church', 'school', 'lighthouse', 'castle', 'mansion']);
   const budget = Math.max(CORE.size, Math.round(all.length * (cfg.landmarkShare ?? 0.16)));
+  // (names typed in for the cemetery's stones: the cemetery always, if a lot takes it)
+  const named = /\S/.test(cfg.memorial || '') || /\S/.test(cfg.graveNames || '');
   const take = (kind, list) => {
-    if (!CORE.has(kind) && out.length >= budget) return;
+    if (!CORE.has(kind) && !(kind === 'cemetery' && named) && out.length >= budget) return;
     const pick = list.find((c) => fits(c, kind)) || list.find((c) => fitsLoose(c, kind));
     if (pick) { pick.l.landmark = kind; out.push(pick.l); }
   };
@@ -853,7 +855,9 @@ function mansion(world, lot, face, cfg, rng, G) {
 }
 
 const BUILDERS = { townhall: townHall, clocktower: clockTower, library, market, church, mansion, school, lighthouse, castle,
-  townsquare: townSquare, stadium, cemetery, allotments, bandstand,
+  townsquare: townSquare, stadium, allotments, bandstand,
+  // (the cemetery puts the names typed in for it on signs)
+  cemetery: (w, l, f, c, r, G) => cemetery(w, l, f, c, r, G, signTags),
   // (the jail, zoo and aquarium put up signs: they are handed signTags)
   jail: (w, l, f, c, r, G) => jail(w, l, f, c, r, G, signTags),
   zoo: (w, l, f, c, r, G) => zoo(w, l, f, c, r, G, signTags),

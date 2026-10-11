@@ -17,7 +17,7 @@ import { buildPregenPack, pregenFileName, siteRegion, viewRegion, pregenCommand,
 import { decodeNbt } from './tools/nbt-read.js';
 import { THEMES } from './engine/materials.js';
 
-const VERSION = '0.52.1';
+const VERSION = '0.52.2';
 const $ = (id) => document.getElementById(id);
 const numVal = (id) => Number($(id).value);      // readCfg has its own local num()
 
@@ -207,6 +207,8 @@ function readCfg() {
   cfg.twistChance = num('twistChance');
   cfg.courtyardChance = num('courtyardChance');
   cfg.hostileCount = num('hostileCount');
+  cfg.memorial = $('memorial').value;
+  cfg.graveNames = $('graveNames').value;
   for (const c of CHECKS) cfg[c] = $(c).checked;
   if ($('mode').value === 'city') {
     cfg.size = num('size');
@@ -572,6 +574,8 @@ function showStats(mesh, times) {
       const ps = placeOffsets(result.world, { places: result.places.filter((P) => asked.has(P.kind)) });
       if (ps.length) line('where (from the centre)', ps.map((P) => `${P.name}: ${P.words}`).join(' · ') + ' — in the game, /function <city>/goto_<name>');
     }
+    if (s.cemeteryMissing) line('cemetery', s.cemeteryMissing);
+    if (s.cemetery) line('cemetery', s.cemetery);
     if (s.hospitalMissing) line('hospital', s.hospitalMissing);
     if (s.hospital) line('hospital', `${s.hospital.beds} beds, a pharmacy of ${s.hospital.stands} brewing stands, a helipad`);
     if (s.firestationMissing) line('fire station', s.firestationMissing);

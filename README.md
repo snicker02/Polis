@@ -1,4 +1,4 @@
-# Polis v0.52.1
+# Polis v0.52.2
 
 *Created with help from Claude AI.*
 
@@ -771,6 +771,19 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.52.2** — Names in the cemetery.
+
+Two new boxes under the landmark options. "In memory of": up to three names, one a
+line, for a memorial in the cemetery. Their stones stand side by side at the far end
+of the path under a cherry tree, a lantern between them, pink tulips and lilies of
+the valley round them, and a bench to sit and look at them. Each stone has a sign
+before it reading "In loving memory" and the name. A line with a / in it is laid out
+as typed instead (a name / 1940 – 2026). "Names for the other gravestones": one a
+line, on signs before the graves nearest the gate. Only what you type goes in, and
+it is saved with your settings. With any names typed, the city always has its
+cemetery, where a lot takes it. The memorial is a place of its own in Find a
+landmark, with `goto_memorial` in the pack. Check 2zzk.
 
 **0.52.1** — goto fixed; Find a landmark in the app.
 
