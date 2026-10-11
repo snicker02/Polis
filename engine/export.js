@@ -17,7 +17,7 @@ import { makeRng } from './rng.js';
 // Must match main.js VERSION, package.json and index.html data-version;
 // tools/validate.js fails if they drift. The app refuses to export when the
 // browser has mixed cached copies of old and new files.
-export const POLIS_VERSION = '0.54.0';
+export const POLIS_VERSION = '0.54.1';
 
 export const CHUNK = 64;          // Bedrock structure limit per horizontal axis
 export const GROUND_DROP = 2;     // base layer y=0 sits 2 below feet; surface y=1 replaces the block you stand on
@@ -546,8 +546,12 @@ export function functionFiles(tiles, world, opts = {}) {
   // the plugs for the rooms under the city: which tiles have one (same names, _p)
   const plugTiles = new Set(buildPlugStructures(world, opts).map((p) => p.name));
   const plugs = tiles.filter((t) => plugTiles.has(t.name + '_p')).map((t) => ({ ...t, name: t.name + '_p' }));
+  // (a city with command blocks in it, the airport's pads or the stadium's: the game's
+  // command block chat turned off, or every run of one is a line in the chat)
+  const hasCommands = [...world.data.values()].some((d) => d && d.id === 'CommandBlock');
   const build = (dx, dz, title, pop) => [
     `# ${title}`,
+    ...(hasCommands ? ['gamerule commandblockoutput false'] : []),
     `# ${tiles.length} structure${tiles.length === 1 ? '' : 's'}. Safe to run again: blocks only.`,
     '# Only loaded chunks are filled: stand near the middle and raise render distance.',
     `# When the whole city is standing, run /function ${ns}/${pop} from the SAME spot.`,
@@ -725,7 +729,7 @@ export function functionFiles(tiles, world, opts = {}) {
   }
   if (places.length) files.push({ name: `functions/${ns}/mark_centre.mcfunction`, fn: `${ns}/mark_centre`, text: [
     `# Polis: mark this spot as the city's centre, for the goto functions. Stand exactly where you ran build_centered`,
-    `# (in the centre monument's alcove, under its sign). Needed only for a city built from a pack older than 0.54.0.`,
+    `# (in the centre monument's alcove, under its sign). Needed only for a city built from a pack older than 0.54.1.`,
     `kill @e[type=armor_stand,tag=${ctag}]`,
     `kill @e[type=armor_stand,name=${anchor}]`,
     `summon armor_stand ${anchor} ~ ~ ~`,
@@ -830,7 +834,7 @@ export function placementGuide(tiles, opts = {}) {
     L.push('WHERE THINGS ARE (from the build_centered spot; north is -Z). To go to one:');
     L.push(`    /function ${ns}/goto_<name>     e.g. /function ${ns}/goto_${places[0].id}`);
     L.push('  (it takes you there from the marker build_centered left, wherever you are in the city.');
-    L.push(`  A city built from a pack older than 0.54.0 has no such marker: stand exactly where you ran`);
+    L.push(`  A city built from a pack older than 0.54.1 has no such marker: stand exactly where you ran`);
     L.push(`  build_centered and run /function ${ns}/mark_centre once. The Polis app's Find a landmark panel`);
     L.push('  also gives each landmark\'s coordinates from your build spot.)');
     const w = Math.max(...places.map((P) => P.name.length));
@@ -844,9 +848,11 @@ export function placementGuide(tiles, opts = {}) {
     L.push('');
   }
   if ((opts.spawns || []).some((p) => p.group === 'stadium')) {
-    L.push('THE STADIUM\'S BOUTS: the fighters come with populate (or /function ' + ns + '/stadium_centered). A repeating');
-    L.push('  command block under the pits keeps them from being hurt; it needs command blocks on:');
-    L.push('  /gamerule commandblocksenabled true (cheats on). The bouts run while you are near enough for the stadium to be simulated.');
+    L.push('THE STADIUM\'S BOUTS: the fighters come with populate (or /function ' + ns + '/stadium_centered); each is');
+    L.push('  saved with Resistance V, so none is ever hurt, and a command block under the pitch gives it again (silently:');
+    L.push('  build turns the command block chat off with /gamerule commandblockoutput false; needs command blocks on).');
+    L.push('  The fans go up into the stands by the stair from the street.');
+    L.push('  The bouts run while you are near enough for the stadium to be simulated.');
     L.push('');
   }
   L.push('A JAIL, ZOO OR AQUARIUM EMPTY? Their animals are summoned, and a summon only reaches');

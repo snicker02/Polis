@@ -37,61 +37,73 @@ export default async function run(ctx) {
   const inspect = (r) => {
     const S = r.landmarks.find((q) => q.kind === 'stadium');
     if (!S || !S.bouts) return { built: false };
-    const w = r.world, B = S.bouts;
+    const w = r.world, B = S.bouts, P = S.pitch;
     const blk = (x, y, z) => { const i = w.get(x, y, z); return i < 0 ? 'air' : MATERIALS.def(i).block.replace('minecraft:', ''); };
     const out = { built: true, bad: [] };
     const G = S.fighters[0].y - 1;
-    // each pit: three clear inside, glass walls and roof, its two fighters in it
-    B.pits.forEach((pit, i) => {
-      const cells = new Set(pit.cells.map(([x, z]) => x + ',' + z));
-      for (const [x, z] of pit.cells) {
-        if (![1, 2, 3].every((d) => blk(x, G + d, z) === 'air')) out.bad.push(`pit ${i}: not clear inside at ${x},${z}`);
-        if (blk(x, G + 4, z) !== 'glass') out.bad.push(`pit ${i}: no roof at ${x},${z}`);
-        if (blk(x, G, z) === 'air') out.bad.push(`pit ${i}: no floor`);
+    const onPitch = (x, z) => x >= P.x0 && x <= P.x1 && z >= P.z0 && z <= P.z1;
+    // the fighters on the pitch, room over them (a golem stands near three high)
+    const kinds = S.fighters.map((f) => f.type === 'golem' ? 'golem' : f.kind).sort().join('+');
+    if (kinds !== 'golem+golem+husk+vindicator') out.bad.push(`fighters ${kinds}`);
+    for (const f of S.fighters) if (!onPitch(f.x, f.z) || ![0, 1, 2].every((d) => blk(f.x, f.y + d, f.z) === 'air') || blk(f.x, f.y - 1, f.z) === 'air') out.bad.push(`${f.kind || f.type} not standing on the pitch`);
+    // walled four high all round: every cell round the pitch solid from G+1 to G+4
+    for (let x = P.x0 - 1; x <= P.x1 + 1; x++) for (let z = P.z0 - 1; z <= P.z1 + 1; z++) {
+      if (onPitch(x, z)) continue;
+      if (![1, 2, 3, 4].every((d) => blk(x, G + d, z) !== 'air')) { out.bad.push(`the wall low at ${x},${z}`); break; }
+    }
+    // sealed: as a mob walks (a step, a jump of one with room over it), nothing off the pitch
+    const clear = (b) => b === 'air' || /sign|lantern|flower|tulip|grass$/.test(b) && !/grass_block/.test(b);
+    const key = (p) => p.join(','), seen = new Set(), q = [];
+    for (const f of S.fighters) { seen.add(key([f.x, f.y, f.z])); q.push([f.x, f.y, f.z]); }
+    while (q.length && seen.size < 5000) {
+      const [x, y, z] = q.pop();
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = x + dx, nz = z + dz, opts = [];
+        if (clear(blk(nx, y, nz)) && clear(blk(nx, y + 1, nz))) opts.push([nx, clear(blk(nx, y - 1, nz)) ? y - 1 : y, nz]);
+        if (!clear(blk(nx, y, nz)) && clear(blk(nx, y + 1, nz)) && clear(blk(nx, y + 2, nz)) && clear(blk(x, y + 2, z))) opts.push([nx, y + 1, nz]);
+        for (const n of opts) if (!seen.has(key(n))) { seen.add(key(n)); q.push(n); }
       }
-      const inPit = S.fighters.filter((f) => cells.has(f.x + ',' + f.z) && f.y === G + 1);
-      const kinds = inPit.map((f) => f.type === 'golem' ? 'golem' : f.kind).sort().join('+');
-      if (inPit.length !== 2 || !/^(golem\+vindicator|golem\+husk)$/.test(kinds)) out.bad.push(`pit ${i}: ${kinds}`);
-      // sealed: as a mob walks (a step, a jump of one with room over it), nothing out
-      const clear = (b) => b === 'air' || /sign|lantern/.test(b);
-      const key = (p) => p.join(','), seen = new Set(), q = [];
-      for (const f of inPit) { seen.add(key([f.x, f.y, f.z])); q.push([f.x, f.y, f.z]); }
-      while (q.length && seen.size < 500) {
-        const [x, y, z] = q.pop();
-        for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-          const nx = x + dx, nz = z + dz;
-          const opts = [];
-          if (clear(blk(nx, y, nz)) && clear(blk(nx, y + 1, nz))) opts.push([nx, clear(blk(nx, y - 1, nz)) ? y - 1 : y, nz]);
-          if (!clear(blk(nx, y, nz)) && clear(blk(nx, y + 1, nz)) && clear(blk(nx, y + 2, nz)) && clear(blk(x, y + 2, z))) opts.push([nx, y + 1, nz]);
-          for (const n of opts) if (!seen.has(key(n))) { seen.add(key(n)); q.push(n); }
-        }
-      }
-      const out2 = [...seen].filter((k) => { const [x, , z] = k.split(',').map(Number); return !cells.has(x + ',' + z); });
-      if (out2.length) out.bad.push(`pit ${i}: a fighter walks out to ${out2[0]}`);
-    });
-    // the command block: repeating, always on, the effect for every fighter
-    const cb = w.getData(...B.command), t = cb && cb.tags;
-    out.command = blk(...B.command) === 'repeating_command_block' && !!t && t.LPCommandMode.v === 1 && t.auto.v === 1
+    }
+    const off = [...seen].find((k) => { const [x, , z] = k.split(',').map(Number); return !onPitch(x, z); });
+    if (off) out.bad.push(`a fighter walks off the pitch to ${off}`);
+    // one command block in the stadium: the silent backstop under the pitch, repeating
+    // every two seconds, reporting nothing
+    let cmds = 0;
+    for (let x = S.lot.x0; x <= S.lot.x1; x++) for (let z = S.lot.z0; z <= S.lot.z1; z++) for (let y = G - 3; y <= G + 14; y++) if (/command_block/.test(blk(x, y, z))) cmds++;
+    const cb = B.command && w.getData(...B.command), t = cb && cb.tags;
+    out.commands = cmds === 1 && blk(...B.command) === 'repeating_command_block' && !!t && t.TrackOutput.v === 0 && t.TickDelay.v >= 40 && t.auto.v === 1
       && new RegExp(`^effect @e\\[tag=${FIGHTER_TAG}\\] resistance \\d+ 4 true$`).test(t.Command.v);
-    // a fan from the tunnel round the pits to the stands
+    // a fan from the street up the stair into the stands, never onto the pitch
     const pass = (b) => b === 'air' || /sign|flower|torch|lantern/.test(b);
     const stand = (x, y, z) => pass(blk(x, y, z)) && pass(blk(x, y + 1, z)) && !pass(blk(x, y - 1, z)) && !/fence|glass|bars/.test(blk(x, y - 1, z));
-    const [tx, ty, tz] = S.tunnel[S.tunnel.length - 1];
-    const key = (p) => p.join(','), seen = new Set(), q = [];
-    for (let d = -1; d <= 1; d++) if (stand(tx, ty + d, tz)) { seen.add(key([tx, ty + d, tz])); q.push([tx, ty + d, tz]); break; }
-    while (q.length && seen.size < 20000) { const [a, b, c] = q.pop(); for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) for (const dy of [0, 1, -1]) { const n = [a + dx, b + dy, c + dz]; if (n[0] < S.lot.x0 || n[0] > S.lot.x1 || n[2] < S.lot.z0 || n[2] > S.lot.z1 || seen.has(key(n)) || !stand(...n)) continue; seen.add(key(n)); q.push(n); } }
-    out.stands = [...seen].some((k) => { const [x, y, z] = k.split(',').map(Number); return y >= G + 3 && /stairs/.test(blk(x, y, z)) === false && /stairs/.test(blk(x, y - 1, z)); });
-    out.walkAround = [...seen].filter((k) => { const [, y] = k.split(',').map(Number); return y === G + 1; }).length >= 20;
+    const [Fx, Fz] = { north: [0, -1], south: [0, 1], west: [-1, 0], east: [1, 0] }[S.face || 'south'] || [0, 1];
+    const foot = B.stair[0], sx = foot[0] + Fx, sz = foot[2] + Fz;
+    const walk = new Set(), wq = [];
+    for (let d = -2; d <= 3; d++) if (stand(sx, foot[1] + d, sz)) { walk.add(key([sx, foot[1] + d, sz])); wq.push([sx, foot[1] + d, sz]); break; }
+    const lo = S.lot;
+    while (wq.length && walk.size < 20000) { const [a, b, c] = wq.pop(); for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) for (const dy of [0, 1, -1]) { const n = [a + dx, b + dy, c + dz]; if (n[0] < lo.x0 - 1 || n[0] > lo.x1 + 1 || n[2] < lo.z0 - 1 || n[2] > lo.z1 + 1 || walk.has(key(n)) || !stand(...n)) continue; if (dy === 1 && !pass(blk(a, b + 2, c))) continue; walk.add(key(n)); wq.push(n); } }
+    out.fansStart = walk.size > 0;
+    out.stands = [...walk].some((k) => { const [x, y, z] = k.split(',').map(Number); return y >= G + 5 && /stairs/.test(blk(x, y - 1, z)) && Math.max(Math.abs(x - (P.x0 + P.x1) / 2) - (P.x1 - P.x0) / 2, Math.abs(z - (P.z0 + P.z1) / 2) - (P.z1 - P.z0) / 2) <= 1.5; });
+    out.fansOnPitch = [...walk].some((k) => { const [x, y, z] = k.split(',').map(Number); return onPitch(x, z) && y <= G + 2; });
     const sign = B.announcer && w.getData(...B.announcer);
     out.announcer = !!sign && /Vindicator/.test(sign.tags.FrontText.v.Text.v) && /Husk/.test(sign.tags.FrontText.v.Text.v);
     return out;
   };
   const ts = cities.map(([n, r]) => [n, r, inspect(r)]);
   const all = (f) => ts.every(([, , t]) => t.built && f(t));
-  check('bouts: the stadium built with its pits, even in a city that had no stadium', ts.every(([, , t]) => t.built) && !without.landmarks.some((q) => q.kind === 'stadium'), ts.map(([n, , t]) => `${n}: ${t.built}`).join(', '));
-  check('bouts: two glass pits, three clear inside, roofed, each a golem and its challenger (a vindicator, a husk), sealed (nothing walks or jumps out)', all((t) => t.bad.length === 0), ts.map(([n, , t]) => (t.bad || []).slice(0, 2).join('; ')).filter(Boolean).join(' | '));
-  check('bouts: under the pits a repeating command block, always on, giving every fighter Resistance V', all((t) => t.command));
-  check('bouts: from the tunnel a fan walks round the pits and up into the stands', all((t) => t.walkAround && t.stands));
+  check('bouts: the stadium built with them, even in a city that had no stadium', ts.every(([, , t]) => t.built) && !without.landmarks.some((q) => q.kind === 'stadium'), ts.map(([n, , t]) => `${n}: ${t.built}`).join(', '));
+  check('bouts: two golems, a vindicator and a husk on the pitch, walled four high all round, sealed (nothing walks, jumps or is thrown off it)', all((t) => t.bad.length === 0), ts.map(([n, , t]) => (t.bad || []).slice(0, 2).join('; ')).filter(Boolean).join(' | '));
+  check('bouts: one command block, silent (no output, every two seconds), giving the fighters Resistance V again', all((t) => t.commands));
+  {
+    const r = cities[0][1];
+    const opts = { namespace: 'chk', spawns: r.spawns, centre: r.world.centre, places: r.places };
+    const fns = functionFiles(tileList(r.world, opts), r.world, opts);
+    const quiet = ['build', 'build_centered'].every((n) => { const f = fns.find((q) => q.fn === 'chk/' + n); return !!f && f.text.split('\n').includes('gamerule commandblockoutput false'); });
+    const plain = generateCity({ ...DEFAULTS, furnish: false, villagers: 0, fish: false, size: 160, seed: 3 });
+    const pf = functionFiles(tileList(plain.world, {}), plain.world, { namespace: 'chk' }).find((q) => q.fn === 'chk/build');
+    check('bouts: build turns the game\'s command block chat off (only where the city has a command block)', quiet && !pf.text.includes('commandblockoutput'));
+  }
+  check('bouts: a fan walks from the street up the stair into the stands round the pitch, and not onto the pitch', all((t) => t.fansStart && t.stands && !t.fansOnPitch), ts.map(([n, , t]) => `${n}: ${t.fansStart}/${t.stands}/${t.fansOnPitch}`).join(', '));
   check('bouts: an announcer\'s sign naming the bouts', all((t) => t.announcer));
   {
     const r = cities[0][1], bad = [];
@@ -99,7 +111,7 @@ export default async function run(ctx) {
     const ents = tiles.flatMap((t) => decodeNbt(t.data).root.structure.entities);
     for (const e of ents) {
       if (!(e.Tags || []).includes(FIGHTER_TAG)) bad.push(`${e.identifier}: no tag`);
-      if (!(e.ActiveEffects || []).some((f) => f.Id === 11 && f.Amplifier === 4 && f.Duration > 1200)) bad.push(`${e.identifier}: no Resistance V`);
+      if (!(e.ActiveEffects || []).some((f) => f.Id === 11 && f.Amplifier === 4 && f.Duration >= 1e9)) bad.push(`${e.identifier}: no lasting Resistance V`);
       if (e.Persistent !== 1) bad.push(`${e.identifier}: not kept`);
     }
     const kinds = ents.map((e) => e.identifier).sort().join(',');
@@ -115,7 +127,17 @@ export default async function run(ctx) {
   {
     const r = generateCity({ ...DEFAULTS, furnish: false, villagers: 0, fish: false, size: 320, seed: 99 });
     const S = r.landmarks.find((q) => q.kind === 'stadium');
-    check('bouts: without them, the stadium as it was (no pits, no fighters)', !!S && !S.bouts && !r.spawns.some((p) => p.group === 'stadium'));
+    // without them: the tunnel onto the pitch, and from it a step up into the stands
+    const w = r.world, blk = (x, y, z) => { const i = w.get(x, y, z); return i < 0 ? 'air' : MATERIALS.def(i).block.replace('minecraft:', ''); };
+    const pass = (b) => b === 'air' || /sign|flower|torch|lantern/.test(b);
+    const stand = (x, y, z) => pass(blk(x, y, z)) && pass(blk(x, y + 1, z)) && !pass(blk(x, y - 1, z)) && !/fence|glass|bars/.test(blk(x, y - 1, z));
+    const key = (p) => p.join(','), seen = new Set(), q = [];
+    const t0 = S.tunnel[S.tunnel.length - 1];
+    for (let d = -1; d <= 1; d++) if (stand(t0[0], t0[1] + d, t0[2])) { seen.add(key([t0[0], t0[1] + d, t0[2]])); q.push([t0[0], t0[1] + d, t0[2]]); break; }
+    while (q.length && seen.size < 20000) { const [a, b, c] = q.pop(); for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) for (const dy of [0, 1, -1]) { const n = [a + dx, b + dy, c + dz]; if (n[0] < S.lot.x0 || n[0] > S.lot.x1 || n[2] < S.lot.z0 || n[2] > S.lot.z1 || seen.has(key(n)) || !stand(...n)) continue; seen.add(key(n)); q.push(n); } }
+    const G0 = t0[1] - 1;
+    const upIn = [...seen].some((k) => { const [x, y, z] = k.split(',').map(Number); return y >= G0 + 3 && /stairs/.test(blk(x, y - 1, z)); });
+    check('stadium (without bouts): as it was, no fighters; from the tunnel a step up into the stands', !!S && !S.bouts && !r.spawns.some((p) => p.group === 'stadium') && S.steps.length === 2 && upIn);
   }
   {
     const states = JSON.parse(readFileSync(new URL('../bedrock-states.json', import.meta.url), 'utf8'))['1.21.60'];

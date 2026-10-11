@@ -56,6 +56,7 @@ export default async function run(ctx) {
     // the centre marker: build_centered places it, the other centred functions run from it
     /^kill @e\[type=armor_stand,name=[a-z0-9_]+_centre\]$/,
     /^summon armor_stand [a-z0-9_]+_centre ~ ~ ~$/,
+    /^gamerule commandblockoutput false$/,
     // the centre marker tagged as the city's own, and goto finding it by that tag
     /^kill @e\[type=armor_stand,tag=polis_c_[0-9a-f]{8}\]$/,
     /^tag @e\[type=armor_stand,name=[a-z0-9_]+_centre,r=2\] add polis_c_[0-9a-f]{8}$/,

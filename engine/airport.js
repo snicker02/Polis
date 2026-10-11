@@ -342,6 +342,6 @@ export function commandBlock(command, chainOrOpts) {
   return { id: 'CommandBlock', tags: {
     Command: N.str(command), CustomName: N.str(''), ExecuteOnFirstTick: N.byte(mode === 'repeat' ? 1 : 0), LPCommandMode: N.int(mode === 'chain' ? 2 : mode === 'repeat' ? 1 : 0),
     LPCondionalMode: N.byte(0), LPRedstoneMode: N.byte(auto ? 1 : 0), LastExecution: N.long(0n), LastOutput: N.str(''),
-    LastOutputParams: N.list(8, []), SuccessCount: N.int(0), TickDelay: N.int(o.delay | 0), TrackOutput: N.byte(1), Version: N.int(36),
+    LastOutputParams: N.list(8, []), SuccessCount: N.int(0), TickDelay: N.int(o.delay | 0), TrackOutput: N.byte(0), Version: N.int(36),
     auto: N.byte(auto ? 1 : 0), conditionMet: N.byte(0), conditionalMode: N.byte(0), powered: N.byte(0) } };
 }

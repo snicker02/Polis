@@ -613,7 +613,7 @@ export function generateCity(cfgIn, onProgress) {
       for (const m of L.inmates || []) m.y += elevAt(Math.floor(m.x), Math.floor(m.z));   // the jail's inmates ride up with it
       for (const m of L.keepers || []) m.y += elevAt(m.x, m.z);                           // the mall's shopkeepers
       for (const m of L.fighters || []) m.y += elevAt(m.x, m.z);                          // the stadium's fighters
-      if (L.bouts) { for (const p of [L.bouts.command, L.bouts.announcer, ...L.bouts.cards]) if (p) p[1] += elevAt(p[0], p[2]); }
+      if (L.bouts) { for (const p of [L.bouts.announcer, L.bouts.command, ...L.bouts.stair]) if (p) p[1] += elevAt(p[0], p[2]); }
       for (const m of [...(L.animals || []), ...(L.fish || [])]) m.y += elevAt(Math.floor(m.x), Math.floor(m.z));   // the zoo's too
       for (const p of L.paintings || []) { const e = elevAt(p.x, p.z); p.y += e; p.pos[1] += e; }      // the museum's paintings,
       for (const st of L.stands || []) st.y += elevAt(Math.floor(st.x), Math.floor(st.z));              // and its armour stands
@@ -986,8 +986,8 @@ export function generateCity(cfgIn, onProgress) {
       CEM.named.length ? `${CEM.named.length} named gravestone${CEM.named.length > 1 ? 's' : ''}${CEM.named.length < namesOf(cfg.graveNames).length ? ` (of ${namesOf(cfg.graveNames).length}: no more graves)` : ''}` : ''].filter(Boolean).join(', ');
   }
   { const S = landmarks.find((q) => q.kind === 'stadium');
-    if (cfg.bouts) { if (S && S.bouts) stats.bouts = `${S.bouts.pits.length} glass pits on the stadium's pitch: ${BOUTS.map((b) => b.name).join(', ')}, fighting on and never hurt`;
-      else stats.boutsMissing = S ? 'the stadium\'s pitch is too small for the pits (it needs 9 by 13)' : cfg.landmarks ? 'no lot for the stadium (it needs 17 by 21)' : 'the bouts are in the stadium, a landmark: tick Landmarks'; } }
+    if (cfg.bouts) { if (S && S.bouts) stats.bouts = `on the stadium's pitch, walled four high: ${BOUTS.map((b) => b.name).join(', ')}, fighting on and never hurt; the fans in by a stair from the street`;
+      else stats.boutsMissing = S ? 'the stadium\'s pitch is too small for the bouts' : cfg.landmarks ? 'no lot for the stadium (it needs 17 by 21)' : 'the bouts are in the stadium, a landmark: tick Landmarks'; } }
   { const A = landmarks.find((q) => q.kind === 'airport');
     if (A) stats.airport = `beside the city to the ${A.side}: a runway ${A.runway.length} long, a terminal, a control tower ${A.tower.top - A.ground} high, ${A.pads.length} elytra launch pads, ${A.planes.length} aircraft`;
     else if (cfg.airport) stats.airportMissing = airportMissing || 'no room for the airport'; }
@@ -997,9 +997,11 @@ export function generateCity(cfgIn, onProgress) {
     : 'no lot beside a straight stretch of the railway (eleven along it) for the station';
   const zoo = landmarks.flatMap((L) => [...(L.animals || []), ...(L.fish || [])]);
   // the stadium's fighters: in the stadium's own structures, each tagged a fighter and
-  // with Resistance V (the command block under the pits gives it them again and again)
+  // with Resistance V for as long as an effect lasts (a billion ticks: over a year and
+  // a half of the game running), saved on the mob; a silent command block under the
+  // pitch gives it again (landmarks-extra.js), should the game not keep a saved effect
   for (const L of landmarks) for (const f of L.fighters || []) spawns.push({ ...f, group: 'stadium', tags: [FIGHTER_TAG],
-    effects: [{ id: 11, amp: 4, ticks: 72000 }] });
+    effects: [{ id: 11, amp: 4, ticks: 1000000000 }] });
   // the mall's shopkeepers: villagers of their trades, in the structures with the rest
   for (const L of landmarks) for (const k of L.keepers || []) spawns.push({ type: 'villager', x: k.x, y: k.y, z: k.z, profession: k.profession, tier: k.tier, group: 'mall' });
   for (const a of zoo) spawns.push({ type: 'mob', kind: a.type, x: a.x, y: a.y, z: a.z, name: a.name, variety: a.variety, group: 'zoo' });

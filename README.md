@@ -1,4 +1,4 @@
-# Polis v0.54.0
+# Polis v0.54.1
 
 *Created with help from Claude AI.*
 
@@ -771,6 +771,28 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.54.1** — The bouts on an open pitch, nothing in the chat.
+
+The command block that kept the fighters unhurt wrote a line to the chat every half
+second (Bedrock's `commandblockoutput` rule is on by default). Now:
+
+- every pack whose city has a command block (the stadium's, the airport's pads)
+  turns that chat off when built: `gamerule commandblockoutput false`. Every command
+  block also reports nothing, and the stadium's runs every two seconds, not twice a
+  second;
+- the glass pits are gone. The fighters (two iron golems, a vindicator, a husk) are
+  loose on the pitch. For the bouts the stands stand two blocks higher, so the pitch
+  is walled four high all round, and nothing leads off it. The tunnel becomes a stair
+  from the street up into the stands, and the fans watch from above;
+- each fighter is saved with Resistance V for a billion ticks (over a year and a half
+  of the game running). The command block under the pitch, now silent, gives it again,
+  in case the game drops an effect a structure brought;
+- the line in from the street now starts exactly at the outer ring, whichever way the
+  lot's width falls (on some lots it began a ring in).
+
+Check 2zzm: the pitch sealed and walled four high, one silent command block, build
+turning the chat off, the fans up into the stands and not onto the pitch.
 
 **0.54.0** — Exhibition bouts in the stadium.
 
