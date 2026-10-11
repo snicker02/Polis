@@ -155,7 +155,8 @@ export default async function run(ctx) {
     const { decodeNbt } = await import('../nbt-read.js');
     const jailEnts = buildMobStructures(r.spawns, { seed: 1 }).filter((t) => t.name.startsWith('m_jail_')).flatMap((t) => decodeNbt(t.data).root.structure.entities);
     const placed = r.inmates.filter((m) => !(m.type === 'enderman' && m.ride)).filter((m) => {
-      const be = HOSTILE_KINDS[m.type] ? HOSTILE_KINDS[m.type].be : 'minecraft:' + m.type;
+      // (as it goes in a structure: the zombie villager as _v2, the one the game spawns)
+      const be = HOSTILE_KINDS[m.type] ? HOSTILE_KINDS[m.type].inStructure || HOSTILE_KINDS[m.type].be : 'minecraft:' + m.type;
       return jailEnts.some((e) => e.identifier === be && e.CustomName === 'Inmate' && e.Persistent === 1 && e.definitions.includes('+polis:kept')
         && Math.floor(e.Pos[0]) === Math.floor(m.x) && Math.floor(e.Pos[2]) === Math.floor(m.z));
     }).length;
@@ -163,6 +164,17 @@ export default async function run(ctx) {
     const shulkerRides = !!shulker && carts.some((c) => (c.LinksTag || []).some((l) => String(l.entityID) === String(shulker.UniqueID)));
     const wanted = r.inmates.filter((m) => !(m.type === 'enderman' && m.ride)).length;
     check('jail: every inmate in the jail\'s own structures, as the game saves it: its kind, named, kept, in its cell; the shulker in a minecart', placed === wanted && wanted > 0 && shulkerRides, `${placed} of ${wanted}, shulker riding ${shulkerRides}`);
+    // no mob in a structure is one the game keeps for old worlds only (the old zombie
+    // villager: its client files ask for animations that are gone, a content log error
+    // for every one), and the pack overrides none of them
+    {
+      const LEGACY = ['minecraft:zombie_villager', 'minecraft:villager'];
+      const { mobEntityFiles } = await import('../../engine/export.js');
+      const legacyIn = jailEnts.filter((e) => LEGACY.includes(e.identifier)).map((e) => e.identifier);
+      const legacyDef = mobEntityFiles().filter((f) => /entities\/(zombie_villager|villager)\.json$/.test(f.name)).map((f) => f.name);
+      const v2 = jailEnts.some((e) => e.identifier === 'minecraft:zombie_villager_v2' && e.definitions.includes('+minecraft:zombie_villager_v2'));
+      check('jail: no legacy mob in its structures (the zombie villager is _v2) and no legacy mob\'s definition in the pack', !legacyIn.length && !legacyDef.length && v2, [...legacyIn, ...legacyDef].join(', ') || (v2 ? '' : 'no zombie_villager_v2'));
+    }
     // The enderman in a minecart on its cell's rail (riding, it cannot teleport),
     // placed as the pair a player saved from their own trap, in the structures with
     // the villagers: the minecart's link naming that enderman, the enderman already

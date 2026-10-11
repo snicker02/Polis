@@ -1,4 +1,4 @@
-# Polis v0.52.2
+# Polis v0.53.0
 
 *Created with help from Claude AI.*
 
@@ -771,6 +771,40 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.53.0** — An airport.
+
+A new option, "An airport beside the city" (off by default), builds an airfield
+(airport.js) outside the city's square, 120 by 50, on the side where a street leads
+straight out across open ground. An access road, three wide, runs from that street
+out through the city wall. The airfield lies at the height the road leaves the city:
+
+- the terminal: a glass front, check-in desks, departures and arrivals boards,
+  seats facing the runway, three doors out to the apron;
+- the control tower: a glass cab 22 up, a ladder inside the shaft, a light on top;
+- three elytra launch pads on the apron. Each is a pressure plate on a command
+  block that lifts you high (levitation), with a chain command block under it that
+  slows your fall, and a chest beside it with elytras and 64 rockets;
+- two parked aircraft, a hangar with a third;
+- a taxiway, and a runway 116 long and 9 wide: black, a dashed centre line,
+  threshold stripes, lights along both edges, a windsock;
+- a fence round it all, and lights wherever the ground would be dark.
+
+It is drawn on the plan beside the city and is a place in Find a landmark (with
+`goto_airport`). The export founds and clears it like the city's own ground, and
+in Java the pads' commands are written in Java's words. Not on a city fitted to your world
+(the land round it is your world's), nor with the dome, stilts, floating islands or
+a cliff. Check 2zzl.
+
+**0.52.3** — No more zombie villager animation errors.
+
+The jail's zombie villager was the old `minecraft:zombie_villager`, which Mojang
+keeps only for old worlds; its client files ask for animations that no longer exist
+(`riding.body`, `baby_zombie_attack_bare_hand`), and the content log reported them.
+It is now `zombie_villager_v2`, the one the game itself spawns. The inmates come in
+structures, so _v2 not being summonable no longer matters; the hostile mobs, which
+are summoned, keep the old id. The pack no longer carries a definition of the old
+one. Check 2zz: no legacy mob in the jail's structures, none in the pack.
 
 **0.52.2** — Names in the cemetery.
 

@@ -17,7 +17,7 @@ import { makeRng } from './rng.js';
 // Must match main.js VERSION, package.json and index.html data-version;
 // tools/validate.js fails if they drift. The app refuses to export when the
 // browser has mixed cached copies of old and new files.
-export const POLIS_VERSION = '0.52.2';
+export const POLIS_VERSION = '0.53.0';
 
 export const CHUNK = 64;          // Bedrock structure limit per horizontal axis
 export const GROUND_DROP = 2;     // base layer y=0 sits 2 below feet; surface y=1 replaces the block you stand on
@@ -139,9 +139,14 @@ export function foundationFill(world) {
 // The city's outline, if it has one (organic cities): a test for "is this
 // column part of the city". Square cities return null (everything is).
 export function cityInside(world) {
-  const m = world.cityMask;
-  if (!m) return null;
-  return (x, z) => x >= 0 && z >= 0 && x < m.W && z < m.D && m.data[z * m.W + x] === 1;
+  const m = world.cityMask, extra = world.extraInside || [];
+  if (!m && !extra.length) return null;
+  // (ground of the city's own outside its square: the airport's airfield and road)
+  const inRect = (x, z) => extra.some((r) => x >= r.x0 && x <= r.x1 && z >= r.z0 && z <= r.z1);
+  const P = world.planSize;
+  const inPlan = m ? (x, z) => x >= 0 && z >= 0 && x < m.W && z < m.D && m.data[z * m.W + x] === 1
+    : (x, z) => x >= 0 && z >= 0 && x < P.W && z < P.D;
+  return (x, z) => inPlan(x, z) || inRect(x, z);
 }
 
 // Fitted to real ground: how high each column has to be carved, and how deep
@@ -707,7 +712,7 @@ export function functionFiles(tiles, world, opts = {}) {
   }
   if (places.length) files.push({ name: `functions/${ns}/mark_centre.mcfunction`, fn: `${ns}/mark_centre`, text: [
     `# Polis: mark this spot as the city's centre, for the goto functions. Stand exactly where you ran build_centered`,
-    `# (in the centre monument's alcove, under its sign). Needed only for a city built from a pack older than 0.52.2.`,
+    `# (in the centre monument's alcove, under its sign). Needed only for a city built from a pack older than 0.53.0.`,
     `kill @e[type=armor_stand,tag=${ctag}]`,
     `kill @e[type=armor_stand,name=${anchor}]`,
     `summon armor_stand ${anchor} ~ ~ ~`,
@@ -812,11 +817,17 @@ export function placementGuide(tiles, opts = {}) {
     L.push('WHERE THINGS ARE (from the build_centered spot; north is -Z). To go to one:');
     L.push(`    /function ${ns}/goto_<name>     e.g. /function ${ns}/goto_${places[0].id}`);
     L.push('  (it takes you there from the marker build_centered left, wherever you are in the city.');
-    L.push(`  A city built from a pack older than 0.52.2 has no such marker: stand exactly where you ran`);
+    L.push(`  A city built from a pack older than 0.53.0 has no such marker: stand exactly where you ran`);
     L.push(`  build_centered and run /function ${ns}/mark_centre once. The Polis app's Find a landmark panel`);
     L.push('  also gives each landmark\'s coordinates from your build spot.)');
     const w = Math.max(...places.map((P) => P.name.length));
     for (const P of places) L.push(`  ${P.name.padEnd(w)}  ${P.words.padEnd(20)}  goto_${P.id}`);
+    L.push('');
+  }
+  if ((opts.places || []).some((P) => P.kind === 'airport')) {
+    L.push('THE AIRPORT\'S LAUNCH PADS run command blocks: take an elytra and rockets from the chest beside a');
+    L.push('  pad, put the elytra on, step on the plate; it lifts you high and slows your fall, so open the elytra');
+    L.push('  (jump in the air). If a pad does nothing: /gamerule commandblocksenabled true (cheats must be on).');
     L.push('');
   }
   L.push('A JAIL, ZOO OR AQUARIUM EMPTY? Their animals are summoned, and a summon only reaches');

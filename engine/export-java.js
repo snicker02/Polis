@@ -18,6 +18,7 @@ import { domeAir } from './dome.js';
 import { inAirBox } from './underground.js';
 import { VoxelWorld } from './blockcore.js';
 import { javaEntity, javaEntityPos } from './java-entities.js';
+import { cityInside } from './export.js';
 
 // ---- big-endian NBT ------------------------------------------------------
 const T = { END: 0, BYTE: 1, SHORT: 2, INT: 3, LONG: 4, FLOAT: 5, DOUBLE: 6, BYTE_ARRAY: 7, STRING: 8, LIST: 9, COMPOUND: 10, INT_ARRAY: 11 };
@@ -123,6 +124,14 @@ function javaBlockEntity(name, data) {
     return J.comp({ id: J.str(name), is_waxed: J.byte(0), front_text: side(javaSignText(text)), back_text: side(javaSignText('')) });
   }
   if (data.id === 'Beacon') return J.comp({ id: J.str('minecraft:beacon') });
+  if (data.id === 'CommandBlock') {
+    // (the airport's launch pads: Bedrock's effect command in Java's own words)
+    const t = data.tags || {}, cmd = t.Command ? t.Command.v : '';
+    const m = cmd.match(/^effect (@[pa])\[r=(\d+)\] ([a-z_]+) (\d+) (\d+) true$/);
+    const jcmd = m ? `effect give ${m[1]}[distance=..${m[2]}] minecraft:${m[3]} ${m[4]} ${m[5]} true` : cmd;
+    return J.comp({ id: J.str(name.includes('chain') ? 'minecraft:chain_command_block' : 'minecraft:command_block'), Command: J.str(jcmd),
+      auto: J.byte(t.auto ? t.auto.v : 0), powered: J.byte(0), conditionMet: J.byte(0), TrackOutput: J.byte(1), UpdateLastExecution: J.byte(1) });
+  }
   if (data.id === 'MobSpawner') {
     // the same spawner on Java: what it spawns, and the same rhythm and reach
     const t = data.tags || {}, v = (k, d) => (t[k] ? t[k].v : d);
@@ -214,8 +223,9 @@ export function javaTiles(world, opts = {}) {
   const air = [];
   const ground = [], piles = [];
   if (opts.fillAir) {
-    const mask = world.cityMask;
-    const inside = (x, z) => !mask || (x >= 0 && z >= 0 && x < mask.W && z < mask.D && mask.data[z * mask.W + x] === 1);
+    // (the city's own ground: its outline, and the airport's airfield beside it)
+    const within = cityInside(world);
+    const inside = (x, z) => !within || within(x, z);
     const clearance = Math.max(0, Math.min(200, opts.clearAbove | 0));
     const depth = Math.max(0, Math.min(48, opts.foundation === undefined ? 8 : opts.foundation | 0));
     const tops = new Map(), bottoms = new Map();

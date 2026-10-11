@@ -35,6 +35,7 @@ import { planHarbour, buildHarbour, harbourSidings } from './harbour.js';
 import { planBridges, buildBridges, bridgeRails } from './bridges.js';
 import { chooseLandmarks, buildLandmark, LANDMARK_NAMES } from './landmarks.js';
 import { namesOf } from './landmarks-extra.js';
+import { buildAirport } from './airport.js';
 import { planHills, liftBlocks, cutStairs, shiftBuilding, walkCity } from './terrain.js';
 import { styleOf, remapTable, STYLES } from './styles.js';
 import { signTags } from './landmarks.js';
@@ -116,6 +117,7 @@ export const DEFAULTS = {
   waterpark: false,          // a water park: pools, a bubble lift, a boat slide, a kids' pool (waterpark.js)
   memorial: '',              // names for a memorial in the cemetery, side by side (one a line; ' / ' a new line on the sign)
   graveNames: '',            // names for the cemetery's other gravestones (one a line)
+  airport: false,            // an airport beside the city: runway, terminal, control tower, elytra launch pads (airport.js)
   mall: false,               // a shopping mall: two floors of shops, each shopkeeper a villager of its trade (mall.js)
   garden: false,             // a botanical garden: a glass hall of plants from every biome (garden.js)
   station: false,            // a railway station on the line: a hall, a platform canopy, a clock (station.js)
@@ -843,6 +845,24 @@ export function generateCity(cfgIn, onProgress) {
   deepenPonds(world, ponds);
   const spawners = cfg.fish ? pondSpawners(world, ponds) : [];
 
+  // ---- the airport: an airfield of its own beside the city, a road out to it ----
+  // (not on a city fitted to your world, whose land round it is the world's own; not
+  // with a dome, on stilts, floating or on a cliff, which have no ground beside them)
+  let airportMissing = null;
+  if (cfg.airport) {
+    const why = cfg.terrain ? 'a city fitted to your world has no room of its own beside it for the airport'
+      : cfg.dome ? 'not with the dome' : cfg.stilts ? 'not on stilts' : floating ? 'not with floating islands' : hills.cliff ? 'not on a cliff' : null;
+    if (why) airportMissing = why;
+    else {
+      const A = buildAirport(world, plan, cfg, { GROUND, elevAt, signTags });
+      if (A.missing) airportMissing = A.missing;
+      else {
+        landmarks.push(A);
+        world.extraInside = [A.lot, A.roadRect];
+        world.planSize = { W: plan.W, D: plan.D };
+      }
+    }
+  }
   // ---- fish: last, once no more water will change ----------------------------
   // their own random stream, so a city's blocks and other spawns are the same
   // with fish on or off
@@ -924,7 +944,8 @@ export function generateCity(cfgIn, onProgress) {
   for (const m of inmates) {
     if (m.type === 'enderman' && m.ride) spawns.push({ type: 'ender_rider', x: Math.floor(m.x), y: m.y, z: Math.floor(m.z), name: m.name, group: 'jail' });
     else {
-      const kind = (HOSTILE_KINDS[m.type] ? HOSTILE_KINDS[m.type].be : 'minecraft:' + m.type).replace('minecraft:', '');
+      const H = HOSTILE_KINDS[m.type];
+      const kind = (H ? H.inStructure || H.be : 'minecraft:' + m.type).replace('minecraft:', '');
       spawns.push(m.ride ? { type: 'mob', kind, x: Math.floor(m.x), y: m.y, z: Math.floor(m.z), name: m.name, ride: true, group: 'jail' }
         : { type: 'mob', kind, x: m.x, y: m.y, z: m.z, name: m.name, group: 'jail' });
     }
@@ -961,6 +982,9 @@ export function generateCity(cfgIn, onProgress) {
     else stats.cemetery = [CEM.memorial ? `a memorial to ${CEM.memorial.signs.map((q) => q.name).join(' and ')} under a cherry tree` : (namesOf(cfg.memorial).length ? 'no room in the cemetery for the memorial' : ''),
       CEM.named.length ? `${CEM.named.length} named gravestone${CEM.named.length > 1 ? 's' : ''}${CEM.named.length < namesOf(cfg.graveNames).length ? ` (of ${namesOf(cfg.graveNames).length}: no more graves)` : ''}` : ''].filter(Boolean).join(', ');
   }
+  { const A = landmarks.find((q) => q.kind === 'airport');
+    if (A) stats.airport = `beside the city to the ${A.side}: a runway ${A.runway.length} long, a terminal, a control tower ${A.tower.top - A.ground} high, ${A.pads.length} elytra launch pads, ${A.planes.length} aircraft`;
+    else if (cfg.airport) stats.airportMissing = airportMissing || 'no room for the airport'; }
   // (a station needs a line to stand on: say so, not that there was no lot)
   if (cfg.station && !landmarks.some((q) => q.kind === 'station')) stats.stationMissing = !transit || !transit.lines || !transit.lines.length
     ? 'a station needs a railway or trams to stand by: set Transit to Railway or Trams'
@@ -2706,6 +2730,7 @@ export function landmarkPlaces(world, landmarks, groundAt) {
     const mx = Math.floor((lot.x0 + lot.x1) / 2), mz = Math.floor((lot.z0 + lot.z1) / 2);
     const ex = dx > 0 ? lot.x1 : dx < 0 ? lot.x0 : mx, ez = dz > 0 ? lot.z1 : dz < 0 ? lot.z0 : mz;
     let at = null;
+    if (L.visit) at = L.visit.slice();                     // (a landmark may say where to stand: the airport's forecourt)
     for (let k = 1; k <= 8 && !at; k++) for (const s of [0, 1, -1, 2, -2, 3, -3]) {
       const x = ex + dx * k + (dz ? s : 0), z = ez + dz * k + (dx ? s : 0);
       const g = groundAt(x, z);
@@ -2714,7 +2739,7 @@ export function landmarkPlaces(world, landmarks, groundAt) {
     }
     if (!at) { const g = groundAt(ex + dx * 3, ez + dz * 3); at = [ex + dx * 3, g + 1, ez + dz * 3]; }
     const n = (seen.get(L.kind) || 0) + 1; seen.set(L.kind, n);
-    out.push({ kind: L.kind, id: n > 1 ? `${L.kind}_${n}` : L.kind, name: (L.name || LANDMARK_NAMES[L.kind] || L.kind), at, look: [ex, at[1] + 1, ez], side,
+    out.push({ kind: L.kind, id: n > 1 ? `${L.kind}_${n}` : L.kind, name: (L.name || LANDMARK_NAMES[L.kind] || L.kind), at, look: L.visitLook ? L.visitLook.slice() : [ex, at[1] + 1, ez], side,
       lot: { x0: lot.x0, z0: lot.z0, x1: lot.x1, z1: lot.z1 } });
     // the cemetery's memorial, a place of its own: before the stones, looking at them
     if (L.memorial) out.push({ kind: 'memorial', id: 'memorial', name: 'Memorial: ' + L.memorial.signs.map((q) => q.name).join(' & '),

@@ -35,9 +35,11 @@ export const HOSTILE_KINDS = {
   // the rest the jail holds (jail.js)
   zombie:           { be: 'minecraft:zombie',             java: 'minecraft:zombie',           name: 'Zombie' },
   drowned:          { be: 'minecraft:drowned',            java: 'minecraft:drowned',          name: 'Drowned' },
-  // (minecraft:zombie_villager, not _v2: Mojang marks _v2 not summonable, and one
-  // summon of it and Bedrock would not load populate at all)
-  zombie_villager:  { be: 'minecraft:zombie_villager',    java: 'minecraft:zombie_villager',  name: 'ZombieVillager' },
+  // (summoned as minecraft:zombie_villager, not _v2: Mojang marks _v2 not summonable,
+  // and one summon of it and Bedrock would not load populate at all. In a structure
+  // (the jail's) it is _v2, the one the game spawns: the old one is for old worlds,
+  // and its client files ask for animations that are gone, an error for every one.)
+  zombie_villager:  { be: 'minecraft:zombie_villager',    java: 'minecraft:zombie_villager',  name: 'ZombieVillager', inStructure: 'minecraft:zombie_villager_v2' },
   skeleton:         { be: 'minecraft:skeleton',           java: 'minecraft:skeleton',         name: 'Skeleton' },
   stray:            { be: 'minecraft:stray',              java: 'minecraft:stray',            name: 'Stray' },
   bogged:           { be: 'minecraft:bogged',             java: 'minecraft:bogged',           name: 'Bogged' },

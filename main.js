@@ -17,7 +17,7 @@ import { buildPregenPack, pregenFileName, siteRegion, viewRegion, pregenCommand,
 import { decodeNbt } from './tools/nbt-read.js';
 import { THEMES } from './engine/materials.js';
 
-const VERSION = '0.52.2';
+const VERSION = '0.53.0';
 const $ = (id) => document.getElementById(id);
 const numVal = (id) => Number($(id).value);      // readCfg has its own local num()
 
@@ -27,7 +27,7 @@ const SLIDERS = {
   maxFloors: 0, pitch: 0, setbackEvery: 0, bw: 0, bd: 0, floors: 0, clip: 0,
   farmChance: 2, pondChance: 2, twistChance: 2, courtyardChance: 2, hostileCount: 0, villagers: 0, wallHeight: 0, foundation: 0, clearAbove: 0, hills: 0, golemsPer10: 0,
 };
-const CHECKS = ['setback', 'roofAccess', 'useStairs', 'lights', 'lamps', 'trees', 'markings', 'landmarks', 'canal', 'harbour', 'bridges', 'detail', 'streetSigns', 'fish', 'megaliths', 'hostiles', 'dome', 'stilts', 'floating', 'cliff', 'underground', 'metro', 'terrainBreaks', 'jail', 'zoo', 'museum', 'hospital', 'firestation', 'police', 'theatre', 'hotel', 'factory', 'park', 'waterpark', 'garden', 'station', 'mall'];
+const CHECKS = ['setback', 'roofAccess', 'useStairs', 'lights', 'lamps', 'trees', 'markings', 'landmarks', 'canal', 'harbour', 'bridges', 'detail', 'streetSigns', 'fish', 'megaliths', 'hostiles', 'dome', 'stilts', 'floating', 'cliff', 'underground', 'metro', 'terrainBreaks', 'jail', 'zoo', 'museum', 'hospital', 'firestation', 'police', 'theatre', 'hotel', 'factory', 'park', 'waterpark', 'garden', 'station', 'mall', 'airport'];
 
 let renderer = null;
 let result = null;       // { world, plan, buildings, cfg, stats }
@@ -130,9 +130,12 @@ function boot() {
 
   $('map').addEventListener('click', (e) => {
     const r = e.currentTarget.getBoundingClientRect();
+    // (the plan may show the airport beside the city: the click is put back into the city's own square)
+    const X = mapExt, W = result && result.plan ? result.plan.W : 1, D = result && result.plan ? result.plan.D : 1;
+    const px = X ? X.x0 + (e.clientX - r.left) / r.width * (X.x1 - X.x0 + 1) : null, pz = X ? X.z0 + (e.clientY - r.top) / r.height * (X.z1 - X.z0 + 1) : null;
     focal = [
-      Math.min(0.98, Math.max(0.02, (e.clientX - r.left) / r.width)),
-      Math.min(0.98, Math.max(0.02, (e.clientY - r.top) / r.height)),
+      Math.min(0.98, Math.max(0.02, X ? px / W : (e.clientX - r.left) / r.width)),
+      Math.min(0.98, Math.max(0.02, X ? pz / D : (e.clientY - r.top) / r.height)),
     ];
     generate();
   });
@@ -351,12 +354,18 @@ const MAP_COL = {
   9: '#6b6259',              // goods yard
 };
 
+// the plan's extent on the map: the city's square, and the airport beside it if there is one
+let mapExt = null;
 function drawMap() {
   const cv = $('map');
-  if (!result || !result.plan.use.length) { cv.getContext('2d').clearRect(0, 0, cv.width, cv.height); return; }
+  if (!result || !result.plan.use.length) { cv.getContext('2d').clearRect(0, 0, cv.width, cv.height); mapExt = null; return; }
   const { W, D, use } = result.plan;
-  cv.width = W; cv.height = D;
+  const air = (result.landmarks || []).find((l) => l.kind === 'airport');
+  mapExt = air ? { x0: Math.min(0, air.lot.x0), z0: Math.min(0, air.lot.z0), x1: Math.max(W - 1, air.lot.x1), z1: Math.max(D - 1, air.lot.z1) } : { x0: 0, z0: 0, x1: W - 1, z1: D - 1 };
+  cv.width = mapExt.x1 - mapExt.x0 + 1; cv.height = mapExt.z1 - mapExt.z0 + 1;
   const ctx = cv.getContext('2d');
+  ctx.fillStyle = '#0b0d10'; ctx.fillRect(0, 0, cv.width, cv.height);
+  ctx.translate(-mapExt.x0, -mapExt.z0);
   const img = ctx.createImageData(W, D);
   const cache = {};
   for (const k in MAP_COL) {
@@ -368,7 +377,22 @@ function drawMap() {
     img.data[i * 4] = c[0]; img.data[i * 4 + 1] = c[1];
     img.data[i * 4 + 2] = c[2]; img.data[i * 4 + 3] = 255;
   }
-  ctx.putImageData(img, 0, 0);
+  ctx.putImageData(img, -mapExt.x0, -mapExt.z0);
+  // the airport: its grass, the apron, the terminal and the runway
+  if (air) {
+    const F = air.frame;
+    const rect = (u0, v0, u1, v1, col) => {
+      const a = F.at(u0, v0), b = F.at(u1, v1);
+      ctx.fillStyle = col; ctx.fillRect(Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.abs(a[0] - b[0]) + 1, Math.abs(a[1] - b[1]) + 1);
+    };
+    rect(F.U0, 0, F.U1, F.VD - 1, '#3f6b33');
+    rect(F.U0 + 2, F.AP.v0, F.U1 - 2, F.AP.v1, '#8c9294');
+    rect(F.U0 + 2, F.TX.v0, F.U1 - 2, F.TX.v1, '#5c6063');
+    rect(air.runway.u0, air.runway.v0, air.runway.u1, air.runway.v1, '#1b1d20');
+    rect(F.T.u0, F.T.v0, F.T.u1, F.T.v1, '#e4e6e6');
+    rect(F.TW.u0, F.TW.v0, F.TW.u1, F.TW.v1, '#3a9ad0');
+    ctx.fillStyle = '#5c6063'; for (const [x, , z] of air.road) ctx.fillRect(x, z, 1, 1);
+  }
   // railway: green corridors and the track lines
   if (result.transit) {
     if (result.transit.mode === 'rails') {
@@ -563,14 +587,14 @@ function showStats(mesh, times) {
       const skipped = Object.keys(NOT_FITTED).filter((id) => $(id) && $(id).checked).map((id) => NOT_FITTED[id]);
       if (skipped.length) line('not on fitted ground', `${skipped.join(', ')}: a fitted city follows your world's own ground`);
     }
-    for (const [k, label] of [['police', 'police station'], ['theatre', 'theatre'], ['hotel', 'hotel'], ['factory', 'factory'], ['workshop', 'workshop'], ['park', 'amusement park'], ['waterpark', 'water park'], ['lazyriver', 'lazy river'], ['garden', 'botanical garden'], ['station', 'station'], ['mall', 'shopping mall']]) {
+    for (const [k, label] of [['police', 'police station'], ['theatre', 'theatre'], ['hotel', 'hotel'], ['factory', 'factory'], ['workshop', 'workshop'], ['park', 'amusement park'], ['waterpark', 'water park'], ['lazyriver', 'lazy river'], ['garden', 'botanical garden'], ['station', 'station'], ['mall', 'shopping mall'], ['airport', 'airport']]) {
       if (s[k + 'Missing']) line(label, s[k + 'Missing']);
       if (s[k]) line(label, s[k]);
     }
     // where the asked-for landmarks are, from the build_centered spot (in the pack:
     // /function <city>/goto_<name>, and the guide lists every one)
     if (result.places && result.places.length) {
-      const asked = new Set(['jail', 'zoo', 'aquarium', 'museum', 'hospital', 'firestation', 'police', 'theatre', 'hotel', 'factory', 'workshop', 'park', 'waterpark', 'lazyriver', 'garden', 'station', 'mall']);
+      const asked = new Set(['jail', 'zoo', 'aquarium', 'museum', 'hospital', 'firestation', 'police', 'theatre', 'hotel', 'factory', 'workshop', 'park', 'waterpark', 'lazyriver', 'garden', 'station', 'mall', 'airport', 'memorial']);
       const ps = placeOffsets(result.world, { places: result.places.filter((P) => asked.has(P.kind)) });
       if (ps.length) line('where (from the centre)', ps.map((P) => `${P.name}: ${P.words}`).join(' · ') + ' — in the game, /function <city>/goto_<name>');
     }
