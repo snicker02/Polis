@@ -882,7 +882,7 @@ const BUILDERS = { townhall: townHall, clocktower: clockTower, library, market, 
   mall: (w, l, f, c, r, G) => shoppingMall(w, l, f, c, r, G, signTags) };
 export const LANDMARK_NAMES = { townhall: 'Town Hall', clocktower: 'Clock Tower', library: 'Library', market: 'Market',
   church: 'Church', school: 'School', lighthouse: 'Lighthouse', castle: 'Castle', mansion: 'Mansion',
-  townsquare: 'Town Square', stadium: 'Stadium', cemetery: 'Cemetery', allotments: 'Allotments', bandstand: 'Bandstand', jail: 'Jail', zoo: 'Zoo', aquarium: 'Aquarium', museum: 'Museum', hospital: 'Hospital', firestation: 'Fire Station', police: 'Police Station', theatre: 'Theatre', hotel: 'Hotel', factory: 'Factory', workshop: 'Workshop', park: 'Amusement Park', waterpark: 'Water Park', lazyriver: 'Lazy River', garden: 'Botanical Garden', station: 'Station', mall: 'Shopping Mall', airport: 'Airport' };
+  townsquare: 'Town Square', stadium: 'Stadium', cemetery: 'Cemetery', allotments: 'Allotments', bandstand: 'Bandstand', jail: 'Jail', zoo: 'Zoo', aquarium: 'Aquarium', museum: 'Museum', hospital: 'Hospital', firestation: 'Fire Station', police: 'Police Station', theatre: 'Theatre', hotel: 'Hotel', factory: 'Factory', workshop: 'Workshop', park: 'Amusement Park', waterpark: 'Water Park', lazyriver: 'Lazy River', garden: 'Botanical Garden', station: 'Station', mall: 'Shopping Mall', airport: 'Airport', themepark: 'Theme Park' };
 
 export function buildLandmark(world, lot, face, cfg, rng, G) {
   const L = BUILDERS[lot.landmark](world, lot, face, cfg, rng, G);

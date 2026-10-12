@@ -17,7 +17,7 @@ import { buildPregenPack, pregenFileName, siteRegion, viewRegion, pregenCommand,
 import { decodeNbt } from './tools/nbt-read.js';
 import { THEMES } from './engine/materials.js';
 
-const VERSION = '0.54.1';
+const VERSION = '0.55.0';
 const $ = (id) => document.getElementById(id);
 const numVal = (id) => Number($(id).value);      // readCfg has its own local num()
 
@@ -27,7 +27,7 @@ const SLIDERS = {
   maxFloors: 0, pitch: 0, setbackEvery: 0, bw: 0, bd: 0, floors: 0, clip: 0,
   farmChance: 2, pondChance: 2, twistChance: 2, courtyardChance: 2, hostileCount: 0, villagers: 0, wallHeight: 0, foundation: 0, clearAbove: 0, hills: 0, golemsPer10: 0,
 };
-const CHECKS = ['setback', 'roofAccess', 'useStairs', 'lights', 'lamps', 'trees', 'markings', 'landmarks', 'canal', 'harbour', 'bridges', 'detail', 'streetSigns', 'fish', 'megaliths', 'hostiles', 'dome', 'stilts', 'floating', 'cliff', 'underground', 'metro', 'terrainBreaks', 'jail', 'zoo', 'museum', 'hospital', 'firestation', 'police', 'theatre', 'hotel', 'factory', 'park', 'waterpark', 'garden', 'station', 'mall', 'airport', 'bouts'];
+const CHECKS = ['setback', 'roofAccess', 'useStairs', 'lights', 'lamps', 'trees', 'markings', 'landmarks', 'canal', 'harbour', 'bridges', 'detail', 'streetSigns', 'fish', 'megaliths', 'hostiles', 'dome', 'stilts', 'floating', 'cliff', 'underground', 'metro', 'terrainBreaks', 'jail', 'zoo', 'museum', 'hospital', 'firestation', 'police', 'theatre', 'hotel', 'factory', 'park', 'waterpark', 'garden', 'station', 'mall', 'airport', 'bouts', 'themepark'];
 
 let renderer = null;
 let result = null;       // { world, plan, buildings, cfg, stats }
@@ -361,7 +361,9 @@ function drawMap() {
   if (!result || !result.plan.use.length) { cv.getContext('2d').clearRect(0, 0, cv.width, cv.height); mapExt = null; return; }
   const { W, D, use } = result.plan;
   const air = (result.landmarks || []).find((l) => l.kind === 'airport');
-  mapExt = air ? { x0: Math.min(0, air.lot.x0), z0: Math.min(0, air.lot.z0), x1: Math.max(W - 1, air.lot.x1), z1: Math.max(D - 1, air.lot.z1) } : { x0: 0, z0: 0, x1: W - 1, z1: D - 1 };
+  const fun = (result.landmarks || []).find((l) => l.kind === 'themepark');
+  mapExt = { x0: 0, z0: 0, x1: W - 1, z1: D - 1 };
+  for (const o of [air, fun]) if (o) mapExt = { x0: Math.min(mapExt.x0, o.lot.x0), z0: Math.min(mapExt.z0, o.lot.z0), x1: Math.max(mapExt.x1, o.lot.x1), z1: Math.max(mapExt.z1, o.lot.z1) };
   cv.width = mapExt.x1 - mapExt.x0 + 1; cv.height = mapExt.z1 - mapExt.z0 + 1;
   const ctx = cv.getContext('2d');
   ctx.fillStyle = '#0b0d10'; ctx.fillRect(0, 0, cv.width, cv.height);
@@ -392,6 +394,15 @@ function drawMap() {
     rect(F.T.u0, F.T.v0, F.T.u1, F.T.v1, '#e4e6e6');
     rect(F.TW.u0, F.TW.v0, F.TW.u1, F.TW.v1, '#3a9ad0');
     ctx.fillStyle = '#5c6063'; for (const [x, , z] of air.road) ctx.fillRect(x, z, 1, 1);
+  }
+  // the theme park: its grass, the coaster's loop, the wheel, the tower, the carousel
+  if (fun) {
+    ctx.fillStyle = '#4a7a3a'; ctx.fillRect(fun.lot.x0, fun.lot.z0, fun.lot.x1 - fun.lot.x0 + 1, fun.lot.z1 - fun.lot.z0 + 1);
+    ctx.fillStyle = '#b5652a'; for (const [x, z] of fun.map.loop) ctx.fillRect(x, z, 1, 1);
+    const [a, b] = fun.map.wheel; ctx.fillStyle = '#e4e6e6'; ctx.fillRect(Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.abs(a[0] - b[0]) + 1, Math.abs(a[1] - b[1]) + 1);
+    ctx.fillStyle = '#c0392b'; ctx.fillRect(fun.map.tower[0] - 2, fun.map.tower[1] - 2, 5, 5);
+    ctx.fillStyle = '#f2cf3e'; ctx.beginPath(); ctx.arc(fun.map.carousel[0] + 0.5, fun.map.carousel[1] + 0.5, 5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#5c6063'; for (const [x, , z] of fun.road) ctx.fillRect(x, z, 1, 1);
   }
   // railway: green corridors and the track lines
   if (result.transit) {
@@ -587,14 +598,14 @@ function showStats(mesh, times) {
       const skipped = Object.keys(NOT_FITTED).filter((id) => $(id) && $(id).checked).map((id) => NOT_FITTED[id]);
       if (skipped.length) line('not on fitted ground', `${skipped.join(', ')}: a fitted city follows your world's own ground`);
     }
-    for (const [k, label] of [['police', 'police station'], ['theatre', 'theatre'], ['hotel', 'hotel'], ['factory', 'factory'], ['workshop', 'workshop'], ['park', 'amusement park'], ['waterpark', 'water park'], ['lazyriver', 'lazy river'], ['garden', 'botanical garden'], ['station', 'station'], ['mall', 'shopping mall'], ['airport', 'airport'], ['bouts', 'stadium bouts']]) {
+    for (const [k, label] of [['police', 'police station'], ['theatre', 'theatre'], ['hotel', 'hotel'], ['factory', 'factory'], ['workshop', 'workshop'], ['park', 'amusement park'], ['waterpark', 'water park'], ['lazyriver', 'lazy river'], ['garden', 'botanical garden'], ['station', 'station'], ['mall', 'shopping mall'], ['airport', 'airport'], ['bouts', 'stadium bouts'], ['themepark', 'theme park']]) {
       if (s[k + 'Missing']) line(label, s[k + 'Missing']);
       if (s[k]) line(label, s[k]);
     }
     // where the asked-for landmarks are, from the build_centered spot (in the pack:
     // /function <city>/goto_<name>, and the guide lists every one)
     if (result.places && result.places.length) {
-      const asked = new Set(['jail', 'zoo', 'aquarium', 'museum', 'hospital', 'firestation', 'police', 'theatre', 'hotel', 'factory', 'workshop', 'park', 'waterpark', 'lazyriver', 'garden', 'station', 'mall', 'airport', 'memorial']);
+      const asked = new Set(['jail', 'zoo', 'aquarium', 'museum', 'hospital', 'firestation', 'police', 'theatre', 'hotel', 'factory', 'workshop', 'park', 'waterpark', 'lazyriver', 'garden', 'station', 'mall', 'airport', 'themepark', 'memorial']);
       const ps = placeOffsets(result.world, { places: result.places.filter((P) => asked.has(P.kind)) });
       if (ps.length) line('where (from the centre)', ps.map((P) => `${P.name}: ${P.words}`).join(' · ') + ' — in the game, /function <city>/goto_<name>');
     }

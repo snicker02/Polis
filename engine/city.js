@@ -36,6 +36,7 @@ import { planBridges, buildBridges, bridgeRails } from './bridges.js';
 import { chooseLandmarks, buildLandmark, LANDMARK_NAMES } from './landmarks.js';
 import { namesOf, FIGHTER_TAG, BOUTS } from './landmarks-extra.js';
 import { buildAirport } from './airport.js';
+import { buildThemePark } from './themepark.js';
 import { planHills, liftBlocks, cutStairs, shiftBuilding, walkCity } from './terrain.js';
 import { styleOf, remapTable, STYLES } from './styles.js';
 import { signTags } from './landmarks.js';
@@ -118,6 +119,7 @@ export const DEFAULTS = {
   memorial: '',              // names for a memorial in the cemetery, side by side (one a line; ' / ' a new line on the sign)
   graveNames: '',            // names for the cemetery's other gravestones (one a line)
   bouts: false,              // exhibition bouts in the stadium: mobs that fight and never die (landmarks-extra.js)
+  themepark: false,          // a theme park beside the city: a giant coaster, a big wheel, a drop tower, a carousel (themepark.js)
   airport: false,            // an airport beside the city: runway, terminal, control tower, elytra launch pads (airport.js)
   mall: false,               // a shopping mall: two floors of shops, each shopkeeper a villager of its trade (mall.js)
   garden: false,             // a botanical garden: a glass hall of plants from every biome (garden.js)
@@ -866,6 +868,23 @@ export function generateCity(cfgIn, onProgress) {
       }
     }
   }
+  // ---- the theme park: likewise beside the city, away from the airport ------------------
+  let themeparkMissing = null;
+  if (cfg.themepark) {
+    const why = cfg.terrain ? 'a city fitted to your world has no room of its own beside it for the theme park'
+      : cfg.dome ? 'not with the dome' : cfg.stilts ? 'not on stilts' : floating ? 'not with floating islands' : hills.cliff ? 'not on a cliff' : null;
+    if (why) themeparkMissing = why;
+    else {
+      const air = landmarks.find((q) => q.kind === 'airport');
+      const T = buildThemePark(world, plan, cfg, { GROUND, elevAt, signTags, awayFrom: air ? air.side : null, avoid: air ? [air.lot, air.roadRect] : [] });
+      if (T.missing) themeparkMissing = T.missing;
+      else {
+        landmarks.push(T);
+        world.extraInside = [...(world.extraInside || []), T.lot, T.roadRect];
+        world.planSize = { W: plan.W, D: plan.D };
+      }
+    }
+  }
   // ---- fish: last, once no more water will change ----------------------------
   // their own random stream, so a city's blocks and other spawns are the same
   // with fish on or off
@@ -988,6 +1007,9 @@ export function generateCity(cfgIn, onProgress) {
   { const S = landmarks.find((q) => q.kind === 'stadium');
     if (cfg.bouts) { if (S && S.bouts) stats.bouts = `on the stadium's pitch, walled four high: ${BOUTS.map((b) => b.name).join(', ')}, fighting on and never hurt; the fans in by a stair from the street`;
       else stats.boutsMissing = S ? 'the stadium\'s pitch is too small for the bouts' : cfg.landmarks ? 'no lot for the stadium (it needs 17 by 21)' : 'the bouts are in the stadium, a landmark: tick Landmarks'; } }
+  { const T = landmarks.find((q) => q.kind === 'themepark');
+    if (T) stats.themepark = `beside the city to the ${T.side}: a roller coaster of ${T.coaster.length} rails with a lift hill ${T.coaster.lift} high, a big wheel of ${T.wheel.cabins.length} cabins, a drop tower ${T.tower.height} high, a carousel, ${T.stalls.length} stalls`;
+    else if (cfg.themepark) stats.themeparkMissing = themeparkMissing || 'no room for the theme park'; }
   { const A = landmarks.find((q) => q.kind === 'airport');
     if (A) stats.airport = `beside the city to the ${A.side}: a runway ${A.runway.length} long, a terminal, a control tower ${A.tower.top - A.ground} high, ${A.pads.length} elytra launch pads, ${A.planes.length} aircraft`;
     else if (cfg.airport) stats.airportMissing = airportMissing || 'no room for the airport'; }
@@ -1010,6 +1032,7 @@ export function generateCity(cfgIn, onProgress) {
   world.wet = new Set(landmarks.flatMap((L) => (L.wetAt || []).map(([x, y, z]) => VoxelWorld.key(x, y, z))));
   for (const F of landmarks.filter((L) => L.kind === 'factory')) spawns.push({ type: 'cart', x: F.siding.cart[0], y: F.siding.cart[1], z: F.siding.cart[2], group: 'factory' });
   for (const P of landmarks.filter((L) => L.kind === 'park')) for (const c of P.carts) spawns.push({ type: 'cart', x: c[0], y: c[1], z: c[2], group: 'park' });
+  for (const P of landmarks.filter((L) => L.kind === 'themepark')) for (const c of P.coaster.carts) spawns.push({ type: 'cart', x: c[0], y: c[1], z: c[2], group: 'themepark' });
   for (const st of stands) spawns.push({ type: 'mob', kind: 'armor_stand', x: st.x, y: st.y, z: st.z, yRot: st.yRot, group: 'museum',
     armour: ['helmet', 'chestplate', 'leggings', 'boots'].map((p) => `minecraft:${st.set}_${p}`) });
   // (asked for, but no lot big enough: said so, not left silent)

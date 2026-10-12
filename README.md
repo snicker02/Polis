@@ -1,4 +1,4 @@
-# Polis v0.54.1
+# Polis v0.55.0
 
 *Created with help from Claude AI.*
 
@@ -771,6 +771,30 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.55.0** — A theme park.
+
+A new option, "A theme park beside the city" (off by default). Like the airport it
+is ground of its own outside the city's square, 110 along the edge by 80 out, at the
+end of a road from one of the city's streets through the wall (a gate, posts, a sign).
+It goes on the side opposite the airport when there is one, and never overlaps it.
+The small amusement park stays as it was. Inside its fence:
+
+- an entrance arch, a plaza of six stalls, an avenue up the middle with benches;
+- the Leviathan, a roller coaster of 340 rails round the whole park: a station with
+  a brake rail and a button on the front run, a lift hill up to 26 (every climbing
+  rail powered), a big drop, a camelback, a second hill, boosters along the level.
+  Three minecarts wait at the station;
+- a big wheel twelve across with twelve cabins;
+- the Plunge, a drop tower 36 high: up the ladder, jump into the open middle, land
+  in three deep of water, out by a doorway and steps;
+- a carousel: horses on poles, a striped roof;
+- lamps wherever the ground would be dark.
+
+It is drawn on the plan, is a place in Find a landmark (`goto_themepark`), and is
+founded and cleared in the export like the city's own ground. Not on a city fitted to
+your world. The airport's way out and its gate are now shared code (offsite.js), as is
+the Ferris wheel (park.js). Check 2zzn.
 
 **0.54.1** — The bouts on an open pitch, nothing in the chat.
 

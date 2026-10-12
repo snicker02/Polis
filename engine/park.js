@@ -128,6 +128,35 @@ export function amusementPark(world, lot, face, cfg, rng, G, signTags) {
   // concrete, eight spokes of light grey concrete from the axle to it, eight cabins
   // two high just outside it, a straight leg either side down to the ground.
   const r = W === 23 ? 6 : W === 19 ? 5 : 3, cu = mid, cv = v1 - 5, cy = G + r + 3;
+  const wheel = ferrisWheel(put, pos, cu, cv, cy, r, G, 8);
+  sign(cu, cv - 3, G + 1, neg(back), 'Ferris wheel');
+
+  // ---- the stalls: a counter, a striped awning, a sign ----------------------------------
+  // (either side of the path in, a block apart)
+  const names = W === 23 ? ['Popcorn', 'Candy floss', 'Lemonade', 'Prizes'] : ['Popcorn', 'Prizes'];
+  const spots = W === 23 ? [3, 7, 13, 17] : W === 19 ? [3, 12] : [3, 9];
+  const stalls = [];
+  const sv = v0 + 4;
+  names.forEach((name, k) => {
+    const ua = spots[k];
+    for (let du = 0; du < 3; du++) {
+      put(ua + du, sv, G + 1, MAT.SMOOTH_QUARTZ);                    // the counter
+      for (let dv = 0; dv < 3; dv++) put(ua + du, sv + dv, G + 3, (du + k) % 2 === 0 ? MAT.RED_WOOL : WOOL_WHITE());   // the awning
+    }
+    for (const [du, dv] of [[0, 2], [2, 2]]) put(ua + du, sv + dv, G + 1, MAT.FENCE), put(ua + du, sv + dv, G + 2, MAT.FENCE);
+    sign(ua + 1, sv - 1, G + 1, neg(back), name);
+    stalls.push({ name, counter: pos(ua + 1, sv, G + 1), sign: pos(ua + 1, sv - 1, G + 1) });
+  });
+
+  const gate = at(mid, -1);
+  return { kind: 'park', lot, rails, railBlocks, supports, station: { rail: stationAt.rail, post, button }, carts, wheel, stalls,
+    sideways: fr.sideways, wide: W, door: [gate[0], G + 1, gate[1]], frame: { at, W, D, mid, u0, u1, v0, v1, T, R } };
+}
+
+// A Ferris wheel in the plane v = cv, about (cu, cy): a closed ring of radius r, n spokes,
+// n cabins two high just outside the ring, an axle, legs either side down to G + 1.
+// put(u, v, y, id) and pos(u, v, y) in the caller's own frame.
+export function ferrisWheel(put, pos, cu, cv, cy, r, G, n = 8) {
   const line4 = (a, b) => {                      // a line from a to b, each step a face away
     const out = [[a[0], a[1]]]; let [x, y] = a;
     const n = Math.max(Math.abs(b[0] - a[0]), Math.abs(b[1] - a[1])) * 4 || 1;
@@ -152,8 +181,8 @@ export function amusementPark(world, lot, face, cfg, rng, G, signTags) {
   const ringSet = new Set(ring.map(([a, b]) => a + ',' + b));
   for (const [dx, dy] of [...ringSet].map((k) => k.split(',').map(Number))) { put(cu + dx, cv, cy + dy, MAT.C_WHITE); wheel.rim.push(pos(cu + dx, cv, cy + dy)); }
   const COLOURS = [MAT.C_RED, MAT.C_BLUE, MAT.LINE, MAT.C_LBLUE || MAT.C_BLUE];
-  for (let k = 0; k < 8; k++) {
-    const a = (k * Math.PI) / 4, ex = Math.cos(a), ey = Math.sin(a);
+  for (let k = 0; k < n; k++) {
+    const a = (k * 2 * Math.PI) / n, ex = Math.cos(a), ey = Math.sin(a);
     const end = [Math.round(ex * r), Math.round(ey * r)];
     const spoke = line4([0, 0], end).filter(([a2, b2]) => !(a2 === 0 && b2 === 0) && !ringSet.has(a2 + ',' + b2));
     for (const [dx, dy] of spoke) put(cu + dx, cv, cy + dy, MAT.C_LGRAY);
@@ -175,26 +204,5 @@ export function amusementPark(world, lot, face, cfg, rng, G, signTags) {
     for (const [dx, y] of leg) put(cu + dx, cv + dv, y, MAT.STONEBRICK);
     wheel.legs.push(leg.map(([dx, y]) => pos(cu + dx, cv + dv, y)));
   }
-  sign(cu, cv - 3, G + 1, neg(back), 'Ferris wheel');
-
-  // ---- the stalls: a counter, a striped awning, a sign ----------------------------------
-  // (either side of the path in, a block apart)
-  const names = W === 23 ? ['Popcorn', 'Candy floss', 'Lemonade', 'Prizes'] : ['Popcorn', 'Prizes'];
-  const spots = W === 23 ? [3, 7, 13, 17] : W === 19 ? [3, 12] : [3, 9];
-  const stalls = [];
-  const sv = v0 + 4;
-  names.forEach((name, k) => {
-    const ua = spots[k];
-    for (let du = 0; du < 3; du++) {
-      put(ua + du, sv, G + 1, MAT.SMOOTH_QUARTZ);                    // the counter
-      for (let dv = 0; dv < 3; dv++) put(ua + du, sv + dv, G + 3, (du + k) % 2 === 0 ? MAT.RED_WOOL : WOOL_WHITE());   // the awning
-    }
-    for (const [du, dv] of [[0, 2], [2, 2]]) put(ua + du, sv + dv, G + 1, MAT.FENCE), put(ua + du, sv + dv, G + 2, MAT.FENCE);
-    sign(ua + 1, sv - 1, G + 1, neg(back), name);
-    stalls.push({ name, counter: pos(ua + 1, sv, G + 1), sign: pos(ua + 1, sv - 1, G + 1) });
-  });
-
-  const gate = at(mid, -1);
-  return { kind: 'park', lot, rails, railBlocks, supports, station: { rail: stationAt.rail, post, button }, carts, wheel, stalls,
-    sideways: fr.sideways, wide: W, door: [gate[0], G + 1, gate[1]], frame: { at, W, D, mid, u0, u1, v0, v1, T, R } };
+  return wheel;
 }
