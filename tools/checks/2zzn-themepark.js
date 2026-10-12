@@ -25,6 +25,7 @@ export default async function run(ctx) {
   const { MATERIALS } = await import('../../engine/materials.js');
   const { railsOf, trackFrom, railLinks, RISE } = await import('../../engine/railgraph.js');
   const { buildStructures, cityInside, foundationFill, functionFiles, tileList } = await import('../../engine/export.js');
+  const { lightMap } = await import('../../engine/lighting.js');
   const { decodeNbt } = await import('../nbt-read.js');
   const L = { furnish: false, villagers: 0, fish: false, themepark: true };
   check('defaults: no theme park unless asked', DEFAULTS.themepark === false);
@@ -117,6 +118,35 @@ export default async function run(ctx) {
     const [mx, mz] = F.at(0, 40);
     out.pack = !!inside && inside(mx, mz) && inside(T.road[0][0], T.road[0][2]) && fill(mx, YA - 3, mz) !== -1 && !inside(...F.at(0, F.VD + 5));
     out.place = r.places.find((P) => P.kind === 'themepark');
+    // the corkscrew: three turns and more round its square, falling twenty and more,
+    // under itself in every column of its sides; its tower crowned with a light
+    {
+      const K = C.corkscrew, cols = new Map();
+      for (const p of K.cells) { const k = p[0] + ',' + p[2]; if (!cols.has(k)) cols.set(k, []); cols.get(k).push(p[1]); }
+      const ys = K.cells.map((p) => p[1]);
+      const stacked = [...cols.values()].filter((hs) => hs.length >= 3).length;
+      out.cork = { rails: K.cells.length, fall: Math.max(...ys) - Math.min(...ys), stacked, columns: cols.size, tower: blk(...K.tower) === 'sea_lantern' };
+    }
+    // the tunnel: walls both sides from the ground to three over the rail, a roof on
+    // them, the rail inside it lit (8 and more), a sign at its mouth
+    {
+      const map = lightMap(w);
+      const tun = C.tunnel.cells.map((c) => {
+        const [x, y, z] = c.rail;
+        const walls = c.walls.every(([wx, wy, wz]) => { for (let yy = YA + 1; yy <= wy; yy++) if (blk(wx, yy, wz) === 'air') return false; return true; });
+        const roof = blk(...c.roof) !== 'air' && c.roof[1] === y + 4;
+        const light = map.light[map.idx(x, y + 1, z)];
+        return { walls, roof, light };
+      });
+      out.tunnel = { length: tun.length, walls: tun.every((t) => t.walls), roof: tun.every((t) => t.roof), dimmest: Math.min(...tun.map((t) => t.light)),
+        drops: C.tunnel.cells[0].h !== C.tunnel.cells[C.tunnel.cells.length - 1].h };
+    }
+    // the station's canopy: over the station rail, posts at its corners
+    {
+      const st = C.station.rail, cp = C.canopy;
+      const over = cp.roof.some((p) => p[0] === st[0] && p[2] === st[2] && p[1] >= st[1] + 4 && blk(...p) !== 'air');
+      out.canopy = over && cp.posts.length === 4 && cp.posts.every((p) => blk(...p) === 'oak_fence');
+    }
     void RISE;
     return out;
   };
@@ -131,7 +161,10 @@ export default async function run(ctx) {
   check('theme park: up the drop tower\'s ladder onto its platform', all((t) => t.walk.towerTop));
   check('theme park: the drop tower\'s pool three deep and held in, the shaft open over it, a way out over the water and down', all((t) => t.pool.leaks === 0 && t.pool.depth === 3 && t.pool.shaftOpen && t.pool.exit), ts.map(([n, , t]) => `${n}: ${JSON.stringify(t.pool)}`).join(' | '));
   check('theme park: the big wheel whole, twelve cabins', all((t) => t.wheel));
-  check('theme park: the coaster winds round the park (a dozen turns and more) and passes under itself (the helix)', all((t) => t.turns >= 12 && t.under >= 10), ts.map(([n, , t]) => `${n}: ${t.turns} turns, ${t.under} under`).join(', '));
+  check('theme park: the corkscrew: three turns and more round its square, falling twenty and more, under itself in its columns, its tower lit on top', all((t) => t.cork.rails >= 48 && t.cork.fall >= 20 && t.cork.stacked >= 8 && t.cork.columns <= 16 && t.cork.tower), ts.map(([n, , t]) => `${n}: ${JSON.stringify(t.cork)}`).join(' | '));
+  check('theme park: the tunnel: walls both sides from the ground to over the cart, a roof on them, the track coming down into it, lit inside (8 and more)', all((t) => t.tunnel.length >= 12 && t.tunnel.walls && t.tunnel.roof && t.tunnel.drops && t.tunnel.dimmest >= 8), ts.map(([n, , t]) => `${n}: ${JSON.stringify(t.tunnel)}`).join(' | '));
+  check('theme park: the station under a canopy, three clear over the cart, on four posts', all((t) => t.canopy));
+  check('theme park: the coaster winds round the park (a dozen turns and more) and passes under itself (the corkscrew)', all((t) => t.turns >= 12 && t.under >= 10), ts.map(([n, , t]) => `${n}: ${t.turns} turns, ${t.under} under`).join(', '));
   {
     // it fills the park: eight hundred rails and more, and a good run of them in every
     // quarter of its ground (front and back, either side of the avenue)

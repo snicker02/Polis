@@ -13,8 +13,11 @@
 //   powered rail up, a level top, the station rail beyond it a powered rail with nothing
 //   powering it, which holds a cart; a button on a post beside it sends it off); a
 //   switchback across the front right, climbing; the lift hill up the right side to
-//   twenty-six; the helix; then switchbacks through every quarter of the park, a hill on
-//   every run (ROUTE), over the paths high enough to walk under, home down the left.
+//   twenty-six; the corkscrew, three tight turns down round a quartz tower crowned with a
+//   light; then switchbacks through every quarter of the park, a hill on every run
+//   (ROUTE), over the paths high enough to walk under; down off the back hill into the
+//   tunnel, lit by lights set in its walls; home down the left to the station under its
+//   red and white canopy.
 //   Every climbing rail powered, boosters along the level. A block under every raised
 //   rail (redstone under a powered one), a pillar every fourth, three clear over every
 //   rail. Three minecarts at the station;
@@ -57,19 +60,28 @@ function shapeOf(prev, cur, next) {
 // leaves its corner level and arrives at the next level (a curve only on the level, its
 // neighbours level with it), and between changes a block of rise or fall a step.
 // The route as laid in the park (ROUTE): the front run with the station; a switchback
-// across the front right; the lift hill up the right; a high run in; a helix down round a
-// square, passing under its own top; behind the drop tower and north over the carousel's
+// across the front right; the lift hill up the right; a high run in; the corkscrew,
+// three tight turns down, passing under its own entry and under itself; behind the drop tower and north over the carousel's
 // path; east and west behind the carousel; along the back fence; a serpentine through
 // the back left; south over the wheel's path; four rows across the front left; home.
 // Wherever it crosses a path it is four and more up (two clear under the block it sits
 // on); it never comes nearer a ride than the paths do.
+export const CORKSCREW = [['N', 4, 24], ['E', 4, 22], ['S', 4, 20], ['W', 4, 18], ['N', 4, 16], ['E', 4, 14], ['S', 4, 12], ['W', 4, 10],
+  ['N', 4, 8], ['E', 4, 6], ['S', 4, 4], ['W', 4, 4]];
+export const CORK_BOX = { u0: 36, u1: 40, v0: 44, v1: 48 };      // its square, in the park's frame
+// the tunnel: over the back run where it comes down to four and along to the corner,
+// u from TUNNEL.u0 to u1 on the row v (the rails inside, its walls either side)
+export const TUNNEL = { v: 76, u0: -44, u1: -29 };
 export const ROUTE = [
   ['E', 103, 1],                                  // the front run, the station on it
   ['N', 6, 1], ['W', 46, 6], ['N', 6, 6],          // the first switchback, climbing as it goes
   ['E', 23, 2], ['E', 23, 7],                     // a dip, up again to the lift
   ['N', 23, 26],                                  // the lift hill
   ['W', 15, 26],                                  // the high run in
-  ['N', 12, 17], ['E', 12, 8], ['S', 12, 4], ['W', 16, 4],   // the helix: down round a square, under its own top
+  // the corkscrew: three tight turns down round a five by five, each side four rails
+  // with two of fall, eight blocks a turn (under its own entry and under itself)
+  ...CORKSCREW,
+  ['W', 4, 4],                                    // out of it
   ['S', 6, 4], ['W', 10, 12], ['W', 10, 4],       // behind the drop tower, a camelback
   ['N', 13, 12], ['N', 13, 4],                    // north over the carousel's path, another
   ['E', 18, 14], ['E', 19, 4],                    // east behind the carousel, a hill
@@ -214,6 +226,46 @@ export function buildThemePark(world, plan, cfg, ctx) {
   // three carts: in the station, and two on the level before the hump
   const carts = [[...station.rail], pos(u0 + prof.station - 3, v0, YA + 1), pos(u0 + prof.station - 5, v0, YA + 1)];
 
+  // ---- the corkscrew's tower: a quartz column up its middle, a sea lantern crown -----------------
+  const ck = CORK_BOX, cku = (ck.u0 + ck.u1) / 2, ckv = (ck.v0 + ck.v1) / 2;
+  const corkTop = YA + 29;
+  for (let y = YA + 1; y < corkTop; y++) put(cku, ckv, y, MAT.QUARTZ_PILLAR);
+  put(cku, ckv, corkTop, MAT.SEA_LANTERN);
+  for (let y = YA + 6; y < corkTop; y += 8) put(cku, ckv, y, MAT.SEA_LANTERN);   // (a light at every turn)
+  const corkscrew = { box: ck, tower: pos(cku, ckv, corkTop), cells: track.all.filter((c) => c[0] >= ck.u0 && c[0] <= ck.u1 && c[1] >= ck.v0 && c[1] <= ck.v1).map((c) => pos(c[0], c[1], YA + c[2])) };
+
+  // ---- the tunnel: into the dark where the back run comes down --------------------------------------
+  // (walls either side of the track from the ground to three over the rail, a roof on
+  // them, following the track down; a light set in the walls every third block, side to
+  // side; lamps on the roof outside)
+  const heightAt = new Map(track.all.map((c) => [c[0] + ',' + c[1], c[2]]));
+  const tunnel = { cells: [], lights: [], portals: [] };
+  const MOSSY = mat('mossy_stone_bricks', '#6f7a62');
+  for (let u = TUNNEL.u0; u <= TUNNEL.u1; u++) {
+    const ht = heightAt.get(u + ',' + TUNNEL.v);
+    if (ht === undefined) throw new Error(`theme park tunnel: no track at ${u},${TUNNEL.v}`);
+    for (const dv of [-1, 1]) {
+      if (track.cols.has(u + ',' + (TUNNEL.v + dv)) || pathCell.has(u + ',' + (TUNNEL.v + dv))) throw new Error(`theme park tunnel: its wall at ${u},${TUNNEL.v + dv} is in the way`);
+      for (let y = YA + 1; y <= YA + ht + 3; y++) put(u, TUNNEL.v + dv, y, (u + y) % 3 ? MAT.STONEBRICK : MOSSY);
+      put(u, TUNNEL.v + dv, YA + ht + 4, MAT.STONEBRICK);
+    }
+    put(u, TUNNEL.v, YA + ht + 4, MAT.STONEBRICK);
+    if ((u - TUNNEL.u0) % 3 === 1) { const dv = (u - TUNNEL.u0) % 6 === 1 ? -1 : 1; put(u, TUNNEL.v + dv, YA + ht + 2, MAT.SEA_LANTERN); tunnel.lights.push(pos(u, TUNNEL.v + dv, YA + ht + 2)); }
+    if ((u - TUNNEL.u0) % 5 === 2) put(u, TUNNEL.v, YA + ht + 5, MAT.LAMP);
+    tunnel.cells.push({ rail: pos(u, TUNNEL.v, YA + ht), walls: [-1, 1].map((dv) => pos(u, TUNNEL.v + dv, YA + ht + 3)), roof: pos(u, TUNNEL.v, YA + ht + 4), h: ht });
+  }
+  // the portals' signs, on the walls at the way in
+  const inH = heightAt.get(TUNNEL.u1 + ',' + TUNNEL.v);
+  sign(TUNNEL.u1 + 1, TUNNEL.v - 1, YA + 1, inName, 'The Dark\nthe Leviathan\ngoes underground');
+  tunnel.portals.push(pos(TUNNEL.u1, TUNNEL.v, YA + inH), pos(TUNNEL.u0, TUNNEL.v, YA + heightAt.get(TUNNEL.u0 + ',' + TUNNEL.v)));
+
+  // ---- the station's canopy: red and white over the platform, on four posts -------------------------
+  const canopy = { roof: [], posts: [] };
+  const SU0 = station.u - 2, SU1 = station.u + 3, CY = YA + 6;     // (over the hump too: three clear over it)
+  for (let u = SU0; u <= SU1; u++) for (let v = v0 - 1; v <= v0 + 1; v++) { put(u, v, CY, (u + v) % 2 ? RED_WOOL : WHITE_WOOL); canopy.roof.push(pos(u, v, CY)); }
+  for (const u of [SU0, SU1]) for (const v of [v0 - 1, v0 + 1]) { for (let y = YA + 1; y < CY; y++) put(u, v, y, MAT.FENCE); canopy.posts.push(pos(u, v, YA + 1)); }
+  for (const u of [SU0 + 1, SU1 - 1]) put(u, v0 - 1, CY - 1, MAT.LAMP_HANG);
+
   // ---- the giant Ferris wheel -------------------------------------------------------------------
   const wr = 12, wu = -26, wv = 44, wy = YA + wr + 3;
   const wheel = ferrisWheel(put, pos, wu, wv, wy, wr, YA, 12, 0, WHEEL_COLOURS());
@@ -315,6 +367,7 @@ export function buildThemePark(world, plan, cfg, ctx) {
   for (const u of [-3, 3]) lit.push(pos(u, 0, YA + 8));
   lit.push(pos(CU, CV, YA + 9), pos(TU + 2, TV + 2, TOP + 2));
   for (const [du, dv] of [[2, 2], [-2, 2], [2, -2], [-2, -2]]) lit.push(pos(CU + du, CV + dv, YA + 6));
+  lit.push(...tunnel.lights, corkscrew.tower, ...[SU0 + 1, SU1 - 1].map((u) => pos(u, v0 - 1, CY - 1)));
   const cells = [];
   for (let v = 1; v < VD - 1; v++) for (let u = U0 + 1; u < U1; u++) cells.push([u, v]);
   const lamps = lightGround(world, { at }, YA, cells, (u, v, x, z) => {
@@ -331,7 +384,7 @@ export function buildThemePark(world, plan, cfg, ctx) {
   const [vx, vz] = at(0, 3), [lx, lz] = at(0, 9);
   return {
     kind: 'themepark', lot: rect, roadRect, side, street: acc.street, gate, streetSign, ground: YA, noLighting: true, rec: null,
-    road, coaster: { rails, railBlocks, supports, station, carts, lift: H, length: rails.length, stationSign },
+    road, coaster: { rails, railBlocks, supports, station, carts, lift: H, length: rails.length, stationSign, corkscrew, tunnel, canopy },
     wheel, tower, carousel, stalls, benches, fence, lamps: [...lit, ...lamps], arch: archSign,
     visit: [vx, YA + 1, vz], visitLook: [lx, YA + 2, lz],
     frame: { at, pos, U0, U1, VD, YA, u0, u1, v0, v1 },

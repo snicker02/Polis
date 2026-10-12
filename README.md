@@ -1,4 +1,4 @@
-# Polis v0.59.0
+# Polis v0.60.0
 
 *Created with help from Claude AI.*
 
@@ -771,6 +771,24 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.60.0** — The Leviathan's corkscrew and tunnel.
+
+- The corkscrew: from the high run off the lift hill the track now goes three tight
+  turns down round a square five across (ROUTE: CORKSCREW), each side four rails with
+  two of fall, eight blocks a turn, under its own entry and under itself in every
+  column of its sides (eight apart, room for a cart). A quartz tower stands in its
+  middle, a sea lantern at every turn and one on top. It takes the place of the wide
+  helix. (Rails cannot bank or go upside down: a corkscrew in Minecraft is a spiral.)
+- The tunnel: where the back run comes down off its hill, the track goes into the
+  dark: stone and mossy stone walls either side from the ground to three over the
+  rail, a roof on them following the track down, a light set in the walls every third
+  block, side to side, lamps on the roof outside, a sign at its mouth ("The Dark").
+- The station under a red and white canopy on four posts, lanterns under it, high
+  enough over the hump for the cart.
+
+2zzn (23 checks): the corkscrew's turns, fall and stacked columns, its tower lit; the
+tunnel's walls, roof and light inside, the track coming down into it; the canopy.
 
 **0.59.0** — A sports centre.
 
