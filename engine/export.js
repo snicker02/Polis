@@ -17,7 +17,7 @@ import { makeRng } from './rng.js';
 // Must match main.js VERSION, package.json and index.html data-version;
 // tools/validate.js fails if they drift. The app refuses to export when the
 // browser has mixed cached copies of old and new files.
-export const POLIS_VERSION = '0.55.0';
+export const POLIS_VERSION = '0.56.0';
 
 export const CHUNK = 64;          // Bedrock structure limit per horizontal axis
 export const GROUND_DROP = 2;     // base layer y=0 sits 2 below feet; surface y=1 replaces the block you stand on
@@ -204,6 +204,31 @@ function columnLimits(world, opts) {
   };
 }
 
+// A command block's command naming one of the pack's own structures ({ns}: the theme
+// park's turning wheel loads its frames by name) given the pack's namespace.
+function blockDataFor(world, opts) {
+  const ns = opts.namespace || 'polis';
+  let any = false;
+  for (const d of world.data.values()) if (d && d.id === 'CommandBlock' && d.tags.Command.v.includes('{ns}')) { any = true; break; }
+  if (!any) return world.data;
+  const out = new Map();
+  for (const [k, d] of world.data) out.set(k, d && d.id === 'CommandBlock' && d.tags.Command.v.includes('{ns}')
+    ? { ...d, tags: { ...d.tags, Command: N.str(d.tags.Command.v.split('{ns}').join(ns)) } } : d);
+  return out;
+}
+
+// The frames of anything that moves (the theme park's wheel): each a structure of its
+// own, every cell of its box written (air where the frame has nothing), loaded in turn
+// by command blocks in the city.
+export function buildAnimStructures(world, opts = {}) {
+  return (world.anims || []).map((a) => {
+    const keys = [], ids = [];
+    for (const [k, id] of a.cells) { const [x, y, z] = k.split(',').map(Number); if (y < a.box.y0) continue; keys.push(VoxelWorld.key(x, y, z)); ids.push(id); }
+    const res = writeMcStructure(keys, ids, a.box, MATERIALS, { airId: MAT.AIR });
+    return { name: a.name, data: res.data, box: a.box, size: res.size, cells: res.cells, paletteSize: res.paletteSize, entities: 0, offset: [a.box.x0, a.box.y0, a.box.z0] };
+  });
+}
+
 export function buildStructures(world, opts = {}) {
   const airId = opts.fillAir ? MAT.AIR : undefined;
   const F = Math.max(0, Math.min(48, opts.foundation | 0));
@@ -211,7 +236,7 @@ export function buildStructures(world, opts = {}) {
   const limits = columnLimits(world, opts);
   return tileList(world, opts).map((t) => {
     const res = writeMcStructure(t.chunk.keys, t.chunk.ids, t.box, MATERIALS,
-      { airId, blockData: world.data, inside: cityInside(world), ...fill, ...limits,
+      { airId, blockData: blockDataFor(world, opts), inside: cityInside(world), ...fill, ...limits,
         wet: world.wet, waterId: MAT.WATER,      // (waterlogged plants: the botanical garden's)
         // a dome's inside is always written as air: water or ground there is driven out
         // and so is every room dug under a building (a cellar, the crypt)
@@ -552,6 +577,7 @@ export function functionFiles(tiles, world, opts = {}) {
   const build = (dx, dz, title, pop) => [
     `# ${title}`,
     ...(hasCommands ? ['gamerule commandblockoutput false'] : []),
+    ...((world.anims || []).length ? ['scoreboard objectives add polis_fun dummy'] : []),     // (the wheel's clock counts on it)
     `# ${tiles.length} structure${tiles.length === 1 ? '' : 's'}. Safe to run again: blocks only.`,
     '# Only loaded chunks are filled: stand near the middle and raise render distance.',
     `# When the whole city is standing, run /function ${ns}/${pop} from the SAME spot.`,
@@ -729,7 +755,7 @@ export function functionFiles(tiles, world, opts = {}) {
   }
   if (places.length) files.push({ name: `functions/${ns}/mark_centre.mcfunction`, fn: `${ns}/mark_centre`, text: [
     `# Polis: mark this spot as the city's centre, for the goto functions. Stand exactly where you ran build_centered`,
-    `# (in the centre monument's alcove, under its sign). Needed only for a city built from a pack older than 0.55.0.`,
+    `# (in the centre monument's alcove, under its sign). Needed only for a city built from a pack older than 0.56.0.`,
     `kill @e[type=armor_stand,tag=${ctag}]`,
     `kill @e[type=armor_stand,name=${anchor}]`,
     `summon armor_stand ${anchor} ~ ~ ~`,
@@ -834,7 +860,7 @@ export function placementGuide(tiles, opts = {}) {
     L.push('WHERE THINGS ARE (from the build_centered spot; north is -Z). To go to one:');
     L.push(`    /function ${ns}/goto_<name>     e.g. /function ${ns}/goto_${places[0].id}`);
     L.push('  (it takes you there from the marker build_centered left, wherever you are in the city.');
-    L.push(`  A city built from a pack older than 0.55.0 has no such marker: stand exactly where you ran`);
+    L.push(`  A city built from a pack older than 0.56.0 has no such marker: stand exactly where you ran`);
     L.push(`  build_centered and run /function ${ns}/mark_centre once. The Polis app's Find a landmark panel`);
     L.push('  also gives each landmark\'s coordinates from your build spot.)');
     const w = Math.max(...places.map((P) => P.name.length));
@@ -853,6 +879,12 @@ export function placementGuide(tiles, opts = {}) {
     L.push('  build turns the command block chat off with /gamerule commandblockoutput false; needs command blocks on).');
     L.push('  The fans go up into the stands by the stair from the street.');
     L.push('  The bouts run while you are near enough for the stadium to be simulated.');
+    L.push('');
+  }
+  if ((opts.places || []).some((P) => P.kind === 'themepark')) {
+    L.push('THE THEME PARK\'S BIG WHEEL turns: a clock of command blocks under it loads its frames in turn (silently).');
+    L.push('  It needs command blocks on (/gamerule commandblocksenabled true, cheats on), and turns while you are near enough');
+    L.push('  for the park to be simulated. Its cabins cannot be ridden while it turns. The Leviathan: press the button at its station.');
     L.push('');
   }
   L.push('A JAIL, ZOO OR AQUARIUM EMPTY? Their animals are summoned, and a summon only reaches');
@@ -930,7 +962,7 @@ export async function exportPack(world, optsIn = {}) {
   // the city's marked centre unless the caller names one
   const opts = { ...optsIn, centre: optsIn.centre || world.centre };
   const tiles = tileList(world, opts);
-  const structures = buildStructures(world, opts).concat(buildDrainStructures(world, opts), buildPlugStructures(world, opts), buildRemoveStructures(world, opts));
+  const structures = buildStructures(world, opts).concat(buildDrainStructures(world, opts), buildPlugStructures(world, opts), buildRemoveStructures(world, opts), buildAnimStructures(world, opts));
   const mobStructs = buildMobStructures(opts.spawns, opts);
   const guide = placementGuide(tiles, { ...opts, world, dome: !!world.dome, stilts: !!world.stiltGrid, floating: !!world.floating, plugs: !!(world.airBoxes && world.airBoxes.length) });
   const fns = functionFiles(tiles, world, { ...opts, mobTiles: mobStructs });
@@ -948,7 +980,7 @@ export async function exportPack(world, optsIn = {}) {
 
 export async function exportStructuresZip(world, opts = {}) {
   const tiles = tileList(world, opts);
-  const structures = buildStructures(world, opts).concat(buildDrainStructures(world, opts), buildPlugStructures(world, opts), buildRemoveStructures(world, opts));
+  const structures = buildStructures(world, opts).concat(buildDrainStructures(world, opts), buildPlugStructures(world, opts), buildRemoveStructures(world, opts), buildAnimStructures(world, opts));
   const mobStructs = buildMobStructures(opts.spawns, opts);
   const guide = placementGuide(tiles, { ...opts, world, dome: !!world.dome, stilts: !!world.stiltGrid, floating: !!world.floating, plugs: !!(world.airBoxes && world.airBoxes.length) });
   const fns = functionFiles(tiles, world, { ...opts, mobTiles: mobStructs });

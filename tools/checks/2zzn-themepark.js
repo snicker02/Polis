@@ -97,6 +97,11 @@ export default async function run(ctx) {
     out.pool = { leaks, depth, shaftOpen, exit };
     // the wheel whole
     out.wheel = T.wheel.rim.every((p) => blk(...p) !== 'air') && T.wheel.cabins.length === 12 && T.wheel.cabins.every((c) => c.every((p) => blk(...p) !== 'air'));
+    // the coaster's turns and where it passes under itself
+    const rs = C.rails;
+    out.turns = rs.filter((p, i) => { const a = rs[(i - 1 + rs.length) % rs.length].at, b = p.at, c = rs[(i + 1) % rs.length].at; return (b[0] - a[0]) * (c[2] - b[2]) - (b[2] - a[2]) * (c[0] - b[0]) !== 0; }).length;
+    const colsH = new Map(); for (const p of rs) { const k = p.at[0] + ',' + p.at[2]; colsH.set(k, (colsH.get(k) || 0) + 1); }
+    out.under = [...colsH.values()].filter((n) => n > 1).length;
     // lit
     const lights = T.lamps;
     let dark = 0;
@@ -125,6 +130,47 @@ export default async function run(ctx) {
   check('theme park: up the drop tower\'s ladder onto its platform', all((t) => t.walk.towerTop));
   check('theme park: the drop tower\'s pool three deep and held in, the shaft open over it, a way out over the water and down', all((t) => t.pool.leaks === 0 && t.pool.depth === 3 && t.pool.shaftOpen && t.pool.exit), ts.map(([n, , t]) => `${n}: ${JSON.stringify(t.pool)}`).join(' | '));
   check('theme park: the big wheel whole, twelve cabins', all((t) => t.wheel));
+  check('theme park: the coaster winds round the park (a dozen turns and more) and passes under itself (the helix)', all((t) => t.turns >= 12 && t.under >= 10), ts.map(([n, , t]) => `${n}: ${t.turns} turns, ${t.under} under`).join(', '));
+  {
+    // the wheel turns: forty-eight frames, a whole turn, the first the wheel as built, each a step round, the
+    // last back to the first a step like any other; a clock of command blocks, in order,
+    // loading them; in the pack the frames as structures and the clock naming them
+    const r = cities[1][1], T = r.landmarks.find((q) => q.kind === 'themepark'), w = r.world;
+    const { ferrisWheel } = await import('../../engine/park.js');
+    const { WHEEL_FRAMES, WHEEL_PERIOD, WHEEL_COLOURS } = await import('../../engine/themepark.js');
+    const anims = (w.anims || []).filter((a) => /^wheel_f\d+$/.test(a.name));
+    const sig = (cells) => [...cells.entries()].filter(([k]) => Number(k.split(',')[1]) >= anims[0].box.y0).map(([k, id]) => k + '=' + id).sort().join(';');
+    const asBuilt = new Map(); for (const k of anims[0].cells.keys()) { const [x, y, z] = k.split(',').map(Number); asBuilt.set(k, w.get(x, y, z)); }
+    const F = T.frame, wu = -26, wv = 44, wr = 12, wy = T.ground + wr + 3;
+    // (frame to frame a step round: as many blocks changed from the last frame back to the
+    // first as between any two; no jump where the turn starts again)
+    const diff = (p, q) => { let n = 0; const keys = new Set([...p.keys(), ...q.keys()]); for (const k of keys) if (p.get(k) !== q.get(k)) n++; return n; };
+    const steps = anims.map((a, f) => diff(a.cells, anims[(f + 1) % anims.length].cells));
+    const distinct = new Set(anims.map((a) => sig(a.cells))).size;
+    const whole = Math.abs(WHEEL_FRAMES * (WHEEL_PERIOD / WHEEL_FRAMES) - 2 * Math.PI) < 1e-9;
+    const frames = anims.length === WHEEL_FRAMES && sig(anims[0].cells) === sig(asBuilt) && whole
+      && steps[steps.length - 1] <= Math.max(...steps.slice(0, -1)) && Math.min(...steps) > 0;
+    const clock = T.wheel.turning.clock;
+    const blk = (p) => MATERIALS.def(w.get(...p)).block.replace('minecraft:', '');
+    const inLine = clock.every((c, k) => k === 0 || Math.abs(c.at[0] - clock[k - 1].at[0]) + Math.abs(c.at[2] - clock[k - 1].at[2]) === 1 && c.at[1] === clock[0].at[1]);
+    const kinds = clock.map((c) => blk(c.at)).join(',');
+    const wantKinds = ['repeating_command_block', ...Array(WHEEL_FRAMES + 1).fill('chain_command_block')].join(',');
+    const data0 = w.getData(...clock[0].at);
+    const lands = clock.slice(2).every((c, f) => { const m = c.cmd.match(/structure load \{ns\}:wheel_f(\d+) ~(-?\d+) ~(-?\d+) ~(-?\d+)$/); return !!m && Number(m[1]) === f && c.at[0] + Number(m[2]) === anims[0].box.x0 && c.at[1] + Number(m[3]) === anims[0].box.y0 && c.at[2] + Number(m[4]) === anims[0].box.z0; });
+    check('theme park: the big wheel turns: forty-eight frames, a whole turn, the first as built, each a step round, no jump from the last back to the first', frames, `${anims.length} frames, ${distinct} distinct, steps ${Math.min(...steps)}..${Math.max(...steps)}, last ${steps[steps.length - 1]}`);
+    check('theme park: the wheel\'s clock: a repeating block, then chain blocks in a line, silent; each frame loaded into its own place', inLine && kinds === wantKinds
+      && data0.tags.TrackOutput.v === 0 && data0.tags.TickDelay.v >= 10 && lands, kinds);
+    const { buildAnimStructures, exportPack } = await import('../../engine/export.js');
+    const { deflateRaw } = ctx;
+    const pack = await exportPack(w, { namespace: 'chk', spawns: r.spawns, places: r.places, deflateRaw });
+    const named = pack.structures.filter((st) => /^wheel_f\d+$/.test(st.name));
+    const box = anims[0].box, vol = (box.x1 - box.x0 + 1) * (box.y1 - box.y0 + 1) * (box.z1 - box.z0 + 1);
+    const full = buildAnimStructures(w, {}).every((st) => { const root = decodeNbt(st.data).root; return root.structure.block_indices[0].every((i) => i >= 0) && root.structure.block_indices[0].length === vol; });
+    let cmdsNamed = 0;
+    for (const st of pack.structures) { const pd = decodeNbt(st.data).root.structure.palette.default.block_position_data || {}; for (const v of Object.values(pd)) { const c = v.block_entity_data && v.block_entity_data.Command; if (c && /structure load chk:wheel_f\d+ /.test(c)) cmdsNamed++; } }
+    const bc = pack.functions.find((f) => f.fn === 'chk/build_centered');
+    check('theme park: in the pack, the forty-eight frames (every cell written, air between), the clock naming them by the pack\'s own name, build making its counter', named.length === WHEEL_FRAMES && full && cmdsNamed === WHEEL_FRAMES && bc.text.includes('scoreboard objectives add polis_fun dummy'), `${named.length} frames, ${cmdsNamed} named, full ${full}`);
+  }
   check('theme park: every piece of its open ground lit', all((t) => t.dark === 0), ts.map(([n, , t]) => `${n}: ${t.dark}`).join(', '));
   check('theme park: in the pack, its ground founded and cleared like the city\'s own (and no more)', all((t) => t.pack));
   {

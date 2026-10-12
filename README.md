@@ -1,4 +1,4 @@
-# Polis v0.55.0
+# Polis v0.56.0
 
 *Created with help from Claude AI.*
 
@@ -771,6 +771,29 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.56.0** — The big wheel turns; the Leviathan winds.
+
+- The theme park's big wheel turns. Blocks cannot rotate, so it turns in frames:
+  48 of them, 7.5 degrees apart, a whole turn (its cabins hang straight down as it
+  goes, so only a whole turn brings it exactly back to itself on the grid). Each frame
+  is a structure in the pack, every block of the wheel's plane with air between. A
+  clock of command blocks under the ground loads them in turn, a frame every half
+  second, 24 seconds a turn: a repeating block counting on a scoreboard (build makes
+  the objective `polis_fun`), then a chain block per frame, all silent. Its cabins
+  cannot be ridden while it turns. The commands name the frames by the pack's own
+  name, filled in at export. Bedrock only: in Java the wheel stands still.
+- The Leviathan no longer runs round a rectangle. Its route (themepark.js: ROUTE) is
+  laid segment by segment: the front run and station, the lift hill to 26, a high
+  run in, a helix down round a square that passes under its own top, the long run to
+  the back, a camelback, round the back corner, a U-turn hill, the last drop home.
+  That is 416 rails and over a dozen turns. The route is refused if it turns anywhere
+  but on the level, or passes over itself with less than five blocks between, and no
+  pillar stands where the track passes under itself or over a path.
+- An upside-down loop is not possible: Minecraft's rails and minecarts cannot go
+  vertical or upside down. The helix is the nearest thing.
+
+Check 2zzn.
 
 **0.55.0** — A theme park.
 

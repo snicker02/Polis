@@ -156,7 +156,9 @@ export function amusementPark(world, lot, face, cfg, rng, G, signTags) {
 // A Ferris wheel in the plane v = cv, about (cu, cy): a closed ring of radius r, n spokes,
 // n cabins two high just outside the ring, an axle, legs either side down to G + 1.
 // put(u, v, y, id) and pos(u, v, y) in the caller's own frame.
-export function ferrisWheel(put, pos, cu, cv, cy, r, G, n = 8) {
+// phase: how far round it is turned (radians): the spokes and cabins turned with it
+// colours: the cabins' colours, in turn round the wheel (four unless given)
+export function ferrisWheel(put, pos, cu, cv, cy, r, G, n = 8, phase = 0, colours = null) {
   const line4 = (a, b) => {                      // a line from a to b, each step a face away
     const out = [[a[0], a[1]]]; let [x, y] = a;
     const n = Math.max(Math.abs(b[0] - a[0]), Math.abs(b[1] - a[1])) * 4 || 1;
@@ -180,9 +182,9 @@ export function ferrisWheel(put, pos, cu, cv, cy, r, G, n = 8) {
   }
   const ringSet = new Set(ring.map(([a, b]) => a + ',' + b));
   for (const [dx, dy] of [...ringSet].map((k) => k.split(',').map(Number))) { put(cu + dx, cv, cy + dy, MAT.C_WHITE); wheel.rim.push(pos(cu + dx, cv, cy + dy)); }
-  const COLOURS = [MAT.C_RED, MAT.C_BLUE, MAT.LINE, MAT.C_LBLUE || MAT.C_BLUE];
+  const COLOURS = colours || [MAT.C_RED, MAT.C_BLUE, MAT.LINE, MAT.C_LBLUE || MAT.C_BLUE];
   for (let k = 0; k < n; k++) {
-    const a = (k * 2 * Math.PI) / n, ex = Math.cos(a), ey = Math.sin(a);
+    const a = phase + (k * 2 * Math.PI) / n, ex = Math.cos(a), ey = Math.sin(a);
     const end = [Math.round(ex * r), Math.round(ey * r)];
     const spoke = line4([0, 0], end).filter(([a2, b2]) => !(a2 === 0 && b2 === 0) && !ringSet.has(a2 + ',' + b2));
     for (const [dx, dy] of spoke) put(cu + dx, cv, cy + dy, MAT.C_LGRAY);

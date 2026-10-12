@@ -27,8 +27,14 @@
 import { MAT, MATERIALS, B, I, railId, poweredRailId, RAIL, stairId, WEIRDO, signId, SIGN_FACING, WOOLS } from './materials.js';
 import { edgeRoute, accessRoad, OUT, OPPOSITE, NAME, lightGround } from './offsite.js';
 import { ferrisWheel } from './park.js';
+import { commandBlock } from './airport.js';
 
 export const THEMEPARK = { L: 110, D: 80, LIFT: 26 };
+// the big wheel's turn: a whole turn in forty-eight frames of seven and a half degrees
+// (its cabins hang straight down as it turns, so nothing short of a whole turn brings it
+// back exactly to itself on the grid: a whole turn loops by its nature)
+export const WHEEL_FRAMES = 48, WHEEL_PERIOD = 2 * Math.PI;
+export const WHEEL_COLOURS = () => null;
 const brake = (dir) => MATERIALS.add(null, 'minecraft:golden_rail', '#d8b13a', { rail_data_bit: B(0), rail_direction: I(dir) }, { passable: true, flowable: true, flat: true });
 const buttonUp = () => MATERIALS.add(null, 'minecraft:wooden_button', '#a08050', { button_pressed_bit: B(0), facing_direction: I(1) });
 
@@ -45,38 +51,58 @@ function shapeOf(prev, cur, next) {
   return S && E ? RAIL.SE : S && W ? RAIL.SW : N && W ? RAIL.NW : RAIL.NE;
 }
 
-// The coaster's heights round its loop: front (from its first corner), right, back, left.
-export function coasterProfile(Lf, Lr, Lb, Ll, H) {
-  const front = [], right = [], back = [], left = [];
-  // the front: level, the station's hump eight in
-  const s = 8;
-  for (let i = 0; i < Lf; i++) front.push([i === s ? 2 : 1, i === s - 1 ? 'hump-up' : i === s ? 'hump-top' : i === s + 1 ? 'station' : (i > s + 3 && i < Lf - 2 && (i - s) % 5 === 0) ? 'boost' : 'plain']);
-  // the right: the lift hill to H, then level to the corner
-  for (let j = 0; j < Lr; j++) right.push([j <= 1 ? 1 : Math.min(H, j), 'plain']);
-  // the back: the big drop, a camelback, a second hill, level home to the corner at four
-  const seq = [H, H];
-  const to = (h) => { let c = seq[seq.length - 1]; while (c !== h) { c += Math.sign(h - c); seq.push(c); } };
-  const level = (n) => { for (let i = 0; i < n; i++) seq.push(seq[seq.length - 1]); };
-  to(4); level(3); to(Math.round(H * 0.6)); level(2); to(4); level(3); to(9); level(2); to(4);
-  while (seq.length < Lb) seq.push(4);
-  for (let k = 0; k < Lb; k++) back.push([seq[k], 'plain']);
-  // the left: level two, down to the ground, level home
-  for (let k = 0; k < Ll; k++) left.push([k <= 1 ? 4 : Math.max(1, 4 - (k - 1)), 'plain']);
-  const all = [...front, ...right, ...back, ...left];
-  // roles: a rail that climbs to the next is powered (the lift and every climb); along
-  // the level a booster every fifth
-  all.forEach((c, i) => {
-    const next = all[(i + 1) % all.length];
-    if (c[1] === 'plain' && next[0] > c[0]) c[1] = 'lift';
+// The coaster's route: from its start corner, segment by segment, each [direction, steps,
+// height to reach] (E, W along u; N out from the city, S back toward it). Each segment
+// leaves its corner level and arrives at the next level (a curve only on the level, its
+// neighbours level with it), and between changes a block of rise or fall a step.
+// The route as laid in the park (THEMEPARK.ROUTE): the front run with the station; the
+// lift hill up the right; a high run in; a helix down round a square, passing under its
+// own top; the long drop to the back; a camelback; round the back corner; a U-turn hill
+// up and over; the last drop home down the left.
+export const ROUTE = [
+  ['E', 103, 1],                                  // the front run, the station on it
+  ['N', 35, 26],                                  // the lift hill
+  ['W', 15, 26],                                  // the high run in
+  ['N', 12, 17], ['E', 12, 8], ['S', 12, 4], ['W', 12, 4],   // the helix: down round a square, under its own top
+  ['N', 30, 4],                                   // the long run to the back
+  ['W', 12, 12], ['W', 12, 4], ['W', 20, 4],      // the camelback
+  ['S', 20, 4], ['W', 22, 4],                     // round the back corner
+  ['N', 16, 14], ['W', 16, 14], ['S', 16, 4],     // the U-turn hill
+  ['W', 6, 4], ['S', 45, 1],                      // and home down the left
+];
+const STEP = { E: [1, 0], W: [-1, 0], N: [0, 1], S: [0, -1] };
+export function coasterRoute(u0, v0, route = ROUTE, station = 8) {
+  let u = u0, v = v0, h = 1;
+  const cells = [[u, v, h]], errors = [];
+  route.forEach(([d, n, target], si) => {
+    const [du, dv] = STEP[d];
+    for (let k = 1; k <= n; k++) {
+      u += du; v += dv;
+      if (k >= 2 && k <= n - 1 && h !== target) h += Math.sign(target - h);
+      cells.push([u, v, h]);
+    }
+    if (h !== target) errors.push(`segment ${si} (${d} ${n}) ends at ${h}, not ${target}`);
   });
+  const last = cells.pop();
+  if (last[0] !== u0 || last[1] !== v0 || last[2] !== 1) errors.push(`the route does not close: ends at ${last}`);
+  // the station's hump on the front run
+  cells[station][2] = 2;
+  const all = cells.map(([cu, cv, ch], i) => [cu, cv, ch, i === station - 1 ? 'hump-up' : i === station ? 'hump-top' : i === station + 1 ? 'station' : 'plain']);
+  const N = all.length;
+  all.forEach((c, i) => { const next = all[(i + 1) % N]; if (c[3] === 'plain' && next[2] > c[2]) c[3] = 'lift'; });
   let run = 0;
   all.forEach((c, i) => {
-    const prev = all[(i - 1 + all.length) % all.length], next = all[(i + 1) % all.length];
-    if (c[1] !== 'plain') { run = 0; return; }
-    run = prev[0] === c[0] && next[0] === c[0] ? run + 1 : 0;
-    if (run && run % 5 === 0) c[1] = 'boost';
+    const prev = all[(i - 1 + N) % N], next = all[(i + 1) % N];
+    if (c[3] !== 'plain') { run = 0; return; }
+    run = prev[2] === c[2] && next[2] === c[2] ? run + 1 : 0;
+    if (run && run % 5 === 0) c[3] = 'boost';
   });
-  return { all, lens: [Lf, Lr, Lb, Ll], station: s };
+  // where it passes over itself, room between: its own rail, the block under the upper,
+  // three clear over the lower
+  const cols = new Map();
+  for (const c of all) { const k = c[0] + ',' + c[1]; if (!cols.has(k)) cols.set(k, []); cols.get(k).push(c[2]); }
+  for (const [k, hs] of cols) if (hs.length > 1) { hs.sort((a, b) => a - b); for (let i = 1; i < hs.length; i++) if (hs[i] - hs[i - 1] < 5) errors.push(`at ${k} it passes over itself ${hs[i] - hs[i - 1]} apart`); }
+  return { all, station, cols, errors };
 }
 
 export function buildThemePark(world, plan, cfg, ctx) {
@@ -142,14 +168,13 @@ export function buildThemePark(world, plan, cfg, ctx) {
 
   // ---- the roller coaster ---------------------------------------------------------------------
   const u0 = U0 + 3, u1 = U1 - 3, v0 = 9, v1 = VD - 4;
-  const loop = [];
-  for (let u = u0; u < u1; u++) loop.push([u, v0]);
-  for (let v = v0; v < v1; v++) loop.push([u1, v]);
-  for (let u = u1; u > u0; u--) loop.push([u, v1]);
-  for (let v = v1; v > v0; v--) loop.push([u0, v]);
-  const H = Math.min(THEMEPARK.LIFT, (v1 - v0) - 6);
-  const prof = coasterProfile(u1 - u0, v1 - v0, u1 - u0, v1 - v0, H);
+  const track = coasterRoute(u0, v0);
+  if (track.errors.length) throw new Error('theme park coaster: ' + track.errors.join('; '));
+  const prof = { all: track.all.map((c) => [c[2], c[3]]), station: track.station };
+  const loop = track.all.map((c) => [c[0], c[1]]);
+  const H = Math.max(...track.all.map((c) => c[2]));
   const P = loop.map(([u, v], i) => pos(u, v, YA + prof.all[i][0]));
+  const pathCell = new Set(paved.map(([u, v]) => u + ',' + v));
   const rails = [], railBlocks = [], supports = [];
   let station = null;
   loop.forEach(([u, v], i) => {
@@ -160,7 +185,8 @@ export function buildThemePark(world, plan, cfg, ctx) {
     const powered = !curve && (role === 'lift' || role === 'boost' || role === 'hump-up');
     const id = role === 'station' ? brake(shape) : powered ? poweredRailId(shape) : railId(shape);
     const under = powered ? MAT.REDSTONE : ht === 1 ? null : MAT.STONEBRICK;
-    if (ht > 2 && i % 4 === 0) for (let y = YA + 1; y < YA + ht - 1; y++) put(u, v, y, MAT.STONEBRICK);    // a pillar
+    // a pillar every fourth, but never where the track passes under itself or over a path
+    if (ht > 2 && i % 4 === 0 && track.cols.get(u + ',' + v).length === 1 && !pathCell.has(u + ',' + v)) for (let y = YA + 1; y < YA + ht - 1; y++) put(u, v, y, MAT.STONEBRICK);
     if (under !== null) { put(u, v, YA + ht - 1, under); railBlocks.push([...pos(u, v, YA + ht - 1), under]); supports.push(pos(u, v, YA + ht - 1)); }
     for (let y = YA + ht + 1; y <= YA + ht + 3; y++) clear(u, v, y);
     put(u, v, YA + ht, id); railBlocks.push([...pos(u, v, YA + ht), id]);
@@ -176,8 +202,42 @@ export function buildThemePark(world, plan, cfg, ctx) {
 
   // ---- the giant Ferris wheel -------------------------------------------------------------------
   const wr = 12, wu = -26, wv = 44, wy = YA + wr + 3;
-  const wheel = ferrisWheel(put, pos, wu, wv, wy, wr, YA, 12);
+  const wheel = ferrisWheel(put, pos, wu, wv, wy, wr, YA, 12, 0, WHEEL_COLOURS());
   sign(wu + 1, wv - 3, YA + 1, inName, 'Big Wheel');
+  // It turns: forty-eight frames of it, each seven and a half degrees on, a whole turn
+  // (twenty-four seconds) and round again. Saved in the pack as structures (export.js: world.anims), every block of its
+  // plane and air between. Under the ground a clock of command blocks loads them in
+  // turn, a frame every half second: a repeating block counting, chain blocks after it,
+  // silent.
+  const FRAMES = WHEEL_FRAMES, frames = [];
+  for (let f = 0; f < FRAMES; f++) {
+    const cells = new Map();
+    const rec = (u, v, y, id) => { if (v !== wv) return; const [x, z] = at(u, v); cells.set(x + ',' + y + ',' + z, id); };
+    ferrisWheel(rec, pos, wu, wv, wy, wr, YA, 12, (f * WHEEL_PERIOD) / FRAMES, WHEEL_COLOURS());
+    frames.push(cells);
+  }
+  const fx = [], fy = [], fz = [];
+  for (const c of frames) for (const k of c.keys()) { const [x, y, z] = k.split(',').map(Number); fx.push(x); fy.push(y); fz.push(z); }
+  const fbox = { x0: Math.min(...fx), x1: Math.max(...fx), y0: Math.max(YA + 1, Math.min(...fy)), y1: Math.max(...fy), z0: Math.min(...fz), z1: Math.max(...fz) };
+  world.anims = [...(world.anims || []), ...frames.map((cells, f) => ({ name: `wheel_f${f}`, box: fbox, cells }))];
+  const FACE = { north: 2, south: 3, west: 4, east: 5 }[NAME(acc.across)];
+  const clockCmds = [
+    { mode: 'repeat', delay: 10, cmd: 'scoreboard players add #wheel polis_fun 1' },
+    { mode: 'chain', cmd: `execute if score #wheel polis_fun matches ${FRAMES}.. run scoreboard players set #wheel polis_fun 0` },
+    ...[...Array(FRAMES).keys()].map((f) => ({ mode: 'chain', frame: f })),
+  ];
+  const clock = [];
+  clockCmds.forEach((c, k) => {
+    const [x, y, z] = pos(wu - 3 + k, wv + 4, YA - 1);
+    const id = MATERIALS.add(null, c.mode === 'repeat' ? 'minecraft:repeating_command_block' : 'minecraft:chain_command_block', c.mode === 'repeat' ? '#6b4fa0' : '#5d8f6a',
+      { conditional_bit: B(0), facing_direction: I(FACE) });
+    world.set(x, y, z, id);
+    const cmd = c.frame === undefined ? c.cmd
+      : `execute if score #wheel polis_fun matches ${c.frame} run structure load {ns}:wheel_f${c.frame} ~${fbox.x0 - x} ~${fbox.y0 - y} ~${fbox.z0 - z}`;
+    world.setData(x, y, z, commandBlock(cmd, { mode: c.mode, delay: c.delay || 0 }));
+    clock.push({ at: [x, y, z], cmd });
+  });
+  wheel.turning = { frames: FRAMES, box: fbox, clock };
 
   // ---- the drop tower -----------------------------------------------------------------------------
   const TU = 24, TV = 30, TOP = YA + 36;                    // its middle; the platform's height

@@ -128,7 +128,8 @@ function javaBlockEntity(name, data) {
     // (the airport's launch pads: Bedrock's effect command in Java's own words)
     const t = data.tags || {}, cmd = t.Command ? t.Command.v : '';
     const m = cmd.match(/^effect (@[pa])\[r=(\d+)\] ([a-z_]+) (\d+) (\d+) true$/);
-    const jcmd = m ? `effect give ${m[1]}[distance=..${m[2]}] minecraft:${m[3]} ${m[4]} ${m[5]} true` : cmd;
+    // (the theme park's wheel turns only in Bedrock: its clock left blank in Java)
+    const jcmd = m ? `effect give ${m[1]}[distance=..${m[2]}] minecraft:${m[3]} ${m[4]} ${m[5]} true` : /structure load|polis_fun/.test(cmd) ? '' : cmd;
     return J.comp({ id: J.str(name.includes('chain') ? 'minecraft:chain_command_block' : 'minecraft:command_block'), Command: J.str(jcmd),
       auto: J.byte(t.auto ? t.auto.v : 0), powered: J.byte(0), conditionMet: J.byte(0), TrackOutput: J.byte(1), UpdateLastExecution: J.byte(1) });
   }

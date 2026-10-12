@@ -1008,7 +1008,7 @@ export function generateCity(cfgIn, onProgress) {
     if (cfg.bouts) { if (S && S.bouts) stats.bouts = `on the stadium's pitch, walled four high: ${BOUTS.map((b) => b.name).join(', ')}, fighting on and never hurt; the fans in by a stair from the street`;
       else stats.boutsMissing = S ? 'the stadium\'s pitch is too small for the bouts' : cfg.landmarks ? 'no lot for the stadium (it needs 17 by 21)' : 'the bouts are in the stadium, a landmark: tick Landmarks'; } }
   { const T = landmarks.find((q) => q.kind === 'themepark');
-    if (T) stats.themepark = `beside the city to the ${T.side}: a roller coaster of ${T.coaster.length} rails with a lift hill ${T.coaster.lift} high, a big wheel of ${T.wheel.cabins.length} cabins, a drop tower ${T.tower.height} high, a carousel, ${T.stalls.length} stalls`;
+    if (T) stats.themepark = `beside the city to the ${T.side}: a roller coaster of ${T.coaster.length} rails with a lift hill ${T.coaster.lift} high, a big wheel of ${T.wheel.cabins.length} cabins that turns, a drop tower ${T.tower.height} high, a carousel, ${T.stalls.length} stalls`;
     else if (cfg.themepark) stats.themeparkMissing = themeparkMissing || 'no room for the theme park'; }
   { const A = landmarks.find((q) => q.kind === 'airport');
     if (A) stats.airport = `beside the city to the ${A.side}: a runway ${A.runway.length} long, a terminal, a control tower ${A.tower.top - A.ground} high, ${A.pads.length} elytra launch pads, ${A.planes.length} aircraft`;
