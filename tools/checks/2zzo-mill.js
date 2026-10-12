@@ -14,17 +14,19 @@
 //   out, the block over it unpowered, the hopper beside it unlocked: locked at 2,
 //   unlocked at 3. The filter never locked, never emptying itself (it points into its
 //   comparator), under the line; the line hopper to hopper into the barrel at its end,
-//   the chest at its head over the first; no column's dust reaching another's.
+//   the chest at its head over the first; no column's dust reaching another's; each
+//   column's barrel with its label on the block over it, nothing in the walk before it.
 // - the farm: every cane on dirt beside water, room to grow three high; each piston
 //   facing its cane's second block, the observer on it watching the third, its pulse
 //   into dust powering the block beside the piston; no observer watching a cell a
 //   piston head goes into (it would set itself off for ever); the stalk pushed out
 //   over the stream; the stream a step shallower each block, held in, over the hopper
 //   into the barrel.
-// - the clock: the lever on its console beside the sticky piston; up, the rider
-//   observer in line with the fixed one, each watching the other; down, out of line,
-//   watching a block that never changes; the lamp and the note block (air over it) on
-//   their backs.
+// - the clock: a ring of observers each watching the one before it (a lap of two game
+//   ticks an observer, a second or so: two observers facing each other ran so fast the
+//   lamp never went out); the rider lifted into the ring by the sticky piston the lever
+//   works, closing it, and at rest under it, the ring broken; the lamp and the note
+//   block (air over it) on observers' backs. Every sign on a wall, none in a walk.
 // Reached on foot; lit (every spot a mob could stand at light 8 or more); every block
 // one of Bedrock's own states; in Java, every one of its blocks as Mojang's table has
 // it. On flat and fitted cities.
@@ -115,7 +117,9 @@ function inspect(r) {
     if (blk(c.filter) !== 'hopper' || key(add(c.filter, DIRV.up)) !== key(c.line)) why.push('filter not under the line');
     if (key(add(c.filter, hopperOut(c.filter))) !== key(c.comparator) || !/comparator/.test(blk(c.comparator))) why.push('filter not pointing into its comparator');
     if (key(add(c.comparator, toInput(c.comparator))) !== key(c.filter)) why.push('comparator not reading the filter');
-    if (key(add(c.filter, DIRV.down)) !== key(c.locked) || blk(c.locked) !== 'hopper' || key(add(c.locked, hopperOut(c.locked))) !== key(c.chest) || blk(c.chest) !== 'chest') why.push('locked hopper not under the filter into the chest');
+    if (key(add(c.filter, DIRV.down)) !== key(c.locked) || blk(c.locked) !== 'hopper' || key(add(c.locked, hopperOut(c.locked))) !== key(c.chest) || blk(c.chest) !== 'barrel') why.push('locked hopper not under the filter into its barrel');
+    // its label on the wall over it at head height, nothing in the walk before it
+    if (!/wall_sign/.test(blk(c.labelSign)) || blk(add(c.chest, add(add(c.labelSign, neg(c.chest)), DIRV.down))) !== 'air') why.push('label in the way');
     if (!/redstone_torch/.test(blk(c.torch)) || key(torchBlock(c.torch)) !== key(c.torchBlock) || !CONDUCT(blk(c.torchBlock))) why.push('torch not on its block');
     if (key(add(c.torch, DIRV.up)) !== key(c.lockBlock) || !CONDUCT(blk(c.lockBlock)) || !near(c.lockBlock, c.locked)) why.push('lock block');
     if (!/repeater/.test(blk(c.repeater)) || key(add(c.repeater, toInput(c.repeater))) !== key(c.repeaterIn) || key(add(c.repeater, neg(toInput(c.repeater)))) !== key(c.torchBlock) || !CONDUCT(blk(c.repeaterIn))) why.push('repeater');
@@ -149,7 +153,7 @@ function inspect(r) {
   const pistons = Fm.pistons.map(L), observers = Fm.observers.map(L), water = Fm.water.map(L);
   const waterSet = new Set(water.map(key));
   out.canes = canes.every((c) => blk(c.base) === 'reeds' && blk(c.dirt) === 'dirt' && [DIRV.north, DIRV.south, DIRV.east, DIRV.west].some((d) => waterSet.has(key(add(c.dirt, d))))
-    && blk(c.second) === 'air' && blk(c.third) === 'air');
+    && blk(c.second) === 'reeds' && blk(c.third) === 'air' && blk(add(c.third, DIRV.up)) === 'air');
   const heads = pistons.map((p) => add(p, pistonFace(p)));
   const watched = observers.map((o) => add(o, observerFace(o)));
   out.aim = canes.every((c, i) => /^piston$/.test(blk(pistons[i])) && key(heads[i]) === key(c.second) && blk(observers[i]) === 'observer' && key(watched[i]) === key(c.third));
@@ -173,25 +177,32 @@ function inspect(r) {
     out.stream = { steps, held, intoBarrel, length: water.length };
   }
 
-  // ---- the clock ------------------------------------------------------------------------------------
+  // ---- the clock: a ring of observers, each watching the one before it --------------------------------
   {
-    const C = Object.fromEntries(Object.entries(M.clock).map(([k, v]) => [k, L(v)]));
-    const why = [];
-    if (blk(C.lever) !== 'lever' || !/^up/.test(st(C.lever, 'lever_direction')) || key(add(C.lever, DIRV.down)) !== key(C.console) || !CONDUCT(blk(C.console))) why.push('lever on its console');
-    if (blk(C.piston) !== 'sticky_piston' || PF6[st(C.piston, 'facing_direction')] !== 'up' || !near(C.console, C.piston)) why.push('piston beside the console, facing up');
-    if (key(add(C.piston, DIRV.up)) !== key(C.rider) || blk(C.rider) !== 'observer' || key(add(C.rider, DIRV.up)) !== key(C.inLine) || blk(C.inLine) !== 'air') why.push('rider over the piston, room over it');
-    // up: the rider at inLine (its facing unchanged), the two watching each other
-    const rf = observerFace(C.rider), ff = observerFace(C.fixed);
-    if (blk(C.fixed) !== 'observer' || key(add(C.fixed, ff)) !== key(C.inLine) || key(add(C.inLine, rf)) !== key(C.fixed)) why.push('not watching each other in line');
-    // down: the rider watching a block that never changes; the fixed one watching the empty cell
-    const restWatch = add(C.rider, rf);
+    const C = M.clock, ring = C.ring.map(L), why = [];
+    const restAt = L(C.riderRest), piston = L(C.piston), floor = L(C.floor), lever = L(C.lever);
+    // the rider at rest, one below its place; in its place when the piston lifts it (its facing kept)
+    const blockAt = (p, riderIn) => (key(p) === key(ring[C.rider]) ? (riderIn ? 'observer' : 'air') : key(p) === key(restAt) ? (riderIn ? 'piston_head' : 'observer') : blk(p));
+    const faceOf = (p) => observerFace(key(p) === key(ring[C.rider]) ? restAt : p);
+    if (blk(restAt) !== 'observer' || key(add(restAt, DIRV.up)) !== key(ring[C.rider]) || blk(ring[C.rider]) !== 'air') why.push('rider not resting under its place');
+    if (blk(piston) !== 'sticky_piston' || PF6[st(piston, 'facing_direction')] !== 'up' || key(add(piston, DIRV.up)) !== key(restAt)) why.push('piston under the rider, facing up');
+    if (blk(lever) !== 'lever' || !/^up/.test(st(lever, 'lever_direction')) || key(add(lever, DIRV.down)) !== key(floor) || !CONDUCT(blk(floor)) || !near(floor, piston)) why.push('lever on the floor block beside the piston');
+    // lever up: every observer of the ring watching the one before it, all ten there
+    const closed = ring.every((p, k) => blockAt(p, true) === 'observer' && key(add(p, faceOf(p))) === key(ring[(k - 1 + ring.length) % ring.length]));
+    if (!closed || ring.length < 8) why.push('ring not closed');
+    // lever down: the one after the rider's place watching an empty cell (the pulse dies there), the rider watching a block that never changes
+    const after = ring[(C.rider + 1) % ring.length];
+    if (key(add(after, faceOf(after))) !== key(ring[C.rider])) why.push('the gap not watched');
+    const restWatch = add(restAt, observerFace(restAt));
     if (!CONDUCT(blk(restWatch)) || blk(restWatch) === 'air') why.push('rider at rest watching something that changes');
-    // their backs: the lamp, the note block with air over it
-    if (key(add(C.fixed, neg(ff))) !== key(C.lamp) || blk(C.lamp) !== 'redstone_lamp') why.push('lamp');
-    if (key(add(C.inLine, neg(rf))) !== key(C.note) || blk(C.note) !== 'noteblock' || blk(add(C.note, DIRV.up)) !== 'air' || blk(add(C.note, DIRV.down)) === 'air') why.push('note block');
-    // nothing else powering the piston: only the console beside it conducts, and only the lever powers that
-    if (N6.some((d) => { const n = add(C.piston, d); return key(n) !== key(C.console) && /redstone|lever|torch|observer/.test(blk(n)) && key(n) !== key(C.rider); })) why.push('something else beside the piston');
-    out.clock = why;
+    // no observer of the ring watching anything but the one before it (none watching the lamp, the note block, the piston)
+    // the lamp and the note block on observers' backs; the note block with air over it, a block under it
+    const backs = ring.map((p) => key(add(p, neg(faceOf(p)))));
+    if (!backs.includes(key(L(C.lamp))) || blk(L(C.lamp)) !== 'redstone_lamp') why.push('lamp not on an observer\'s back');
+    if (!backs.includes(key(L(C.note))) || blk(L(C.note)) !== 'noteblock' || blk(add(L(C.note), DIRV.up)) !== 'air' || blk(add(L(C.note), DIRV.down)) === 'air') why.push('note block');
+    // nothing but the lever's floor block able to power the piston
+    if (N6.some((d) => { const n = add(piston, d); return key(n) !== key(floor) && key(n) !== key(restAt) && (/redstone|lever|torch|observer/.test(blk(n)) || backs.includes(key(n))); })) why.push('something else beside the piston');
+    out.clock = why; out.period = ring.length * 2;
   }
 
   // ---- on foot ------------------------------------------------------------------------------------------
@@ -203,7 +214,7 @@ function inspect(r) {
     while (q.length && walk.size < 20000) { const [a, b, c] = q.pop(); for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) for (const dy of [0, 1, -1]) { const n = [a + dx, b + dy, c + dz]; if (walk.has(key(n)) || !stand(...n)) continue; walk.add(key(n)); q.push(n); } }
     const cells = [...walk].map((k) => k.split(',').map(Number));
     const reachOf = (p, r = 4.5) => cells.some(([x, y, z]) => Math.hypot(x + 0.5 - (p[0] + 0.5), y + 1.6 - (p[1] + 0.5), z + 0.5 - (p[2] + 0.5)) <= r);
-    out.reach = { chests: cols.every((c) => reachOf(c.chest)), input: reachOf(L(S.input)), overflow: reachOf(L(S.overflow)), lever: reachOf(L(M.clock.lever)), barrel: reachOf(L(Fm.barrel)) };
+    out.reach = { barrels: cols.every((c) => reachOf(c.chest)), input: reachOf(L(S.input)), overflow: reachOf(L(S.overflow)), lever: reachOf(L(M.clock.lever)), barrel: reachOf(L(Fm.barrel)) };
   }
   // ---- lit: the hall inside, floor to ceiling ---------------------------------------------------------------
   out.inside = new Set();
@@ -243,13 +254,30 @@ export default async function run(ctx) {
     ts.map(([n, , t]) => (t.columns || []).map((c) => `${c.item.replace('minecraft:', '')} ${c.rest}/${c.more}`).join(' ')).join(' | '));
   check('mill: each sorter column followed through: locked at 2, unlocked at 3; its parts where they must be; no dust reaching another column', all((t) => t.columns.every((c) => c.lockedAtRest && c.unlockedAtMore && c.why.length === 0)),
     ts.flatMap(([n, , t]) => (t.columns || []).filter((c) => !(c.lockedAtRest && c.unlockedAtMore && !c.why.length)).map((c) => `${n} ${c.item}: rest ${c.lockedAtRest} more ${c.unlockedAtMore} ${c.why.join('; ')}`)).slice(0, 3).join(' | '));
-  check('mill: every cane on dirt beside water, room to grow three high', all((t) => t.canes));
+  check('mill: every cane on dirt beside water, planted two high, room to grow a third', all((t) => t.canes));
   check('mill: each piston facing its cane\'s second block, the observer on it watching the third', all((t) => t.aim));
   check('mill: no observer watching a cell a piston head goes into (it would set itself off for ever)', all((t) => t.noLoop));
   check('mill: each observer\'s pulse, along the dust behind it, fires every piston', all((t) => t.fires.every((n) => n === t.fires.length)), ts.map(([n, , t]) => `${n}: ${(t.fires || []).join(',')}`).join(' | '));
   check('mill: the stalk pushed out over the stream; the stream a step shallower each block, held in, over the hopper into the barrel', all((t) => t.overStream && t.stream.steps && t.stream.held && t.stream.intoBarrel && t.stream.length <= 8), ts.map(([n, , t]) => `${n}: ${JSON.stringify(t.stream)}`).join(' | '));
-  check('mill: the observer clock: lever on its console beside the sticky piston; up, the two observers watching each other; down, out of line; the lamp and the note block on their backs', all((t) => t.clock.length === 0), ts.map(([n, , t]) => `${n}: ${(t.clock || []).join('; ')}`).join(' | '));
-  check('mill: reached on foot: every sorter chest, the chest at the head, the barrel at the end, the clock\'s lever, the farm\'s barrel', all((t) => Object.values(t.reach).every(Boolean)), ts.map(([n, , t]) => `${n}: ${JSON.stringify(t.reach)}`).join(' | '));
+  check('mill: the observer clock: a ring of observers each watching the one before it, closed with the lever up and broken with it down; the lamp and the note block on their backs', all((t) => t.clock.length === 0), ts.map(([n, , t]) => `${n}: ${(t.clock || []).join('; ')}`).join(' | '));
+  check('mill: the clock slow enough to see: a lap of a second or so (two game ticks an observer), not the blur of two observers facing each other', all((t) => t.period >= 16), ts.map(([n, , t]) => `${n}: ${t.period} game ticks`).join(', '));
+  {
+    // every sign on a wall (or a block) behind it, at head height, none standing in a walk
+    const bad = [];
+    for (const [n, r, t] of ts) {
+      if (!t.built) continue;
+      const M = r.landmarks.find((q) => q.kind === 'mill'), w = r.world;
+      for (const p0 of M.signs) {
+        const p = [p0[0], p0[1] + t.lift, p0[2]], id = w.get(...p), d = id >= 0 ? MATERIALS.def(id) : null;
+        const f = d && d.states.facing_direction ? ({ 2: [0, 0, -1], 3: [0, 0, 1], 4: [-1, 0, 0], 5: [1, 0, 0] })[d.states.facing_direction.value] : null;
+        const behind = f ? w.get(p[0] - f[0], p[1], p[2] - f[2]) : -1;
+        if (!d || !/wall_sign/.test(d.block) || behind < 0 || /glass|hopper|lantern/.test(MATERIALS.def(behind).block)) bad.push(`${n} ${p}`);
+      }
+      w.forEach((x, y, z, id) => { if (/standing_sign/.test(MATERIALS.def(id).block) && t.inside.has(x + ',' + z) && y >= t.yIn[0] && y <= t.yIn[1]) bad.push(`${n} standing ${x},${y},${z}`); });
+    }
+    check('mill: its signs on walls at head height, none standing in a walk (one before each chest took the click meant for it)', bad.length === 0, bad.slice(0, 3).join('; '));
+  }
+  check('mill: reached on foot: every sorter barrel, the chest at the head, the barrel at the end, the clock\'s lever, the farm\'s barrel', all((t) => Object.values(t.reach).every(Boolean)), ts.map(([n, , t]) => `${n}: ${JSON.stringify(t.reach)}`).join(' | '));
   {
     let dark = 0, spots = 0;
     for (const [, r, t] of ts) {

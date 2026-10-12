@@ -1,4 +1,4 @@
-# Polis v0.58.0
+# Polis v0.58.1
 
 *Created with help from Claude AI.*
 
@@ -771,6 +771,24 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.58.1** — The mill, put right from a walk round it.
+
+- The observer clock's lamp did not flash: two observers facing each other set each
+  other off every few game ticks, faster than a redstone lamp goes out, so it looked
+  lit or dead. Now the clock is a ring of ten observers upright against the wall, each
+  watching the one before it: a pulse runs round in twenty game ticks, a second, and
+  flashes the lamp on top once a lap (the note block plays with it). The lever's
+  piston lifts one observer into the ring to start it and drops it out to stop it.
+- The sorter's labels stood in the one walk between the front wall and the chests,
+  in the way, and took the click meant for a chest. Now each label is a sign on the
+  wall of a block over its container, at head height, and the containers are barrels
+  (a barrel opens whatever is over it). The other signs in the mill went on walls too.
+- The cane is planted two high, so the first harvest needs one more block of growth.
+  Cane is slow (many minutes a block, at random, and only while you are near): the guide gives /gamerule randomtickspeed 20 to watch it work sooner.
+
+2zzo (17 checks) follows the ring round, closed with the lever up and broken with it
+down, a lap at least sixteen game ticks; every sign on a wall, none standing in a walk.
 
 **0.58.0** — The mill: a sugar cane farm, an observer clock, an item sorter.
 
