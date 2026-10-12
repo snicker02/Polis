@@ -7,16 +7,17 @@
 //
 // - the entrance: an arch over the gate, a plaza of six stalls inside it, an avenue
 //   of gravel up the middle with benches, paths off it to each ride;
-// - the roller coaster, round the whole park inside its fence, by the railway's own
-//   rules (a block of rise a rail, a curve only on the level: railgraph.js follows it
-//   as a cart does). The station on the front run (a hump: a powered rail up, a level
-//   top, the station rail beyond it a powered rail with nothing powering it, which
-//   holds a cart; a button on a post beside it sends it off); the lift hill up the
-//   right side to twenty-six, every climbing rail powered; along the back the big drop,
-//   a camelback, a second hill, each climb powered; down to the ground along the left
-//   and home. Boosters along the level. A block under every raised rail (redstone
-//   under a powered one), a pillar every fourth, three clear over every rail.
-//   Three minecarts at the station;
+// - the roller coaster, the Leviathan, winding through nearly the whole park inside its
+//   fence, by the railway's own rules (a block of rise a rail, a curve only on the level:
+//   railgraph.js follows it as a cart does). The station on the front run (a hump: a
+//   powered rail up, a level top, the station rail beyond it a powered rail with nothing
+//   powering it, which holds a cart; a button on a post beside it sends it off); a
+//   switchback across the front right, climbing; the lift hill up the right side to
+//   twenty-six; the helix; then switchbacks through every quarter of the park, a hill on
+//   every run (ROUTE), over the paths high enough to walk under, home down the left.
+//   Every climbing rail powered, boosters along the level. A block under every raised
+//   rail (redstone under a powered one), a pillar every fourth, three clear over every
+//   rail. Three minecarts at the station;
 // - a giant Ferris wheel, twelve across, twelve cabins (park.js: ferrisWheel);
 // - the drop tower: a shaft thirty-six high, a ladder up its back to a railed platform;
 //   jump into the open middle and fall into three deep of water at the bottom (water
@@ -55,20 +56,33 @@ function shapeOf(prev, cur, next) {
 // height to reach] (E, W along u; N out from the city, S back toward it). Each segment
 // leaves its corner level and arrives at the next level (a curve only on the level, its
 // neighbours level with it), and between changes a block of rise or fall a step.
-// The route as laid in the park (THEMEPARK.ROUTE): the front run with the station; the
-// lift hill up the right; a high run in; a helix down round a square, passing under its
-// own top; the long drop to the back; a camelback; round the back corner; a U-turn hill
-// up and over; the last drop home down the left.
+// The route as laid in the park (ROUTE): the front run with the station; a switchback
+// across the front right; the lift hill up the right; a high run in; a helix down round a
+// square, passing under its own top; behind the drop tower and north over the carousel's
+// path; east and west behind the carousel; along the back fence; a serpentine through
+// the back left; south over the wheel's path; four rows across the front left; home.
+// Wherever it crosses a path it is four and more up (two clear under the block it sits
+// on); it never comes nearer a ride than the paths do.
 export const ROUTE = [
   ['E', 103, 1],                                  // the front run, the station on it
-  ['N', 35, 26],                                  // the lift hill
+  ['N', 6, 1], ['W', 46, 6], ['N', 6, 6],          // the first switchback, climbing as it goes
+  ['E', 23, 2], ['E', 23, 7],                     // a dip, up again to the lift
+  ['N', 23, 26],                                  // the lift hill
   ['W', 15, 26],                                  // the high run in
-  ['N', 12, 17], ['E', 12, 8], ['S', 12, 4], ['W', 12, 4],   // the helix: down round a square, under its own top
-  ['N', 30, 4],                                   // the long run to the back
-  ['W', 12, 12], ['W', 12, 4], ['W', 20, 4],      // the camelback
-  ['S', 20, 4], ['W', 22, 4],                     // round the back corner
-  ['N', 16, 14], ['W', 16, 14], ['S', 16, 4],     // the U-turn hill
-  ['W', 6, 4], ['S', 45, 1],                      // and home down the left
+  ['N', 12, 17], ['E', 12, 8], ['S', 12, 4], ['W', 16, 4],   // the helix: down round a square, under its own top
+  ['S', 6, 4], ['W', 10, 12], ['W', 10, 4],       // behind the drop tower, a camelback
+  ['N', 13, 12], ['N', 13, 4],                    // north over the carousel's path, another
+  ['E', 18, 14], ['E', 19, 4],                    // east behind the carousel, a hill
+  ['N', 6, 4], ['W', 20, 16], ['W', 19, 4],       // back west, a higher hill
+  ['N', 6, 4], ['W', 28, 18], ['W', 28, 4],       // along the back fence, the highest after the lift
+  ['S', 22, 4], ['E', 10, 4], ['N', 18, 14], ['E', 10, 14],  // the back-left serpentine: up
+  ['S', 18, 4], ['E', 10, 4], ['N', 18, 14], ['E', 8, 14],   // down, and up again
+  ['S', 34, 6],                                   // south over the wheel's path
+  ['W', 20, 16], ['W', 20, 4], ['S', 6, 4],       // the front-left serpentine: four rows, a hill on each
+  ['E', 20, 14], ['E', 20, 4], ['S', 6, 4],
+  ['W', 20, 12], ['W', 20, 4], ['S', 6, 4],
+  ['E', 20, 10], ['E', 20, 4], ['S', 6, 4],
+  ['W', 44, 3], ['S', 5, 1],                      // and home
 ];
 const STEP = { E: [1, 0], W: [-1, 0], N: [0, 1], S: [0, -1] };
 export function coasterRoute(u0, v0, route = ROUTE, station = 8) {

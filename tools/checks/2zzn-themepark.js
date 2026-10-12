@@ -102,6 +102,7 @@ export default async function run(ctx) {
     out.turns = rs.filter((p, i) => { const a = rs[(i - 1 + rs.length) % rs.length].at, b = p.at, c = rs[(i + 1) % rs.length].at; return (b[0] - a[0]) * (c[2] - b[2]) - (b[2] - a[2]) * (c[0] - b[0]) !== 0; }).length;
     const colsH = new Map(); for (const p of rs) { const k = p.at[0] + ',' + p.at[2]; colsH.set(k, (colsH.get(k) || 0) + 1); }
     out.under = [...colsH.values()].filter((n) => n > 1).length;
+    out.rails = rs.length;
     // lit
     const lights = T.lamps;
     let dark = 0;
@@ -131,6 +132,15 @@ export default async function run(ctx) {
   check('theme park: the drop tower\'s pool three deep and held in, the shaft open over it, a way out over the water and down', all((t) => t.pool.leaks === 0 && t.pool.depth === 3 && t.pool.shaftOpen && t.pool.exit), ts.map(([n, , t]) => `${n}: ${JSON.stringify(t.pool)}`).join(' | '));
   check('theme park: the big wheel whole, twelve cabins', all((t) => t.wheel));
   check('theme park: the coaster winds round the park (a dozen turns and more) and passes under itself (the helix)', all((t) => t.turns >= 12 && t.under >= 10), ts.map(([n, , t]) => `${n}: ${t.turns} turns, ${t.under} under`).join(', '));
+  {
+    // it fills the park: eight hundred rails and more, and a good run of them in every
+    // quarter of its ground (front and back, either side of the avenue)
+    const { coasterRoute, THEMEPARK } = await import('../../engine/themepark.js');
+    const U0 = -THEMEPARK.L / 2, tr = coasterRoute(U0 + 3, 9);
+    const q = [0, 0, 0, 0];
+    for (const [u, v] of tr.all) q[(u < 0 ? 0 : 1) + (v < THEMEPARK.D / 2 ? 0 : 2)]++;
+    check('theme park: the coaster fills the park: eight hundred rails and more, a hundred and more in every quarter of it', all((t) => t.rails >= 800) && q.every((n) => n >= 100), `${ts.map(([n, , t]) => `${n}: ${t.rails}`).join(', ')}; quarters ${q.join('/')}`);
+  }
   {
     // the wheel turns: forty-eight frames, a whole turn, the first the wheel as built, each a step round, the
     // last back to the first a step like any other; a clock of command blocks, in order,

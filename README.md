@@ -1,4 +1,4 @@
-# Polis v0.56.1
+# Polis v0.57.0
 
 *Created with help from Claude AI.*
 
@@ -772,6 +772,20 @@ inside WebGL1's limits.
 
 ## Changelog
 
+**0.57.0** — The Leviathan fills the park.
+
+- The theme park's coaster now winds through nearly the whole park: 874 rails (from
+  416), 34 segments of route. After the station a switchback across the front right
+  climbs toward the lift; after the lift and the helix it runs behind the drop tower,
+  north over the carousel's path, east and west behind the carousel, along the back
+  fence (its highest hill after the lift, 18), a serpentine of three hills through the
+  back left, south over the Big Wheel's path, four rows with a hill each across the
+  front left, and home. Every hill climb is powered on redstone, boosters every fifth
+  rail on the level. Where it crosses a path it is at least four up, so you walk
+  under it; it keeps clear of every ride and the avenue.
+- New check (2zzn): the coaster fills the park, 800 rails and more, 100 and more in
+  every quarter of it.
+
 **0.56.1** — The big wheel's clock, made plain.
 
 - The wheel did not turn in game. Its clock was the only one in Polis to count on a
@@ -817,7 +831,7 @@ It goes on the side opposite the airport when there is one, and never overlaps i
 The small amusement park stays as it was. Inside its fence:
 
 - an entrance arch, a plaza of six stalls, an avenue up the middle with benches;
-- the Leviathan, a roller coaster of 340 rails round the whole park: a station with
+- the Leviathan, a roller coaster of 874 rails winding through nearly the whole park: a station with
   a brake rail and a button on the front run, a lift hill up to 26 (every climbing
   rail powered), a big drop, a camelback, a second hill, boosters along the level.
   Three minecarts wait at the station;
