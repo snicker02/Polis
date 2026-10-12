@@ -17,7 +17,7 @@ import { makeRng } from './rng.js';
 // Must match main.js VERSION, package.json and index.html data-version;
 // tools/validate.js fails if they drift. The app refuses to export when the
 // browser has mixed cached copies of old and new files.
-export const POLIS_VERSION = '0.58.1';
+export const POLIS_VERSION = '0.59.0';
 
 export const CHUNK = 64;          // Bedrock structure limit per horizontal axis
 export const GROUND_DROP = 2;     // base layer y=0 sits 2 below feet; surface y=1 replaces the block you stand on
@@ -886,6 +886,14 @@ export function placementGuide(tiles, opts = {}) {
     L.push('  command blocks on: if it stands still, run  /gamerule commandblocksenabled true  and walk up to it.');
     L.push('  A wheel built from a pack older than 0.56.1 used a counting clock that may not run: build the theme park again.');
     L.push('  Its cabins cannot be ridden while it turns. The Leviathan: press the button at its station.');
+    L.push('');
+  }
+  if ((opts.places || []).some((P) => P.kind === 'sports')) {
+    L.push('THE SPORTS CENTRE: the court and the pool lane on the ground; the climbing wall across the back of the hall');
+    L.push('  (ladders and scaffolding: hold jump to go up scaffolding, sneak to come down; hay to land on) up to a');
+    L.push('  platform that leads into the parkour room over the pool. Its floor is lava (not really: it is concrete):');
+    L.push('  jump block to block to the platform at the front, then down the ladder to the lobby. The running track is');
+    L.push('  on the roof: up the ladder in the parkour room.');
     L.push('');
   }
   if ((opts.places || []).some((P) => P.kind === 'mill')) {

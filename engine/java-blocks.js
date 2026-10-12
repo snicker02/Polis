@@ -133,6 +133,9 @@ function translateState(block, key, value) {
     }
     // an observer's way it watches, written by name in Bedrock as in Java
     case 'minecraft:facing_direction': return ['facing', String(value)];
+    // scaffolding: how far from what holds it up (Java's distance), the check bit dropped
+    case 'stability': return ['distance', String(value)];
+    case 'stability_check': return null;
     case 'repeater_delay': return ['delay', String(Number(value) + 1)];
     case 'output_subtract_bit': return ['mode', value ? 'subtract' : 'compare'];
     case 'output_lit_bit': return ['powered', value ? 'true' : 'false'];
@@ -204,6 +207,7 @@ export function toJava(block, states = {}, extra = {}) {
   if (name === 'minecraft:repeater') { props.locked = 'false'; props.powered = block === 'minecraft:powered_repeater' ? 'true' : 'false'; }
   if (name === 'minecraft:piston' || name === 'minecraft:sticky_piston') props.extended = 'false';
   if (name === 'minecraft:hopper') props.enabled = 'true';
+  if (name === 'minecraft:scaffolding') props.bottom = 'false';
   if (name === 'minecraft:sugar_cane' && props.age === undefined) props.age = '0';
   // a plain pumpkin does not face anywhere in Java (a carved one does)
   if (name === 'minecraft:pumpkin') delete props.facing;

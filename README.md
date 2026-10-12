@@ -1,4 +1,4 @@
-# Polis v0.58.1
+# Polis v0.59.0
 
 *Created with help from Claude AI.*
 
@@ -771,6 +771,43 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.59.0** — A sports centre.
+
+A new option, "A sports centre" (off by default), builds one (sports.js): twenty-one
+by twenty-seven where the lot takes it (turned side-on to its street if it must),
+else seventeen by twenty-three, white concrete with a blue band, the hall thirteen
+high:
+
+- The court down the left of the hall, marked in coloured concrete: blue, a white
+  boundary, centre line and circle, an orange key at each end with its free-throw
+  line; a backboard (its square lit) and a hoop (a cauldron) over each end. Some of
+  the boundary's white is sea lantern: the court is lit from its own lines.
+- The climbing wall across the back: holds of six colours of concrete up the wall
+  (every third one a sea lantern), two ladders and two towers of scaffolding to a
+  platform seven up, hay bales all along its foot to land on. The platform runs
+  through a doorway into the parkour room.
+- The pool lane down the right: one lane two deep, light blue with a black line and
+  a T at each end, sunk a block and walled a block above the floor (sunk deeper, a
+  pool on a hilly city came out a block shallower, filled with stone: the lift onto
+  the terraces fills under every raised column), starting blocks at the back.
+- The parkour room over the pool, its floor seven up and "lava" (orange and red
+  concrete): a course of blocks from the doorway to a finishing platform at the
+  front, a gap of one going up a block, of two level or going down, two up at most so
+  a jump never meets the roof; a ladder down through the floor to the lobby.
+- The running track on the roof, up a ladder from the parkour room: two lanes of red
+  terracotta with a white line between, a start line, a railing round the edge with
+  lamps on it, a green field in the middle with lamp posts.
+
+The Java export writes scaffolding as Java has it (its distance; Bedrock's stability).
+
+New section 2zzp (11 checks): built at both sizes, flat and hilly; the court's colours,
+the same at both ends, its boundary all line, both hoops; every ladder and tower of the
+climbing wall unbroken, hay under it, holds of four colours and more; the pool two deep
+and held in; every parkour jump one a player can make, room over every block, no jump
+meeting the roof; walked from the street to the court, the pool, the wall, up onto the
+platform, into the parkour room, down to the lobby and up to the roof; both lanes of
+the track closed loops; lit inside and on the roof; Bedrock's states, Java's blocks.
 
 **0.58.1** — The mill, put right from a walk round it.
 

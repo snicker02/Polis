@@ -122,6 +122,7 @@ export const DEFAULTS = {
   themepark: false,          // a theme park beside the city: a giant coaster, a big wheel, a drop tower, a carousel (themepark.js)
   airport: false,            // an airport beside the city: runway, terminal, control tower, elytra launch pads (airport.js)
   mall: false,               // a shopping mall: two floors of shops, each shopkeeper a villager of its trade (mall.js)
+  sports: false,             // a sports centre: courts, a climbing wall, a pool lane, a parkour room, a track on the roof (sports.js)
   garden: false,             // a botanical garden: a glass hall of plants from every biome (garden.js)
   station: false,            // a railway station on the line: a hall, a platform canopy, a clock (station.js)
   terrainBreaks: true,       // on fitted terrain, lots step at their own heights (retaining walls), held only to the street they face
@@ -993,10 +994,11 @@ export function generateCity(cfgIn, onProgress) {
     ['waterpark', '15 by 19', (L) => `pools, a bubble lift ${L.frame.H} high, a boat slide of ${L.slide.length} blocks of blue ice, a kids' pool with a waterfall`],
     ['park', '15 by 19', (L) => `a roller coaster of ${L.rails.length} rails rising ${L.frame.R}, a Ferris wheel of ${L.wheel.cabins.length} cabins, ${L.stalls.length} stalls`],
     ['workshop', '13 by 15', (L) => `${L.smelters.length} automatic smelters, ${L.presses.length} presses, an instrument bench of ${L.notes.length}, night lights`],
+    ['sports', '17 by 23', (L) => `a court marked in coloured concrete, a climbing wall of ${L.climb.ladders.length} ladders and ${L.climb.scaffolds.length} towers of scaffolding, a pool lane ${L.pool.water.length / 2 / 3} long, a parkour course of ${L.stones.length} jumps, a running track of ${L.track.lanes[0].length} on the roof`],
     ['mill', '13 by 15', (L) => `a sugar cane farm of ${L.farm.canes.length} canes, an observer clock, an item sorter of ${L.sorter.columns.length} filters`]]) {
     const L = landmarks.find((q) => q.kind === kind);
     if (L) stats[kind] = say(L);
-    else if (cfg[kind] || ((kind === 'workshop' || kind === 'mill') && cfg.factory && landmarks.some((q) => q.kind === 'factory')) || (kind === 'lazyriver' && cfg.waterpark && landmarks.some((q) => q.kind === 'waterpark'))) stats[kind + 'Missing'] = `no lot big enough for the ${kind === 'police' ? 'police station' : kind === 'park' ? 'amusement park' : kind === 'waterpark' ? 'water park' : kind === 'lazyriver' ? 'lazy river' : kind === 'garden' ? 'botanical garden' : kind === 'mall' ? 'shopping mall' : kind} (it needs ${need})`;
+    else if (cfg[kind] || ((kind === 'workshop' || kind === 'mill') && cfg.factory && landmarks.some((q) => q.kind === 'factory')) || (kind === 'lazyriver' && cfg.waterpark && landmarks.some((q) => q.kind === 'waterpark'))) stats[kind + 'Missing'] = `no lot big enough for the ${kind === 'police' ? 'police station' : kind === 'park' ? 'amusement park' : kind === 'waterpark' ? 'water park' : kind === 'lazyriver' ? 'lazy river' : kind === 'garden' ? 'botanical garden' : kind === 'mall' ? 'shopping mall' : kind === 'sports' ? 'sports centre' : kind} (it needs ${need})`;
   }
   // the names typed in for the cemetery: where they went, or why they could not
   if (namesOf(cfg.memorial).length || namesOf(cfg.graveNames).length) {
