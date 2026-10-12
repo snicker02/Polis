@@ -26,6 +26,7 @@
 import { MAT, MATERIALS, B, I, S, chestId, smokerId, stonecutterId, furnaceId, railId, RAIL, stairId, WEIRDO, ironDoorId, DIR } from './materials.js';
 import { lotFrame } from './zoo.js';
 import { helpers } from './services.js';
+import { N } from './blockcore.js';
 
 export const FACTORY_SIZE = [19, 25];   // (fifteen by twenty-two, or thirteen by eighteen, where the lot is smaller: the same machines)
 
@@ -237,4 +238,162 @@ export function workshop(world, lot, face, cfg, rng, G, signTags) {
   const doorAt = at(mid, -1);
   return { kind: 'workshop', lot, smelters, presses, notes, nightLights, sideways: fr.sideways,
     door: [doorAt[0], G + 1, doorAt[1]], frame: { at, W, D, H, TOP, mid } };
+}
+
+// ---- the mill: a sugar cane farm, an observer clock, an item sorter ------------------------
+// Thirteen by fifteen (as the workshop), stone brick, six clear inside, a skylight over
+// the farm; with the factory, on the nearest lot that takes it. Each machine as the plainest working
+// design (Bedrock's own block states throughout: a piston's facing counts south 2,
+// north 3, east 4, west 5; an observer faces the way it watches, and sends its pulse
+// out of its back; a repeater's or comparator's direction points from its output to
+// its input; a wall torch names the side its block is on):
+//
+// - The sugar cane farm, along the back: a row of cane on dirt, a channel of water
+//   before it (the cane's water, and a stream carrying the harvest to a hopper at its
+//   end, into a barrel). Behind each cane, at its second block, a piston facing it;
+//   on the piston an observer watching the cane's third block; behind the observers a
+//   line of dust on blocks, beside the pistons. Cane grows three high: the observer
+//   pulses, the dust powers the blocks under it, the pistons fire and break the cane
+//   at its second block, pushing the stalk out over the stream; the top falls.
+//   (The observer watches the third block, never the cell a piston head goes into, so
+//   it does not set itself off again and again.)
+// - The observer clock: two observers facing each other, each set off by the other,
+//   over and over, as fast as redstone goes. One of them rides a sticky piston worked
+//   by a lever: lever on, the piston lifts it into line and the clock runs (a lamp on
+//   one observer's back, a note block on the other's); lever off, it drops out of line
+//   and the clock stops.
+// - The item sorter: a line of hoppers along the top, carrying what goes into the
+//   chest at its head, past four filters. Each filter hopper under the line holds 41 of
+//   its item and four named sticks; it points into a comparator, so it never empties
+//   itself. A comparator reads it at 2; one more of its item makes 3, enough to reach
+//   along three dust and set off a repeater, which powers the block a torch hangs on:
+//   the torch goes out, the block above it no longer powered, and the hopper under the
+//   filter, locked till then, takes one item and puts it in the chest before it. Back
+//   to 41, the comparator falls to 2, the torch comes on again and locks it. Whatever
+//   matches no filter goes on to a barrel at the end of the line.
+export const MILL_SIZE = [13, 15];
+export const SORTED = [['minecraft:sugar_cane', 'Sugar cane'], ['minecraft:coal', 'Coal'], ['minecraft:iron_ingot', 'Iron ingots'], ['minecraft:cobblestone', 'Cobblestone']];
+export const FILTER = { item: 41, named: 4, name: 'Polis filter' };
+export const MILL_LANTERNS = [[2, 1], [10, 1], [6, 2], [1, 6], [11, 6], [6, 6], [3, 8], [9, 8], [10, 12], [1, 9], [10, 9]];
+export const MILL_FLOOR_LIGHTS = [[1, 2], [11, 2], [1, 7], [11, 7], [6, 8], [10, 13]];
+// Bedrock's piston facing (south 2, north 3, east 4, west 5); the usual one elsewhere
+const PISTON_FACING = { down: 0, up: 1, south: 2, north: 3, east: 4, west: 5 };
+const pistonId = (dir, sticky = false) => MATERIALS.add(null, sticky ? 'minecraft:sticky_piston' : 'minecraft:piston', sticky ? '#7a8a6a' : '#8a8a7a', { facing_direction: I(PISTON_FACING[dir]) });
+const observerId = (watches) => MATERIALS.add(null, 'minecraft:observer', '#5e5e5e', { 'minecraft:facing_direction': S(watches), powered_bit: B(0) });
+const comparatorId = (toInput) => MATERIALS.add(null, 'minecraft:unpowered_comparator', '#b8b0a8', { 'minecraft:cardinal_direction': S(toInput), output_lit_bit: B(0), output_subtract_bit: B(0) }, { passable: true, flat: true });
+const repeaterId = (toInput) => MATERIALS.add(null, 'minecraft:unpowered_repeater', '#b8a8a8', { 'minecraft:cardinal_direction': S(toInput), repeater_delay: I(0) }, { passable: true, flat: true });
+const redTorchId = (side) => MATERIALS.add(null, 'minecraft:redstone_torch', '#d03020', { torch_facing_direction: S(side) }, { passable: true, transparent: true });
+const CANE = () => MATERIALS.add(null, 'minecraft:reeds', '#8fcf5a', { age: I(0) }, { passable: true, transparent: true });
+const barrelId = (dir) => MATERIALS.add(null, 'minecraft:barrel', '#7d5a34', { facing_direction: I(FACING_NUM[dir]), open_bit: B(0) });
+const hopperTo = (dir) => hopper(dir === 'down' ? 0 : FACING_NUM[dir]);
+const item = (name, count, slot, custom) => N.comp({ Count: N.byte(count), Damage: N.short(0), Name: N.str(name), Slot: N.byte(slot), WasPickedUp: N.byte(0),
+  ...(custom ? { tag: N.comp({ display: N.comp({ Name: N.str(custom) }) }) } : {}) });
+
+export function mill(world, lot, face, cfg, rng, G, signTags) {
+  const [W, D] = MILL_SIZE, H = 6, TOP = G + H + 1, mid = 6;
+  const fr = lotFrame(lot, face, W, D);
+  if (!fr) return null;
+  const h = helpers(world, fr, G, signTags);
+  const { at, put, clear, neg, sign, nameOf } = h;
+  const back = fr.back, across = fr.across;
+  const BACK = nameOf(back), FRONT_ = nameOf(neg(back)), RIGHT = nameOf(across), LEFT = nameOf(neg(across));
+  const pos = (u, v, y) => { const [x, z] = at(u, v); return [x, y, z]; };
+  // ---- the hall ------------------------------------------------------------------------------
+  const Vc = D - 4;                                  // the cane's row
+  for (let v = 0; v < D; v++) for (let u = 0; u < W; u++) {
+    for (let y = G + 1; y <= TOP + 2; y++) clear(u, v, y);
+    put(u, v, G - 1, MAT.STONEBRICK); put(u, v, G, MAT.SMOOTH);
+    // (glass over the farm, every other row: daylight on the cane)
+    put(u, v, TOP, v >= Vc - 2 && v <= Vc + 1 && u >= 1 && u <= 9 && (v + u) % 2 === 0 ? MAT.GLASS : MAT.SMOOTH);
+    if (u === 0 || u === W - 1 || v === 0 || v === D - 1) for (let y = G + 1; y < TOP; y++) put(u, v, y, MAT.STONEBRICK);
+  }
+  for (let u = mid - 1; u <= mid + 1; u++) for (let y = G + 1; y <= G + 3; y++) clear(u, 0, y);
+  for (const v of [5, 9]) for (let y = G + 4; y <= G + 5; y++) { put(0, v, y, MAT.GLASS); put(W - 1, v, y, MAT.GLASS); }
+
+  // ---- the sugar cane farm, along the back ----------------------------------------------------
+  // (v: Vc - 2 the channel's lip, Vc - 1 the channel, Vc the cane, Vc + 1 pistons and
+  // observers, Vc + 2 the dust; the bed raised a block, so the barrel stands on the floor)
+  const CANE_U = [1, 2, 3, 4, 5, 6, 7], END = 8;
+  const farm = { canes: [], water: [], pistons: [], observers: [], dust: [] };
+  for (let u = 1; u <= END + 1; u++) for (let v = Vc - 2; v <= Vc + 2; v++) put(u, v, G + 1, MAT.STONEBRICK);
+  for (let u = 1; u <= END; u++) {
+    // the channel: its source at the head, the stream a step shallower each block on;
+    // its lip of glass before it
+    const d = u - 1;
+    put(u, Vc - 1, G + 2, water(d, d > 0)); farm.water.push(pos(u, Vc - 1, G + 2));
+    put(u, Vc - 2, G + 2, MAT.GLASS);
+  }
+  put(END + 1, Vc - 1, G + 2, MAT.GLASS); put(END + 1, Vc - 2, G + 2, MAT.GLASS); put(END, Vc, G + 2, MAT.STONEBRICK);
+  // the hopper under the stream's end, into the barrel before it
+  put(END, Vc - 1, G + 1, hopperTo(FRONT_)); put(END, Vc - 2, G + 1, barrelId(FRONT_));
+  farm.hopper = pos(END, Vc - 1, G + 1); farm.barrel = pos(END, Vc - 2, G + 1);
+  for (const u of CANE_U) {
+    put(u, Vc, G + 2, MAT.DIRT); put(u, Vc, G + 3, CANE());
+    for (let y = G + 2; y <= G + 3; y++) put(u, Vc + 1, y, MAT.STONEBRICK);
+    put(u, Vc + 1, G + 4, pistonId(FRONT_));                 // at the cane's second block, facing it
+    put(u, Vc + 1, G + 5, observerId(FRONT_));               // on it, watching the cane's third
+    for (let y = G + 2; y <= G + 4; y++) put(u, Vc + 2, y, MAT.STONEBRICK);
+    put(u, Vc + 2, G + 5, DUST());                           // behind the observer, on a block beside the piston
+    farm.canes.push({ dirt: pos(u, Vc, G + 2), base: pos(u, Vc, G + 3), second: pos(u, Vc, G + 4), third: pos(u, Vc, G + 5) });
+    farm.pistons.push(pos(u, Vc + 1, G + 4)); farm.observers.push(pos(u, Vc + 1, G + 5)); farm.dust.push(pos(u, Vc + 2, G + 5));
+  }
+  sign(9, Vc - 3, G + 1, neg(back), 'Sugar cane farm\nthe harvest goes\ninto the barrel');
+
+  // ---- the item sorter, inside the door ---------------------------------------------------------
+  // (v: VS - 1 the chests, VS the hoppers, VS + 1 .. VS + 4 the redstone behind)
+  const VS = 3, COLS = [3, 5, 7, 9], L0 = 2, L1 = 10;
+  const sorter = { line: [], columns: [] };
+  for (let u = L0; u <= L1; u++) { put(u, VS, G + 3, hopperTo(u < L1 ? RIGHT : 'down')); sorter.line.push(pos(u, VS, G + 3)); }
+  for (let u = L0; u <= L1; u++) if (!COLS.includes(u)) { put(u, VS, G + 1, MAT.SMOOTH); put(u, VS, G + 2, MAT.GLASS); }
+  // the chest at its head (put things in it); the barrel at its end (what matches no filter)
+  put(L0, VS, G + 4, chestId(FRONT_)); sorter.input = pos(L0, VS, G + 4);
+  put(L1, VS, G + 2, barrelId(FRONT_)); sorter.overflow = pos(L1, VS, G + 2);
+  COLS.forEach((u, k) => {
+    const [name, label] = SORTED[k];
+    put(u, VS - 1, G + 1, chestId(FRONT_));                         // its chest
+    put(u, VS, G + 1, hopperTo(FRONT_));                            // the locked hopper, into the chest
+    put(u, VS, G + 2, hopperTo(BACK));                              // the filter, into the comparator (so never out)
+    const [fx, fz] = at(u, VS);
+    world.setData(fx, G + 2, fz, { id: 'Hopper', tags: { Items: N.list(10, [item(name, FILTER.item, 0), ...[1, 2, 3, 4].map((s) => item('minecraft:stick', 1, s, FILTER.name))]) } });
+    for (let v = VS + 1; v <= VS + 4; v++) put(u, v, G - 1, MAT.STONEBRICK);
+    put(u, VS + 1, G, redTorchId(BACK));                            // the torch, on the block behind it
+    put(u, VS + 1, G + 1, MAT.STONEBRICK);                          // the block it powers, beside the locked hopper
+    put(u, VS + 1, G + 2, comparatorId(FRONT_));                    // reading the filter
+    put(u, VS + 2, G, MAT.STONEBRICK);                              // the torch's block
+    put(u, VS + 2, G + 1, MAT.STONEBRICK); put(u, VS + 2, G + 2, DUST());
+    put(u, VS + 3, G, repeaterId(BACK));                            // into the torch's block
+    put(u, VS + 3, G + 1, MAT.STONEBRICK); put(u, VS + 3, G + 2, DUST());
+    put(u, VS + 4, G, MAT.STONEBRICK); put(u, VS + 4, G + 1, DUST()); // the third dust, on the block behind the repeater
+    sign(u, VS - 2, G + 1, neg(back), label);
+    sorter.columns.push({ item: name, label, chest: pos(u, VS - 1, G + 1), locked: pos(u, VS, G + 1), filter: pos(u, VS, G + 2), torch: pos(u, VS + 1, G),
+      lockBlock: pos(u, VS + 1, G + 1), comparator: pos(u, VS + 1, G + 2), torchBlock: pos(u, VS + 2, G), dust: [pos(u, VS + 2, G + 2), pos(u, VS + 3, G + 2), pos(u, VS + 4, G + 1)],
+      repeater: pos(u, VS + 3, G), repeaterIn: pos(u, VS + 4, G), line: pos(u, VS, G + 3) });
+  });
+  sign(1, VS - 1, G + 1, neg(back), 'Item sorter\nput things in the\nchest at the top');
+
+  // ---- the observer clock, beside the farm --------------------------------------------------------
+  // (along v at the right wall: the lamp, the fixed observer watching back, the sticky
+  // piston with the rider on it watching forward, the note block; the lever's console
+  // beside the piston)
+  const CU = W - 2, CV = Vc - 1;              // the column; the fixed observer's row
+  put(CU, CV - 1, G + 1, MAT.STONEBRICK); put(CU, CV - 1, G + 2, MAT.STONEBRICK); put(CU, CV - 1, G + 3, LAMP());
+  put(CU, CV, G + 1, MAT.STONEBRICK); put(CU, CV, G + 2, MAT.STONEBRICK); put(CU, CV, G + 3, observerId(BACK));
+  put(CU, CV + 1, G + 1, pistonId('up', true)); put(CU, CV + 1, G + 2, observerId(FRONT_));   // the rider, out of line till the piston lifts it
+  put(CU, CV + 2, G + 1, MAT.STONEBRICK); put(CU, CV + 2, G + 2, MAT.GLASS); put(CU, CV + 2, G + 3, NOTE());
+  put(CU - 1, CV + 1, G + 1, MAT.SMOOTH_QUARTZ); put(CU - 1, CV + 1, G + 2, lever(back[0] !== 0 ? 'up_north_south' : 'up_east_west'));
+  const clock = { lamp: pos(CU, CV - 1, G + 3), fixed: pos(CU, CV, G + 3), piston: pos(CU, CV + 1, G + 1), rider: pos(CU, CV + 1, G + 2), inLine: pos(CU, CV + 1, G + 3),
+    note: pos(CU, CV + 2, G + 3), console: pos(CU - 1, CV + 1, G + 1), lever: pos(CU - 1, CV + 1, G + 2) };
+  sign(CU - 1, CV - 1, G + 1, neg(back), 'Observer clock\npull the lever');
+
+  // ---- the lights: lanterns hung from the ceiling clear of the machines, lights set in
+  // the floor of the walks -------------------------------------------------------------------------
+  const lanterns = [];
+  for (const [u, v] of MILL_LANTERNS) {
+    if ([1, 2, 3, 4].some((d) => world.has(...pos(u, v, TOP - d)))) continue;
+    put(u, v, TOP - 1, MAT.LAMP_HANG); lanterns.push(pos(u, v, TOP - 1));
+  }
+  for (const [u, v] of MILL_FLOOR_LIGHTS) { put(u, v, G, MAT.SHROOMLIGHT); lanterns.push(pos(u, v, G)); }
+  const doorAt = at(mid, -1);
+  return { kind: 'mill', lot, farm, sorter, clock, lanterns, sideways: fr.sideways,
+    door: [doorAt[0], G + 1, doorAt[1]], frame: { at, W, D, H, TOP, mid, Vc, VS, CU, CV } };
 }

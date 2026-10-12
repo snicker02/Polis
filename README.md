@@ -1,4 +1,4 @@
-# Polis v0.57.0
+# Polis v0.58.0
 
 *Created with help from Claude AI.*
 
@@ -771,6 +771,48 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.58.0** — The mill: a sugar cane farm, an observer clock, an item sorter.
+
+With the factory now comes a third building, the mill (factory.js: mill), thirteen
+by fifteen like the workshop, on the nearest lot to the factory that takes it. Plain
+redstone, no command blocks:
+
+- The item sorter, inside the door: a line of hoppers along the top from a chest at
+  its head to a barrel at its end, over four filters (sugar cane, coal, iron ingots,
+  cobblestone). Each filter hopper comes filled: 41 of its item and four sticks named
+  "Polis filter". It points into a comparator, so it never empties itself; the
+  comparator reads 2, and one more of its item makes 3, which reaches along three dust
+  to a repeater; the repeater powers the block a torch hangs on, the torch goes out,
+  and the hopper under the filter (locked by the block over the torch) takes one item
+  and puts it in the chest before it. Anything else goes on to the barrel.
+- The observer clock: two observers facing each other set each other off, over and
+  over. One rides a sticky piston worked by a lever: lever up, it is lifted into line
+  and the clock runs, a lamp and a note block on their backs; lever down, it drops
+  out of line and the clock stops.
+- The sugar cane farm, along the back: seven cane on dirt beside a channel of water.
+  Behind each, a piston at the cane's second block; on it an observer watching the
+  third; behind the observers a line of dust on the blocks beside the pistons. When a
+  cane grows three high the pistons break it at its second block and push the stalk
+  out into the stream, which carries it to a hopper at its end and into a barrel. The
+  top stalk of each harvest falls at the foot of the cane, out of the stream's reach:
+  so it works in every simple observer farm (the observer must not watch the cell the
+  piston goes into, or it sets itself off for ever).
+
+Bedrock writes some facings its own way, and the mill's checks read them so, by
+Mojang's own Java-to-Bedrock table: a piston's sideways facings count south 2, north
+3, east 4, west 5; an observer faces the way it watches; a repeater's or comparator's
+direction points from its output to its input; a wall torch names the side its block
+is on. The Java export now translates all of these the same way (a wall torch had
+been written facing the wrong way round; no city used one), and writes what is in a
+chest, a barrel or a hopper (the airport's elytras, the mill's filters).
+
+New section 2zzo (15 checks): each sorter column followed through block by block,
+locked at 2 and unlocked at 3, no column's dust reaching another; the filters' contents;
+the farm's cane, pistons, observers and dust (each observer fires every piston, none
+watches a cell a piston goes into), the stalk over the stream, the stream into the
+barrel; the clock in line and out; everything reached on foot; lit inside; Bedrock's
+own states; the Java blocks against Mojang's table. On flat and fitted cities.
 
 **0.57.0** — The Leviathan fills the park.
 

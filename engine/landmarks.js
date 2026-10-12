@@ -33,7 +33,7 @@ import { museum } from './museum.js';
 import { hospital, fireStation } from './services.js';
 import { policeStation, theatre, hotel } from './civic.js';
 import { trainStation, stationFit } from './station.js';
-import { factory, workshop } from './factory.js';
+import { factory, workshop, mill } from './factory.js';
 import { amusementPark } from './park.js';
 import { waterPark, lazyRiver } from './waterpark.js';
 import { botanicalGarden } from './garden.js';
@@ -45,7 +45,7 @@ const NEED = {                       // [shorter side, longer side] of the lot
   townhall: [13, 15], clocktower: [9, 9], library: [11, 12], market: [12, 12],
   church: [13, 15], mansion: [15, 20], school: [17, 25], lighthouse: [9, 9], castle: [13, 13],
   townsquare: [13, 13], stadium: [17, 21], cemetery: [12, 14], allotments: [13, 13], bandstand: [9, 9],
-  jail: [15, 23], zoo: [15, 24], aquarium: [11, 20], museum: [15, 24], hospital: [15, 23], firestation: [12, 20], police: [13, 15], theatre: [17, 20], hotel: [13, 19], factory: [13, 18], workshop: [13, 15], park: [15, 19], waterpark: [15, 19], lazyriver: [14, 15], garden: [15, 19], station: [11, 11], mall: [17, 20],
+  jail: [15, 23], zoo: [15, 24], aquarium: [11, 20], museum: [15, 24], hospital: [15, 23], firestation: [12, 20], police: [13, 15], theatre: [17, 20], hotel: [13, 19], factory: [13, 18], workshop: [13, 15], mill: [13, 15], park: [15, 19], waterpark: [15, 19], lazyriver: [14, 15], garden: [15, 19], station: [11, 11], mall: [17, 20],
 };
 
 // Mark the lots, each kind at most once:
@@ -137,10 +137,10 @@ export function chooseLandmarks(plan, cfg, hills = null, canal = null, transit =
   // fit far smaller ones. Toward the edge of town where it can be.
   // (and the zoo and aquarium, when asked for, next: the zoo as big as the jail,
   // the aquarium smaller)
-  for (const kind of ['jail', 'zoo', 'aquarium', 'museum', 'hospital', 'firestation', 'police', 'theatre', 'hotel', 'factory', 'workshop', 'park', 'waterpark', 'lazyriver', 'garden', 'mall']) {
-    // (the aquarium comes with the zoo, the workshop with the factory)
-    if (!cfg[kind === 'aquarium' ? 'zoo' : kind === 'workshop' ? 'factory' : kind === 'lazyriver' ? 'waterpark' : kind]) continue;
-    if (kind === 'workshop' && !out.some((l) => l.landmark === 'factory')) continue;
+  for (const kind of ['jail', 'zoo', 'aquarium', 'museum', 'hospital', 'firestation', 'police', 'theatre', 'hotel', 'factory', 'workshop', 'mill', 'park', 'waterpark', 'lazyriver', 'garden', 'mall']) {
+    // (the aquarium comes with the zoo, the workshop and the mill with the factory)
+    if (!cfg[kind === 'aquarium' ? 'zoo' : kind === 'workshop' || kind === 'mill' ? 'factory' : kind === 'lazyriver' ? 'waterpark' : kind]) continue;
+    if ((kind === 'workshop' || kind === 'mill') && !out.some((l) => l.landmark === 'factory')) continue;
     if (kind === 'lazyriver' && !out.some((l) => l.landmark === 'waterpark')) continue;   // (the lazy river with the water park)
     // (the zoo on a lot that takes its big pens if there is one: 15 by 28)
     // (the aquarium likewise on one that takes its big tanks: 15 by 25)
@@ -156,7 +156,7 @@ export function chooseLandmarks(plan, cfg, hills = null, canal = null, transit =
     };
     // (the police station as near the jail as it can be, where there is one)
     // (and the workshop as near the factory)
-    const jailLot = kind === 'police' ? out.find((l) => l.landmark === 'jail') : kind === 'workshop' ? out.find((l) => l.landmark === 'factory') : kind === 'lazyriver' ? out.find((l) => l.landmark === 'waterpark') : null;
+    const jailLot = kind === 'police' ? out.find((l) => l.landmark === 'jail') : kind === 'workshop' || kind === 'mill' ? out.find((l) => l.landmark === 'factory') : kind === 'lazyriver' ? out.find((l) => l.landmark === 'waterpark') : null;
     const mid = (l) => [(l.x0 + l.x1) / 2, (l.z0 + l.z1) / 2];
     const nearJail = (c) => { if (!jailLot) return 0; const [a, b] = mid(c.l), [j, k] = mid(jailLot); return Math.hypot(a - j, b - k); };
     const lots = all.filter((c) => fits(c, kind)).sort((p, q) => (jailLot ? nearJail(p) - nearJail(q) : 0) || roomy(p) - roomy(q) || q.d - p.d);
@@ -874,6 +874,7 @@ const BUILDERS = { townhall: townHall, clocktower: clockTower, library, market, 
   hotel: (w, l, f, c, r, G) => hotel(w, l, f, c, r, G, signTags),
   factory: (w, l, f, c, r, G) => factory(w, l, f, c, r, G, signTags),
   workshop: (w, l, f, c, r, G) => workshop(w, l, f, c, r, G, signTags),
+  mill: (w, l, f, c, r, G) => mill(w, l, f, c, r, G, signTags),
   park: (w, l, f, c, r, G) => amusementPark(w, l, f, c, r, G, signTags),
   waterpark: (w, l, f, c, r, G) => waterPark(w, l, f, c, r, G, signTags),
   lazyriver: (w, l, f, c, r, G) => lazyRiver(w, l, f, c, r, G, signTags),
@@ -882,7 +883,7 @@ const BUILDERS = { townhall: townHall, clocktower: clockTower, library, market, 
   mall: (w, l, f, c, r, G) => shoppingMall(w, l, f, c, r, G, signTags) };
 export const LANDMARK_NAMES = { townhall: 'Town Hall', clocktower: 'Clock Tower', library: 'Library', market: 'Market',
   church: 'Church', school: 'School', lighthouse: 'Lighthouse', castle: 'Castle', mansion: 'Mansion',
-  townsquare: 'Town Square', stadium: 'Stadium', cemetery: 'Cemetery', allotments: 'Allotments', bandstand: 'Bandstand', jail: 'Jail', zoo: 'Zoo', aquarium: 'Aquarium', museum: 'Museum', hospital: 'Hospital', firestation: 'Fire Station', police: 'Police Station', theatre: 'Theatre', hotel: 'Hotel', factory: 'Factory', workshop: 'Workshop', park: 'Amusement Park', waterpark: 'Water Park', lazyriver: 'Lazy River', garden: 'Botanical Garden', station: 'Station', mall: 'Shopping Mall', airport: 'Airport', themepark: 'Theme Park' };
+  townsquare: 'Town Square', stadium: 'Stadium', cemetery: 'Cemetery', allotments: 'Allotments', bandstand: 'Bandstand', jail: 'Jail', zoo: 'Zoo', aquarium: 'Aquarium', museum: 'Museum', hospital: 'Hospital', firestation: 'Fire Station', police: 'Police Station', theatre: 'Theatre', hotel: 'Hotel', factory: 'Factory', workshop: 'Workshop', mill: 'Mill', park: 'Amusement Park', waterpark: 'Water Park', lazyriver: 'Lazy River', garden: 'Botanical Garden', station: 'Station', mall: 'Shopping Mall', airport: 'Airport', themepark: 'Theme Park' };
 
 export function buildLandmark(world, lot, face, cfg, rng, G) {
   const L = BUILDERS[lot.landmark](world, lot, face, cfg, rng, G);

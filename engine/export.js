@@ -17,7 +17,7 @@ import { makeRng } from './rng.js';
 // Must match main.js VERSION, package.json and index.html data-version;
 // tools/validate.js fails if they drift. The app refuses to export when the
 // browser has mixed cached copies of old and new files.
-export const POLIS_VERSION = '0.57.0';
+export const POLIS_VERSION = '0.58.0';
 
 export const CHUNK = 64;          // Bedrock structure limit per horizontal axis
 export const GROUND_DROP = 2;     // base layer y=0 sits 2 below feet; surface y=1 replaces the block you stand on
@@ -885,8 +885,20 @@ export function placementGuide(tiles, opts = {}) {
     L.push('  a whole turn every 24 seconds. It runs only while you are near (within simulation distance), and only with');
     L.push('  command blocks on: if it stands still, run  /gamerule commandblocksenabled true  and walk up to it.');
     L.push('  A wheel built from a pack older than 0.56.1 used a counting clock that may not run: build the theme park again.');
-    L.push('  It needs command blocks on (/gamerule commandblocksenabled true, cheats on), and turns while you are near enough');
-    L.push('  for the park to be simulated. Its cabins cannot be ridden while it turns. The Leviathan: press the button at its station.');
+    L.push('  Its cabins cannot be ridden while it turns. The Leviathan: press the button at its station.');
+    L.push('');
+  }
+  if ((opts.places || []).some((P) => P.kind === 'mill')) {
+    L.push('THE MILL, beside the factory: plain redstone, no command blocks.');
+    L.push('  The item sorter: put things in the chest at the top left of the line. Sugar cane, coal, iron ingots and');
+    L.push('  cobblestone each go into their own chest below; anything else goes on to the barrel at the end. Each');
+    L.push('  filter hopper holds 41 of its item and four sticks named "Polis filter": leave them be (without them a');
+    L.push('  filter takes in anything). The first of each item waits in the hopper under its filter till the next comes.');
+    L.push('  The observer clock: pull the lever. The piston lifts an observer into line with the other; they set each');
+    L.push('  other off over and over, the lamp and the note block with them. Push the lever back to stop it.');
+    L.push('  The sugar cane farm: when a cane grows three high its observer sets off the pistons, which break it and');
+    L.push('  push the stalks into the stream; the stream carries them to the barrel at its end. The top stalk drops');
+    L.push('  at the foot of the cane now and then. Cane grows only while you are near enough for it to be simulated.');
     L.push('');
   }
   L.push('A JAIL, ZOO OR AQUARIUM EMPTY? Their animals are summoned, and a summon only reaches');

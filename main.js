@@ -17,7 +17,7 @@ import { buildPregenPack, pregenFileName, siteRegion, viewRegion, pregenCommand,
 import { decodeNbt } from './tools/nbt-read.js';
 import { THEMES } from './engine/materials.js';
 
-const VERSION = '0.57.0';
+const VERSION = '0.58.0';
 const $ = (id) => document.getElementById(id);
 const numVal = (id) => Number($(id).value);      // readCfg has its own local num()
 
@@ -598,14 +598,14 @@ function showStats(mesh, times) {
       const skipped = Object.keys(NOT_FITTED).filter((id) => $(id) && $(id).checked).map((id) => NOT_FITTED[id]);
       if (skipped.length) line('not on fitted ground', `${skipped.join(', ')}: a fitted city follows your world's own ground`);
     }
-    for (const [k, label] of [['police', 'police station'], ['theatre', 'theatre'], ['hotel', 'hotel'], ['factory', 'factory'], ['workshop', 'workshop'], ['park', 'amusement park'], ['waterpark', 'water park'], ['lazyriver', 'lazy river'], ['garden', 'botanical garden'], ['station', 'station'], ['mall', 'shopping mall'], ['airport', 'airport'], ['bouts', 'stadium bouts'], ['themepark', 'theme park']]) {
+    for (const [k, label] of [['police', 'police station'], ['theatre', 'theatre'], ['hotel', 'hotel'], ['factory', 'factory'], ['workshop', 'workshop'], ['mill', 'mill'], ['park', 'amusement park'], ['waterpark', 'water park'], ['lazyriver', 'lazy river'], ['garden', 'botanical garden'], ['station', 'station'], ['mall', 'shopping mall'], ['airport', 'airport'], ['bouts', 'stadium bouts'], ['themepark', 'theme park']]) {
       if (s[k + 'Missing']) line(label, s[k + 'Missing']);
       if (s[k]) line(label, s[k]);
     }
     // where the asked-for landmarks are, from the build_centered spot (in the pack:
     // /function <city>/goto_<name>, and the guide lists every one)
     if (result.places && result.places.length) {
-      const asked = new Set(['jail', 'zoo', 'aquarium', 'museum', 'hospital', 'firestation', 'police', 'theatre', 'hotel', 'factory', 'workshop', 'park', 'waterpark', 'lazyriver', 'garden', 'station', 'mall', 'airport', 'themepark', 'memorial']);
+      const asked = new Set(['jail', 'zoo', 'aquarium', 'museum', 'hospital', 'firestation', 'police', 'theatre', 'hotel', 'factory', 'workshop', 'mill', 'park', 'waterpark', 'lazyriver', 'garden', 'station', 'mall', 'airport', 'themepark', 'memorial']);
       const ps = placeOffsets(result.world, { places: result.places.filter((P) => asked.has(P.kind)) });
       if (ps.length) line('where (from the centre)', ps.map((P) => `${P.name}: ${P.words}`).join(' · ') + ' — in the game, /function <city>/goto_<name>');
     }

@@ -78,7 +78,9 @@ export default async function run(ctx) {
     check('underground: every room lit like a room (its floor 8 on average)', dim === 0, `${dim} dim`);
     const { toJava } = await import('../../engine/java-blocks.js');
     const wt = toJava('minecraft:torch', { torch_facing_direction: 'east' }), st = toJava('minecraft:torch', { torch_facing_direction: 'top' });
-    check('underground, Java: a wall torch is a wall_torch facing the same way, a standing one a torch', wt.name === 'minecraft:wall_torch' && wt.props.facing === 'east' && st.name === 'minecraft:torch' && !Object.keys(st.props).length);
+    // (Bedrock's torch_facing_direction names the side its block is on, Java's facing the
+    // way the torch leans: Mojang's own table has bedrock east as java facing=west)
+    check('underground, Java: a wall torch is a wall_torch leaning away from its block (Mojang\'s table), a standing one a torch', wt.name === 'minecraft:wall_torch' && wt.props.facing === 'west' && st.name === 'minecraft:torch' && !Object.keys(st.props).length);
   }
   // watertight: every cell beside a dug room, below the street, is a block or
   // another room (the world's own ground round it can be water)

@@ -49,6 +49,10 @@ const RENAME = {
   'minecraft:waterlily': 'minecraft:lily_pad',
   'minecraft:web': 'minecraft:cobweb',
   'minecraft:unlit_redstone_torch': 'minecraft:redstone_torch',
+  'minecraft:unpowered_repeater': 'minecraft:repeater',
+  'minecraft:powered_repeater': 'minecraft:repeater',
+  'minecraft:unpowered_comparator': 'minecraft:comparator',
+  'minecraft:powered_comparator': 'minecraft:comparator',
   'minecraft:lit_pumpkin': 'minecraft:jack_o_lantern',
   'minecraft:melon_block': 'minecraft:melon',
   'minecraft:noteblock': 'minecraft:note_block',
@@ -119,11 +123,20 @@ function translateState(block, key, value) {
     case 'growth':
       return ['age', String(value)];
     case 'facing_direction': {
+      // (a piston counts its sideways facings the other way round in Bedrock: south 2,
+      // north 3, east 4, west 5, by Mojang's own mapping table)
+      if (/piston$/.test(block)) return ['facing', ['down', 'up', 'south', 'north', 'east', 'west'][value] || 'north'];
       const f = FACING[value] || 'north';
       // torches, ladders, wall signs and the like face outward from the wall
       if (/torch$/.test(block) && (f === 'up' || f === 'down')) return null;
       return ['facing', f];
     }
+    // an observer's way it watches, written by name in Bedrock as in Java
+    case 'minecraft:facing_direction': return ['facing', String(value)];
+    case 'repeater_delay': return ['delay', String(Number(value) + 1)];
+    case 'output_subtract_bit': return ['mode', value ? 'subtract' : 'compare'];
+    case 'output_lit_bit': return ['powered', value ? 'true' : 'false'];
+    case 'torch_facing_direction': return null;          // (made into a wall torch's facing below)
     case 'weirdo_direction': return ['facing', STAIR_FACING[value] || 'east'];
     case 'upside_down_bit': return ['half', value ? 'top' : 'bottom'];
     case 'open_bit': return ['open', value ? 'true' : 'false'];
@@ -177,11 +190,21 @@ export function toJava(block, states = {}, extra = {}) {
   }
   // a torch on a wall is its own block in Java, facing the same way (away from
   // the wall it hangs on); one standing on top of a block stays a torch
-  if (name === 'minecraft:torch') {
+  // (Bedrock names the side its block is on, Java the way it leans: the opposite, by
+  // Mojang's own mapping table: java wall_torch facing=north is bedrock south)
+  // (a redstone torch likewise, lit or not by its Bedrock name)
+  if (name === 'minecraft:torch' || name === 'minecraft:redstone_torch') {
+    const OPP = { east: 'west', west: 'east', north: 'south', south: 'north' };
     const f = String((states.torch_facing_direction && states.torch_facing_direction.value !== undefined) ? states.torch_facing_direction.value : states.torch_facing_direction || 'top');
-    if (['east', 'west', 'north', 'south'].includes(f)) { name = 'minecraft:wall_torch'; for (const k of Object.keys(props)) delete props[k]; props.facing = f; }
-    else for (const k of Object.keys(props)) delete props[k];
+    const red = name === 'minecraft:redstone_torch';
+    for (const k of Object.keys(props)) delete props[k];
+    if (OPP[f]) { name = red ? 'minecraft:redstone_wall_torch' : 'minecraft:wall_torch'; props.facing = OPP[f]; }
+    if (red) props.lit = block === 'minecraft:unlit_redstone_torch' ? 'false' : 'true';
   }
+  if (name === 'minecraft:repeater') { props.locked = 'false'; props.powered = block === 'minecraft:powered_repeater' ? 'true' : 'false'; }
+  if (name === 'minecraft:piston' || name === 'minecraft:sticky_piston') props.extended = 'false';
+  if (name === 'minecraft:hopper') props.enabled = 'true';
+  if (name === 'minecraft:sugar_cane' && props.age === undefined) props.age = '0';
   // a plain pumpkin does not face anywhere in Java (a carved one does)
   if (name === 'minecraft:pumpkin') delete props.facing;
   // a full cauldron is its own block in Java

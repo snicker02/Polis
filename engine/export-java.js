@@ -146,6 +146,16 @@ function javaBlockEntity(name, data) {
     });
   }
   if (data.id === 'Bed') return null;                    // Java carries the colour in the block name
+  // a chest, a barrel, a hopper: what is in it, in Java 1.21's own words (a count, an
+  // id, a custom name as a component): the airport's elytras, the mill's sorting filters
+  if (data.id === 'Chest' || data.id === 'Barrel' || data.id === 'Hopper') {
+    const items = (data.tags && data.tags.Items ? data.tags.Items.v : []).map((it) => {
+      const f = it.v, custom = f.tag && f.tag.v.display && f.tag.v.display.v.Name ? f.tag.v.display.v.Name.v : null;
+      return J.comp({ Slot: J.byte(f.Slot.v), id: J.str(f.Name.v), count: J.int(f.Count.v),
+        ...(custom ? { components: J.comp({ 'minecraft:custom_name': J.str(JSON.stringify(custom)) }) } : {}) });
+    });
+    return J.comp({ id: J.str({ Chest: 'minecraft:chest', Barrel: 'minecraft:barrel', Hopper: 'minecraft:hopper' }[data.id]), Items: J.list(T.COMPOUND, items) });
+  }
   return null;
 }
 

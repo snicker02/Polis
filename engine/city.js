@@ -992,10 +992,11 @@ export function generateCity(cfgIn, onProgress) {
     ['lazyriver', '14 by 15', (L) => `a ring of four runs, each a step down, and a bubble lift back up`],
     ['waterpark', '15 by 19', (L) => `pools, a bubble lift ${L.frame.H} high, a boat slide of ${L.slide.length} blocks of blue ice, a kids' pool with a waterfall`],
     ['park', '15 by 19', (L) => `a roller coaster of ${L.rails.length} rails rising ${L.frame.R}, a Ferris wheel of ${L.wheel.cabins.length} cabins, ${L.stalls.length} stalls`],
-    ['workshop', '13 by 15', (L) => `${L.smelters.length} automatic smelters, ${L.presses.length} presses, an instrument bench of ${L.notes.length}, night lights`]]) {
+    ['workshop', '13 by 15', (L) => `${L.smelters.length} automatic smelters, ${L.presses.length} presses, an instrument bench of ${L.notes.length}, night lights`],
+    ['mill', '13 by 15', (L) => `a sugar cane farm of ${L.farm.canes.length} canes, an observer clock, an item sorter of ${L.sorter.columns.length} filters`]]) {
     const L = landmarks.find((q) => q.kind === kind);
     if (L) stats[kind] = say(L);
-    else if (cfg[kind] || (kind === 'workshop' && cfg.factory && landmarks.some((q) => q.kind === 'factory')) || (kind === 'lazyriver' && cfg.waterpark && landmarks.some((q) => q.kind === 'waterpark'))) stats[kind + 'Missing'] = `no lot big enough for the ${kind === 'police' ? 'police station' : kind === 'park' ? 'amusement park' : kind === 'waterpark' ? 'water park' : kind === 'lazyriver' ? 'lazy river' : kind === 'garden' ? 'botanical garden' : kind === 'mall' ? 'shopping mall' : kind} (it needs ${need})`;
+    else if (cfg[kind] || ((kind === 'workshop' || kind === 'mill') && cfg.factory && landmarks.some((q) => q.kind === 'factory')) || (kind === 'lazyriver' && cfg.waterpark && landmarks.some((q) => q.kind === 'waterpark'))) stats[kind + 'Missing'] = `no lot big enough for the ${kind === 'police' ? 'police station' : kind === 'park' ? 'amusement park' : kind === 'waterpark' ? 'water park' : kind === 'lazyriver' ? 'lazy river' : kind === 'garden' ? 'botanical garden' : kind === 'mall' ? 'shopping mall' : kind} (it needs ${need})`;
   }
   // the names typed in for the cemetery: where they went, or why they could not
   if (namesOf(cfg.memorial).length || namesOf(cfg.graveNames).length) {
