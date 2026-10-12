@@ -207,8 +207,8 @@ export function buildThemePark(world, plan, cfg, ctx) {
   // It turns: forty-eight frames of it, each seven and a half degrees on, a whole turn
   // (twenty-four seconds) and round again. Saved in the pack as structures (export.js: world.anims), every block of its
   // plane and air between. Under the ground a clock of command blocks loads them in
-  // turn, a frame every half second: a repeating block counting, chain blocks after it,
-  // silent.
+  // turn, a frame every half second: a repeating block loading the first once a turn,
+  // chain blocks after it each waiting half a second to load the next, silent.
   const FRAMES = WHEEL_FRAMES, frames = [];
   for (let f = 0; f < FRAMES; f++) {
     const cells = new Map();
@@ -221,22 +221,20 @@ export function buildThemePark(world, plan, cfg, ctx) {
   const fbox = { x0: Math.min(...fx), x1: Math.max(...fx), y0: Math.max(YA + 1, Math.min(...fy)), y1: Math.max(...fy), z0: Math.min(...fz), z1: Math.max(...fz) };
   world.anims = [...(world.anims || []), ...frames.map((cells, f) => ({ name: `wheel_f${f}`, box: fbox, cells }))];
   const FACE = { north: 2, south: 3, west: 4, east: 5 }[NAME(acc.across)];
-  const clockCmds = [
-    { mode: 'repeat', delay: 10, cmd: 'scoreboard players add #wheel polis_fun 1' },
-    { mode: 'chain', cmd: `execute if score #wheel polis_fun matches ${FRAMES}.. run scoreboard players set #wheel polis_fun 0` },
-    ...[...Array(FRAMES).keys()].map((f) => ({ mode: 'chain', frame: f })),
-  ];
+  // (a plain timed chain, nothing to count: the repeating block loads frame 0 once a
+  // whole turn, every chain block after it waits half a second and loads the next)
+  const STEP = 10;
   const clock = [];
-  clockCmds.forEach((c, k) => {
-    const [x, y, z] = pos(wu - 3 + k, wv + 4, YA - 1);
-    const id = MATERIALS.add(null, c.mode === 'repeat' ? 'minecraft:repeating_command_block' : 'minecraft:chain_command_block', c.mode === 'repeat' ? '#6b4fa0' : '#5d8f6a',
+  for (let f = 0; f < FRAMES; f++) {
+    const mode = f === 0 ? 'repeat' : 'chain', delay = f === 0 ? FRAMES * STEP : STEP;
+    const [x, y, z] = pos(wu - 3 + f, wv + 4, YA - 1);
+    const id = MATERIALS.add(null, mode === 'repeat' ? 'minecraft:repeating_command_block' : 'minecraft:chain_command_block', mode === 'repeat' ? '#6b4fa0' : '#5d8f6a',
       { conditional_bit: B(0), facing_direction: I(FACE) });
     world.set(x, y, z, id);
-    const cmd = c.frame === undefined ? c.cmd
-      : `execute if score #wheel polis_fun matches ${c.frame} run structure load {ns}:wheel_f${c.frame} ~${fbox.x0 - x} ~${fbox.y0 - y} ~${fbox.z0 - z}`;
-    world.setData(x, y, z, commandBlock(cmd, { mode: c.mode, delay: c.delay || 0 }));
-    clock.push({ at: [x, y, z], cmd });
-  });
+    const cmd = `structure load {ns}:wheel_f${f} ~${fbox.x0 - x} ~${fbox.y0 - y} ~${fbox.z0 - z}`;
+    world.setData(x, y, z, commandBlock(cmd, { mode, delay }));
+    clock.push({ at: [x, y, z], cmd, mode, delay });
+  }
   wheel.turning = { frames: FRAMES, box: fbox, clock };
 
   // ---- the drop tower -----------------------------------------------------------------------------

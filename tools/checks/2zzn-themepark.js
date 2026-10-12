@@ -154,12 +154,18 @@ export default async function run(ctx) {
     const blk = (p) => MATERIALS.def(w.get(...p)).block.replace('minecraft:', '');
     const inLine = clock.every((c, k) => k === 0 || Math.abs(c.at[0] - clock[k - 1].at[0]) + Math.abs(c.at[2] - clock[k - 1].at[2]) === 1 && c.at[1] === clock[0].at[1]);
     const kinds = clock.map((c) => blk(c.at)).join(',');
-    const wantKinds = ['repeating_command_block', ...Array(WHEEL_FRAMES + 1).fill('chain_command_block')].join(',');
+    const wantKinds = ['repeating_command_block', ...Array(WHEEL_FRAMES - 1).fill('chain_command_block')].join(',');
+    // (each block facing the next, so the chain runs on down the line)
+    const FACING = { 2: [0, -1], 3: [0, 1], 4: [-1, 0], 5: [1, 0] };
+    const facesOn = clock.every((c, k) => { if (k === clock.length - 1) return true; const f = FACING[MATERIALS.def(w.get(...c.at)).states.facing_direction.value]; return !!f && c.at[0] + f[0] === clock[k + 1].at[0] && c.at[2] + f[1] === clock[k + 1].at[2]; });
+    // (timed, nothing counted: the first waits a whole turn, each after it half a second)
+    const timed = clock.every((c, k) => { const t = w.getData(...c.at).tags; return t.TickDelay.v === (k === 0 ? WHEEL_FRAMES * 10 : 10) && t.LPCommandMode.v === (k === 0 ? 1 : 2) && t.auto.v === 1 && t.LPCondionalMode.v === 0; })
+      && clock.every((c) => !/scoreboard|execute/.test(c.cmd));
     const data0 = w.getData(...clock[0].at);
-    const lands = clock.slice(2).every((c, f) => { const m = c.cmd.match(/structure load \{ns\}:wheel_f(\d+) ~(-?\d+) ~(-?\d+) ~(-?\d+)$/); return !!m && Number(m[1]) === f && c.at[0] + Number(m[2]) === anims[0].box.x0 && c.at[1] + Number(m[3]) === anims[0].box.y0 && c.at[2] + Number(m[4]) === anims[0].box.z0; });
+    const lands = clock.every((c, f) => { const m = c.cmd.match(/structure load \{ns\}:wheel_f(\d+) ~(-?\d+) ~(-?\d+) ~(-?\d+)$/); return !!m && Number(m[1]) === f && c.at[0] + Number(m[2]) === anims[0].box.x0 && c.at[1] + Number(m[3]) === anims[0].box.y0 && c.at[2] + Number(m[4]) === anims[0].box.z0; });
     check('theme park: the big wheel turns: forty-eight frames, a whole turn, the first as built, each a step round, no jump from the last back to the first', frames, `${anims.length} frames, ${distinct} distinct, steps ${Math.min(...steps)}..${Math.max(...steps)}, last ${steps[steps.length - 1]}`);
-    check('theme park: the wheel\'s clock: a repeating block, then chain blocks in a line, silent; each frame loaded into its own place', inLine && kinds === wantKinds
-      && data0.tags.TrackOutput.v === 0 && data0.tags.TickDelay.v >= 10 && lands, kinds);
+    check('theme park: the wheel\'s clock: a repeating block, then chain blocks in a line each facing the next, silent, timed (no counter); each frame loaded into its own place', inLine && facesOn && timed && kinds === wantKinds
+      && clock.every((c) => w.getData(...c.at).tags.TrackOutput.v === 0) && lands, `${kinds.split(',').length} blocks, facing ${facesOn}, timed ${timed}, lands ${lands}`);
     const { buildAnimStructures, exportPack } = await import('../../engine/export.js');
     const { deflateRaw } = ctx;
     const pack = await exportPack(w, { namespace: 'chk', spawns: r.spawns, places: r.places, deflateRaw });
@@ -169,7 +175,7 @@ export default async function run(ctx) {
     let cmdsNamed = 0;
     for (const st of pack.structures) { const pd = decodeNbt(st.data).root.structure.palette.default.block_position_data || {}; for (const v of Object.values(pd)) { const c = v.block_entity_data && v.block_entity_data.Command; if (c && /structure load chk:wheel_f\d+ /.test(c)) cmdsNamed++; } }
     const bc = pack.functions.find((f) => f.fn === 'chk/build_centered');
-    check('theme park: in the pack, the forty-eight frames (every cell written, air between), the clock naming them by the pack\'s own name, build making its counter', named.length === WHEEL_FRAMES && full && cmdsNamed === WHEEL_FRAMES && bc.text.includes('scoreboard objectives add polis_fun dummy'), `${named.length} frames, ${cmdsNamed} named, full ${full}`);
+    check('theme park: in the pack, the forty-eight frames (every cell written, air between), the clock naming them by the pack\'s own name, no counter in build', named.length === WHEEL_FRAMES && full && cmdsNamed === WHEEL_FRAMES && !/scoreboard/.test(bc.text), `${named.length} frames, ${cmdsNamed} named, full ${full}`);
   }
   check('theme park: every piece of its open ground lit', all((t) => t.dark === 0), ts.map(([n, , t]) => `${n}: ${t.dark}`).join(', '));
   check('theme park: in the pack, its ground founded and cleared like the city\'s own (and no more)', all((t) => t.pack));

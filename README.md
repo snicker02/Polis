@@ -1,4 +1,4 @@
-# Polis v0.56.0
+# Polis v0.56.1
 
 *Created with help from Claude AI.*
 
@@ -772,6 +772,19 @@ inside WebGL1's limits.
 
 ## Changelog
 
+**0.56.1** — The big wheel's clock, made plain.
+
+- The wheel did not turn in game. Its clock was the only one in Polis to count on a
+  scoreboard (`scoreboard players add #wheel …`, then `execute if score … run
+  structure load …` per frame), and something in that chain did not run. It is now a
+  plain timed chain with nothing to count: the repeating block loads frame 0 once a
+  whole turn (TickDelay 480), and each of the 47 chain blocks after it waits 10 ticks
+  and loads the next frame. Only `structure load` commands; build no longer makes a
+  scoreboard objective. The check (2zzn) holds each block facing the next, the
+  delays, and no scoreboard or execute anywhere in it.
+- The guide says the wheel runs only near a player and with
+  `/gamerule commandblocksenabled true`.
+
 **0.56.0** — The big wheel turns; the Leviathan winds.
 
 - The theme park's big wheel turns. Blocks cannot rotate, so it turns in frames:
@@ -779,8 +792,8 @@ inside WebGL1's limits.
   goes, so only a whole turn brings it exactly back to itself on the grid). Each frame
   is a structure in the pack, every block of the wheel's plane with air between. A
   clock of command blocks under the ground loads them in turn, a frame every half
-  second, 24 seconds a turn: a repeating block counting on a scoreboard (build makes
-  the objective `polis_fun`), then a chain block per frame, all silent. Its cabins
+  second, 24 seconds a turn: a repeating block, then a chain block per frame, all
+  silent (0.56.1 made this a plain timed chain, see above). Its cabins
   cannot be ridden while it turns. The commands name the frames by the pack's own
   name, filled in at export. Bedrock only: in Java the wheel stands still.
 - The Leviathan no longer runs round a rectangle. Its route (themepark.js: ROUTE) is

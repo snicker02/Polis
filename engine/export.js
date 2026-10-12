@@ -17,7 +17,7 @@ import { makeRng } from './rng.js';
 // Must match main.js VERSION, package.json and index.html data-version;
 // tools/validate.js fails if they drift. The app refuses to export when the
 // browser has mixed cached copies of old and new files.
-export const POLIS_VERSION = '0.56.0';
+export const POLIS_VERSION = '0.56.1';
 
 export const CHUNK = 64;          // Bedrock structure limit per horizontal axis
 export const GROUND_DROP = 2;     // base layer y=0 sits 2 below feet; surface y=1 replaces the block you stand on
@@ -577,7 +577,6 @@ export function functionFiles(tiles, world, opts = {}) {
   const build = (dx, dz, title, pop) => [
     `# ${title}`,
     ...(hasCommands ? ['gamerule commandblockoutput false'] : []),
-    ...((world.anims || []).length ? ['scoreboard objectives add polis_fun dummy'] : []),     // (the wheel's clock counts on it)
     `# ${tiles.length} structure${tiles.length === 1 ? '' : 's'}. Safe to run again: blocks only.`,
     '# Only loaded chunks are filled: stand near the middle and raise render distance.',
     `# When the whole city is standing, run /function ${ns}/${pop} from the SAME spot.`,
@@ -882,7 +881,10 @@ export function placementGuide(tiles, opts = {}) {
     L.push('');
   }
   if ((opts.places || []).some((P) => P.kind === 'themepark')) {
-    L.push('THE THEME PARK\'S BIG WHEEL turns: a clock of command blocks under it loads its frames in turn (silently).');
+    L.push('THE THEME PARK\'S BIG WHEEL turns: a clock of command blocks under it loads its frames in turn (silently),');
+    L.push('  a whole turn every 24 seconds. It runs only while you are near (within simulation distance), and only with');
+    L.push('  command blocks on: if it stands still, run  /gamerule commandblocksenabled true  and walk up to it.');
+    L.push('  A wheel built from a pack older than 0.56.1 used a counting clock that may not run: build the theme park again.');
     L.push('  It needs command blocks on (/gamerule commandblocksenabled true, cheats on), and turns while you are near enough');
     L.push('  for the park to be simulated. Its cabins cannot be ridden while it turns. The Leviathan: press the button at its station.');
     L.push('');
