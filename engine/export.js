@@ -17,7 +17,7 @@ import { makeRng } from './rng.js';
 // Must match main.js VERSION, package.json and index.html data-version;
 // tools/validate.js fails if they drift. The app refuses to export when the
 // browser has mixed cached copies of old and new files.
-export const POLIS_VERSION = '0.61.0';
+export const POLIS_VERSION = '0.62.0';
 
 export const CHUNK = 64;          // Bedrock structure limit per horizontal axis
 export const GROUND_DROP = 2;     // base layer y=0 sits 2 below feet; surface y=1 replaces the block you stand on
@@ -890,6 +890,13 @@ export function placementGuide(tiles, opts = {}) {
     L.push('  Behind the coaster, along the walk at the back: bumper boats (the boats come with populate), a hedge maze');
     L.push('  with a chest at its far end, trampolines of slime with a tower to jump off (slime takes the fall), and an');
     L.push('  archery range: bows and arrows in the chest, and a target lights its lamp when an arrow hits it.');
+    L.push('');
+  }
+  if ((opts.places || []).some((P) => P.kind === 'bank')) {
+    L.push('THE BANK\'S VAULT: go through the gap at the end of the counter to the tellers\' side. Five levers on the back wall');
+    L.push('  open the vault\'s iron door when each is set right, on or off; the lamp over the door lights when they are.');
+    L.push('  The code is on the manager\'s sign at the far end, for those who look (and in the summary in the app).');
+    L.push('  Inside, a button by the door lets you out. Plain redstone: no command blocks.');
     L.push('');
   }
   if ((opts.places || []).some((P) => P.kind === 'sports')) {

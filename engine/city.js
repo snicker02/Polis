@@ -122,6 +122,7 @@ export const DEFAULTS = {
   themepark: false,          // a theme park beside the city: a giant coaster, a big wheel, a drop tower, a carousel (themepark.js)
   airport: false,            // an airport beside the city: runway, terminal, control tower, elytra launch pads (airport.js)
   mall: false,               // a shopping mall: two floors of shops, each shopkeeper a villager of its trade (mall.js)
+  bank: false,               // a bank: a marble hall, teller windows, a vault behind an iron door with a lever combination lock (bank.js)
   sports: false,             // a sports centre: courts, a climbing wall, a pool lane, a parkour room, a track on the roof (sports.js)
   garden: false,             // a botanical garden: a glass hall of plants from every biome (garden.js)
   station: false,            // a railway station on the line: a hall, a platform canopy, a clock (station.js)
@@ -994,6 +995,7 @@ export function generateCity(cfgIn, onProgress) {
     ['waterpark', '15 by 19', (L) => `pools, a bubble lift ${L.frame.H} high, a boat slide of ${L.slide.length} blocks of blue ice, a kids' pool with a waterfall`],
     ['park', '15 by 19', (L) => `a roller coaster of ${L.rails.length} rails rising ${L.frame.R}, a Ferris wheel of ${L.wheel.cabins.length} cabins, ${L.stalls.length} stalls`],
     ['workshop', '13 by 15', (L) => `${L.smelters.length} automatic smelters, ${L.presses.length} presses, an instrument bench of ${L.notes.length}, night lights`],
+    ['bank', '17 by 21', (L) => `a marble hall, ${L.windows.length} teller windows, a vault behind an iron door with a combination lock of ${L.levers.length} levers (the code: ${L.codeWords}), ${L.vault.gold.length} gold blocks, ${L.vault.chests.length} chests of emeralds, a safe-deposit wall of ${L.vault.deposit.length}`],
     ['sports', '17 by 23', (L) => `a court marked in coloured concrete, a climbing wall of ${L.climb.ladders.length} ladders and ${L.climb.scaffolds.length} towers of scaffolding, a pool lane ${L.pool.water.length / 2 / 3} long, a parkour course of ${L.stones.length} jumps, a running track of ${L.track.lanes[0].length} on the roof`],
     ['mill', '13 by 15', (L) => `a sugar cane farm of ${L.farm.canes.length} canes, an observer clock, an item sorter of ${L.sorter.columns.length} filters`]]) {
     const L = landmarks.find((q) => q.kind === kind);

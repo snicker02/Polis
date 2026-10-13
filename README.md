@@ -1,4 +1,4 @@
-# Polis v0.61.0
+# Polis v0.62.0
 
 *Created with help from Claude AI.*
 
@@ -771,6 +771,33 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.62.0** — A bank, its vault behind a combination lock.
+
+A new option, "A bank" (off by default), builds one (bank.js), seventeen by twenty-
+one: a marble hall of quartz and calcite, quartz pillars, chandeliers, sea lanterns
+set in the walls and the floor; a counter across it with three teller windows in a
+screen of iron bars, a gap at its end into the tellers' side; the manager's desk.
+
+On the tellers' back wall five levers and the vault's iron door, a redstone lamp over
+it. The levers open the door only when each is set right, on or off: a code of the
+city's own (from its seed, never all one way), written on the manager's sign for those
+who look, and in the summary. Behind the wall, sealed and lit, seen through glass from
+the vault, the lock: each lever on a block; one that should be on has a torch on the
+back of its block (lit, so wrong, while the lever is off); one that should be off has
+dust behind it (powered, so wrong, while the lever is on). All of them run into one
+line of dust and a block at its end; a torch on that block is lit only when nothing is
+wrong, and powers the dust that powers the wall block beside the door: the door opens
+and the lamp lights. A button inside lets you out. Inside: gold blocks along the walls,
+four chests of emeralds, a safe-deposit wall of barrels in an iron frame across the
+back, some of them with something in.
+
+New section 2zzq (11 checks): the lock followed through block by block (levers,
+torches settling, dust levels and where each dust points) for all thirty-two ways to
+set the levers: the door opens, and the lamp lights, for the code and for nothing
+else; the button opens it; the code on the sign the lock's own; codes differ between
+cities; with the door shut no way into the vault on foot, with it open every part of
+it; the gold, emeralds and deposit wall; lit inside; Bedrock's states. Flat and hilly.
 
 **0.61.0** — A second corkscrew, a longer dark tunnel, four new rides.
 
