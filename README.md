@@ -1,4 +1,4 @@
-# Polis v0.60.0
+# Polis v0.61.0
 
 *Created with help from Claude AI.*
 
@@ -771,6 +771,33 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.61.0** — A second corkscrew, a longer dark tunnel, four new rides.
+
+- The theme park is a hundred and ten deep (from eighty): the new rows at the back
+  hold four new rides, along a walk reached by the avenue, which now runs on under
+  the coaster's back run (ten up there).
+- A second corkscrew on the other side of the park: a second lift hill to twenty in
+  the back-left, then two tight turns down round a quartz tower of its own.
+- The tunnel is twice as long (thirty-four) and dark: no lights in it at all. The
+  back run climbs over the avenue to ten, goes into the tunnel at the top of its hill,
+  and drops to four inside it, unseen. The lamps stay on its roof outside.
+- Bumper boats: a pond a block deep with a rim round it and six boats on it (they
+  come with populate, with the city's other boats).
+- A hedge maze: twenty-one by twenty-one, hedges of oak leaves three high, carved
+  fresh depth first; the way in at the front, a chest of prizes (a cake, a golden
+  apple, cookies) at the cell farthest in by its paths. Its walks are lit from the
+  floor.
+- Trampolines: a floor of slime in a fence, a stone tower in the middle with a ladder
+  up it, eight up, to jump off (slime takes the fall and bounces you).
+- An archery range: a counter to shoot from with a chest of bows and arrows, five
+  targets down the range each with a redstone lamp on it (a target hit by an arrow
+  powers what is beside it: the lamp lights), a wall behind to stop the arrows.
+
+2zzn (24 checks): both corkscrews; the tunnel thirty long and more, dark, no light in
+it; the pond held in with six boats on it, the maze's hedges and its prize, the
+trampolines' slime and tower, the targets and their lamps, bows in the chest; all of
+it walked to on foot, through the maze to the prize and up the tower.
 
 **0.60.0** — The Leviathan's corkscrew and tunnel.
 

@@ -86,7 +86,10 @@ export default async function run(ctx) {
     }
     const near = (p, r = 1) => [...seen].some((k) => { const [x, y, z] = k.split(',').map(Number); return Math.abs(x - p[0]) + Math.abs(z - p[2]) <= r && Math.abs(y - p[1]) <= 1; });
     out.walk = { start: !!s0, button: near(T.coaster.station.button, 1), wheel: near(T.wheel.legs[0][0], 3), ladderFoot: near(T.tower.ladder[0], 1),
-      carousel: near(T.carousel.centre, 5), towerTop: seen.has(key(T.tower.top)) || near(T.tower.top, 1) };
+      carousel: near(T.carousel.centre, 5), towerTop: seen.has(key(T.tower.top)) || near(T.tower.top, 1),
+      boats: near(T.rides.boats.rim, 1), mazeDoor: near(T.rides.maze.door, 0), mazePrize: near(T.rides.maze.prize, 1),
+      trampolines: T.rides.trampolines.slime.some((p) => seen.has(key([p[0], p[1] + 1, p[2]]))), trampolineTower: seen.has(key(T.rides.trampolines.top)),
+      archery: near(T.rides.archery.stand, 0) };
     // the pool: three deep, held in; the shaft open over it; the way out
     const W2 = new Set(T.tower.water.map(key));
     let leaks = 0;
@@ -121,11 +124,13 @@ export default async function run(ctx) {
     // the corkscrew: three turns and more round its square, falling twenty and more,
     // under itself in every column of its sides; its tower crowned with a light
     {
-      const K = C.corkscrew, cols = new Map();
-      for (const p of K.cells) { const k = p[0] + ',' + p[2]; if (!cols.has(k)) cols.set(k, []); cols.get(k).push(p[1]); }
-      const ys = K.cells.map((p) => p[1]);
-      const stacked = [...cols.values()].filter((hs) => hs.length >= 3).length;
-      out.cork = { rails: K.cells.length, fall: Math.max(...ys) - Math.min(...ys), stacked, columns: cols.size, tower: blk(...K.tower) === 'sea_lantern' };
+      out.corks = C.corkscrews.map((K) => {
+        const cols = new Map();
+        for (const p of K.cells) { const k = p[0] + ',' + p[2]; if (!cols.has(k)) cols.set(k, []); cols.get(k).push(p[1]); }
+        const ys = K.cells.map((p) => p[1]);
+        const stacked = [...cols.values()].filter((hs) => hs.length >= 2).length;
+        return { rails: K.cells.length, fall: Math.max(...ys) - Math.min(...ys), stacked, columns: cols.size, tower: blk(...K.tower) === 'sea_lantern' };
+      });
     }
     // the tunnel: walls both sides from the ground to three over the rail, a roof on
     // them, the rail inside it lit (8 and more), a sign at its mouth
@@ -136,10 +141,27 @@ export default async function run(ctx) {
         const walls = c.walls.every(([wx, wy, wz]) => { for (let yy = YA + 1; yy <= wy; yy++) if (blk(wx, yy, wz) === 'air') return false; return true; });
         const roof = blk(...c.roof) !== 'air' && c.roof[1] === y + 4;
         const light = map.light[map.idx(x, y + 1, z)];
-        return { walls, roof, light };
+        const lamps = [...c.walls.map(([wx, , wz]) => [wx, wz]), [x, z]].some(([wx, wz]) => { for (let yy = YA + 1; yy <= c.roof[1]; yy++) if (/lantern|glowstone|shroomlight|lamp|torch/.test(blk(wx, yy, wz))) return true; return false; });
+        return { walls, roof, light, lamps };
       });
-      out.tunnel = { length: tun.length, walls: tun.every((t) => t.walls), roof: tun.every((t) => t.roof), dimmest: Math.min(...tun.map((t) => t.light)),
+      const ls = tun.map((t) => t.light).sort((a, b) => a - b);
+      out.tunnel = { length: tun.length, walls: tun.every((t) => t.walls), roof: tun.every((t) => t.roof), median: ls[Math.floor(ls.length / 2)], lamps: tun.some((t) => t.lamps),
         drops: C.tunnel.cells[0].h !== C.tunnel.cells[C.tunnel.cells.length - 1].h };
+    }
+    // the rides at the back
+    {
+      const R = T.rides, why = [];
+      const Wset = new Set(R.boats.water.map(key));
+      if (!R.boats.water.every((p) => blk(...p) === 'water' && [[1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1], [0, -1, 0]].every(([a, b, c]) => { const n = [p[0] + a, p[1] + b, p[2] + c]; return Wset.has(key(n)) || !/^(air|water)$/.test(blk(...n)); }))) why.push('pond');
+      const boatSpawns = r.spawns.filter((sp) => sp.type === 'boat' && Wset.has(key([sp.x, sp.y, sp.z])));
+      if (boatSpawns.length < 6) why.push(`boats ${boatSpawns.length}`);
+      if (!R.maze.hedges.every((p) => [0, 1, 2].every((d) => blk(p[0], p[1] + d, p[2]) === 'oak_leaves')) || blk(...R.maze.prize) !== 'chest' || R.maze.steps < 30) why.push(`maze (${R.maze.steps} steps)`);
+      const tr = R.trampolines;
+      if (tr.slime.length < 150 || !tr.slime.every((p) => blk(...p) === 'slime') || !tr.ladder.every((p, i) => blk(...p) === 'ladder' && (i === 0 || p[1] === tr.ladder[i - 1][1] + 1)) || tr.ladder[tr.ladder.length - 1][1] !== tr.top[1]) why.push('trampolines');
+      if (!R.archery.targets.every((t) => blk(...t.target) === 'target' && blk(...t.lamp) === 'redstone_lamp' && t.lamp[1] === t.target[1] + 1) || R.archery.targets.length < 5) why.push('targets');
+      const items = ((w.getData(...R.archery.chest) || { tags: {} }).tags.Items || { v: [] }).v.map((it) => it.v.Name.v);
+      if (!items.includes('minecraft:bow') || !items.includes('minecraft:arrow')) why.push('no bows');
+      out.rides = why;
     }
     // the station's canopy: over the station rail, posts at its corners
     {
@@ -157,12 +179,13 @@ export default async function run(ctx) {
   check('theme park: the coaster\'s lift hill twenty and more high', all((t) => t.lift >= 20), ts.map(([n, , t]) => `${n}: ${t.lift}`).join(', '));
   check('theme park: every climb powered on redstone, every raised rail on a block, three clear over every rail', all((t) => t.bad.length === 0), ts.map(([n, , t]) => (t.bad || []).slice(0, 3).join('; ')).filter(Boolean).join(' | '));
   check('theme park: the station a brake rail with its button beside it; the carts on rails', all((t) => t.station && t.carts));
-  check('theme park: walked from the city\'s street through the gate to the coaster\'s button, the big wheel, the drop tower\'s ladder, the carousel', all((t) => Object.entries(t.walk).filter(([k]) => k !== 'towerTop').every(([, v]) => v)), ts.map(([n, , t]) => `${n}: ${JSON.stringify(t.walk)}`).join(' | '));
+  check('theme park: walked from the city\'s street through the gate to the coaster\'s button, the big wheel, the drop tower\'s ladder, the carousel, and at the back the boats, through the maze to its prize, the trampolines and up their tower, the archery range', all((t) => Object.entries(t.walk).filter(([k]) => k !== 'towerTop').every(([, v]) => v)), ts.map(([n, , t]) => `${n}: ${JSON.stringify(t.walk)}`).join(' | '));
   check('theme park: up the drop tower\'s ladder onto its platform', all((t) => t.walk.towerTop));
   check('theme park: the drop tower\'s pool three deep and held in, the shaft open over it, a way out over the water and down', all((t) => t.pool.leaks === 0 && t.pool.depth === 3 && t.pool.shaftOpen && t.pool.exit), ts.map(([n, , t]) => `${n}: ${JSON.stringify(t.pool)}`).join(' | '));
   check('theme park: the big wheel whole, twelve cabins', all((t) => t.wheel));
-  check('theme park: the corkscrew: three turns and more round its square, falling twenty and more, under itself in its columns, its tower lit on top', all((t) => t.cork.rails >= 48 && t.cork.fall >= 20 && t.cork.stacked >= 8 && t.cork.columns <= 16 && t.cork.tower), ts.map(([n, , t]) => `${n}: ${JSON.stringify(t.cork)}`).join(' | '));
-  check('theme park: the tunnel: walls both sides from the ground to over the cart, a roof on them, the track coming down into it, lit inside (8 and more)', all((t) => t.tunnel.length >= 12 && t.tunnel.walls && t.tunnel.roof && t.tunnel.drops && t.tunnel.dimmest >= 8), ts.map(([n, , t]) => `${n}: ${JSON.stringify(t.tunnel)}`).join(' | '));
+  check('theme park: two corkscrews, one each side of the park: the first three turns falling twenty and more, the second two falling fourteen and more; each under itself in its columns, round its square, its tower lit on top', all((t) => t.corks.length === 2 && t.corks[0].rails >= 48 && t.corks[0].fall >= 20 && t.corks[1].rails >= 32 && t.corks[1].fall >= 14 && t.corks.every((k) => k.stacked >= 8 && k.columns <= 16 && k.tower)), ts.map(([n, , t]) => `${n}: ${JSON.stringify(t.corks)}`).join(' | '));
+  check('theme park: the tunnel: thirty long and more, walls both sides from the ground to over the cart, a roof on them, the track over its hill and down inside it, dark (no light in it, its middle unlit)', all((t) => t.tunnel.length >= 30 && t.tunnel.walls && t.tunnel.roof && t.tunnel.drops && !t.tunnel.lamps && t.tunnel.median <= 3), ts.map(([n, , t]) => `${n}: ${JSON.stringify(t.tunnel)}`).join(' | '));
+  check('theme park: the rides at the back: the bumper boats\' pond held in, six boats on it; the hedge maze three high with a chest at the far end; the trampolines of slime with a tower to jump off; the archery range\'s targets each with a lamp on it, bows and arrows in the chest', all((t) => t.rides.length === 0), ts.map(([n, , t]) => `${n}: ${(t.rides || []).join('; ')}`).join(' | '));
   check('theme park: the station under a canopy, three clear over the cart, on four posts', all((t) => t.canopy));
   check('theme park: the coaster winds round the park (a dozen turns and more) and passes under itself (the corkscrew)', all((t) => t.turns >= 12 && t.under >= 10), ts.map(([n, , t]) => `${n}: ${t.turns} turns, ${t.under} under`).join(', '));
   {

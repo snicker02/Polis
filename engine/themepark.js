@@ -1,7 +1,7 @@
 // engine/themepark.js — a theme park beside the city, at the end of a road of its own.
 //
 // Like the airport (offsite.js), ground of the city's own outside its square: a park
-// a hundred and ten along the city's edge by eighty out from it, on the side away from
+// a hundred and ten along the city's edge by a hundred and ten out from it, on the side away from
 // the airport where there is one, at the height its road leaves the city. In its own
 // frame: u along the edge (the road arrives at u = 0), v out from the city.
 //
@@ -26,14 +26,18 @@
 //   jump into the open middle and fall into three deep of water at the bottom (water
 //   breaks any fall), out by a doorway over the water and steps down;
 // - a carousel: a round platform, horses on poles, a striped roof;
+// - behind the coaster, along a walk at the back: bumper boats on a pond, a hedge maze
+//   with a chest of prizes at its far end, trampolines of slime with a tower to jump
+//   off, an archery range whose targets light a lamp when hit;
 // - a fence round it all, lamps wherever the night would be dark.
 
-import { MAT, MATERIALS, B, I, railId, poweredRailId, RAIL, stairId, WEIRDO, signId, SIGN_FACING, WOOLS } from './materials.js';
+import { MAT, MATERIALS, B, I, railId, poweredRailId, RAIL, stairId, WEIRDO, signId, SIGN_FACING, WOOLS, chestId } from './materials.js';
+import { N } from './blockcore.js';
 import { edgeRoute, accessRoad, OUT, OPPOSITE, NAME, lightGround } from './offsite.js';
 import { ferrisWheel } from './park.js';
 import { commandBlock } from './airport.js';
 
-export const THEMEPARK = { L: 110, D: 80, LIFT: 26 };
+export const THEMEPARK = { L: 110, D: 110, LIFT: 26 };
 // the big wheel's turn: a whole turn in forty-eight frames of seven and a half degrees
 // (its cabins hang straight down as it turns, so nothing short of a whole turn brings it
 // back exactly to itself on the grid: a whole turn loops by its nature)
@@ -69,9 +73,12 @@ function shapeOf(prev, cur, next) {
 export const CORKSCREW = [['N', 4, 24], ['E', 4, 22], ['S', 4, 20], ['W', 4, 18], ['N', 4, 16], ['E', 4, 14], ['S', 4, 12], ['W', 4, 10],
   ['N', 4, 8], ['E', 4, 6], ['S', 4, 4], ['W', 4, 4]];
 export const CORK_BOX = { u0: 36, u1: 40, v0: 44, v1: 48 };      // its square, in the park's frame
+// the second, on the other side of the park: two turns down from the second lift
+export const CORKSCREW2 = [['S', 4, 18], ['E', 4, 16], ['N', 4, 14], ['W', 4, 12], ['S', 4, 10], ['E', 4, 8], ['N', 4, 6], ['W', 4, 4]];
+export const CORK_BOX2 = { u0: -26, u1: -22, v0: 68, v1: 72 };
 // the tunnel: over the back run where it comes down to four and along to the corner,
 // u from TUNNEL.u0 to u1 on the row v (the rails inside, its walls either side)
-export const TUNNEL = { v: 76, u0: -44, u1: -29 };
+export const TUNNEL = { v: 76, u0: -45, u1: -12 };
 export const ROUTE = [
   ['E', 103, 1],                                  // the front run, the station on it
   ['N', 6, 1], ['W', 46, 6], ['N', 6, 6],          // the first switchback, climbing as it goes
@@ -86,8 +93,9 @@ export const ROUTE = [
   ['N', 13, 12], ['N', 13, 4],                    // north over the carousel's path, another
   ['E', 18, 14], ['E', 19, 4],                    // east behind the carousel, a hill
   ['N', 6, 4], ['W', 20, 16], ['W', 19, 4],       // back west, a higher hill
-  ['N', 6, 4], ['W', 28, 18], ['W', 28, 4],       // along the back fence, the highest after the lift
-  ['S', 22, 4], ['E', 10, 4], ['N', 18, 14], ['E', 10, 14],  // the back-left serpentine: up
+  ['N', 6, 4], ['W', 28, 10], ['W', 28, 4],       // along the back, over the avenue, into the tunnel and down in the dark
+  ['S', 22, 4], ['E', 10, 4], ['N', 18, 20], ['E', 10, 20],  // the second lift, to twenty
+  ...CORKSCREW2,                                  // the second corkscrew: two turns down
   ['S', 18, 4], ['E', 10, 4], ['N', 18, 14], ['E', 8, 14],   // down, and up again
   ['S', 34, 6],                                   // south over the wheel's path
   ['W', 20, 16], ['W', 20, 4], ['S', 6, 4],       // the front-left serpentine: four rows, a hill on each
@@ -174,7 +182,9 @@ export function buildThemePark(world, plan, cfg, ctx) {
   const PATH = MAT.GRAVEL;
   const paved = [];
   const pave = (u, v) => { put(u, v, YA, PATH); paved.push([u, v]); };
-  for (let v = 1; v <= 72; v++) for (let u = -1; u <= 1; u++) pave(u, v);
+  for (let v = 1; v <= 83; v++) for (let u = -1; u <= 1; u++) pave(u, v);          // (on under the coaster's back run to the rides behind it)
+  for (let v = 82; v <= 83; v++) for (let u = -50; u <= 50; u++) if (Math.abs(u) > 1) pave(u, v);   // the walk along the back
+  for (const [u0p, u1p, v1p] of [[-45, -41, 85], [-19, -17, 85], [12, 14, 85], [38, 40, 88]]) for (let v = 84; v <= v1p; v++) for (let u = u0p; u <= u1p; u++) pave(u, v);   // to each ride (on to the archery's shooting place)
   for (let u = -2; u >= -12; u--) for (const v of [43, 44, 45]) pave(u, v);       // to the wheel
   for (let u = 2; u <= 21; u++) for (const v of [24, 25]) pave(u, v);              // to the drop tower
   for (let u = 2; u <= 18; u++) for (const v of [55, 56, 57]) pave(u, v);          // to the carousel
@@ -227,17 +237,19 @@ export function buildThemePark(world, plan, cfg, ctx) {
   const carts = [[...station.rail], pos(u0 + prof.station - 3, v0, YA + 1), pos(u0 + prof.station - 5, v0, YA + 1)];
 
   // ---- the corkscrew's tower: a quartz column up its middle, a sea lantern crown -----------------
-  const ck = CORK_BOX, cku = (ck.u0 + ck.u1) / 2, ckv = (ck.v0 + ck.v1) / 2;
-  const corkTop = YA + 29;
-  for (let y = YA + 1; y < corkTop; y++) put(cku, ckv, y, MAT.QUARTZ_PILLAR);
-  put(cku, ckv, corkTop, MAT.SEA_LANTERN);
-  for (let y = YA + 6; y < corkTop; y += 8) put(cku, ckv, y, MAT.SEA_LANTERN);   // (a light at every turn)
-  const corkscrew = { box: ck, tower: pos(cku, ckv, corkTop), cells: track.all.filter((c) => c[0] >= ck.u0 && c[0] <= ck.u1 && c[1] >= ck.v0 && c[1] <= ck.v1).map((c) => pos(c[0], c[1], YA + c[2])) };
+  const corkscrews = [[CORK_BOX, YA + 29], [CORK_BOX2, YA + 23]].map(([ck, corkTop]) => {
+    const cku = (ck.u0 + ck.u1) / 2, ckv = (ck.v0 + ck.v1) / 2;
+    for (let y = YA + 1; y < corkTop; y++) put(cku, ckv, y, MAT.QUARTZ_PILLAR);
+    put(cku, ckv, corkTop, MAT.SEA_LANTERN);
+    for (let y = YA + 6; y < corkTop; y += 8) put(cku, ckv, y, MAT.SEA_LANTERN);   // (a light at every turn)
+    return { box: ck, tower: pos(cku, ckv, corkTop), cells: track.all.filter((c) => c[0] >= ck.u0 && c[0] <= ck.u1 && c[1] >= ck.v0 && c[1] <= ck.v1).map((c) => pos(c[0], c[1], YA + c[2])) };
+  });
+  const corkscrew = corkscrews[0];
 
   // ---- the tunnel: into the dark where the back run comes down --------------------------------------
   // (walls either side of the track from the ground to three over the rail, a roof on
-  // them, following the track down; a light set in the walls every third block, side to
-  // side; lamps on the roof outside)
+  // them, following the track over its hill and down: dark inside, no light in it at
+  // all; lamps on the roof outside)
   const heightAt = new Map(track.all.map((c) => [c[0] + ',' + c[1], c[2]]));
   const tunnel = { cells: [], lights: [], portals: [] };
   const MOSSY = mat('mossy_stone_bricks', '#6f7a62');
@@ -250,13 +262,12 @@ export function buildThemePark(world, plan, cfg, ctx) {
       put(u, TUNNEL.v + dv, YA + ht + 4, MAT.STONEBRICK);
     }
     put(u, TUNNEL.v, YA + ht + 4, MAT.STONEBRICK);
-    if ((u - TUNNEL.u0) % 3 === 1) { const dv = (u - TUNNEL.u0) % 6 === 1 ? -1 : 1; put(u, TUNNEL.v + dv, YA + ht + 2, MAT.SEA_LANTERN); tunnel.lights.push(pos(u, TUNNEL.v + dv, YA + ht + 2)); }
     if ((u - TUNNEL.u0) % 5 === 2) put(u, TUNNEL.v, YA + ht + 5, MAT.LAMP);
     tunnel.cells.push({ rail: pos(u, TUNNEL.v, YA + ht), walls: [-1, 1].map((dv) => pos(u, TUNNEL.v + dv, YA + ht + 3)), roof: pos(u, TUNNEL.v, YA + ht + 4), h: ht });
   }
   // the portals' signs, on the walls at the way in
   const inH = heightAt.get(TUNNEL.u1 + ',' + TUNNEL.v);
-  sign(TUNNEL.u1 + 1, TUNNEL.v - 1, YA + 1, inName, 'The Dark\nthe Leviathan\ngoes underground');
+  sign(TUNNEL.u1 + 1, TUNNEL.v - 1, YA + 1, inName, 'The Dark\nthe Leviathan goes\nin over the hill\nand down unseen');
   tunnel.portals.push(pos(TUNNEL.u1, TUNNEL.v, YA + inH), pos(TUNNEL.u0, TUNNEL.v, YA + heightAt.get(TUNNEL.u0 + ',' + TUNNEL.v)));
 
   // ---- the station's canopy: red and white over the platform, on four posts -------------------------
@@ -355,6 +366,109 @@ export function buildThemePark(world, plan, cfg, ctx) {
   sign(CU - 6, CV, YA + 1, inName, 'Carousel');
   const carousel = { centre: pos(CU, CV, YA + 1), horses };
 
+  // ---- the rides behind the coaster, along the walk at the back ------------------------------------
+  const rides = {};
+  // the bumper boats: a pond a block deep, a rim round it, six boats on it
+  {
+    const P0 = -52, P1 = -34, Q0 = 86, Q1 = 104, water = [], boats = [];
+    for (let u = P0; u <= P1; u++) for (let v = Q0; v <= Q1; v++) {
+      const rim = u === P0 || u === P1 || v === Q0 || v === Q1;
+      if (rim) { put(u, v, YA, MAT.SMOOTH_QUARTZ); continue; }
+      put(u, v, YA - 1, MAT.BASE); put(u, v, YA, MAT.WATER); water.push(pos(u, v, YA));
+    }
+    for (const [u, v] of [[-48, 90], [-43, 90], [-38, 90], [-48, 98], [-43, 98], [-38, 98]]) boats.push(pos(u, v, YA));
+    sign(-40, Q0 - 1, YA + 1, inName, 'Bumper boats\nget in a boat\nand bump');
+    rides.boats = { water, boats, rim: pos(-43, Q0, YA), box: [P0, P1, Q0, Q1] };
+  }
+  // the hedge maze: twenty-one by twenty-one, hedges three high, the way in at the front
+  // in the middle, a chest of prizes at the cell farthest in
+  {
+    const M0 = -28, N0 = 86, n = 10, size = 2 * n + 1;
+    const LEAF = MATERIALS.add(null, 'minecraft:oak_leaves', '#3f7a2c', { persistent_bit: B(1), update_bit: B(0) }, { transparent: true });
+    const open = new Set();
+    let seed = 1234567;
+    const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
+    // a maze carved from the middle of the front row, depth first (each cell at odd places)
+    const startC = [Math.floor(n / 2), 0], stack = [startC], seen = new Set([startC.join(',')]);
+    const cellAt = ([a, b]) => [1 + 2 * a, 1 + 2 * b];
+    open.add(cellAt(startC).join(','));
+    while (stack.length) {
+      const [a, b] = stack[stack.length - 1];
+      const nb = [[1, 0], [-1, 0], [0, 1], [0, -1]].map(([da, db]) => [a + da, b + db]).filter(([x, y]) => x >= 0 && y >= 0 && x < n && y < n && !seen.has(x + ',' + y));
+      if (!nb.length) { stack.pop(); continue; }
+      const nx = nb[Math.floor(rnd() * nb.length)];
+      const [ca, cb] = cellAt([a, b]), [na, nbb] = cellAt(nx);
+      open.add(((ca + na) / 2) + ',' + ((cb + nbb) / 2)); open.add(na + ',' + nbb);
+      seen.add(nx.join(',')); stack.push(nx);
+    }
+    const doorU = cellAt(startC)[0];
+    open.add(doorU + ',0');
+    // the cell farthest in from the door, by the maze's own paths
+    const dist = new Map([[doorU + ',0', 0]]), q = [[doorU, 0]];
+    while (q.length) { const [a, b] = q.shift(); for (const [da, db] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const k = (a + da) + ',' + (b + db); if (open.has(k) && !dist.has(k)) { dist.set(k, dist.get(a + ',' + b) + 1); q.push([a + da, b + db]); } } }
+    const [goal] = [...dist.entries()].sort((x, y) => y[1] - x[1])[0];
+    const [ga, gb] = goal.split(',').map(Number);
+    const hedges = [];
+    for (let a = 0; a < size; a++) for (let b = 0; b < size; b++) {
+      const u = M0 + a, v = N0 + b;
+      if (open.has(a + ',' + b)) { put(u, v, YA, PATH); paved.push([u, v]); continue; }
+      put(u, v, YA, MAT.GRASS);
+      for (let y = YA + 1; y <= YA + 3; y++) put(u, v, y, LEAF);
+      hedges.push(pos(u, v, YA + 1));
+    }
+    put(M0 + ga, N0 + gb, YA + 1, chestId(outName));
+    const [cx, cz] = at(M0 + ga, N0 + gb);
+    world.setData(cx, YA + 1, cz, { id: 'Chest', tags: { Items: N.list(10, [
+      N.comp({ Count: N.byte(1), Damage: N.short(0), Name: N.str('minecraft:cake'), Slot: N.byte(0), WasPickedUp: N.byte(0) }),
+      N.comp({ Count: N.byte(1), Damage: N.short(0), Name: N.str('minecraft:golden_apple'), Slot: N.byte(1), WasPickedUp: N.byte(0) }),
+      N.comp({ Count: N.byte(16), Damage: N.short(0), Name: N.str('minecraft:cookie'), Slot: N.byte(2), WasPickedUp: N.byte(0) }),
+    ]) } });
+    sign(M0 + doorU + 2, N0 - 1, YA + 1, inName, 'Hedge maze\na prize at the\nfar end of it');
+    rides.maze = { door: pos(M0 + doorU, N0, YA + 1), prize: pos(M0 + ga, N0 + gb, YA + 1), hedges, size, cells: [...open].map((k) => { const [a, b] = k.split(',').map(Number); return pos(M0 + a, N0 + b, YA + 1); }), steps: dist.get(goal) };
+  }
+  // the trampolines: a floor of slime in a fence, a tower to jump off (slime takes the fall)
+  {
+    const T0 = 4, T1 = 22, S0 = 86, S1 = 100, mu = 13, mv = 93, TT = YA + 8;
+    const SLIME = mat('slime', '#78c060'), slime = [];
+    for (let u = T0; u <= T1; u++) for (let v = S0; v <= S1; v++) {
+      const edge = u === T0 || u === T1 || v === S0 || v === S1;
+      if (edge) { if (!(v === S0 && Math.abs(u - mu) <= 1)) put(u, v, YA + 1, MAT.FENCE); continue; }
+      put(u, v, YA, SLIME); slime.push(pos(u, v, YA));
+    }
+    for (let u = mu - 1; u <= mu + 1; u++) for (let v = mv - 1; v <= mv + 1; v++) for (let y = YA; y < TT; y++) put(u, v, y, MAT.STONEBRICK);
+    const tower = new Set(); for (let u = mu - 1; u <= mu + 1; u++) for (let v = mv - 1; v <= mv + 1; v++) tower.add(pos(u, v, YA).join(','));
+    for (let i = slime.length - 1; i >= 0; i--) if (tower.has(slime[i].join(','))) slime.splice(i, 1);
+    const ladder = [];
+    const LADDERS = { north: MAT.LADDER_2, south: MAT.LADDER_3, west: MAT.LADDER_4, east: MAT.LADDER_5 };
+    for (let y = YA + 1; y <= TT; y++) { put(mu, mv - 2, y, LADDERS[inName]); ladder.push(pos(mu, mv - 2, y)); }
+    for (const [du, dv] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) put(mu + du, mv + dv, TT, MAT.LAMP);
+    sign(mu + 2, S0 - 1, YA + 1, inName, 'Trampolines\nbounce, or climb\nthe tower and jump');
+    rides.trampolines = { slime, ladder, top: pos(mu, mv, TT), gate: pos(mu, S0, YA + 1) };
+  }
+  // the archery range: a counter to shoot from, a chest of bows and arrows, five targets
+  // down the range, each with a redstone lamp on it that lights when the target is hit;
+  // a wall behind to stop the arrows
+  {
+    const A0 = 28, A1 = 50, line = 88, back = 104, targets = [];
+    for (let u = A0 + 1; u <= A1 - 1; u++) if (Math.abs(u - 39) > 1) put(u, line, YA + 1, MAT.SMOOTH_QUARTZ);
+    for (const u of [A0 + 3, A1 - 3]) put(u, line, YA + 2, MAT.LAMP);                  // (lanterns on the counter)
+    put(A0 + 1, line - 1, YA + 1, chestId(inName));
+    const [qx, qz] = at(A0 + 1, line - 1);
+    world.setData(qx, YA + 1, qz, { id: 'Chest', tags: { Items: N.list(10, [
+      ...[0, 1, 2].map((k) => N.comp({ Count: N.byte(1), Damage: N.short(0), Name: N.str('minecraft:bow'), Slot: N.byte(k), WasPickedUp: N.byte(0) })),
+      ...[3, 4, 5].map((k) => N.comp({ Count: N.byte(64), Damage: N.short(0), Name: N.str('minecraft:arrow'), Slot: N.byte(k), WasPickedUp: N.byte(0) })),
+    ]) } });
+    const TARGET = mat('target', '#d8c0a8'), RLAMP = mat('redstone_lamp', '#8a5a3a');
+    for (const u of [31, 35, 39, 43, 47]) {
+      put(u, back, YA + 1, MAT.STONEBRICK); put(u, back, YA + 2, TARGET); put(u, back, YA + 3, RLAMP);
+      targets.push({ target: pos(u, back, YA + 2), lamp: pos(u, back, YA + 3) });
+    }
+    for (let u = A0; u <= A1; u++) for (let v = back + 1; v <= back + 2; v++) for (let y = YA + 1; y <= YA + 5; y++) put(u, v, y, MAT.STONEBRICK);
+    for (let v = line + 1; v <= back; v++) for (const u of [A0, A1]) put(u, v, YA + 1, MAT.FENCE);
+    sign(41, line - 1, YA + 1, inName, 'Archery\nbows in the chest\nhit a target:\nits lamp lights');
+    rides.archery = { chest: pos(A0 + 1, line - 1, YA + 1), targets, stand: pos(39, line, YA + 1) };
+  }
+
   // ---- benches along the avenue ----------------------------------------------------------------------
   const benches = [];
   for (let v = 14; v <= 70; v += 8) for (const [u, d] of [[-3, 'west'], [3, 'east']]) {
@@ -367,7 +481,7 @@ export function buildThemePark(world, plan, cfg, ctx) {
   for (const u of [-3, 3]) lit.push(pos(u, 0, YA + 8));
   lit.push(pos(CU, CV, YA + 9), pos(TU + 2, TV + 2, TOP + 2));
   for (const [du, dv] of [[2, 2], [-2, 2], [2, -2], [-2, -2]]) lit.push(pos(CU + du, CV + dv, YA + 6));
-  lit.push(...tunnel.lights, corkscrew.tower, ...[SU0 + 1, SU1 - 1].map((u) => pos(u, v0 - 1, CY - 1)));
+  lit.push(...corkscrews.map((c) => c.tower), ...[SU0 + 1, SU1 - 1].map((u) => pos(u, v0 - 1, CY - 1)));
   const cells = [];
   for (let v = 1; v < VD - 1; v++) for (let u = U0 + 1; u < U1; u++) cells.push([u, v]);
   const lamps = lightGround(world, { at }, YA, cells, (u, v, x, z) => {
@@ -384,7 +498,7 @@ export function buildThemePark(world, plan, cfg, ctx) {
   const [vx, vz] = at(0, 3), [lx, lz] = at(0, 9);
   return {
     kind: 'themepark', lot: rect, roadRect, side, street: acc.street, gate, streetSign, ground: YA, noLighting: true, rec: null,
-    road, coaster: { rails, railBlocks, supports, station, carts, lift: H, length: rails.length, stationSign, corkscrew, tunnel, canopy },
+    road, coaster: { rails, railBlocks, supports, station, carts, lift: H, length: rails.length, stationSign, corkscrew, corkscrews, tunnel, canopy }, rides,
     wheel, tower, carousel, stalls, benches, fence, lamps: [...lit, ...lamps], arch: archSign,
     visit: [vx, YA + 1, vz], visitLook: [lx, YA + 2, lz],
     frame: { at, pos, U0, U1, VD, YA, u0, u1, v0, v1 },

@@ -1011,7 +1011,7 @@ export function generateCity(cfgIn, onProgress) {
     if (cfg.bouts) { if (S && S.bouts) stats.bouts = `on the stadium's pitch, walled four high: ${BOUTS.map((b) => b.name).join(', ')}, fighting on and never hurt; the fans in by a stair from the street`;
       else stats.boutsMissing = S ? 'the stadium\'s pitch is too small for the bouts' : cfg.landmarks ? 'no lot for the stadium (it needs 17 by 21)' : 'the bouts are in the stadium, a landmark: tick Landmarks'; } }
   { const T = landmarks.find((q) => q.kind === 'themepark');
-    if (T) stats.themepark = `beside the city to the ${T.side}: a roller coaster of ${T.coaster.length} rails with a lift hill ${T.coaster.lift} high, a big wheel of ${T.wheel.cabins.length} cabins that turns, a drop tower ${T.tower.height} high, a carousel, ${T.stalls.length} stalls`;
+    if (T) stats.themepark = `beside the city to the ${T.side}: a roller coaster of ${T.coaster.length} rails with a lift hill ${T.coaster.lift} high, two corkscrews and a dark tunnel, a big wheel of ${T.wheel.cabins.length} cabins that turns, a drop tower ${T.tower.height} high, a carousel, ${T.stalls.length} stalls; at the back bumper boats, a hedge maze, trampolines, an archery range`;
     else if (cfg.themepark) stats.themeparkMissing = themeparkMissing || 'no room for the theme park'; }
   { const A = landmarks.find((q) => q.kind === 'airport');
     if (A) stats.airport = `beside the city to the ${A.side}: a runway ${A.runway.length} long, a terminal, a control tower ${A.tower.top - A.ground} high, ${A.pads.length} elytra launch pads, ${A.planes.length} aircraft`;
@@ -1036,6 +1036,7 @@ export function generateCity(cfgIn, onProgress) {
   for (const F of landmarks.filter((L) => L.kind === 'factory')) spawns.push({ type: 'cart', x: F.siding.cart[0], y: F.siding.cart[1], z: F.siding.cart[2], group: 'factory' });
   for (const P of landmarks.filter((L) => L.kind === 'park')) for (const c of P.carts) spawns.push({ type: 'cart', x: c[0], y: c[1], z: c[2], group: 'park' });
   for (const P of landmarks.filter((L) => L.kind === 'themepark')) for (const c of P.coaster.carts) spawns.push({ type: 'cart', x: c[0], y: c[1], z: c[2], group: 'themepark' });
+  for (const P of landmarks.filter((L) => L.kind === 'themepark')) for (const b of (P.rides && P.rides.boats.boats) || []) spawns.push({ type: 'boat', x: b[0], y: b[1], z: b[2] });   // the bumper boats
   for (const st of stands) spawns.push({ type: 'mob', kind: 'armor_stand', x: st.x, y: st.y, z: st.z, yRot: st.yRot, group: 'museum',
     armour: ['helmet', 'chestplate', 'leggings', 'boots'].map((p) => `minecraft:${st.set}_${p}`) });
   // (asked for, but no lot big enough: said so, not left silent)
