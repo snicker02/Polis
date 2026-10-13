@@ -17,7 +17,7 @@ import { makeRng } from './rng.js';
 // Must match main.js VERSION, package.json and index.html data-version;
 // tools/validate.js fails if they drift. The app refuses to export when the
 // browser has mixed cached copies of old and new files.
-export const POLIS_VERSION = '0.62.1';
+export const POLIS_VERSION = '0.63.0';
 
 export const CHUNK = 64;          // Bedrock structure limit per horizontal axis
 export const GROUND_DROP = 2;     // base layer y=0 sits 2 below feet; surface y=1 replaces the block you stand on
@@ -892,6 +892,11 @@ export function placementGuide(tiles, opts = {}) {
     L.push('  or /function ' + ns + '/themepark_centered), a hedge maze');
     L.push('  with a chest at its far end, trampolines of slime with a tower to jump off (slime takes the fall), and an');
     L.push('  archery range: bows and arrows in the chest, and a target lights its lamp when an arrow hits it.');
+    L.push('');
+  }
+  if ((opts.places || []).some((P) => P.kind === 'watertower' || P.kind === 'petrol')) {
+    L.push('THE WATER TOWER: a ladder up its front leg to the catwalk round the tank; a second ladder up the tank to its roof,');
+    L.push('  where a hatch drops you into the water. THE PETROL STATION: press a pump\'s button and it hands out a lump of coal.');
     L.push('');
   }
   if ((opts.places || []).some((P) => P.kind === 'bank')) {

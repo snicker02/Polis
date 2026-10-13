@@ -101,6 +101,8 @@ function translateState(block, key, value) {
       if (/_door$/.test(block)) return ['facing', DOOR_TURN[String(value)] || String(value)];
       return ['facing', String(value)];
     case 'powered_bit': return ['powered', value ? 'true' : 'false'];
+    case 'button_pressed_bit': return ['powered', value ? 'true' : 'false'];
+    case 'triggered_bit': return ['triggered', value ? 'true' : 'false'];
     case 'deprecated': return null;
     case 'cauldron_liquid': return null;
     case 'fill_level': return ['level', String(Math.min(3, value))];

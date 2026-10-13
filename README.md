@@ -1,4 +1,4 @@
-# Polis v0.62.1
+# Polis v0.63.0
 
 *Created with help from Claude AI.*
 
@@ -771,6 +771,31 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.63.0** — A water tower, a petrol station, a skate park.
+
+Three new options (off by default), built by townbits.js:
+
+- "A water tower" (nine by nine): four iron legs braced with bars, a ladder up to a
+  square catwalk with a railing all round and lanterns on its posts, and an octagonal
+  white tank with a blue band, full of water. A second ladder climbs the tank to its
+  roof, where an open hatch drops you into the water to swim.
+- "A petrol station" (fifteen by seventeen): a red and yellow canopy lit with sea
+  lanterns over two pumps; each pump's button makes it hand out coal (a dropper with
+  nine stacks). A car at the pumps, a price board on a pole by the street, and a brick
+  shop behind with a glass front, a counter and barrels of food, lit inside.
+- "A skate park" (fifteen by nineteen): a half pipe of quartz quarter pipes with decks
+  and railings, a pyramid in the middle, a grind rail and a ledge, graffiti walls in
+  the seed's colours, benches and lamps.
+
+- Java export: a button's pressed state and a dropper's triggered state were not
+  mapped; now they are.
+- New check section 2zzr: the tower's legs, water held in, ladders reachable, the
+  catwalk walkable all round with nowhere to fall, the hatch over the water; the pumps
+  facing out with room in front, buttons attached, coal inside; headroom under the
+  canopy, a walk into the shop, the shop lit; the skate ramps' decks and the pyramid
+  reachable, the rail and ledge, the graffiti; Bedrock states and Java blocks — on flat
+  and hilly cities.
 
 **0.62.1** — The vault's code read the right way round; the bumper boats come.
 
