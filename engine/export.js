@@ -11,13 +11,13 @@
 
 import { splitWorld, writeMcStructure, buildMcPack, makeZip, crc32, VoxelWorld, N } from './blockcore.js';
 import { MATERIALS, MAT } from './materials.js';
-import { makeEntity, STRUCTURE_MOBS, makeRiderPair, makeCart } from './entities.js';
+import { makeEntity, STRUCTURE_MOBS, makeRiderPair, makeCart, makeBoat } from './entities.js';
 import { makeRng } from './rng.js';
 
 // Must match main.js VERSION, package.json and index.html data-version;
 // tools/validate.js fails if they drift. The app refuses to export when the
 // browser has mixed cached copies of old and new files.
-export const POLIS_VERSION = '0.62.0';
+export const POLIS_VERSION = '0.62.1';
 
 export const CHUNK = 64;          // Bedrock structure limit per horizontal axis
 export const GROUND_DROP = 2;     // base layer y=0 sits 2 below feet; surface y=1 replaces the block you stand on
@@ -441,6 +441,7 @@ export function buildMobStructures(spawns, opts = {}) {
     // (a rider is two entities: the minecart and the enderman riding it)
     const entities = t.mobs.flatMap((p) => p.type === 'ender_rider' ? makeRiderPair(p.x, p.y, p.z, rng, p.name)
       : p.type === 'cart' ? [makeCart(p.x, p.y, p.z, rng)]
+      : p.type === 'parkboat' ? [makeBoat(p.x, p.y, p.z, rng)]
       : p.type === 'mob' ? (p.ride ? mobInMinecart(p.kind, p.x, p.y, p.z, rng, p) : [mobNbt(p.kind, p.x, p.y, p.z, rng, p)])
       : [makeEntity(p.type, p.x, p.y, p.z, rng, { profession: p.profession, tier: p.tier, motif: p.motif, direction: p.direction, pos: p.pos })]).map((e) => withExtras(e, t.mobs.find((p) => entityOf(p, e)) || null));
     const res = writeMcStructure([], [], t.box, MATERIALS, { entities, placeholderId: MAT.AIR });
@@ -887,7 +888,8 @@ export function placementGuide(tiles, opts = {}) {
     L.push('  A wheel built from a pack older than 0.56.1 used a counting clock that may not run: build the theme park again.');
     L.push('  Its cabins cannot be ridden while it turns. The Leviathan: press the button at its station. A lap is near');
     L.push('  900 rails: the lift hill, a corkscrew, hills all round the park, a second lift and corkscrew, the dark tunnel.');
-    L.push('  Behind the coaster, along the walk at the back: bumper boats (the boats come with populate), a hedge maze');
+    L.push('  Behind the coaster, along the walk at the back: bumper boats (the boats come in the park\'s own structures, with populate');
+    L.push('  or /function ' + ns + '/themepark_centered), a hedge maze');
     L.push('  with a chest at its far end, trampolines of slime with a tower to jump off (slime takes the fall), and an');
     L.push('  archery range: bows and arrows in the chest, and a target lights its lamp when an arrow hits it.');
     L.push('');

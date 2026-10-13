@@ -1038,7 +1038,7 @@ export function generateCity(cfgIn, onProgress) {
   for (const F of landmarks.filter((L) => L.kind === 'factory')) spawns.push({ type: 'cart', x: F.siding.cart[0], y: F.siding.cart[1], z: F.siding.cart[2], group: 'factory' });
   for (const P of landmarks.filter((L) => L.kind === 'park')) for (const c of P.carts) spawns.push({ type: 'cart', x: c[0], y: c[1], z: c[2], group: 'park' });
   for (const P of landmarks.filter((L) => L.kind === 'themepark')) for (const c of P.coaster.carts) spawns.push({ type: 'cart', x: c[0], y: c[1], z: c[2], group: 'themepark' });
-  for (const P of landmarks.filter((L) => L.kind === 'themepark')) for (const b of (P.rides && P.rides.boats.boats) || []) spawns.push({ type: 'boat', x: b[0], y: b[1], z: b[2] });   // the bumper boats
+  for (const P of landmarks.filter((L) => L.kind === 'themepark')) for (const b of (P.rides && P.rides.boats.boats) || []) spawns.push({ type: 'parkboat', x: b[0], y: b[1], z: b[2], group: 'themepark' });   // the bumper boats, in the park's own structures
   for (const st of stands) spawns.push({ type: 'mob', kind: 'armor_stand', x: st.x, y: st.y, z: st.z, yRot: st.yRot, group: 'museum',
     armour: ['helmet', 'chestplate', 'leggings', 'boots'].map((p) => `minecraft:${st.set}_${p}`) });
   // (asked for, but no lot big enough: said so, not left silent)

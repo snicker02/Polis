@@ -1,4 +1,4 @@
-# Polis v0.62.0
+# Polis v0.62.1
 
 *Created with help from Claude AI.*
 
@@ -771,6 +771,23 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.62.1** — The vault's code read the right way round; the bumper boats come.
+
+- The bank's code on the manager's sign (and in the summary) was read out in the
+  order of the frame's own u, which for a bank square on to its street runs from the
+  player's right to their left: the sign gave the code backwards and the door did not
+  open. Now it is read left to right as a player facing the levers sees them, and the
+  sign says which way is on (a lever on a wall is on with its handle down). The teller
+  windows are numbered the same way. (In a bank already built: set the sign's code
+  backwards, right to left.) 2zzq now has a bank square on to its street among its
+  cities (its others had all been turned side-on, where u happens to run to the right),
+  and checks the sign against the levers as seen.
+- The bumper boats never came: populate summoned them, and a summon reaches only
+  loaded chunks; the theme park lies beyond the city's ticking areas. Now they are
+  saved in the park's own structures, as its minecarts are (an oak boat, from the same
+  saved entity as the minecart), on the pond's surface. 2zzn checks the six boats in
+  the park's structures on the water.
 
 **0.62.0** — A bank, its vault behind a combination lock.
 

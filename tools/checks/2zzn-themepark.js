@@ -153,7 +153,7 @@ export default async function run(ctx) {
       const R = T.rides, why = [];
       const Wset = new Set(R.boats.water.map(key));
       if (!R.boats.water.every((p) => blk(...p) === 'water' && [[1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1], [0, -1, 0]].every(([a, b, c]) => { const n = [p[0] + a, p[1] + b, p[2] + c]; return Wset.has(key(n)) || !/^(air|water)$/.test(blk(...n)); }))) why.push('pond');
-      const boatSpawns = r.spawns.filter((sp) => sp.type === 'boat' && Wset.has(key([sp.x, sp.y, sp.z])));
+      const boatSpawns = r.spawns.filter((sp) => sp.type === 'parkboat' && sp.group === 'themepark' && Wset.has(key([sp.x, sp.y, sp.z])));
       if (boatSpawns.length < 6) why.push(`boats ${boatSpawns.length}`);
       if (!R.maze.hedges.every((p) => [0, 1, 2].every((d) => blk(p[0], p[1] + d, p[2]) === 'oak_leaves')) || blk(...R.maze.prize) !== 'chest' || R.maze.steps < 30) why.push(`maze (${R.maze.steps} steps)`);
       const tr = R.trampolines;
@@ -250,6 +250,13 @@ export default async function run(ctx) {
     const opts = { namespace: 'chk', places: r.places, spawns: r.spawns, centre: r.world.centre, world: r.world };
     const go = functionFiles(tileList(r.world, opts), r.world, opts).find((f) => f.fn === 'chk/goto_themepark');
     check('theme park: a place in Find a landmark, a goto to its gate', !!ts[1][2].place && !!go);
+    // the bumper boats saved in the park's own structures, boats on the water's surface
+    // (summoned by populate they never came: the park lies beyond the ticking areas)
+    const { buildMobStructures } = await import('../../engine/export.js');
+    const boats = buildMobStructures(r.spawns, { seed: 1 }).filter((t) => t.group === 'themepark').flatMap((t) => decodeNbt(t.data).root.structure.entities).filter((e) => e.identifier === 'minecraft:boat');
+    const T1 = r.landmarks.find((q) => q.kind === 'themepark');
+    const onWater = boats.every((e) => { const [x, y, z] = e.Pos.map(Math.floor); return y === T1.ground + 1 && T1.rides.boats.water.some((p) => p[0] === x && p[2] === z); });
+    check('theme park: the six bumper boats in the park\'s own structures (as its minecarts are), each on the pond\'s surface', boats.length === 6 && onWater, `${boats.length} boats, on the water ${onWater}`);
   }
   {
     const fx = JSON.parse(readFileSync(new URL('./site-1004954.json', import.meta.url), 'utf8'));

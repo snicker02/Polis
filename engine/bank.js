@@ -60,6 +60,10 @@ export function bank(world, lot, face, cfg, rng, G, signTags) {
   const UD = 13;                                      // the vault door
   const LEVERS = [1, 3, 5, 7, 9];                     // the levers, two apart
   const code = bankCode(cfg.seed || 1);
+  // (which way u runs for someone facing the back wall: to their right, or to their
+  // left. The frame turns either way with the lot, and the code was read out in u's
+  // order, which for half the lots was right to left: the sign's code did not open it)
+  const uToRight = across[0] * -back[1] + across[1] * back[0] > 0;
   const CALCITE = MAT.CALCITE;
 
   // ---- the shell ------------------------------------------------------------------------------
@@ -91,13 +95,14 @@ export function bank(world, lot, face, cfg, rng, G, signTags) {
     const isWindow = u === 4 || u === 8 || u === 12;
     for (let y = G + 2; y <= G + 3; y++) if (!isWindow) put(u, TC, y, MAT.BARS);
     put(u, TC, G + 4, MAT.CHISELED_QUARTZ);
-    if (isWindow) { windows.push(pos(u, TC, G + 2)); wallSign(u, TC - 1, G + 4, FRONT, `Teller ${windows.length}`); }
+    if (isWindow) { windows.push(pos(u, TC, G + 2)); wallSign(u, TC - 1, G + 4, FRONT, `Teller ${uToRight ? windows.length : 4 - windows.length}`); }
   }
   // (the gap at its end, W - 2, the way through to the tellers' side)
   // the manager's desk at the far end of the tellers' side, the code on a sign on it
   put(1, VW - 1, G + 1, MAT.DARK_PLANKS); put(1, VW - 2, G + 1, MAT.DARK_PLANKS);
-  const codeWords = code.map((b) => (b ? 'on' : 'off')).join(' ');
-  const hint = wallSign(1, VW - 3, G + 2, RIGHT, `Manager\nvault code, left\nto right:\n${codeWords}`);
+  const leftToRight = uToRight ? code : code.slice().reverse();
+  const codeWords = leftToRight.map((b) => (b ? 'on' : 'off')).join(' ');
+  const hint = wallSign(1, VW - 3, G + 2, RIGHT, `Vault code, left\nto right:\n${codeWords}\n(on: lever down)`);
 
   // ---- the levers and the vault door on the tellers' back wall ------------------------------------
   for (let u = 1; u <= W - 2; u++) for (let y = G + 1; y < TOP; y++) put(u, VW, y, y === G + 1 ? MAT.CHISELED_QUARTZ : MAT.QUARTZ);
@@ -170,6 +175,6 @@ export function bank(world, lot, face, cfg, rng, G, signTags) {
   }
   wallSign(mid, D - 3, G + 6, FRONT, 'Safe deposit');
   const doorAt = at(mid, -1);
-  return { kind: 'bank', lot, code, codeWords, levers, door, lock, vault, windows, hint, lights, sideways: fr.sideways,
+  return { kind: 'bank', lot, code, codeWords, uToRight, levers, door, lock, vault, windows, hint, lights, sideways: fr.sideways,
     door0: [doorAt[0], G + 1, doorAt[1]], doorOut: [doorAt[0], G + 1, doorAt[1]], frame: { at, W, D, TOP, VW, UD, TC, mid } };
 }

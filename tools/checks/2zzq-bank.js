@@ -111,9 +111,15 @@ function inspect(r) {
     button: settle([false, false, false, false, false], true).doorOpen,
     levers: parts.levers.every((p) => raw(p) === 'lever') && parts.levers.length === 5,
   };
-  // the code on the manager's sign
+  // the code on the manager's sign, read left to right by someone facing the levers (the
+  // way they face: toward the wall, from the lever's own facing; right of that, by the
+  // world's own axes: east of north, south of east, ...)
   const txt = (w.getData(...L(B.hint)) || { tags: {} }).tags.FrontText;
-  out.hint = !!txt && txt.v.Text.v.includes(code.map((b) => (b ? 'on' : 'off')).join(' '));
+  const facing = { north: 'south', south: 'north', east: 'west', west: 'east' }[st(parts.levers[0], 'lever_direction')];
+  const rightOf = { north: [1, 0], east: [0, 1], south: [-1, 0], west: [0, -1] }[facing];
+  const order = parts.levers.map((p, k) => [p[0] * rightOf[0] + p[2] * rightOf[1], k]).sort((a, b) => a[0] - b[0]).map(([, k]) => k);
+  const asSeen = order.map((k) => (code[k] ? 'on' : 'off')).join(' ');
+  out.hint = !!txt && txt.v.Text.v.includes(asSeen) && B.codeWords === asSeen;
   // the vault's contents
   const V = B.vault;
   const emeralds = V.chests.every((c) => { const d = w.getData(...L(c)); return d && d.tags.Items.v.some((it) => it.v.Name.v === 'minecraft:emerald'); });
@@ -153,6 +159,7 @@ export default async function run(ctx) {
     ['flat 256', generateCity({ ...DEFAULTS, ...Lb, size: 256, seed: 7, hills: 0 })],
     ['flat 320', generateCity({ ...DEFAULTS, ...Lb, size: 320, seed: 12345, hills: 0 })],
     ['hilly 256', generateCity({ ...DEFAULTS, ...Lb, size: 256, seed: 7 })],
+    ['flat 256, square on to its street (its levers numbered right to left)', generateCity({ ...DEFAULTS, ...Lb, size: 256, seed: 2, hills: 0 })],
   ];
   const ts = cities.map(([n, r]) => [n, r, inspect(r)]);
   const all = (f) => ts.every(([, , t]) => t.built && f(t));
@@ -161,7 +168,7 @@ export default async function run(ctx) {
   check('bank: the vault door opens for the code, and the lamp over it lights (followed through, block by block)', all((t) => t.lock.levers && t.lock.opensForCode), ts.map(([n, , t]) => `${n}: ${JSON.stringify(t.lock)}`).join(' | '));
   check('bank: for every other one of the thirty-two ways to set the levers, the door stays shut and the lamp dark', all((t) => t.lock.shutOtherwise && t.lock.opened === 1), ts.map(([n, , t]) => `${n}: opens for ${t.lock.opened}`).join(', '));
   check('bank: the button inside opens the door (to let yourself out)', all((t) => t.lock.button));
-  check('bank: the code on the manager\'s sign the code the lock wants', all((t) => t.hint));
+  check('bank: the code on the manager\'s sign (and in the summary), read left to right facing the levers, the code the lock wants (it had been read in the frame\'s own order, right to left on half the lots)', all((t) => t.hint));
   check('bank: the vault: gold blocks, chests of emeralds, a safe-deposit wall of barrels', all((t) => t.vault.gold >= 8 && t.vault.chests >= 4 && t.vault.emeralds && t.vault.deposit >= 20), ts.map(([n, , t]) => `${n}: ${JSON.stringify(t.vault)}`).join(' | '));
   check('bank: on foot, through the gap in the counter to the levers; with the door shut no way into the vault, with it open every part of it', all((t) => Object.values(t.walk).every(Boolean)), ts.map(([n, , t]) => `${n}: ${JSON.stringify(t.walk)}`).join(' | '));
   {
@@ -183,5 +190,5 @@ export default async function run(ctx) {
     }
     check('bank: every block one of Bedrock\'s own states', bad.size === 0, [...bad].slice(0, 4).join(', '));
   }
-  note(`bank codes: ${ts.map(([n, r]) => `${n} ${(r.landmarks.find((q) => q.kind === 'bank') || {}).codeWords}`).join('; ')}`);
+  note(`bank codes: ${ts.map(([n, r]) => { const b = r.landmarks.find((q) => q.kind === 'bank') || {}; return `${n} ${b.codeWords} (u runs ${b.uToRight ? 'right' : 'left'})`; }).join('; ')}`);
 }

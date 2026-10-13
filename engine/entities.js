@@ -26,7 +26,7 @@ function uniqueId(rng) {
 const floatList = (xs) => ({ t: 9, et: 5, keepEt: true, v: xs.map((x) => ({ t: 5, v: x })) });
 
 // kinds carried in mob structures (everything else is summoned)
-export const STRUCTURE_MOBS = new Set(['villager', 'golem', 'cat', 'panda', 'cow', 'pig', 'chicken', 'sheep', 'painting', 'ender_rider', 'mob', 'cart']);
+export const STRUCTURE_MOBS = new Set(['villager', 'golem', 'cat', 'panda', 'cow', 'pig', 'chicken', 'sheep', 'painting', 'ender_rider', 'mob', 'cart', 'parkboat']);
 
 // An empty minecart standing on a rail at (x, y, z): the player's saved minecart
 // (rider-templates.js) with its rider link taken off (the factory's siding).
@@ -36,6 +36,21 @@ export function makeCart(x, y, z, rng) {
   cart.v.Pos = floatList([x + 0.5, y + MINECART_RIDER.cartDy, z + 0.5]);
   delete cart.v.LinksTag;
   return cart;
+}
+
+// A boat saved in a structure, as the minecart is (the theme park's bumper boats: a
+// summoned boat reaches only loaded chunks, and the park lies off beyond the city's
+// ticking areas, so populate's boats never came). The same saved entity as the
+// minecart, made an oak boat; on the water's surface, a block over the water it floats in.
+export function makeBoat(x, y, z, rng) {
+  const boat = hydrate(MINECART_RIDER.cart);
+  boat.v.UniqueID = N.long(uniqueId(rng));
+  boat.v.identifier = N.str('minecraft:boat');
+  boat.v.definitions = { t: 9, et: 8, keepEt: true, v: [N.str('+minecraft:boat')] };
+  boat.v.Variant = N.int(0);
+  boat.v.Pos = floatList([x + 0.5, y + 1, z + 0.5]);
+  delete boat.v.LinksTag;
+  return boat;
 }
 
 // The jail's enderman, riding a minecart (riding, an enderman cannot teleport):

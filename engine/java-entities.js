@@ -69,7 +69,7 @@ export function javaEntity(spawn, J) {
   if (t === 'tropicalfish') {
     return { id: 'minecraft:tropical_fish', nbt: { Variant: J.int((spawn.variant | 0)), PersistenceRequired: J.byte(1), FromBucket: J.byte(1) } };
   }
-  if (t === 'boat') return { id: 'minecraft:oak_boat', nbt: {} };
+  if (t === 'boat' || t === 'parkboat') return { id: 'minecraft:oak_boat', nbt: {} };
   if (t === 'painting') {
     const variant = PAINTING_VARIANT[spawn.motif];
     if (!variant) return null;
@@ -90,6 +90,6 @@ export function javaEntityPos(spawn, box) {
   // A boat rides on the surface: given the block of water it sits in, it has
   // to go a block higher or it starts underneath the water and cannot be
   // boarded.
-  const lift = spawn.type === 'boat' ? 1 : 0;
+  const lift = spawn.type === 'boat' || spawn.type === 'parkboat' ? 1 : 0;
   return [spawn.x - box.x0 + 0.5, spawn.y - box.y0 + lift, spawn.z - box.z0 + 0.5];
 }
