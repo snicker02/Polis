@@ -80,6 +80,7 @@ const RENAME = {
   'minecraft:deadbush': 'minecraft:dead_bush',
   'minecraft:pumpkin': 'minecraft:pumpkin',
   'minecraft:cauldron': 'minecraft:cauldron',
+  'minecraft:magma': 'minecraft:magma_block',
   'minecraft:yellow_flower': 'minecraft:dandelion',
   'minecraft:tallgrass': 'minecraft:short_grass',
   'minecraft:double_plant': 'minecraft:tall_grass',
@@ -103,6 +104,8 @@ function translateState(block, key, value) {
     case 'powered_bit': return ['powered', value ? 'true' : 'false'];
     case 'button_pressed_bit': return ['powered', value ? 'true' : 'false'];
     case 'triggered_bit': return ['triggered', value ? 'true' : 'false'];
+    case 'drag_down': return ['drag', value ? 'true' : 'false'];
+    case 'extinguished': return ['lit', value ? 'false' : 'true'];
     case 'deprecated': return null;
     case 'cauldron_liquid': return null;
     case 'fill_level': return ['level', String(Math.min(3, value))];
@@ -217,7 +220,11 @@ export function toJava(block, states = {}, extra = {}) {
   if (name === 'minecraft:cauldron') {
     const level = Number(props.level || 0);
     delete props.level;
-    if (level > 0) { name = 'minecraft:water_cauldron'; props.level = String(Math.max(1, Math.min(3, level))); }
+    const liq = states.cauldron_liquid && (states.cauldron_liquid.value !== undefined ? states.cauldron_liquid.value : states.cauldron_liquid);
+    // (lava and powder snow have cauldrons of their own; a lava cauldron is always full)
+    if (level > 0 && liq === 'lava') name = 'minecraft:lava_cauldron';
+    else if (level > 0 && liq === 'powder_snow') { name = 'minecraft:powder_snow_cauldron'; props.level = String(Math.max(1, Math.min(3, level))); }
+    else if (level > 0) { name = 'minecraft:water_cauldron'; props.level = String(Math.max(1, Math.min(3, level))); }
   }
   // beetroots grow through four stages in Java, eight in Bedrock
   if (name === 'minecraft:beetroots' && props.age !== undefined) props.age = String(Math.min(3, Math.floor(Number(props.age) / 2)));

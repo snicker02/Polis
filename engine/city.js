@@ -125,6 +125,8 @@ export const DEFAULTS = {
   watertower: false,         // a water tower: a tank on iron legs, a catwalk, a hatch to swim in it (townbits.js)
   petrol: false,             // a petrol station: a canopy, pumps that hand out coal, a car, a shop (townbits.js)
   skatepark: false,          // a skate park: a half pipe, a pyramid, a rail and a ledge, graffiti walls (townbits.js)
+  wizard: false,             // a wizard's tower: a cauldron room, a brewing lab, an enchanting library, the wizard's room (wizard.js)
+  lifts: true,               // bubble lifts beside the stairs of the tall towers: soul sand up, magma down (building.js)
   bank: false,               // a bank: a marble hall, teller windows, a vault behind an iron door with a lever combination lock (bank.js)
   sports: false,             // a sports centre: courts, a climbing wall, a pool lane, a parkour room, a track on the roof (sports.js)
   garden: false,             // a botanical garden: a glass hall of plants from every biome (garden.js)
@@ -509,7 +511,7 @@ export function generateCity(cfgIn, onProgress) {
       floors: lot.floors, pitch: cfg.pitch, groundY: GROUND,
       style: lot.style, facing: front.side, theme,
       roofAccess: cfg.roofAccess, useStairs: cfg.useStairs, stairStyle: cfg.stairStyle, lights: cfg.lights,
-      setback: cfg.setback, setbackEvery: cfg.setbackEvery,
+      setback: cfg.setback, setbackEvery: cfg.setbackEvery, lifts: cfg.lifts,
     }, rng);
 
     if (rec) {
@@ -1001,12 +1003,13 @@ export function generateCity(cfgIn, onProgress) {
     ['watertower', '9 by 9', (L) => `a tank of ${L.water.length} blocks of water on four iron legs, a catwalk, a ladder up, a hatch on its roof`],
     ['petrol', '15 by 17', (L) => `a canopy over ${L.pumps.length} pumps (a button hands out coal), a car, a shop`],
     ['skatepark', '15 by 19', (L) => `a half pipe, a pyramid, a grind rail and a ledge, ${L.ramps.length} ramps of stairs, graffiti walls`],
+    ['wizard', '15 by 15', (L) => `a cauldron room of ${L.cauldrons.length} cauldrons, ${L.brewing.length} brewing stands, an enchanting table with ${L.shelves.length} bookshelves round it (it counts fifteen, its most), an anvil, the wizard's room under a pointed roof`],
     ['bank', '17 by 21', (L) => `a marble hall, ${L.windows.length} teller windows, a vault behind an iron door with a combination lock of ${L.levers.length} levers (the code: ${L.codeWords}), ${L.vault.gold.length} gold blocks, ${L.vault.chests.length} chests of emeralds, a safe-deposit wall of ${L.vault.deposit.length}`],
     ['sports', '17 by 23', (L) => `a court marked in coloured concrete, a climbing wall of ${L.climb.ladders.length} ladders and ${L.climb.scaffolds.length} towers of scaffolding, a pool lane ${L.pool.water.length / 2 / 3} long, a parkour course of ${L.stones.length} jumps, a running track of ${L.track.lanes[0].length} on the roof`],
     ['mill', '13 by 15', (L) => `a sugar cane farm of ${L.farm.canes.length} canes, an observer clock, an item sorter of ${L.sorter.columns.length} filters`]]) {
     const L = landmarks.find((q) => q.kind === kind);
     if (L) stats[kind] = say(L);
-    else if (cfg[kind] || ((kind === 'workshop' || kind === 'mill') && cfg.factory && landmarks.some((q) => q.kind === 'factory')) || (kind === 'lazyriver' && cfg.waterpark && landmarks.some((q) => q.kind === 'waterpark'))) stats[kind + 'Missing'] = `no lot big enough for the ${kind === 'police' ? 'police station' : kind === 'park' ? 'amusement park' : kind === 'waterpark' ? 'water park' : kind === 'lazyriver' ? 'lazy river' : kind === 'garden' ? 'botanical garden' : kind === 'mall' ? 'shopping mall' : kind === 'sports' ? 'sports centre' : kind === 'watertower' ? 'water tower' : kind === 'petrol' ? 'petrol station' : kind === 'skatepark' ? 'skate park' : kind} (it needs ${need})`;
+    else if (cfg[kind] || ((kind === 'workshop' || kind === 'mill') && cfg.factory && landmarks.some((q) => q.kind === 'factory')) || (kind === 'lazyriver' && cfg.waterpark && landmarks.some((q) => q.kind === 'waterpark'))) stats[kind + 'Missing'] = `no lot big enough for the ${kind === 'police' ? 'police station' : kind === 'park' ? 'amusement park' : kind === 'waterpark' ? 'water park' : kind === 'lazyriver' ? 'lazy river' : kind === 'garden' ? 'botanical garden' : kind === 'mall' ? 'shopping mall' : kind === 'sports' ? 'sports centre' : kind === 'watertower' ? 'water tower' : kind === 'petrol' ? 'petrol station' : kind === 'skatepark' ? 'skate park' : kind === 'wizard' ? "wizard's tower" : kind} (it needs ${need})`;
   }
   // the names typed in for the cemetery: where they went, or why they could not
   if (namesOf(cfg.memorial).length || namesOf(cfg.graveNames).length) {
@@ -1058,6 +1061,7 @@ export function generateCity(cfgIn, onProgress) {
   // where each landmark is, to find it in the game (export.js: the guide's list and
   // a goto_<kind> function for each): a spot to stand on the street before its front
   const places = landmarkPlaces(world, landmarks, (x, z) => GROUND + elevAt(x, z));
+  world.lifts = buildings.filter((b) => b.lift).length;     // (for the guide)
   return { world, plan, buildings, cfg, stats, shell, bridges, farms, ranches, spawns, bell, transit, wall, landmarks, places, canal, centre, streets, harbour, harbourPlan, megaliths, ponds, courtyards, hostiles, inmates, zoo, stands, dome, canals, lighting, styleDistricts: SD, spawners, stilts, islands, cliffWays, rooms, metro, hills, stepRails,
     hills, stairRuns, reach, groundAt: (x, z) => GROUND + elevAt(x, z) };
 }
@@ -2052,7 +2056,7 @@ export function generateSingle(cfgIn) {
     floors: cfg.floors, pitch: cfg.pitch, groundY: GROUND,
     style: cfg.style, facing: 'south', theme,
     roofAccess: cfg.roofAccess, useStairs: cfg.useStairs, stairStyle: cfg.stairStyle, lights: cfg.lights,
-    setback: cfg.setback, setbackEvery: cfg.setbackEvery,
+    setback: cfg.setback, setbackEvery: cfg.setbackEvery, lifts: cfg.lifts !== false,
   }, rng);
 
   const buildings = rec ? [rec] : [];

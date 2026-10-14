@@ -1,4 +1,4 @@
-# Polis v0.63.0
+# Polis v0.64.0
 
 *Created with help from Claude AI.*
 
@@ -771,6 +771,52 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.64.0** — A wizard's tower; bubble lifts in the tall towers.
+
+A new option, "A wizard's tower" (off by default), builds one (wizard.js), fifteen by
+fifteen: a round tower of mossy and cracked stone brick in a garden, four floors six
+high, under a pointed hat of purpur stairs with a brim and an end rod on its point.
+
+- The ground floor, the cauldron room: a great cauldron over a soul campfire in the
+  middle, cauldrons of water, lava and powder snow round the walls, a barrel of
+  buckets and bottles.
+- The first floor, the brewing lab: three brewing stands with blaze powder in them, a
+  cauldron of water to fill bottles from, chests of every ingredient (nether wart,
+  blaze powder, bottles, redstone, glowstone, gunpowder, fermented spider eyes, sugar,
+  magma cream, golden carrots, glistering melon, rabbit's feet, ghast tears, phantom
+  membrane, pufferfish, a turtle shell, dragon's breath).
+- The second floor, the enchanting library: the table in the middle with bookshelves
+  round it two away, level with it and one up, the cells between left empty: fifteen
+  at each height, the gap at the back the way in (the table counts fifteen, its most).
+  Lapis, books and bottles o' enchanting in a chest; an anvil, a grindstone.
+- The top floor, the wizard's own room, open up into the roof: a bed, a crafting
+  table, a furnace, an ender chest, chests (a spyglass among them).
+- One ladder up the back wall from the ground to the top floor. Glowstone set in the
+  floors lights the rooms above and below; lanterns hang in the roof.
+
+Bubble lifts (a new option, "Bubble lifts in towers", on by default): every tower of
+six floors and more gets two shafts of water at one end of its stair core, beside a
+landing. Soul sand under one: a bubble column carries you up to the top floor, where
+you pop out and step off sideways. Magma under the other: it drags you down to the
+ground (crouch at the bottom: magma burns). On every floor a pair of open doors from
+the landing into the shafts (a door holds the water back); to get off on a floor
+between, hold forward into its doorway as you pass. Each shaft is walled in glass
+wherever it does not already stand against a wall. The core of a tall tower is now
+placed a cell further from the wall at its ends when it can be, to leave room for the
+shafts; a tower whose core still stands too near its wall at both ends has no lift.
+Inside walls, doors and art keep clear of the lift. The guide explains both.
+
+- Java export: bubble columns (drag), magma (magma_block), campfires (lit), lava and
+  powder snow cauldrons (their own blocks in Java) now come out right.
+- New check section 2zzs (15 checks): the table with fifteen bookshelves counted the
+  way the game counts them; the stands with blaze powder, the ingredients, the
+  cauldrons of all three, the anvil; the ladder; every floor, the table, the stands
+  and the wizard's room walked to on foot; the roof closed from inside and every top
+  of it a stair; lit; a lift in every tall tower whose stairs run in flights, its soul
+  sand and magma, its columns rising and sinking to the top floor, the water held in,
+  the open doors on every floor walked to from the street, room at the top to come
+  out; off when asked; Bedrock states and Java blocks.
 
 **0.63.0** — A water tower, a petrol station, a skate park.
 

@@ -17,7 +17,7 @@ import { makeRng } from './rng.js';
 // Must match main.js VERSION, package.json and index.html data-version;
 // tools/validate.js fails if they drift. The app refuses to export when the
 // browser has mixed cached copies of old and new files.
-export const POLIS_VERSION = '0.63.0';
+export const POLIS_VERSION = '0.64.0';
 
 export const CHUNK = 64;          // Bedrock structure limit per horizontal axis
 export const GROUND_DROP = 2;     // base layer y=0 sits 2 below feet; surface y=1 replaces the block you stand on
@@ -897,6 +897,20 @@ export function placementGuide(tiles, opts = {}) {
   if ((opts.places || []).some((P) => P.kind === 'watertower' || P.kind === 'petrol')) {
     L.push('THE WATER TOWER: a ladder up its front leg to the catwalk round the tank; a second ladder up the tank to its roof,');
     L.push('  where a hatch drops you into the water. THE PETROL STATION: press a pump\'s button and it hands out a lump of coal.');
+    L.push('');
+  }
+  if ((opts.places || []).some((P) => P.kind === 'wizard')) {
+    L.push('THE WIZARD\'S TOWER: the ladder up the back wall goes to every floor. On the ground the cauldrons; on the first');
+    L.push('  floor the brewing stands (blaze powder in them, every ingredient in the chests); on the second the enchanting');
+    L.push('  table with fifteen bookshelves round it, lapis and bottles o\' enchanting in the chest (throw them for the levels');
+    L.push('  you need), an anvil and a grindstone; at the top the wizard\'s own room, a bed and an ender chest.');
+    L.push('');
+  }
+  if (opts.world && opts.world.lifts) {
+    L.push('BUBBLE LIFTS: the tall towers have two shafts of water beside the stairs, behind a pair of open doors on every');
+    L.push('  floor. Step into the one over soul sand and it carries you up to the top floor (you pop out: step off sideways);');
+    L.push('  the one over magma drags you down. To get off on a floor between, hold forward into its doorway as you pass.');
+    L.push('  At the bottom of the down shaft the magma burns: crouch (sneak) and walk out.');
     L.push('');
   }
   if ((opts.places || []).some((P) => P.kind === 'bank')) {

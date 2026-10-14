@@ -26,7 +26,7 @@ const item = (name, count, slot) => N.comp({ Count: N.byte(count), Damage: N.sho
 const mat = (block, color, states = {}, flags = {}) => MATERIALS.add(null, 'minecraft:' + block, color, states, flags);
 const LADDERS = { north: MAT.LADDER_2, south: MAT.LADDER_3, west: MAT.LADDER_4, east: MAT.LADDER_5 };
 
-function framed(world, lot, face, W, D, G, signTags) {
+export function framed(world, lot, face, W, D, G, signTags) {
   const fr = lotFrame(lot, face, W, D);
   if (!fr) return null;
   const h = helpers(world, fr, G, signTags);

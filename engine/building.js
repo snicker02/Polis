@@ -35,7 +35,7 @@
 
 import { perimeter } from './blockcore.js';
 import { makeRng } from './rng.js';
-import { MAT, doorId, stairId, DIR, WEIRDO, STAIR_SOLID, FLOWERS } from './materials.js';
+import { MAT, MATERIALS, B, doorId, stairId, DIR, WEIRDO, STAIR_SOLID, FLOWERS } from './materials.js';
 
 export const OUTWARD = { north: [0, -1], south: [0, 1], west: [-1, 0], east: [1, 0] };
 const OPPOSITE = { north: 'south', south: 'north', east: 'west', west: 'east' };
@@ -110,7 +110,11 @@ export function makeBuilding(world, spec, rng) {
       const c = Math.round((lo + hi) / 2 - (len - 1) / 2);
       return Math.min(Math.max(c, range[0]), range[1]);
     };
+    // (a tall tower that will have a bubble lift wants a cell more at the ends of
+    // its core, for the shafts beside a landing: tried first, then as before)
+    const liftWanted = spec.lifts && style === 'tower' && floors >= LIFT_MIN_FLOORS;
     outer:
+    for (const em of liftWanted ? [3, 2] : [2])
     for (const kind of prefs) {
       const [U, V] = coreSize(kind, P);
       for (const alongX of [w >= d, w < d]) {
@@ -119,8 +123,8 @@ export function makeBuilding(world, spec, rng) {
         // against the back wall when they can (0.3.0): that leaves one deep
         // strip at the front for rooms instead of two shallow ones either
         // side. Spirals need open floor all round, so they go in the middle.
-        const fx = fit(top.x0, top.x1, cw, 2), fz = fit(top.z0, top.z1, cd, 2);
-        const endFit = kind === 'spiral' ? null : (alongX ? fit(top.x0, top.x1, cw, 2) : fit(top.z0, top.z1, cd, 2));
+        const fx = fit(top.x0, top.x1, cw, alongX ? em : 2), fz = fit(top.z0, top.z1, cd, alongX ? 2 : em);
+        const endFit = kind === 'spiral' ? null : (alongX ? fit(top.x0, top.x1, cw, em) : fit(top.z0, top.z1, cd, em));
         const sideFit = kind === 'spiral' ? null : (alongX ? fit(top.z0, top.z1, cd, 1) : fit(top.x0, top.x1, cw, 1));
         if (!(endFit && sideFit)) {
           if (fx && fz) {
@@ -350,7 +354,12 @@ export function makeBuilding(world, spec, rng) {
     if (spec.deco && style !== 'house') decoInfo = artDeco(world, ctx);
   }
 
+  // ---- a bubble lift beside the stairs (a tall tower) -------------------------
+  const lift = spec.lifts && style === 'tower' && floors >= LIFT_MIN_FLOORS && core
+    ? bubbleLift(world, { core, top, floors, P, gy, floorYs, theme }) : null;
+
   return {
+    lift,
     x0, z0, x1, z1, w, d, floors, pitch: P, groundY: gy, style,
     themeName: theme.name, theme, facing: face,
     rects: Array.from({ length: floors }, (_, k) => rect(k)),
@@ -367,6 +376,72 @@ export function makeBuilding(world, spec, rng) {
     lancets: lancetInfo,
     deco: decoInfo,
   };
+}
+
+// ---- the bubble lift ---------------------------------------------------------------
+// Two shafts of water side by side at one end of the stair core, a cell out from
+// its end (the core's own end cells are its landings): soul sand under one, a
+// bubble column all the way up that carries a swimmer to the top floor; magma under
+// the other, a column that drags a swimmer down to the ground. On every floor an
+// open door from the landing into each shaft (a door holds water back, open or
+// shut); a shaft is walled in glass wherever it is not already against a wall, the
+// other shaft or its door. The water rises to the top floor's own level, so out of
+// the up shaft you are thrown up into the room and step off sideways; into the down
+// shaft at the top you simply walk. On a floor between, hold forward into the
+// doorway as you pass it. At the bottom of the down shaft the magma burns: sneak
+// (crouch) there, and step out.
+//
+// Only where the core stands at least two cells clear of the wall at that end (a
+// shaft, then its door, then the landing); otherwise no lift.
+export const LIFT_MIN_FLOORS = 6;
+export const BUBBLE_UP = () => MATERIALS.add(null, 'minecraft:bubble_column', '#3a5ad0', { drag_down: B(0) }, { transparent: true });
+export const BUBBLE_DOWN = () => MATERIALS.add(null, 'minecraft:bubble_column', '#2a3a90', { drag_down: B(1) }, { transparent: true });
+const SOUL_SAND = () => MATERIALS.add(null, 'minecraft:soul_sand', '#5a4434', {});
+const MAGMA = () => MATERIALS.add(null, 'minecraft:magma', '#9a4a1c', {});
+function bubbleLift(world, c) {
+  const { core, top, floors, gy, floorYs, theme } = c;
+  const ax = core.alongX;                                 // u runs along the core's flights
+  const XZ = (u, v) => (ax ? [u, v] : [v, u]);
+  const uLo = (ax ? top.x0 : top.z0) + 1, uHi = (ax ? top.x1 : top.z1) - 1;
+  const vLo = (ax ? top.z0 : top.x0) + 1, vHi = (ax ? top.z1 : top.x1) - 1;
+  const cu0 = ax ? core.x0 : core.z0, cu1 = ax ? core.x1 : core.z1;
+  const cv0 = ax ? core.z0 : core.x0, cv1 = ax ? core.z1 : core.x1;
+  const gapLo = cu0 - uLo, gapHi = uHi - cu1;
+  if (Math.max(gapLo, gapHi) < 2 || cv1 - cv0 < 1) return null;
+  const lo = gapLo >= 2 && (gapLo >= gapHi || gapHi < 2);
+  const us = lo ? cu0 - 2 : cu1 + 2, ud = lo ? cu0 - 1 : cu1 + 1, out = lo ? 1 : -1;
+  const back = cv0 - vLo <= vHi - cv1;                    // the two rows nearer the wall
+  const [va, vb] = back ? [cv0, cv0 + 1] : [cv1, cv1 - 1];
+  const topY = floorYs[floors - 1];
+  const solid = (x, y, z) => { const id = world.get(x, y, z); return id !== -1 && !MATERIALS.isPassable(id); };
+  const shafts = [XZ(us, va), XZ(us, vb)];
+  const doors = [XZ(ud, va), XZ(ud, vb)];
+  const isShaft = (x, z) => shafts.some(([a, b]) => a === x && b === z);
+  const isDoor = (x, z) => doors.some(([a, b]) => a === x && b === z);
+  const doorY = new Set(); for (const sy of floorYs) { doorY.add(sy + 1); doorY.add(sy + 2); }
+  // the way out of a shaft, through its door, as a facing
+  const [ox, oz] = XZ(out, 0);
+  const facing = ox === 1 ? 'east' : ox === -1 ? 'west' : oz === 1 ? 'south' : 'north';
+  // the shafts: the base, then the water
+  world.set(shafts[0][0], gy, shafts[0][1], SOUL_SAND());
+  world.set(shafts[1][0], gy, shafts[1][1], MAGMA());
+  for (let y = gy + 1; y <= topY; y++) { world.set(shafts[0][0], y, shafts[0][1], BUBBLE_UP()); world.set(shafts[1][0], y, shafts[1][1], BUBBLE_DOWN()); }
+  // the doors, open, a pair on every floor
+  for (const sy of floorYs) doors.forEach(([x, z], i) => {
+    world.set(x, sy + 1, z, doorId(theme.door, DIR[facing], false, i, true));
+    world.set(x, sy + 2, z, doorId(theme.door, DIR[facing], true, i, true));
+  });
+  // walled in: every side of the water not a wall, the other shaft or a door
+  const glass = [];
+  for (const [x, z] of shafts) for (let y = gy + 1; y <= topY; y++) for (const [a, b] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+    const nx = x + a, nz = z + b;
+    if (isShaft(nx, nz) || (isDoor(nx, nz) && doorY.has(y))) continue;
+    if (solid(nx, y, nz)) continue;
+    world.set(nx, y, nz, theme.glass);
+    glass.push([nx, y, nz]);
+  }
+  const cells = new Set([...shafts, ...doors, ...glass.map(([x, , z]) => [x, z])].map(([x, z]) => x + ',' + z));
+  return { up: shafts[0], down: shafts[1], doors, glass, y0: gy, y1: topY, floors: floorYs.slice(), out: [ox, oz], facing, cells };
 }
 
 // ---- a house's own details ------------------------------------------------------

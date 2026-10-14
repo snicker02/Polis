@@ -513,12 +513,12 @@ export const DIR = { east: 0, south: 1, west: 2, north: 3 };
 // the Java facing. 0.1.7-0.1.8 wrote the facing unrotated, so every door was a
 // quarter turn out; single doors hid it, double doors came apart.
 const DOOR_CARDINAL = ['south', 'west', 'north', 'east'];   // indexed by DIR
-export function doorId(kind, dir, upper, hinge = 0) {
+export function doorId(kind, dir, upper, hinge = 0, open = false) {
   const [block, color] = DOOR_BLOCKS[kind] || DOOR_BLOCKS.oak;  // unknown kind -> oak, never iron
   return MATERIALS.add(null, block, color, {
     'minecraft:cardinal_direction': S(DOOR_CARDINAL[dir & 3]),
     door_hinge_bit: B(hinge),
-    open_bit: B(0),
+    open_bit: B(open ? 1 : 0),
     upper_block_bit: B(upper ? 1 : 0),
   }, { passable: true });
 }
@@ -561,6 +561,7 @@ const STAIR_BLOCKS = {
   crimson: ['minecraft:crimson_stairs', '#653147'],
   warped: ['minecraft:warped_stairs', '#2b6963'],
   bamboo: ['minecraft:bamboo_stairs', '#c9b25a'],
+  purpur: ['minecraft:purpur_stairs', '#a97ca9'],
 };
 export const WEIRDO = { east: 0, west: 1, south: 2, north: 3 };
 

@@ -150,7 +150,11 @@ export function planRooms(rec, k, rng) {
     }
   }
   if (!rooms.length) return null;
-  return { walls, doors, rooms, use };
+  // (a bubble lift's shafts, doors and glass are left as they are: a floor whose
+  // rooms would want a door in them has no rooms)
+  const liftCells = rec.lift && rec.lift.cells;
+  if (liftCells && doors.some((d) => liftCells.has(d.x + ',' + d.z))) return null;
+  return { walls: liftCells ? walls.filter(([x, z]) => !liftCells.has(x + ',' + z)) : walls, doors, rooms, use };
 }
 
 // Build a planned floor: walls from floor to ceiling, doors (with wall above
@@ -158,8 +162,9 @@ export function planRooms(rec, k, rng) {
 export function buildRooms(world, rec, k, plan, theme, put) {
   const sy = rec.floorYs[k], top = sy + rec.pitch - 1;
   const doorAt = new Set(plan.doors.map((d) => d.x + ',' + d.z));
+  const liftCells = rec.lift && rec.lift.cells;
   for (const [x, z] of plan.walls) {
-    if (doorAt.has(x + ',' + z)) continue;
+    if (doorAt.has(x + ',' + z) || (liftCells && liftCells.has(x + ',' + z))) continue;
     for (let y = sy + 1; y <= top; y++) put(x, y, z, MAT.INTERIOR_WALL);
   }
   for (const d of plan.doors) {
