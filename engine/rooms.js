@@ -58,6 +58,20 @@ export function planRooms(rec, k, rng) {
 
   const walls = [], doors = [], rooms = [];
   const sides = [];
+  // a door clear of a bubble lift (on it, or beside it, it would open into glass or
+  // water): from the middle of its run outward, the first spot clear of the lift
+  // (and likewise clear of the cells a building keeps clear: a cellar's stairs going
+  // down beside a door left one side of it a hole)
+  const liftCells = rec.lift && rec.lift.cells, kept = rec.keepClear;
+  const nearLift = (x, z) => [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]].some(([a, b]) => { const k = (x + a) + ',' + (z + b); return (!!liftCells && liftCells.has(k)) || (!!kept && kept.has(k)); });
+  const clearOf = (mid, lo, hi, at) => {
+    for (let d = 0; d <= hi - lo; d++) for (const t of d ? [mid - d, mid + d] : [mid]) {
+      if (t < lo || t > hi) continue;
+      const [x, z] = at(t);
+      if (!nearLift(x, z)) return t;
+    }
+    return mid;
+  };
   if (bLo - vLo >= 3) sides.push({ wallV: bLo - 1, v0: vLo, v1: bLo - 2, toCorr: +1 });
   if (vHi - bHi >= 3) sides.push({ wallV: bHi + 1, v0: bHi + 2, v1: vHi, toCorr: -1 });
 
@@ -104,13 +118,13 @@ export function planRooms(rec, k, rng) {
       // a bedroom in an apartment opens off its kitchen, not the corridor
       const apartmentBedroom = use === 'apartments' && types[i] === 'bedroom';
       if (!apartmentBedroom) {
-        const du = Math.floor((s0 + s1) / 2);
+        const du = clearOf(Math.floor((s0 + s1) / 2), s0, s1, (t) => xz(t, sd.wallV));
         const [dx, dz] = xz(du, sd.wallV);
         doors.push({ x: dx, z: dz, facing: vFacing(sd.toCorr) });
         room.doors.push([dx, dz]);
       } else {
         const cu = s0 - 1;                               // the wall shared with the kitchen before it
-        const dv = Math.floor((sd.v0 + sd.v1) / 2);
+        const dv = clearOf(Math.floor((sd.v0 + sd.v1) / 2), sd.v0, sd.v1, (t) => xz(cu, t));
         const [dx, dz] = xz(cu, dv);
         doors.push({ x: dx, z: dz, facing: uFacing(+1) });
         room.doors.push([dx, dz]);
@@ -137,7 +151,7 @@ export function planRooms(rec, k, rng) {
       if (e.u1 - e.u0 + 1 < 2 || (e.second && e.second.u1 - e.second.u0 + 1 < 2)) continue;
       if (entranceInside.some(([x, z]) => (alongX ? x : z) === e.wallU)) continue;
       for (let v = vLo; v <= vHi; v++) walls.push(xz(e.wallU, v));
-      const dv = Math.floor((vLo + vHi) / 2);
+      const dv = clearOf(Math.floor((vLo + vHi) / 2), vLo, vHi, (t) => xz(e.wallU, t));
       const [dx, dz] = xz(e.wallU, dv);
       doors.push({ x: dx, z: dz, facing: uFacing(e.toCorr) });
       const mk = (u0, u1, type) => {
@@ -150,10 +164,9 @@ export function planRooms(rec, k, rng) {
     }
   }
   if (!rooms.length) return null;
-  // (a bubble lift's shafts, doors and glass are left as they are: a floor whose
-  // rooms would want a door in them has no rooms)
-  const liftCells = rec.lift && rec.lift.cells;
-  if (liftCells && doors.some((d) => liftCells.has(d.x + ',' + d.z))) return null;
+  // (a bubble lift's shafts, doors and glass are left as they are: a floor where a
+  // door could find no spot clear of it has no rooms)
+  if (doors.some((d) => nearLift(d.x, d.z) && liftCells && [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]].some(([a, b]) => liftCells.has((d.x + a) + ',' + (d.z + b))))) return null;
   return { walls: liftCells ? walls.filter(([x, z]) => !liftCells.has(x + ',' + z)) : walls, doors, rooms, use };
 }
 
@@ -174,7 +187,15 @@ export function buildRooms(world, rec, k, plan, theme, put) {
   }
   for (const rm of plan.rooms) {
     const cx = Math.floor((rm.x0 + rm.x1) / 2), cz = Math.floor((rm.z0 + rm.z1) / 2);
-    if (!world.has(cx, top, cz)) put(cx, top, cz, MAT.LANTERN);
+    if (!world.has(cx, top, cz)) { put(cx, top, cz, MAT.LANTERN); continue; }
+    // (the middle taken, by a bubble lift say: the nearest free cell of the ceiling)
+    let best = null;
+    for (let x = rm.x0; x <= rm.x1; x++) for (let z = rm.z0; z <= rm.z1; z++) {
+      if (world.has(x, top, z)) continue;
+      const d = Math.abs(x - cx) + Math.abs(z - cz);
+      if (!best || d < best[2]) best = [x, z, d];
+    }
+    if (best) put(best[0], top, best[1], MAT.LANTERN);
   }
   plan.art = hangArt(world, rec, k, plan, put);
 }

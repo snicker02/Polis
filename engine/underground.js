@@ -33,7 +33,11 @@ export function digUnder(world, rec, opts = {}) {
   const nearCore = (x, z) => core && x >= core.x0 - 1 && x <= core.x1 + 1 && z >= core.z0 - 1 && z <= core.z1 + 1;
   const nearDoor = (x, z) => (rec.doorCells || []).some(([dx, dz]) => Math.abs(dx - x) <= 1 && Math.abs(dz - z) <= 1);
   const inner = (x, z) => x > r.x0 && x < r.x1 && z > r.z0 && z < r.z1;
-  const freeHere = (x, z) => inner(x, z) && !nearCore(x, z) && !nearDoor(x, z) &&
+  // (nor beside a door of the ground floor's rooms: a flight cut down beside one
+  // left that side of it a hole)
+  const roomDoors = ((rec.roomPlans && rec.roomPlans[0] && rec.roomPlans[0].doors) || []);
+  const nearRoomDoor = (x, z) => roomDoors.some((d) => Math.abs(d.x - x) <= 2 && Math.abs(d.z - z) <= 2);   // (its railing a cell further out)
+  const freeHere = (x, z) => inner(x, z) && !nearCore(x, z) && !nearDoor(x, z) && !nearRoomDoor(x, z) &&
     world.has(x, G, z) && [1, 2, 3].every((h) => !world.has(x, G + h, z));
   // the room's volume must be free to dig: nothing built there already (a pond,
   // a canal, a cellar next door), only the soft fill the city stands on

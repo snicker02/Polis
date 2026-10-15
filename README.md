@@ -1,4 +1,4 @@
-# Polis v0.64.0
+# Polis v0.64.1
 
 *Created with help from Claude AI.*
 
@@ -772,6 +772,36 @@ inside WebGL1's limits.
 
 ## Changelog
 
+**0.64.1** — Bubble lifts in every building of five floors and more.
+
+- 0.64.0 put lifts only in buildings of the tower style with six floors or more. A
+  city with its floors capped at six (a modern city with Max floors 6, say) has no
+  towers that tall, only mid-rises, so it had no lifts at all. Now every building of
+  five floors and more gets one (houses aside): in a 512 city of seed 292023633 with
+  floors capped at six, 28 of its 33 buildings that tall. The ones without: five with
+  spiral stairs too near their walls, and the wings of courtyard blocks (their stair
+  wing opens into the others, and the glass round a shaft could close the way).
+- The lift is now placed where it blocks nothing: of every place it could go (either
+  end of the core, the rows nearer the wall or the other two, and for a spiral either
+  way across), the first where no cell of it is beside the way in from the front door,
+  and where on every floor all the open floor still joins up. (Placed at the first end
+  with room, one stood its glass in front of the front door.)
+- The lift is placed against the end wall when it can be (nothing then lies beyond it
+  to be shut off), and never where it would cut the corridor the rooms open off. The
+  cells over the shafts' tops are kept clear of furniture (one top floor had something
+  stood on the water). A room's door that would fall on or beside the lift moves along
+  its wall to the nearest spot clear of it (dropping the floor's rooms instead, as a
+  first try did, left a third of the lift buildings with none), and a room's light
+  whose middle is taken goes to the nearest free cell of its ceiling.
+- Doors and cellars: a room's door is also kept off the cells a building keeps clear,
+  and a cellar's flight down is cut at least two cells from any ground-floor room's
+  door (its railing stood beside one, and once the flight itself: the moved cores
+  brought it out).
+- 2zm probed the floor of each storey at one spot, which fell in the stairwell about
+  one time in ten; it now skips the stairwell and a lift's shaft (with the cores moved
+  it had come out at 89.95% against its 90% mark).
+- 2zzs now looks at lifts in a city whose floors are capped at six too.
+
 **0.64.0** — A wizard's tower; bubble lifts in the tall towers.
 
 A new option, "A wizard's tower" (off by default), builds one (wizard.js), fifteen by
@@ -796,7 +826,7 @@ high, under a pointed hat of purpur stairs with a brim and an end rod on its poi
   floors lights the rooms above and below; lanterns hang in the roof.
 
 Bubble lifts (a new option, "Bubble lifts in towers", on by default): every tower of
-six floors and more gets two shafts of water at one end of its stair core, beside a
+six floors and more (from 0.64.1 every building of five floors and more) gets two shafts of water at one end of its stair core, beside a
 landing. Soul sand under one: a bubble column carries you up to the top floor, where
 you pop out and step off sideways. Magma under the other: it drags you down to the
 ground (crouch at the bottom: magma burns). On every floor a pair of open doors from

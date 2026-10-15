@@ -48,7 +48,13 @@ export default async function run(ctx) {
       // the floor of each upper storey, in the middle of the building
       for (let k = 1; k < b.floors; k++) {
         const rk = b.rects[k], sy = b.floorYs[k];
-        const n = blk(w, Math.floor((rk.x0 + rk.x1) / 2) + 1, sy, rk.z0 + 1);
+        const px = Math.floor((rk.x0 + rk.x1) / 2) + 1, pz = rk.z0 + 1;
+        // (the stairwell and a bubble lift's shaft are no floor: not counted. Probed
+        // there, the stairwell's open cells came within a hair of the 90% mark, 192
+        // of 213, and with the cores moved for the lifts in 0.64.1 just under it)
+        if (b.lift && [b.lift.up, b.lift.down].some(([a, c]) => a === px && c === pz)) continue;
+        if (b.core && px >= b.core.x0 && px <= b.core.x1 && pz >= b.core.z0 && pz <= b.core.z1) continue;
+        const n = blk(w, px, sy, pz);
         floors++; if (/glass/.test(n)) glassFloors++;
       }
     }

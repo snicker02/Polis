@@ -14,7 +14,8 @@
 //   it a stair (or the end rod);
 // - every spot a mob could stand lit (inside to 8).
 // The lifts, in cities furnished as they come:
-// - every tall tower whose stairs run in flights has one;
+// - every building of five floors and more whose stairs run in flights has one, in a
+//   city of tall towers and in one whose floors are capped at six;
 // - soul sand under the up shaft, magma under the down; a bubble column in each all
 //   the way to the top floor, each the right way; every side of the water a wall,
 //   the other shaft, or a door on a floor (the water held in);
@@ -120,8 +121,10 @@ function inspectLifts(r) {
   const raw = (x, y, z) => { const i = w.get(x, y, z); return i < 0 ? 'air' : MATERIALS.def(i).block.replace('minecraft:', ''); };
   const st = (x, y, z, k) => { const i = w.get(x, y, z); const d = i < 0 ? null : MATERIALS.def(i); const v = d ? d.states[k] : undefined; return v === undefined || v === null ? undefined : (v.value ?? v); };
   const solid = (x, y, z) => { const i = w.get(x, y, z); return i >= 0 && !MATERIALS.isPassable(i); };
-  const tall = r.buildings.filter((b) => b.style === 'tower' && b.floors >= 6 && b.core);
-  const flights = tall.filter((b) => b.stairKind !== 'spiral');
+  const tall = r.buildings.filter((b) => b.style !== 'house' && b.floors >= 5 && b.core);
+  // (a wing of a courtyard block has none: its stair wing opens into the others, and
+  // the glass round a shaft could close the way through)
+  const flights = tall.filter((b) => b.stairKind !== 'spiral' && !b.courtyard);
   const lifts = r.buildings.filter((b) => b.lift);
   const out = { tall: tall.length, flights: flights.length, lifts: lifts.length, flightsWithout: flights.filter((b) => !b.lift).length, base: 0, columns: 0, held: 0, doors: 0, reached: 0, top: 0, bad: [] };
   for (const b of lifts) {
@@ -224,11 +227,13 @@ export default async function run(ctx) {
     ['256 seed 1', generateCity({ ...DEFAULTS, size: 256, seed: 1 })],
     ['320 seed 7', generateCity({ ...DEFAULTS, size: 320, seed: 7 })],
     ['192 seed 5 flat', generateCity({ ...DEFAULTS, size: 192, seed: 5, hills: 0 })],
+    // (floors capped at six: no towers that tall at all, only mid-rises; 0.64.0 put lifts in none of them)
+    ['256 seed 3, six floors at most', generateCity({ ...DEFAULTS, size: 256, seed: 3, maxFloors: 6 })],
   ];
   const ls = lcities.map(([n, r]) => [n, r, inspectLifts(r)]);
   const sayL = () => ls.map(([n, , t]) => `${n}: ${JSON.stringify(t)}`).join(' | ');
   const sum = (k) => ls.reduce((a, [, , t]) => a + t[k], 0);
-  check('lifts: every tall tower whose stairs run in flights has one (and there are lifts in every city)', ls.every(([, , t]) => t.flightsWithout === 0 && t.lifts > 0), sayL());
+  check('lifts: every building of five floors and more whose stairs run in flights has one (and there are lifts in every city, one with its floors capped at six too)', ls.every(([, , t]) => t.flightsWithout === 0 && t.lifts > 0), sayL());
   check('lifts: soul sand under the up shaft, magma under the down; a bubble column in each to the top floor, rising in one and sinking in the other', sum('base') === sum('lifts') && sum('columns') === sum('lifts'), sayL());
   check('lifts: the water held in (every side of it a block, the other shaft or a door)', sum('held') === sum('lifts'), sayL());
   check('lifts: on every floor a door into each shaft, open, both walked to on foot from the street; room over the up shaft at the top to come out', sum('doors') === sum('lifts') && sum('reached') === sum('lifts') && sum('top') === sum('lifts'), sayL());
@@ -254,5 +259,5 @@ export default async function run(ctx) {
     check('every block one of Bedrock\'s own states', bad.size === 0, [...bad].slice(0, 4).join(', '));
     check('in Java, the table, stands, cauldrons (water, lava, powder snow), the roof, the bubble columns (drag), soul sand, magma, the open doors each a block Java has, with its own states', jbad.size === 0, [...jbad].slice(0, 4).join(', '));
   }
-  note(`lifts: ${ls.map(([n, , t]) => `${n} ${t.lifts} of ${t.tall} tall towers (${t.flights} in flights)`).join('; ')}`);
+  note(`lifts: ${ls.map(([n, , t]) => `${n} ${t.lifts} of ${t.tall} buildings of five floors and more (${t.flights} with flights)`).join('; ')}`);
 }

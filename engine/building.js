@@ -112,7 +112,7 @@ export function makeBuilding(world, spec, rng) {
     };
     // (a tall tower that will have a bubble lift wants a cell more at the ends of
     // its core, for the shafts beside a landing: tried first, then as before)
-    const liftWanted = spec.lifts && style === 'tower' && floors >= LIFT_MIN_FLOORS;
+    const liftWanted = spec.lifts && style !== 'house' && floors >= LIFT_MIN_FLOORS;
     outer:
     for (const em of liftWanted ? [3, 2] : [2])
     for (const kind of prefs) {
@@ -354,12 +354,13 @@ export function makeBuilding(world, spec, rng) {
     if (spec.deco && style !== 'house') decoInfo = artDeco(world, ctx);
   }
 
-  // ---- a bubble lift beside the stairs (a tall tower) -------------------------
-  const lift = spec.lifts && style === 'tower' && floors >= LIFT_MIN_FLOORS && core
-    ? bubbleLift(world, { core, top, floors, P, gy, floorYs, theme }) : null;
+  // ---- a bubble lift beside the stairs (a building of five floors and more) ---
+  const lift = spec.lifts && style !== 'house' && floors >= LIFT_MIN_FLOORS && core
+    ? bubbleLift(world, { core, top, floors, P, gy, floorYs, theme, rects: Array.from({ length: floors }, (_, k) => rect(k)), doorCells, outv }) : null;
 
   return {
     lift,
+    keepClear: lift ? new Set(lift.keep) : undefined,
     x0, z0, x1, z1, w, d, floors, pitch: P, groundY: gy, style,
     themeName: theme.name, theme, facing: face,
     rects: Array.from({ length: floors }, (_, k) => rect(k)),
@@ -393,34 +394,85 @@ export function makeBuilding(world, spec, rng) {
 //
 // Only where the core stands at least two cells clear of the wall at that end (a
 // shaft, then its door, then the landing); otherwise no lift.
-export const LIFT_MIN_FLOORS = 6;
+// (any building of five floors and more, not only the towers: a city whose tallest
+// floors are capped at six has no towers that tall, and had no lifts at all)
+export const LIFT_MIN_FLOORS = 5;
 export const BUBBLE_UP = () => MATERIALS.add(null, 'minecraft:bubble_column', '#3a5ad0', { drag_down: B(0) }, { transparent: true });
 export const BUBBLE_DOWN = () => MATERIALS.add(null, 'minecraft:bubble_column', '#2a3a90', { drag_down: B(1) }, { transparent: true });
 const SOUL_SAND = () => MATERIALS.add(null, 'minecraft:soul_sand', '#5a4434', {});
 const MAGMA = () => MATERIALS.add(null, 'minecraft:magma', '#9a4a1c', {});
 function bubbleLift(world, c) {
-  const { core, top, floors, gy, floorYs, theme } = c;
-  const ax = core.alongX;                                 // u runs along the core's flights
-  const XZ = (u, v) => (ax ? [u, v] : [v, u]);
-  const uLo = (ax ? top.x0 : top.z0) + 1, uHi = (ax ? top.x1 : top.z1) - 1;
-  const vLo = (ax ? top.z0 : top.x0) + 1, vHi = (ax ? top.z1 : top.x1) - 1;
-  const cu0 = ax ? core.x0 : core.z0, cu1 = ax ? core.x1 : core.z1;
-  const cv0 = ax ? core.z0 : core.x0, cv1 = ax ? core.z1 : core.x1;
-  const gapLo = cu0 - uLo, gapHi = uHi - cu1;
-  if (Math.max(gapLo, gapHi) < 2 || cv1 - cv0 < 1) return null;
-  const lo = gapLo >= 2 && (gapLo >= gapHi || gapHi < 2);
-  const us = lo ? cu0 - 2 : cu1 + 2, ud = lo ? cu0 - 1 : cu1 + 1, out = lo ? 1 : -1;
-  const back = cv0 - vLo <= vHi - cv1;                    // the two rows nearer the wall
-  const [va, vb] = back ? [cv0, cv0 + 1] : [cv1, cv1 - 1];
+  const { core, top, floors, gy, floorYs, theme, rects, doorCells, outv } = c;
+  const H4 = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+  // Every place it could go, best first: along the flights (a spiral has open floor
+  // all round, so either way across), the end with more room first, the rows nearer
+  // the wall first. The first that blocks nothing is built: no cell of it beside the
+  // way in from the front door, and on every floor all the open floor still joined
+  // up (the glass round a shaft must not cut off a corner of the floor).
+  const cands = [];
+  for (const ax of core.kind === 'spiral' ? [core.alongX, !core.alongX] : [core.alongX]) {
+    const XZ = (u, v) => (ax ? [u, v] : [v, u]);
+    const uLo = (ax ? top.x0 : top.z0) + 1, uHi = (ax ? top.x1 : top.z1) - 1;
+    const vLo = (ax ? top.z0 : top.x0) + 1, vHi = (ax ? top.z1 : top.x1) - 1;
+    const cu0 = ax ? core.x0 : core.z0, cu1 = ax ? core.x1 : core.z1;
+    const cv0 = ax ? core.z0 : core.x0, cv1 = ax ? core.z1 : core.x1;
+    if (cv1 - cv0 < 1) continue;
+    // (against the end wall first: nothing then lies beyond it to be cut off; else
+    // right beside the landing)
+    const ends = [];
+    if (cu0 - uLo >= 2) { ends.push({ us: uLo, ud: uLo + 1, out: 1, room: cu0 - uLo }); if (cu0 - 2 !== uLo) ends.push({ us: cu0 - 2, ud: cu0 - 1, out: 1, room: cu0 - uLo - 1 }); }
+    if (uHi - cu1 >= 2) { ends.push({ us: uHi, ud: uHi - 1, out: -1, room: uHi - cu1 }); if (cu1 + 2 !== uHi) ends.push({ us: cu1 + 2, ud: cu1 + 1, out: -1, room: uHi - cu1 - 1 }); }
+    ends.sort((a, b) => b.room - a.room);
+    const nearBack = cv0 - vLo <= vHi - cv1;
+    const rowsA = [cv0, cv0 + 1], rowsB = [cv1, cv1 - 1];
+    for (const e of ends) for (const [va, vb] of nearBack ? [rowsA, rowsB] : [rowsB, rowsA]) {
+      const [ox, oz] = XZ(e.out, 0);
+      // (the corridor the rooms will open off: the core's rows and one either side)
+      const band = (x, z) => { const v = ax ? z : x; return v >= cv0 - 1 && v <= cv1 + 1; };
+      cands.push({ shafts: [XZ(e.us, va), XZ(e.us, vb)], doors: [XZ(e.ud, va), XZ(e.ud, vb)], out: [ox, oz], band });
+    }
+  }
+  const K = (x, z) => x + ',' + z;
+  const inside = (r, x, z) => x > r.x0 && x < r.x1 && z > r.z0 && z < r.z1;
+  const inCore = (x, z) => x >= core.x0 && x <= core.x1 && z >= core.z0 && z <= core.z1;
+  const ways = doorCells.map(([x, z]) => [x - outv[0], z - outv[1]]);
+  const fits = (cd) => {
+    const S = new Set(cd.shafts.map(([x, z]) => K(x, z))), Dd = new Set(cd.doors.map(([x, z]) => K(x, z)));
+    // the columns the glass may take: every side of a shaft not the other shaft or a door
+    const glass = new Set();
+    for (const [x, z] of cd.shafts) for (const [a, b] of H4) { const k = K(x + a, z + b); if (!S.has(k) && !Dd.has(k)) glass.add(k); }
+    const all = [...S, ...Dd, ...glass].map((k) => k.split(',').map(Number));
+    if (all.some(([x, z]) => inCore(x, z))) return false;
+    if (all.some(([x, z]) => ways.some(([a, b]) => Math.abs(a - x) <= 1 && Math.abs(b - z) <= 1))) return false;
+    for (let k = 0; k < floors; k++) {
+      const r = rects[k];
+      if (!cd.shafts.every(([x, z]) => inside(r, x, z)) || !cd.doors.every(([x, z]) => inside(r, x, z))) return false;
+      const blocked = (x, z) => S.has(K(x, z)) || glass.has(K(x, z));
+      // all the open floor joined up, and the corridor joined up along itself (the
+      // rooms' walls, built later, close off everything but the corridor)
+      for (const only of [() => true, cd.band]) {
+        let total = 0, start = null;
+        for (let x = r.x0 + 1; x < r.x1; x++) for (let z = r.z0 + 1; z < r.z1; z++) if (only(x, z) && !blocked(x, z)) { total++; if (!start) start = [x, z]; }
+        if (!start) return false;
+        const seen = new Set([K(...start)]), q = [start];
+        while (q.length) {
+          const [x, z] = q.pop();
+          for (const [a, b] of H4) { const nx = x + a, nz = z + b; const k2 = K(nx, nz); if (seen.has(k2) || !inside(r, nx, nz) || !only(nx, nz) || blocked(nx, nz)) continue; seen.add(k2); q.push([nx, nz]); }
+        }
+        if (seen.size !== total) return false;
+      }
+    }
+    return true;
+  };
+  const cd = cands.find(fits);
+  if (!cd) return null;
+  const { shafts, doors } = cd, [ox, oz] = cd.out;
   const topY = floorYs[floors - 1];
   const solid = (x, y, z) => { const id = world.get(x, y, z); return id !== -1 && !MATERIALS.isPassable(id); };
-  const shafts = [XZ(us, va), XZ(us, vb)];
-  const doors = [XZ(ud, va), XZ(ud, vb)];
   const isShaft = (x, z) => shafts.some(([a, b]) => a === x && b === z);
   const isDoor = (x, z) => doors.some(([a, b]) => a === x && b === z);
   const doorY = new Set(); for (const sy of floorYs) { doorY.add(sy + 1); doorY.add(sy + 2); }
   // the way out of a shaft, through its door, as a facing
-  const [ox, oz] = XZ(out, 0);
   const facing = ox === 1 ? 'east' : ox === -1 ? 'west' : oz === 1 ? 'south' : 'north';
   // the shafts: the base, then the water
   world.set(shafts[0][0], gy, shafts[0][1], SOUL_SAND());
@@ -433,7 +485,7 @@ function bubbleLift(world, c) {
   });
   // walled in: every side of the water not a wall, the other shaft or a door
   const glass = [];
-  for (const [x, z] of shafts) for (let y = gy + 1; y <= topY; y++) for (const [a, b] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+  for (const [x, z] of shafts) for (let y = gy + 1; y <= topY; y++) for (const [a, b] of H4) {
     const nx = x + a, nz = z + b;
     if (isShaft(nx, nz) || (isDoor(nx, nz) && doorY.has(y))) continue;
     if (solid(nx, y, nz)) continue;
@@ -441,7 +493,10 @@ function bubbleLift(world, c) {
     glass.push([nx, y, nz]);
   }
   const cells = new Set([...shafts, ...doors, ...glass.map(([x, , z]) => [x, z])].map(([x, z]) => x + ',' + z));
-  return { up: shafts[0], down: shafts[1], doors, glass, y0: gy, y1: topY, floors: floorYs.slice(), out: [ox, oz], facing, cells };
+  // (kept clear by the furnishing: the shafts, their doors, and the cells over the
+  // shafts' tops on the top floor, where you come out)
+  return { up: shafts[0], down: shafts[1], doors, glass, y0: gy, y1: topY, floors: floorYs.slice(), out: [ox, oz], facing, cells,
+    keep: [...shafts, ...doors].map(([x, z]) => x + ',' + z) };
 }
 
 // ---- a house's own details ------------------------------------------------------
