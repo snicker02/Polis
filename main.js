@@ -17,7 +17,7 @@ import { buildPregenPack, pregenFileName, siteRegion, viewRegion, pregenCommand,
 import { decodeNbt } from './tools/nbt-read.js';
 import { THEMES } from './engine/materials.js';
 
-const VERSION = '0.64.1';
+const VERSION = '0.65.0';
 const $ = (id) => document.getElementById(id);
 const numVal = (id) => Number($(id).value);      // readCfg has its own local num()
 
@@ -600,7 +600,7 @@ function showStats(mesh, times) {
       const skipped = Object.keys(NOT_FITTED).filter((id) => $(id) && $(id).checked).map((id) => NOT_FITTED[id]);
       if (skipped.length) line('not on fitted ground', `${skipped.join(', ')}: a fitted city follows your world's own ground`);
     }
-    for (const [k, label] of [['police', 'police station'], ['theatre', 'theatre'], ['hotel', 'hotel'], ['factory', 'factory'], ['workshop', 'workshop'], ['mill', 'mill'], ['park', 'amusement park'], ['waterpark', 'water park'], ['lazyriver', 'lazy river'], ['garden', 'botanical garden'], ['station', 'station'], ['mall', 'shopping mall'], ['sports', 'sports centre'], ['bank', 'bank'], ['watertower', 'water tower'], ['petrol', 'petrol station'], ['skatepark', 'skate park'], ['wizard', "wizard's tower"], ['airport', 'airport'], ['bouts', 'stadium bouts'], ['themepark', 'theme park']]) {
+    for (const [k, label] of [['police', 'police station'], ['theatre', 'theatre'], ['hotel', 'hotel'], ['factory', 'factory'], ['workshop', 'workshop'], ['mill', 'mill'], ['park', 'amusement park'], ['waterpark', 'water park'], ['lazyriver', 'lazy river'], ['garden', 'botanical garden'], ['station', 'station'], ['mall', 'shopping mall'], ['sports', 'sports centre'], ['bank', 'bank'], ['watertower', 'water tower'], ['petrol', 'petrol station'], ['skatepark', 'skate park'], ['wizard', "wizard's tower"], ['bandstand', 'bandstand'], ['airport', 'airport'], ['bouts', 'stadium bouts'], ['themepark', 'theme park']]) {
       if (s[k + 'Missing']) line(label, s[k + 'Missing']);
       if (s[k]) line(label, s[k]);
     }

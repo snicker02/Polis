@@ -15,6 +15,8 @@ import { styleOf } from './styles.js';
 import { OUTWARD } from './building.js';
 import { commandBlock } from './airport.js';
 import { MATERIALS, I as INT, B as BYTE } from './materials.js';
+import { buildTune } from './music.js';
+import { signTags } from './landmarks.js';
 
 const right = (face) => { const [fx, fz] = OUTWARD[face]; return [fz, -fx]; };
 
@@ -427,7 +429,9 @@ export function allotments(world, lot, face, cfg, rng, G) {
 }
 
 // ---- bandstand -----------------------------------------------------------
-// A small raised stage with a roof on posts, in the middle of its lot.
+// A small raised stage with a roof on posts, in the middle of its lot; a square roof
+// over the whole lot carries the tune (music.js): press the button on the stand in the
+// middle of the stage and a melody and its bass play from the roof.
 export function bandstand(world, lot, face, cfg, rng, G) {
   const LP = styleOf(cfg.cityStyle).landmark;
   pave(world, lot, G, (x, z) => ((x + z) & 1 ? MAT.GRASS : MAT.PATH));
@@ -443,16 +447,22 @@ export function bandstand(world, lot, face, cfg, rng, G) {
     for (let y = G + 2; y <= G + 4; y++) world.set(mx + dx, y, mz + dz, LP.hallColumn);
     posts.push([mx + dx, G + 4, mz + dz]);
   }
-  for (let dz = -R; dz <= R; dz++)
-    for (let dx = -R; dx <= R; dx++) {
-      if (Math.abs(dx) + Math.abs(dz) > R + 1) continue;
-      world.set(mx + dx, G + 5, mz + dz, LP.hallWall);
-    }
-  world.set(mx, G + 6, mz, LP.hallColumn);
-  world.set(mx, G + 7, mz, MAT.LAMP);
+  // the roof: square, nine by nine (the tune's lines need the room); solid, for the
+  // repeaters to stand on (a style whose hall walls are glass gets quartz)
+  const glassy = MATERIALS.def(LP.hallWall).transparent;
+  const roof = glassy ? MAT.SMOOTH_QUARTZ : LP.hallWall;
+  for (let dz = -4; dz <= 4; dz++) for (let dx = -4; dx <= 4; dx++) world.set(mx + dx, G + 5, mz + dz, roof);
   // steps up on the street side
   const [Fx, Fz] = OUTWARD[face];
   const step = [mx + Fx * (R + 1), G + 1, mz + Fz * (R + 1)];
   world.set(step[0], step[1], step[2], stairId(LP.hallStair, Fx === 1 ? WEIRDO.west : Fx === -1 ? WEIRDO.east : Fz === 1 ? WEIRDO.north : WEIRDO.south));
-  return { kind: 'bandstand', lot, posts, step, rec: null, topY: G + 8 };
+  // the tune, from the city's seed and where the bandstand stands
+  const seed = ((cfg.seed | 0) * 2654435761 ^ (mx * 73856093) ^ (mz * 19349663) ^ 0x7a9e) >>> 0;
+  const music = buildTune(world, mx, mz, G, [Fx, Fz], { stand: MAT.SMOOTH_QUARTZ, roof, rest: MAT.SMOOTH_QUARTZ }, seed);
+  // a sign beside the step
+  const [rx, rz] = right(face);
+  const signAt = [step[0] + rx, G + 1, step[2] + rz];
+  world.set(signAt[0], signAt[1], signAt[2], signId(SIGN_FACING[face]));
+  world.setData(signAt[0], signAt[1], signAt[2], { id: 'Sign', tags: signTags(`Bandstand\npress the button\non the stand: a tune\nin ${music.key} on the ${music.instrument}`) });
+  return { kind: 'bandstand', lot, posts, step, music, sign: signAt, rec: null, topY: G + 8 };
 }

@@ -1,4 +1,4 @@
-# Polis v0.64.1
+# Polis v0.65.0
 
 *Created with help from Claude AI.*
 
@@ -771,6 +771,55 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.65.0** — The bandstand plays a tune; the archery range gets a shooting gallery.
+
+The bandstand (music.js): a button on a stand in the middle of the stage plays a
+tune from note blocks on the roof, a melody and a bass line together, about three
+and a half seconds, different in every city (the key, the instrument, the notes and
+the rhythm come from the seed and where the bandstand stands). The melody's
+instrument is one of bells, flute, chimes, xylophone, pling or harp, the bass on
+oak. A redstone lamp on top lights while it plays. The roof is square now, nine by
+nine, to carry the two lines; a sign by the step names the key and instrument.
+
+- How: the button is on a block with a redstone torch on it, a block over that, a
+  second torch on that block set in the roof, and on that the block the tune starts
+  from. Pressed, the first torch goes out, the second lights, the start comes on:
+  one rising edge a press, so the tune plays once. Two lines of twelve steps go out
+  over the roof, each a repeater and a note block (or for a rest in the bass a plain
+  block) by turns, the same repeater delays in both so the bass keeps time. No note
+  block touches another (a powered note block sets off any beside it), each has air
+  over it and its instrument's block under it. The second torch is saved unlit, as
+  the game will have it at rest.
+
+The shooting gallery (in the theme park's archery range, themepark.js): six targets
+rise out of the floor on sticky pistons and sink back, one after another out from
+the middle, each up for 1.8 seconds and down for 1.8, while the lever on the counter
+is on. A redstone lamp stands behind where each target rises: hit it while it is up
+and the lamp lights. A striped awning over the counter on posts. Blocks cannot ride
+a rail in Minecraft, so the targets move as a fairground's do, up and down.
+
+- How (all a block under the range's floor): a ring of eighteen observers, a pulse
+  round it every 1.8 seconds, started and stopped by the lever (one observer of the
+  ring sits on a sticky piston: lever on, it is pushed into the ring); at one corner
+  the pulse comes out into a line of repeaters along the row, a block at each target;
+  each block flips a waxed copper bulb (a bulb turns over at every pulse: a flip-
+  flop), a comparator reads the bulb into the block beside the target's piston.
+
+- New: tools/checks/redsim.js, a small redstone simulator (repeaters, comparators,
+  observers, torches, buttons, levers, note blocks, lamps, pistons, copper bulbs,
+  targets), so a machine is checked by running it, not only by looking at it.
+- Java export: levers (face and facing from Bedrock's one word, powered from its open
+  bit), buttons on top of a block (face floor), copper bulbs (lit), and note blocks
+  (their pitch and instrument, a block entity in Bedrock, states in Java).
+- New check section 2zzt (10 checks): a tune on every bandstand, different city to
+  city, the same from the same seed; every note block's air, instrument and pitch,
+  none beside another, every repeater straight; run, at rest nothing stirs, pressed
+  every note plays once at the tune's own times, the bass with the melody, the lamp,
+  and again on a second press; the button walked to, the lot lit; the gallery's
+  parts; run, at rest nothing stirs, the lever on every target up and down a lap
+  each way, the nearer the middle the sooner, a raised target hit lights its lamp,
+  the lever off and all of it still within three seconds; Bedrock states and Java.
 
 **0.64.1** — Bubble lifts in every building of five floors and more.
 

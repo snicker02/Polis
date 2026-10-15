@@ -189,7 +189,7 @@ export function writeJavaStructure(cells, box, opts = {}) {
     if (index === undefined) {
       const def = MATERIALS.def(id);
       if (!def) continue;
-      const jv = toJava(def.block, def.states, data && data.bytes ? data.bytes : {});
+      const jv = toJava(def.block, def.states, data ? { ...(data.bytes || {}), ...(data.java || {}) } : {});
       name = jv.name;
       const props = jv.props;
       const key = name + '|' + Object.entries(props).sort().map(([k, v]) => k + '=' + v).join(',');

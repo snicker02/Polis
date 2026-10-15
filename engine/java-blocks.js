@@ -105,6 +105,8 @@ function translateState(block, key, value) {
     case 'button_pressed_bit': return ['powered', value ? 'true' : 'false'];
     case 'triggered_bit': return ['triggered', value ? 'true' : 'false'];
     case 'drag_down': return ['drag', value ? 'true' : 'false'];
+    case 'lit': return ['lit', value ? 'true' : 'false'];
+    case 'lever_direction': return ['lever_direction', String(value)];        // (made into face and facing below)
     case 'extinguished': return ['lit', value ? 'false' : 'true'];
     case 'deprecated': return null;
     case 'cauldron_liquid': return null;
@@ -216,6 +218,26 @@ export function toJava(block, states = {}, extra = {}) {
   if (name === 'minecraft:sugar_cane' && props.age === undefined) props.age = '0';
   // a plain pumpkin does not face anywhere in Java (a carved one does)
   if (name === 'minecraft:pumpkin') delete props.facing;
+  // a lever: Bedrock names its place and lie in one word, Java in two (face, facing);
+  // it is on when its open bit is
+  if (name === 'minecraft:lever') {
+    const d = String(props.lever_direction || 'up_north_south');
+    props.face = /^up/.test(d) ? 'floor' : /^down/.test(d) ? 'ceiling' : 'wall';
+    props.facing = /east_west/.test(d) ? 'east' : /north_south/.test(d) ? 'north' : d;
+    props.powered = props.open === 'true' ? 'true' : 'false';
+    delete props.lever_direction; delete props.open;
+  }
+  // a button on top of a block or under one: Java's face, the facing then any
+  if (/_button$/.test(name) && (props.facing === 'up' || props.facing === 'down')) {
+    props.face = props.facing === 'up' ? 'floor' : 'ceiling'; props.facing = 'north';
+  } else if (/_button$/.test(name) && props.facing) props.face = 'wall';
+  // a note block's pitch is a block entity in Bedrock, a state in Java (and its
+  // instrument, which the game works out from the block under it, is stored too)
+  if (name === 'minecraft:note_block') {
+    props.note = String(Math.max(0, Math.min(24, Number(extra.note) || 0)));
+    props.instrument = extra.instrument || 'harp';
+    props.powered = 'false';
+  }
   // a full cauldron is its own block in Java
   if (name === 'minecraft:cauldron') {
     const level = Number(props.level || 0);

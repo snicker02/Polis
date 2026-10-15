@@ -17,7 +17,7 @@ import { makeRng } from './rng.js';
 // Must match main.js VERSION, package.json and index.html data-version;
 // tools/validate.js fails if they drift. The app refuses to export when the
 // browser has mixed cached copies of old and new files.
-export const POLIS_VERSION = '0.64.1';
+export const POLIS_VERSION = '0.65.0';
 
 export const CHUNK = 64;          // Bedrock structure limit per horizontal axis
 export const GROUND_DROP = 2;     // base layer y=0 sits 2 below feet; surface y=1 replaces the block you stand on
@@ -897,6 +897,17 @@ export function placementGuide(tiles, opts = {}) {
   if ((opts.places || []).some((P) => P.kind === 'watertower' || P.kind === 'petrol')) {
     L.push('THE WATER TOWER: a ladder up its front leg to the catwalk round the tank; a second ladder up the tank to its roof,');
     L.push('  where a hatch drops you into the water. THE PETROL STATION: press a pump\'s button and it hands out a lump of coal.');
+    L.push('');
+  }
+  if ((opts.places || []).some((P) => P.kind === 'bandstand')) {
+    L.push('THE BANDSTAND: press the button on the stand in the middle of the stage and it plays its tune, a melody and a');
+    L.push('  bass, from the note blocks on its roof (the lamp on top lights while it plays). Every city has its own tune.');
+    L.push('');
+  }
+  if ((opts.places || []).some((P) => P.kind === 'themepark')) {
+    L.push('THE SHOOTING GALLERY (in the theme park\'s archery range): flip the lever on the counter and six targets rise out');
+    L.push('  of the floor and sink again, one after another out from the middle, over and over. Hit one while it is up and');
+    L.push('  its lamp lights. Lever off to stop them. Bows and arrows in the chest.');
     L.push('');
   }
   if ((opts.places || []).some((P) => P.kind === 'wizard')) {

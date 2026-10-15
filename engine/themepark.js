@@ -31,7 +31,7 @@
 //   off, an archery range whose targets light a lamp when hit;
 // - a fence round it all, lamps wherever the night would be dark.
 
-import { MAT, MATERIALS, B, I, railId, poweredRailId, RAIL, stairId, WEIRDO, signId, SIGN_FACING, WOOLS, chestId } from './materials.js';
+import { MAT, MATERIALS, B, I, S, railId, poweredRailId, RAIL, stairId, WEIRDO, signId, SIGN_FACING, WOOLS, chestId } from './materials.js';
 import { N } from './blockcore.js';
 import { edgeRoute, accessRoad, OUT, OPPOSITE, NAME, lightGround } from './offsite.js';
 import { ferrisWheel } from './park.js';
@@ -465,8 +465,8 @@ export function buildThemePark(world, plan, cfg, ctx) {
     }
     for (let u = A0; u <= A1; u++) for (let v = back + 1; v <= back + 2; v++) for (let y = YA + 1; y <= YA + 5; y++) put(u, v, y, MAT.STONEBRICK);
     for (let v = line + 1; v <= back; v++) for (const u of [A0, A1]) put(u, v, YA + 1, MAT.FENCE);
-    sign(41, line - 1, YA + 1, inName, 'Archery\nbows in the chest\nhit a target:\nits lamp lights');
-    rides.archery = { chest: pos(A0 + 1, line - 1, YA + 1), targets, stand: pos(39, line, YA + 1) };
+    sign(41, line - 1, YA + 1, inName, 'Archery\nbows in the chest\nlever on the counter:\nmoving targets');
+    rides.archery = { chest: pos(A0 + 1, line - 1, YA + 1), targets, stand: pos(39, line, YA + 1), gallery: shootingGallery(world, { at, pos, put, YA, line, inName, RED_WOOL, WHITE_WOOL }) };
   }
 
   // ---- benches along the avenue ----------------------------------------------------------------------
@@ -504,4 +504,90 @@ export function buildThemePark(world, plan, cfg, ctx) {
     frame: { at, pos, U0, U1, VD, YA, u0, u1, v0, v1 },
     map: { loop: loop.map(([u, v]) => at(u, v)), wheel: [at(wu - wr, wv), at(wu + wr, wv)], tower: at(TU, TV), carousel: at(CU, CV) },
   };
+}
+
+// ---- the shooting gallery: targets that pop up and down in a wave ----------------------------
+// (In the archery range, in front of its fixed targets.) Blocks cannot ride a rail, so the
+// targets move the way a fairground's do: each rises out of the floor on a sticky piston
+// and sinks back. Six of them in a row, rising one after another out from the middle
+// and later sinking in the same order, over and over while the lever on the counter is on.
+//
+// Under the floor, all a block down:
+// - the clock: a ring of eighteen observers, each watching the one before it, a pulse
+//   running round in 1.8 seconds (as the mill's: one of the ring, the rider, sits on a
+//   sticky piston, here standing on the range just past the counter; the lever on the
+//   counter, through the counter's block, works the piston: on, the rider is pushed down
+//   into the ring and the pulse starts; off, it is pulled out and the pulse dies at the gap);
+// - at one corner the ring's pulse comes out into a block, the head of the feed: a line of
+//   repeaters each way along the row, a block where each target is (two repeaters between,
+//   0.4 seconds a target);
+// - each target's block sets off a waxed copper bulb beside it, which turns on or off at
+//   each pulse (a bulb is a flip-flop); a comparator reads the bulb (lit, 15) into a block,
+//   and the block powers the sticky piston beside it, under the target: lit, the target is
+//   up; dark, it is down, flush with the floor;
+// - a redstone lamp stands behind each target's raised place: hit the target while it is
+//   up and the lamp lights.
+function shootingGallery(world, c) {
+  const { at, pos, put, YA, line, inName, RED_WOOL, WHITE_WOOL } = c;
+  const [x0, z0] = at(0, 0), [xu, zu] = at(1, 0), [xv, zv] = at(0, 1);
+  const U = [xu - x0, zu - z0], V = [xv - x0, zv - z0];
+  const NAME_ = (d) => (d[0] > 0 ? 'east' : d[0] < 0 ? 'west' : d[1] > 0 ? 'south' : 'north');
+  const dirName = (du, dv) => NAME_([U[0] * du + V[0] * dv, U[1] * du + V[1] * dv]);
+  const observer = (watches) => MATERIALS.add(null, 'minecraft:observer', '#5e5e5e', { 'minecraft:facing_direction': S(watches), powered_bit: B(0) });
+  const repeater = (toInput, delay) => MATERIALS.add(null, 'minecraft:unpowered_repeater', '#b8a8a8', { 'minecraft:cardinal_direction': S(toInput), repeater_delay: I(delay - 1) }, { passable: true, flat: true });
+  const comparator = (toInput) => MATERIALS.add(null, 'minecraft:unpowered_comparator', '#b8b0a8', { 'minecraft:cardinal_direction': S(toInput), output_lit_bit: B(0), output_subtract_bit: B(0) }, { passable: true, flat: true });
+  const sticky = (dir) => MATERIALS.add(null, 'minecraft:sticky_piston', '#7a8a6a', { facing_direction: I({ down: 0, up: 1, south: 2, north: 3, east: 4, west: 5 }[dir]) });
+  const BULB = MATERIALS.add(null, 'minecraft:waxed_copper_bulb', '#b5643a', { lit: B(0), powered_bit: B(0) });
+  const TARGET = MATERIALS.add(null, 'minecraft:target', '#d8c0a8', {});
+  const RLAMP = MATERIALS.add(null, 'minecraft:redstone_lamp', '#8a5a3a', {});
+  const LEVER = MATERIALS.add(null, 'minecraft:lever', '#6a5a4a', { lever_direction: S(Math.abs(U[0]) ? 'up_east_west' : 'up_north_south'), open_bit: B(0) });
+  const Y = YA - 1;
+  const base = (u, v) => put(u, v, Y - 1, MAT.STONEBRICK);
+  // ---- the clock: the ring, in order round it
+  const ring = [];
+  for (let v = 89; v <= 91; v++) ring.push([36, v]);
+  for (let u = 35; u >= 29; u--) ring.push([u, 91]);
+  for (let v = 90; v >= 89; v--) ring.push([29, v]);
+  for (let u = 30; u <= 35; u++) ring.push([u, 89]);
+  const RIDER = ring.findIndex(([u, v]) => u === 33 && v === 89);
+  const watches = ring.map(([u, v], k) => { const [pu, pv] = ring[(k - 1 + ring.length) % ring.length]; return dirName(pu - u, pv - v); });
+  ring.forEach(([u, v], k) => { base(u, v); if (k !== RIDER) put(u, v, Y, observer(watches[k])); });
+  // the rider, at rest a block up (in the floor), the sticky piston over it on the range,
+  // the lever on the counter beside the piston
+  const [ru, rv] = ring[RIDER];
+  put(ru, rv, YA, observer(watches[RIDER])); put(ru, rv, YA + 1, sticky('down'));
+  put(ru, line, YA + 2, LEVER);
+  // ---- the feed: from the ring's corner at (36, 91) into its head, then each way along the row
+  const FEED = 92, head = [36, FEED];
+  base(...head); put(head[0], FEED, Y, MAT.STONEBRICK);
+  const modulesAt = [30, 33, 39, 42, 45, 48];
+  const feed = [pos(head[0], FEED, Y)], modules = [];
+  for (const dir of [1, -1]) {
+    for (let u = head[0] + dir; dir > 0 ? u <= 48 : u >= 30; u += dir) {
+      base(u, FEED);
+      if (modulesAt.includes(u)) put(u, FEED, Y, MAT.STONEBRICK);
+      else put(u, FEED, Y, repeater(dirName(-dir, 0), 2));
+      feed.push(pos(u, FEED, Y));
+    }
+  }
+  // ---- the targets
+  for (const u of modulesAt) {
+    for (const v of [93, 94, 95, 96]) base(u, v);
+    put(u, 93, Y, BULB);
+    put(u, 94, Y, comparator(dirName(0, -1)));                    // (reads the bulb behind it)
+    put(u, 95, Y, MAT.STONEBRICK);                                 // (the comparator's block, beside the piston)
+    put(u, 96, Y, sticky('up'));
+    put(u, 96, YA, TARGET);                                        // down: flush with the floor
+    put(u, 97, YA + 1, RLAMP);
+    modules.push({ u, feed: pos(u, FEED, Y), bulb: pos(u, 93, Y), comparator: pos(u, 94, Y), block: pos(u, 95, Y), piston: pos(u, 96, Y),
+      target: pos(u, 96, YA), up: pos(u, 96, YA + 1), lamp: pos(u, 97, YA + 1) });
+  }
+  modules.sort((a, b) => Math.abs(a.u - 37.5) - Math.abs(b.u - 37.5));
+  // ---- a fairground stall: a striped awning over the counter on posts at either end
+  const awning = [];
+  for (let u = 28; u <= 50; u++) for (const v of [line - 1, line]) { put(u, v, YA + 4, (u % 2) ? RED_WOOL : WHITE_WOOL); awning.push(pos(u, v, YA + 4)); }
+  for (const u of [28, 50]) for (let y = YA + 1; y <= YA + 3; y++) put(u, line, y, MAT.FENCE);
+  void inName;
+  return { ring: ring.map(([u, v]) => pos(u, v, Y)), rider: RIDER, riderRest: pos(ru, rv, YA), piston: pos(ru, rv, YA + 1), lever: pos(ru, line, YA + 2),
+    counter: pos(ru, line, YA + 1), tap: pos(36, 91, Y), head: pos(head[0], FEED, Y), feed, modules, awning, period: ring.length * 0.1 };
 }
