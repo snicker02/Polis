@@ -207,6 +207,28 @@ export default async function run(ctx) {
       if (rlLines.length !== rl.length || (firstMob >= 0 && firstMob < last) || (firstSet >= 0 && firstSet < last) || (firstSummon >= 0 && firstSummon < last)) popBad++;
     }
     check('metro: populate and populate_centered lay the rails under the city first: before the mobs, the minecarts and the rails set again', popBad === 0, `${popBad}`);
+    // (0.66.1) and each of them set again by hand: metro_rails, called by populate after the structures
+    {
+      const wb = w.box;
+      const parts = fns.filter((f) => /^test\/metro_rails(_\d+)?$/.test(f.fn));
+      const set = new Map();
+      for (const f of parts) for (const l of f.text.split('\n')) {
+        const m = l.match(/^setblock ~(-?\d*) ~(-?\d*) ~(-?\d*) (minecraft:\w+) \[(.*)\]$/);
+        if (m) set.set([wb.x0 + Number(m[1] || 0), Number(m[2] || 0) + 2, wb.z0 + Number(m[3] || 0)].join(), [m[4], m[5]]);
+      }
+      let right = 0;
+      w.forEach((x, y, z, id) => {
+        if (!under(x, y, z, id)) return;
+        const e = set.get([x, y, z].join()), d = MATERIALS.def(id);
+        const dir = d.states.rail_direction; const dv = dir ? (dir.value ?? dir) : 0;
+        if (e && e[0] === d.block && e[1].includes(`"rail_direction"=${dv}`)) right++;
+      });
+      const pop = fns.find((f) => f.fn === 'test/populate').text.split('\n');
+      const call = pop.findIndex((l) => l === 'function test/metro_rails'), lastRl = Math.max(...pop.map((l, i) => (/_rl /.test(l) ? i : -1)));
+      check('metro: every rail under the city also set by hand (metro_rails, parts of 8000 lines at most, each calling the next), called by populate after the structures',
+        right === want && set.size === want && parts.every((f) => f.text.split('\n').length <= 8004) && call > lastRl && fns.some((f) => f.fn === 'test/metro_rails_centered'),
+        `${right}/${want} right, ${set.size} set, call at ${call} after ${lastRl}`);
+    }
   }
   // none when switched off, on stilts, in the sky, up a cliff
   {

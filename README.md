@@ -1,4 +1,4 @@
-# Polis v0.66.0
+# Polis v0.66.1
 
 *Created with help from Claude AI.*
 
@@ -771,6 +771,31 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.66.1** — The metro's rails set by hand as well; build and populate say which pack they are.
+
+Reported: after populate the metro still had no rails. The pack itself has them: for
+the reported city (512, seed 292023633) its 18 rail structures hold all 1110 rails
+under the city, each at its own cell, loaded by populate at the same offsets as the
+city's tiles. What kept them from going down in the game is not known; so populate no
+longer relies on the structures alone.
+
+- After the rail structures, populate now calls a function of its own, metro_rails
+  (metro_rails_centered for the centred build), that sets every rail under the city
+  with a setblock of its own, its exact shape given, straights and slopes first and
+  curves last. Whatever the structures did not put down, this does. It ends by saying
+  how many it set. It can be run on its own at any time, from the build spot or from
+  the mark (metro_rails_from_mark), to put back any rail that is missing. A big metro
+  is split into parts of at most 8000 lines, each calling the next (Bedrock will not
+  load a longer function).
+- build and populate now name the Polis version and the city's function name in the
+  first thing they say in chat, so it is plain which pack's function is running: each
+  version's pack has its own name, and an older pack still in the world answers to its
+  own.
+- (The Molang errors in the content log, from the player's, the minecart's and the
+  squid's animations, are the game's own vanilla resource pack: nothing of Polis.)
+- 2zu checks that every rail under the city is set by hand once, with its own block
+  and shape, in parts of 8000 lines at most, called by populate after the structures.
 
 **0.66.0** — Three new city styles: Steampunk, Santorini and Cyberpunk.
 

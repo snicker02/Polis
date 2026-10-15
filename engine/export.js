@@ -17,7 +17,7 @@ import { makeRng } from './rng.js';
 // Must match main.js VERSION, package.json and index.html data-version;
 // tools/validate.js fails if they drift. The app refuses to export when the
 // browser has mixed cached copies of old and new files.
-export const POLIS_VERSION = '0.66.0';
+export const POLIS_VERSION = '0.66.1';
 
 export const CHUNK = 64;          // Bedrock structure limit per horizontal axis
 export const GROUND_DROP = 2;     // base layer y=0 sits 2 below feet; surface y=1 replaces the block you stand on
@@ -428,6 +428,30 @@ export function railLines(world, dx, dz) {
   return rails.map((r) => `setblock ${rel(r.x - dx)} ${rel(r.y - GROUND_DROP)} ${rel(r.z - dz)} ${r.golden ? `minecraft:golden_rail ["rail_data_bit"=true,"rail_direction"=${r.dir}]` : `minecraft:rail ["rail_direction"=${r.dir}]`}`);
 }
 
+// Every rail under the city set by hand, one setblock each, straights and slopes first,
+// the curves last (both their neighbours there when they go in). populate loads the
+// rails in structures first; this follows, so a rail the structures did not put down (a
+// tile whose chunks were not loaded, whatever the reason) is put down all the same, and
+// each one with its exact shape. Its own function (metro_rails), so it can be run again
+// on its own; in parts of at most 8000 lines (Bedrock will not load a longer function).
+export function undergroundRailLines(world, dx, dz) {
+  const under = undergroundRail(world);
+  if (!under) return [];
+  const rails = [];
+  world.forEach((x, y, z, id) => {
+    if (!under(x, y, z, id)) return;
+    const d = MATERIALS.def(id), st = d.states.rail_direction, dir = Number(st ? (st.value ?? st) : 0);
+    rails.push({ x, y, z, d, dir });
+  });
+  const rank = (r) => (r.dir >= 6 ? 2 : r.dir >= 2 ? 1 : 0);
+  rails.sort((a, b) => rank(a) - rank(b) || a.y - b.y || a.x - b.x || a.z - b.z);
+  const stateText = (states) => Object.entries(states).map(([k, v]) => {
+    const t = v && v.type, val = v && v.value !== undefined ? v.value : v;
+    return `"${k}"=${t === 'string' ? `"${val}"` : /_bit$/.test(k) ? (val ? 'true' : 'false') : val}`;
+  }).join(',');
+  return rails.map((r) => `setblock ${rel(r.x - dx)} ${rel(r.y - GROUND_DROP)} ${rel(r.z - dz)} ${r.d.block} [${stateText(r.d.states)}]`);
+}
+
 // ---- mob structures ------------------------------------------------------------
 // Villagers and golems travel inside entity-only structures (no blocks, every
 // cell structure void), one per 64x64 tile, so they arrive wherever blocks do.
@@ -612,7 +636,13 @@ export function functionFiles(tiles, world, opts = {}) {
   const railStructs = buildRailStructures(world, opts);
   const railByName = new Set(railStructs.map((p) => p.name));
   const railTiles = tiles.filter((t) => railByName.has(t.name + '_rl')).map((t) => ({ ...t, name: t.name + '_rl' }));
-  const railCount = railStructs.reduce((a, p) => a + p.rails, 0);
+  const railCount = railStructs.reduce((a, p) => a + p.rails, 0), undergroundRailCount = railCount;
+  const metroCache = new Map();
+  const metroParts = (dx, dz) => {
+    const k = dx + ',' + dz;
+    if (!metroCache.has(k)) { const ls = undergroundRailLines(world, dx, dz), parts = []; for (let i = 0; i < ls.length; i += 8000) parts.push(ls.slice(i, i + 8000)); metroCache.set(k, parts); }
+    return metroCache.get(k);
+  };
   const plugs = tiles.filter((t) => plugTiles.has(t.name + '_p')).map((t) => ({ ...t, name: t.name + '_p' }));
   // (a city with command blocks in it, the airport's pads or the stadium's: the game's
   // command block chat turned off, or every run of one is a line in the chat)
@@ -632,7 +662,7 @@ export function functionFiles(tiles, world, opts = {}) {
     // the centred version marks this spot (an armor stand in the centre mark's
     // alcove), and the other centred functions run from it wherever you stand
     ...(pop === 'populate_centered' ? [`kill @e[type=armor_stand,name=${anchor}]`, `kill @e[type=armor_stand,tag=${ctag}]`, `summon armor_stand ${anchor} ~ ~ ~`, `tag @e[type=armor_stand,name=${anchor},r=2] add ${ctag}`] : []),
-    `say Polis: city placed. When it has finished appearing, run /function ${ns}/${pop} from this same spot.`,
+    `say Polis ${POLIS_VERSION} (${ns}): city placed. When it has finished appearing, run /function ${ns}/${pop} from this same spot.`,
     ...(pop === 'populate_centered' ? [`say Polis: this spot is marked by an armor stand. To come back to it: /tp @s @e[type=armor_stand,name=${anchor},c=1]`] : []),
   ].join('\n') + '\n';
   const railCache = new Map();
@@ -662,11 +692,13 @@ export function functionFiles(tiles, world, opts = {}) {
     // start, the far side was unloaded at that very moment, still loading again
     // while every summon and rail ran, and none of them reached it. release takes
     // them off; areas makes them again, run on its own and a moment let pass.)
-    `say Polis: bringing in ${villagers} villagers, ${golems} golems, ${cats} cats, ${pandas} pandas, ` +
+    `say Polis ${POLIS_VERSION} (${ns}): bringing in ${villagers} villagers, ${golems} golems, ${cats} cats, ${pandas} pandas, ` +
       `${animals.length} farm animals` + (summoned.length ? `, ${summonedNote()}...` : '...'),
     ...(railTiles.length ? [`say Polis: laying the ${railCount} rails under the city (left out of build, so no water could take them)...`,
       `kill @e[type=item,x=${rel(wb.x0 - dx)},y=${rel(wb.y0 - GROUND_DROP)},z=${rel(wb.z0 - dz)},dx=${wb.x1 - wb.x0},dy=${Math.max(1, 1 - wb.y0)},dz=${wb.z1 - wb.z0}]`,     // (any rail an earlier build's water dropped, under the ground)
-      ...railTiles.map((t) => load(t, dx, dz))] : []),
+      ...railTiles.map((t) => load(t, dx, dz)),
+      // (and each one set again by hand: whatever the structures did not put down)
+      ...(metroParts(dx, dz).length ? [`function ${ns}/metro_rails${dx === wb.x0 ? '' : '_centered'}`] : [])] : []),
     ...mobs.map((t) => load(t, dx, dz)),
     ...(rails(dx, dz).length ? ['say Polis: setting every rail again (a curve can straighten itself while the city goes in)...', ...rails(dx, dz)] : []),
     ...summoned.map((p) => sumLine(p, dx, dz)),
@@ -702,6 +734,13 @@ export function functionFiles(tiles, world, opts = {}) {
       { name: `functions/${ns}/rails_centered.mcfunction`, fn: `${ns}/rails_centered`,
         text: ['# Polis: every rail set again with its exact shape. Run from the same spot as build_centered.', ...rails(cx, cz)].join('\n') + '\n' },
     ] : []),
+    // (the rails under the city by hand: populate calls these; they can be run again on their own)
+    ...metroParts(wb.x0, wb.z0).map((part, k) => ({ name: `functions/${ns}/metro_rails${k ? '_' + (k + 1) : ''}.mcfunction`, fn: `${ns}/metro_rails${k ? '_' + (k + 1) : ''}`,
+      text: [`# Polis ${POLIS_VERSION}: the rails under the city (metro), each set by hand${k ? ` (part ${k + 1})` : ''}. Run from the same spot as build.`, ...part,
+        ...(k + 1 < metroParts(wb.x0, wb.z0).length ? [`function ${ns}/metro_rails_${k + 2}`] : [`say Polis: ${undergroundRailCount} rails under the city set.`])].join('\n') + '\n' })),
+    ...metroParts(cx, cz).map((part, k) => ({ name: `functions/${ns}/metro_rails_centered${k ? '_' + (k + 1) : ''}.mcfunction`, fn: `${ns}/metro_rails_centered${k ? '_' + (k + 1) : ''}`,
+      text: [`# Polis ${POLIS_VERSION}: the rails under the city (metro), each set by hand${k ? ` (part ${k + 1})` : ''}. Run from the same spot as build_centered.`, ...part,
+        ...(k + 1 < metroParts(cx, cz).length ? [`function ${ns}/metro_rails_centered_${k + 2}`] : [`say Polis: ${undergroundRailCount} rails under the city set.`])].join('\n') + '\n' })),
     ...(removeTiles.length ? [
       { name: `functions/${ns}/remove.mcfunction`, fn: `${ns}/remove`, text: remove(wb.x0, wb.z0) },
       { name: `functions/${ns}/remove_centered.mcfunction`, fn: `${ns}/remove_centered`, text: remove(cx, cz) },
@@ -893,6 +932,7 @@ export function placementGuide(tiles, opts = {}) {
   L.push('  It clears the city to a clean site (grass on the city\'s own ground) and removes every non-player entity in the area.');
   if (opts.plugs) L.push('Underground: build first fills every room under the city (cellars, crypt, metro) with stone, then the city puts the rooms back: the world\'s own groundwater cannot get in at the edge of a tile not yet loaded.');
   if (opts.plugs) L.push('The rails under the city (the metro) are not laid by build: populate lays them, once the whole city is in, so no water running in at a tile\'s edge while it loads can wash them away.');
+  if (opts.plugs) L.push('If any are missing afterwards, /function <city>/metro_rails_centered (or metro_rails, or metro_rails_from_mark) sets every one of them again, one by one. The first line build and populate say in chat names the Polis version and the city\'s function name: check it is this pack\'s.');
   L.push(`build_centered also leaves an armor stand on its spot (named ${centreAnchor(ns)}). Run populate_centered`);
   L.push('  from that spot; if you have moved, go back to it first:');
   L.push(`    /tp @s @e[type=armor_stand,name=${centreAnchor(ns)},c=1]`);
