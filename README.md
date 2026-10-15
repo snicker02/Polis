@@ -1,4 +1,4 @@
-# Polis v0.66.1
+# Polis v0.67.0
 
 *Created with help from Claude AI.*
 
@@ -771,6 +771,57 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.67.0** — A nightclub with a jukebox panel of six songs.
+
+A new option, "A nightclub" (off by default), builds one (club.js), seventeen by
+twenty-four: a black club with neon bands, double doors under a neon canopy, a dance
+floor of coloured concrete and froglights under a disco ball, a bar down one side
+(barrels of drinks and snacks behind it, stools before it), booths down the other, and
+across the back the DJ booth: six buttons, each with its song's name, genre, instrument,
+key and length on a sign over it and a lamp that lights while it is pressed. A real
+jukebox and a chest of every music disc stand at the booth too.
+
+- The songs are built over the club, one floor apiece (eight blocks a song): a melody
+  line and a rhythm line of note blocks and repeaters, each snaking the whole floor in
+  rows two apart, seventy-four to seventy-nine steps a line, fifteen to twenty-four
+  seconds a song. The bandstand's tune was twelve.
+- Each button sits at the foot of a torch tower of its own in the back wall, climbing
+  to its song's floor. An even number of torches below the start means one press plays
+  the song once. The higher songs wait a moment (up to about two and a half seconds)
+  while the signal climbs.
+- Every song is composed from the city's seed and the club's place. Six of eleven
+  genres per club, each with its own melody instrument and beat:
+  - Disco: bells
+  - Synthwave: pling
+  - Chiptune: bit, on emerald
+  - Funk: banjo, on hay
+  - Ballad: flute
+  - Waltz: harp, in three
+  - Calypso: iron xylophone
+  - Boogie: cow bell
+  - Lullaby: chimes
+  - Surf: guitar, on wool
+  - Marimba: xylophone
+
+  Each song runs to a chord progression, in phrases A A' B A, swung where the genre
+  swings, and comes home to the tonic. Its rhythm line plays the beat: a bass on the
+  chord's root (planks), kick (stone), snare (sand) and hat (glass). Titles are made
+  up ("Velvet Rhythm") and no two in a club share a word.
+- The song floors are lit by sea lanterns set in their floors every four blocks, so
+  nothing spawns among the circuits. Glass bands at the line heights show them from
+  the street.
+- The export guide has a section on it.
+- Java: a cake's bites now carry over (bite_counter → bites); the nightclub's check
+  caught it on a cake elsewhere in the city.
+- New check 2zzv: built in two cities; six songs, six genres, titles with no shared
+  word, every song seventy steps and fifteen seconds or more; every note block with
+  air over it, its instrument under it (the snare's sand on a block) and its pitch the
+  song's, none beside another, every repeater straight. Run in the redstone simulator:
+  at rest nothing stirs; each button plays its own song, every note once at its time,
+  melody and rhythm together, no other song's notes, its lamp on while pressed, and
+  again the same. The panel is walked to from the street, nothing on the lot is dark,
+  and every block is a Bedrock state and a Java block.
 
 **0.66.1** — The metro's rails set by hand as well; build and populate say which pack they are.
 

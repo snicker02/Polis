@@ -125,6 +125,7 @@ export const DEFAULTS = {
   watertower: false,         // a water tower: a tank on iron legs, a catwalk, a hatch to swim in it (townbits.js)
   petrol: false,             // a petrol station: a canopy, pumps that hand out coal, a car, a shop (townbits.js)
   skatepark: false,          // a skate park: a half pipe, a pyramid, a rail and a ledge, graffiti walls (townbits.js)
+  nightclub: false,          // a nightclub: a dance floor, a bar, a jukebox panel of six buttons playing six songs of note blocks (club.js)
   wizard: false,             // a wizard's tower: a cauldron room, a brewing lab, an enchanting library, the wizard's room (wizard.js)
   lifts: true,               // bubble lifts beside the stairs of the tall towers: soul sand up, magma down (building.js)
   bank: false,               // a bank: a marble hall, teller windows, a vault behind an iron door with a lever combination lock (bank.js)
@@ -1010,6 +1011,7 @@ export function generateCity(cfgIn, onProgress) {
     ['skatepark', '15 by 19', (L) => `a half pipe, a pyramid, a grind rail and a ledge, ${L.ramps.length} ramps of stairs, graffiti walls`],
     ['bandstand', '9 by 9', (L) => L.music ? `a button on the stand plays a tune in ${L.music.key} on the ${L.music.instrument}, ${L.music.melody.length} notes and a bass, ${L.music.seconds} seconds` : 'a stage'],
     ['wizard', '15 by 15', (L) => `a cauldron room of ${L.cauldrons.length} cauldrons, ${L.brewing.length} brewing stands, an enchanting table with ${L.shelves.length} bookshelves round it (it counts fifteen, its most), an anvil, the wizard's room under a pointed roof`],
+    ['nightclub', '17 by 24', (L) => `a dance floor, a bar, a jukebox panel of ${L.songs.length} songs: ${L.songs.map((s) => `"${s.title}" (${s.genre}, ${Math.round(s.seconds)} s)`).join(', ')}`],
     ['bank', '17 by 21', (L) => `a marble hall, ${L.windows.length} teller windows, a vault behind an iron door with a combination lock of ${L.levers.length} levers (the code: ${L.codeWords}), ${L.vault.gold.length} gold blocks, ${L.vault.chests.length} chests of emeralds, a safe-deposit wall of ${L.vault.deposit.length}`],
     ['sports', '17 by 23', (L) => `a court marked in coloured concrete, a climbing wall of ${L.climb.ladders.length} ladders and ${L.climb.scaffolds.length} towers of scaffolding, a pool lane ${L.pool.water.length / 2 / 3} long, a parkour course of ${L.stones.length} jumps, a running track of ${L.track.lanes[0].length} on the roof`],
     ['mill', '13 by 15', (L) => `a sugar cane farm of ${L.farm.canes.length} canes, an observer clock, an item sorter of ${L.sorter.columns.length} filters`]]) {

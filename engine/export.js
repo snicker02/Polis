@@ -17,7 +17,7 @@ import { makeRng } from './rng.js';
 // Must match main.js VERSION, package.json and index.html data-version;
 // tools/validate.js fails if they drift. The app refuses to export when the
 // browser has mixed cached copies of old and new files.
-export const POLIS_VERSION = '0.66.1';
+export const POLIS_VERSION = '0.67.0';
 
 export const CHUNK = 64;          // Bedrock structure limit per horizontal axis
 export const GROUND_DROP = 2;     // base layer y=0 sits 2 below feet; surface y=1 replaces the block you stand on
@@ -1001,6 +1001,14 @@ export function placementGuide(tiles, opts = {}) {
     L.push('  floor the brewing stands (blaze powder in them, every ingredient in the chests); on the second the enchanting');
     L.push('  table with fifteen bookshelves round it, lapis and bottles o\' enchanting in the chest (throw them for the levels');
     L.push('  you need), an anvil and a grindstone; at the top the wizard\'s own room, a bed and an ender chest.');
+    L.push('');
+  }
+  if ((opts.places || []).some((P) => P.kind === 'nightclub')) {
+    L.push('THE NIGHTCLUB: the jukebox panel is across the back of the club, six buttons, each with its song\'s name on a');
+    L.push('  sign over it. Press one and its song plays from the floors above (a few seconds\' wait for the higher songs:');
+    L.push('  the signal climbs the tower to them). Each song is a melody and a rhythm line of note blocks, seventy-odd');
+    L.push('  steps, twenty-odd seconds. The glass bands up the outside show the circuits. A real jukebox and a chest of');
+    L.push('  every music disc are at the booth too. Do not break the blocks over the club: the songs are up there.');
     L.push('');
   }
   if (opts.world && opts.world.lifts) {

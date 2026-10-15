@@ -109,6 +109,7 @@ function translateState(block, key, value) {
     case 'lit': return ['lit', value ? 'true' : 'false'];
     case 'lever_direction': return ['lever_direction', String(value)];        // (made into face and facing below)
     case 'extinguished': return ['lit', value ? 'false' : 'true'];
+    case 'bite_counter': return ['bites', String(value)];
     case 'deprecated': return null;
     case 'cauldron_liquid': return null;
     case 'fill_level': return ['level', String(Math.min(3, value))];
