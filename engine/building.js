@@ -35,6 +35,7 @@
 
 import { perimeter } from './blockcore.js';
 import { makeRng } from './rng.js';
+import { steampunkDress, santoriniDress, cyberDress } from './stylebits.js';
 import { MAT, MATERIALS, B, doorId, stairId, DIR, WEIRDO, STAIR_SOLID, FLOWERS } from './materials.js';
 
 export const OUTWARD = { north: [0, -1], south: [0, 1], west: [-1, 0], east: [1, 0] };
@@ -278,9 +279,9 @@ export function makeBuilding(world, spec, rng) {
   }
 
   // ---- roof ----------------------------------------------------------------
-  slab(top, roofY, theme.floor);
+  slab(top, roofY, spec.roofSlab || theme.floor);       // (a style may whitewash its roofs)
 
-  if (style === 'house') {
+  if (style === 'house' && !spec.flatRoof) {
     // a rustic roof hangs further out, the way a village cottage's does
     gableRoof(world, { x0: top.x0 - 1, z0: top.z0 - 1, x1: top.x1 + 1, z1: top.z1 + 1 },
       roofY + 1, theme, spec.useStairs, spec.rustic ? 1 : 0);
@@ -335,7 +336,7 @@ export function makeBuilding(world, spec, rng) {
     for (const [cx, cz] of doorCells) world.set(cx, gy + 3, cz, MAT.GLOWSTONE);
   }
 
-  let houseInfo = null, arcadeInfo = null, eavesInfo = null, lancetInfo = null, decoInfo = null, chimneyAt = null;
+  let houseInfo = null, arcadeInfo = null, eavesInfo = null, lancetInfo = null, decoInfo = null, chimneyAt = null, steamInfo = null, santoriniInfo = null, neonInfo = null;
   if (spec.detail !== false) {
     const ctx = {
       rects: Array.from({ length: floors }, (_, k) => rect(k)), floorYs, roofY, top, theme, style, face, P,
@@ -352,6 +353,12 @@ export function makeBuilding(world, spec, rng) {
     if (spec.eaves) eavesInfo = eaveSkirts(world, ctx);
     if (spec.lancets && style !== 'tower') lancetInfo = gothicWindows(world, ctx);
     if (spec.deco && style !== 'house') decoInfo = artDeco(world, ctx);
+    // a style's own dress (stylebits.js), each from its own stream seeded where the building stands
+    const own = (salt) => makeRng(((x0 * 2654435761) ^ (z0 * 40503) ^ salt) >>> 0);
+    ctx.chimney = chimneyAt;
+    if (spec.steam) steamInfo = steampunkDress(world, ctx, own(0x57ea));
+    if (spec.santorini) santoriniInfo = santoriniDress(world, ctx, own(0x5a47));
+    if (spec.neon) neonInfo = cyberDress(world, ctx, own(0xc1be));
   }
 
   // ---- a bubble lift beside the stairs (a building of five floors and more) ---
@@ -364,7 +371,7 @@ export function makeBuilding(world, spec, rng) {
     x0, z0, x1, z1, w, d, floors, pitch: P, groundY: gy, style,
     themeName: theme.name, theme, facing: face,
     rects: Array.from({ length: floors }, (_, k) => rect(k)),
-    floorYs, roofY, topY: hut ? roofY + 4 : roofY + (style === 'house' ? Math.ceil(Math.min(w, d) / 2) + 1 : 2),
+    floorYs, roofY, topY: hut ? roofY + 4 : roofY + (style === 'house' && !spec.flatRoof ? Math.ceil(Math.min(w, d) / 2) + 1 : 2),
     core: core ? { x0: core.x0, z0: core.z0, x1: core.x1, z1: core.z1 } : null,
     stairKind: core ? core.kind : null,
     hut, hutDoor, windows: windowCount, chimney: chimneyAt,
@@ -376,6 +383,7 @@ export function makeBuilding(world, spec, rng) {
     eaves: eavesInfo,
     lancets: lancetInfo,
     deco: decoInfo,
+    steam: steamInfo, santorini: santoriniInfo, neon: neonInfo, flatRoof: !!spec.flatRoof,
   };
 }
 

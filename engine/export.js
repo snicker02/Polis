@@ -17,7 +17,7 @@ import { makeRng } from './rng.js';
 // Must match main.js VERSION, package.json and index.html data-version;
 // tools/validate.js fails if they drift. The app refuses to export when the
 // browser has mixed cached copies of old and new files.
-export const POLIS_VERSION = '0.65.0';
+export const POLIS_VERSION = '0.66.0';
 
 export const CHUNK = 64;          // Bedrock structure limit per horizontal axis
 export const GROUND_DROP = 2;     // base layer y=0 sits 2 below feet; surface y=1 replaces the block you stand on
@@ -229,13 +229,50 @@ export function buildAnimStructures(world, opts = {}) {
   });
 }
 
+// ---- the rails under the city: in with populate, not with build -------------------
+// The city goes in a tile at a time, and a room under it (a metro tunnel) crosses many
+// tiles. The plugs (buildPlugStructures) keep the world's water out of every tile's
+// share of a room until that tile goes in; but where one tile is in and its neighbour's
+// ground has not loaded yet, the tunnel's end stands open onto that ground, and when it
+// loads its water can run in for a moment before its own plug and tile arrive. It
+// drains away when they do; a rail it ran over is gone (in the game water breaks a rail
+// and drops it). So the rails in the rooms under the city are left out of build: the
+// tunnels go in empty, and populate (run once the whole city is standing, every tile
+// in, any such water long gone) lays them, a structure a tile of nothing but rails.
+const RAIL_BLOCK = /^minecraft:(rail|golden_rail|detector_rail|activator_rail)$/;
+export function undergroundRail(world) {
+  const rooms = inAirBox(world);
+  if (!rooms) return null;
+  return (x, y, z, id) => RAIL_BLOCK.test(MATERIALS.def(id).block) && rooms(x, y, z);
+}
+export function buildRailStructures(world, opts = {}) {
+  const under = undergroundRail(world);
+  if (!under) return [];
+  const out = [];
+  for (const t of tileList(world, opts)) {
+    const keys = [], ids = [];
+    t.chunk.keys.forEach((k, i) => { const [x, y, z] = VoxelWorld.unkey(k); if (under(x, y, z, t.chunk.ids[i])) { keys.push(k); ids.push(t.chunk.ids[i]); } });
+    if (!keys.length) continue;
+    const res = writeMcStructure(keys, ids, t.box, MATERIALS, {});     // (everything else structure void: left as it is)
+    out.push({ name: t.name + '_rl', data: res.data, box: t.box, size: res.size, cells: res.cells, offset: t.offset, rails: keys.length });
+  }
+  return out;
+}
+
 export function buildStructures(world, opts = {}) {
   const airId = opts.fillAir ? MAT.AIR : undefined;
   const F = Math.max(0, Math.min(48, opts.foundation | 0));
   const fill = F ? { fillFn: foundationFill(world), fillBelowY: world.box.y0 } : {};
   const limits = columnLimits(world, opts);
+  const under = undergroundRail(world);
   return tileList(world, opts).map((t) => {
-    const res = writeMcStructure(t.chunk.keys, t.chunk.ids, t.box, MATERIALS,
+    // (the rails under the city left out: air there, until populate lays them)
+    let keys = t.chunk.keys, ids = t.chunk.ids;
+    if (under) {
+      keys = []; ids = [];
+      t.chunk.keys.forEach((k, i) => { const [x, y, z] = VoxelWorld.unkey(k); if (!under(x, y, z, t.chunk.ids[i])) { keys.push(k); ids.push(t.chunk.ids[i]); } });
+    }
+    const res = writeMcStructure(keys, ids, t.box, MATERIALS,
       { airId, blockData: blockDataFor(world, opts), inside: cityInside(world), ...fill, ...limits,
         wet: world.wet, waterId: MAT.WATER,      // (waterlogged plants: the botanical garden's)
         // a dome's inside is always written as air: water or ground there is driven out
@@ -571,6 +608,11 @@ export function functionFiles(tiles, world, opts = {}) {
   const ctag = layoutTag(world);
   // the plugs for the rooms under the city: which tiles have one (same names, _p)
   const plugTiles = new Set(buildPlugStructures(world, opts).map((p) => p.name));
+  // the rails under the city: populate lays them (same names, _rl)
+  const railStructs = buildRailStructures(world, opts);
+  const railByName = new Set(railStructs.map((p) => p.name));
+  const railTiles = tiles.filter((t) => railByName.has(t.name + '_rl')).map((t) => ({ ...t, name: t.name + '_rl' }));
+  const railCount = railStructs.reduce((a, p) => a + p.rails, 0);
   const plugs = tiles.filter((t) => plugTiles.has(t.name + '_p')).map((t) => ({ ...t, name: t.name + '_p' }));
   // (a city with command blocks in it, the airport's pads or the stadium's: the game's
   // command block chat turned off, or every run of one is a line in the chat)
@@ -622,6 +664,9 @@ export function functionFiles(tiles, world, opts = {}) {
     // them off; areas makes them again, run on its own and a moment let pass.)
     `say Polis: bringing in ${villagers} villagers, ${golems} golems, ${cats} cats, ${pandas} pandas, ` +
       `${animals.length} farm animals` + (summoned.length ? `, ${summonedNote()}...` : '...'),
+    ...(railTiles.length ? [`say Polis: laying the ${railCount} rails under the city (left out of build, so no water could take them)...`,
+      `kill @e[type=item,x=${rel(wb.x0 - dx)},y=${rel(wb.y0 - GROUND_DROP)},z=${rel(wb.z0 - dz)},dx=${wb.x1 - wb.x0},dy=${Math.max(1, 1 - wb.y0)},dz=${wb.z1 - wb.z0}]`,     // (any rail an earlier build's water dropped, under the ground)
+      ...railTiles.map((t) => load(t, dx, dz))] : []),
     ...mobs.map((t) => load(t, dx, dz)),
     ...(rails(dx, dz).length ? ['say Polis: setting every rail again (a curve can straighten itself while the city goes in)...', ...rails(dx, dz)] : []),
     ...summoned.map((p) => sumLine(p, dx, dz)),
@@ -847,6 +892,7 @@ export function placementGuide(tiles, opts = {}) {
   L.push('To take the city away again: /function <city id>/remove_centered from the build_centered spot (or remove from the build spot).'.replace('<city id>', opts.namespace || 'polis'));
   L.push('  It clears the city to a clean site (grass on the city\'s own ground) and removes every non-player entity in the area.');
   if (opts.plugs) L.push('Underground: build first fills every room under the city (cellars, crypt, metro) with stone, then the city puts the rooms back: the world\'s own groundwater cannot get in at the edge of a tile not yet loaded.');
+  if (opts.plugs) L.push('The rails under the city (the metro) are not laid by build: populate lays them, once the whole city is in, so no water running in at a tile\'s edge while it loads can wash them away.');
   L.push(`build_centered also leaves an armor stand on its spot (named ${centreAnchor(ns)}). Run populate_centered`);
   L.push('  from that spot; if you have moved, go back to it first:');
   L.push(`    /tp @s @e[type=armor_stand,name=${centreAnchor(ns)},c=1]`);
@@ -1029,7 +1075,7 @@ export async function exportPack(world, optsIn = {}) {
   // the city's marked centre unless the caller names one
   const opts = { ...optsIn, centre: optsIn.centre || world.centre };
   const tiles = tileList(world, opts);
-  const structures = buildStructures(world, opts).concat(buildDrainStructures(world, opts), buildPlugStructures(world, opts), buildRemoveStructures(world, opts), buildAnimStructures(world, opts));
+  const structures = buildStructures(world, opts).concat(buildDrainStructures(world, opts), buildPlugStructures(world, opts), buildRailStructures(world, opts), buildRemoveStructures(world, opts), buildAnimStructures(world, opts));
   const mobStructs = buildMobStructures(opts.spawns, opts);
   const guide = placementGuide(tiles, { ...opts, world, dome: !!world.dome, stilts: !!world.stiltGrid, floating: !!world.floating, plugs: !!(world.airBoxes && world.airBoxes.length) });
   const fns = functionFiles(tiles, world, { ...opts, mobTiles: mobStructs });
@@ -1047,7 +1093,7 @@ export async function exportPack(world, optsIn = {}) {
 
 export async function exportStructuresZip(world, opts = {}) {
   const tiles = tileList(world, opts);
-  const structures = buildStructures(world, opts).concat(buildDrainStructures(world, opts), buildPlugStructures(world, opts), buildRemoveStructures(world, opts), buildAnimStructures(world, opts));
+  const structures = buildStructures(world, opts).concat(buildDrainStructures(world, opts), buildPlugStructures(world, opts), buildRailStructures(world, opts), buildRemoveStructures(world, opts), buildAnimStructures(world, opts));
   const mobStructs = buildMobStructures(opts.spawns, opts);
   const guide = placementGuide(tiles, { ...opts, world, dome: !!world.dome, stilts: !!world.stiltGrid, floating: !!world.floating, plugs: !!(world.airBoxes && world.airBoxes.length) });
   const fns = functionFiles(tiles, world, { ...opts, mobTiles: mobStructs });

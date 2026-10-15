@@ -1,4 +1,4 @@
-# Polis v0.65.0
+# Polis v0.66.0
 
 *Created with help from Claude AI.*
 
@@ -771,6 +771,64 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.66.0** — Three new city styles: Steampunk, Santorini and Cyberpunk.
+
+Each is offered in the City style list and in Mix styles (every style is, from here on).
+
+- **Steampunk.** A Victorian industrial town of brick, dark oak, deepslate and copper.
+  The copper (cut copper roofs and stairs, copper walls) is left unwaxed, so in the game
+  it turns green over the days. Every roof has a chimney stack or two with a campfire
+  smoking on top, and so does each house's own chimney. Copper pipes (lightning rods
+  end to end) run down the side walls from under the eave to a block over head height,
+  and there are lightning rods on the roof corners. Streets of cobbled deepslate, brick
+  pavements, lanterns on dark oak posts.
+- **Santorini.** Whitewashed houses with flat white roofs (a new flat-roof option for
+  houses), blue and light-blue frames, teal doors. A blue dome on many roofs, a chapel's,
+  with a lantern on its cross, and bougainvillea (flowering azalea leaves, kept from
+  decaying) over the doorways and along the top of the ground floor. White lanes and
+  cream paths, a white wall capped in blue. A hill town, low: unless the sliders are set
+  otherwise, hills come up to 4 and floors stop at 5.
+- **Cyberpunk.** Black towers of concrete, deepslate and chrome, tinted and purple
+  glass. Every other floor is ringed with neon (froglights or sea lanterns in the
+  floor's trim course). A blade sign of coloured concrete, lit at both ends, runs down
+  the street front, and an antenna mast with an end rod stands on most roofs. Black
+  streets with magenta lines and cyan crossings, deepslate pavements, froglight street
+  lights, a city wall capped in light.
+
+How: each style's palettes and street restyling are in styles.js like the others; its
+dress (stylebits.js) goes on after a building's shell, from the building's own random
+stream, so the rest of the city is laid out exactly as before. Like every dress it only
+fills empty cells, never lower than head height out from a wall, never on a roof hut or
+its way out (the neon replaces the trim course itself).
+
+- Java export: flowering azalea leaves by their Java name.
+- New check section 2zzu (13 checks): the three registered and offered (and in the Mix
+  list); every building walked through, nothing dark; Steampunk's chimney fires and
+  low-free pipes, its copper unwaxed; Santorini's flat white roofs, its domes and
+  lanterns, its bougainvillea persistent and high, its defaults (and the sliders having
+  their way); Cyberpunk's neon on every building of two floors, its signs and antennas;
+  the three mixed with others, each in its own dress in its own districts; Bedrock
+  states, and every block in Java.
+
+**0.65.1** — The metro's rails laid by populate, out of the water's way.
+
+The rails in the tunnels under the city were still washed out on wet ground. The
+plugs (0.35.3) keep the world's water out of every tile's share of a tunnel until that
+tile goes in; but a tunnel crosses many tiles, and where one tile is in and its
+neighbour's ground has only just loaded, the tunnel's end stands open onto that
+ground for a moment before the neighbour's plug and tile arrive. Water runs in, takes
+every rail it passes over (water breaks a rail), and drains away when they do: the
+tunnel was left dry and bare, the rails lying about as items.
+
+So build no longer lays the rails under the city: the tunnels go in empty. Populate,
+run once the whole city is standing (every tile in, any such water gone), first clears
+any dropped items under the ground, then lays the rails, a structure a tile holding
+nothing but them, before the minecarts come and before every rail is set to its exact
+shape again. Rails above ground are as they were. The guide says so.
+
+(A city built with an earlier pack: build it again with this one, then populate. The
+blocks under the powered rails are still laid by build.)
 
 **0.65.0** — The bandstand plays a tune; the archery range gets a shooting gallery.
 

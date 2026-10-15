@@ -431,6 +431,132 @@ STYLES.fortress = {
   keepAtCentre: true,
   remap: { ...STYLES.medieval.remap, WALL_BODY: 'STONEBRICK', WALL_CAP: 'STONEBRICK' },
 };
+// Steampunk: a Victorian industrial town of brick and dark oak, deepslate and copper
+// (unwaxed: its roofs and walls of copper turn green in the game as the days go by);
+// a smoking chimney stack on every roof, copper pipes down the side walls, lightning
+// rods (stylebits.js: steampunkDress); cobbled streets, brick pavements, lanterns on
+// dark posts.
+STYLES.steampunk = {
+  label: 'Steampunk',
+  steam: true,
+  themes: {
+    house: [
+      T('foundry', MAT.BRICK, MAT.DARK_FRAME, MAT.DARK_PLANKS, MAT.GLASS, 'copper', 'dark', MAT.COPPER_CUT),
+      T('ironworks', MAT.DEEPSLATE_BRICKS, MAT.BRICK, MAT.SPRUCE, MAT.GLASS, 'copper', 'spruce', MAT.COPPER_CUT),
+      T('gaslamp', MAT.BRICK, MAT.DEEPSLATE_BRICKS, MAT.DARK_PLANKS, MAT.GLASS, 'deepslate', 'dark', MAT.DEEPSLATE),
+    ],
+    mid: [
+      T('mill', MAT.BRICK, MAT.DARK_FRAME, MAT.DARK_PLANKS, MAT.GLASS, 'brick', 'dark'),
+      T('boiler', MAT.DEEPSLATE_BRICKS, MAT.COPPER_CUT, MAT.SPRUCE, MAT.GLASS, 'deepslate', 'spruce'),
+      T('brass', MAT.COPPER_BLK, MAT.BRICK, MAT.DARK_PLANKS, MAT.GLASS, 'copper', 'dark'),
+    ],
+    tower: [
+      T('clockwork', MAT.BRICK, MAT.COPPER_CUT, MAT.DARK_PLANKS, MAT.GLASS, 'brick', 'dark'),
+      T('foundrytower', MAT.DEEPSLATE_BRICKS, MAT.IRON, MAT.DARK_PLANKS, MAT.TINTED, 'deepslate', 'dark'),
+      T('verdigris', MAT.COPPER_CUT, MAT.DEEPSLATE_BRICKS, MAT.SPRUCE, MAT.GLASS, 'copper', 'spruce'),
+    ],
+  },
+  remap: {
+    ASPHALT: 'COBBLED_DEEPSLATE', SIDEWALK: 'BRICK', LINE: 'COBBLED_DEEPSLATE', CROSSWALK: 'ANDESITE', PATH: 'GRAVEL',
+    LAMP_POST: 'DARK_FENCE', STREET_LIGHT: 'LAMP', WALL_BODY: 'BRICK', WALL_CAP: 'DEEPSLATE_BRICKS', RETAIN: 'BRICK',
+    INTERIOR_WALL: 'BRICK', CANAL_BED: 'COBBLED_DEEPSLATE', DOCK: 'DARK_PLANKS',
+  },
+  landmark: { ...MODERN_LANDMARK,
+    hallPave: MAT.COBBLED_DEEPSLATE, hallWall: MAT.BRICK, hallColumn: MAT.DEEPSLATE_BRICKS, hallCapital: MAT.COPPER_CUT,
+    hallFloor: MAT.DARK_PLANKS, hallGlass: MAT.GLASS, hallStair: 'brick', hallDoor: 'dark', entablature: MAT.DEEPSLATE_BRICKS,
+    domeBase: MAT.BRICK, domeRing: MAT.DEEPSLATE_BRICKS, dome: MAT.COPPER_BLK, finial: MAT.IRON,
+    clockPave: [MAT.COBBLED_DEEPSLATE, MAT.BRICK], clockWall: MAT.BRICK, clockTrim: MAT.COPPER_CUT, clockFloor: MAT.DARK_PLANKS,
+    clockStair: 'brick', clockDoor: 'dark', spire: MAT.COPPER_CUT,
+    libPave: MAT.BRICK, libWall: MAT.DEEPSLATE_BRICKS, libTrim: MAT.BRICK, libFloor: MAT.DARK_PLANKS, libStair: 'deepslate', libDoor: 'dark',
+    schoolWall: MAT.BRICK, schoolTrim: MAT.DEEPSLATE_BRICKS,
+    market: [MAT.COBBLED_DEEPSLATE, MAT.BRICK], wellRim: MAT.BRICK, wellRoof: MAT.COPPER_CUT },
+};
+
+// Santorini: whitewashed houses with flat roofs, blue doors and window frames, blue
+// domes on the roofs (a chapel's, a lantern on its cross), bougainvillea over the
+// doorways (stylebits.js: santoriniDress); white lanes and cream paths, a white wall
+// capped in blue. Best on hills: the town steps down them in terraces.
+STYLES.santorini = {
+  label: 'Santorini',
+  santorini: true,
+  flatRoofs: true,                 // a house's roof is flat, for its dome and terrace
+  hillTown: true,                  // on hills and low, unless the sliders say otherwise (city.js)
+  roofSlab: MAT.C_WHITE,           // whitewashed roofs
+  noArcade: true,
+  shapedChance: 0,
+  themes: {
+    house: [
+      T('casa', MAT.C_WHITE, MAT.C_BLUE, MAT.SMOOTH_SAND, MAT.GLASS, 'quartz', 'warped', MAT.C_WHITE),
+      T('galazio', MAT.C_WHITE, MAT.C_LBLUE, MAT.OAK, MAT.GLASS, 'smoothsand', 'warped', MAT.C_WHITE),
+      T('kokkino', MAT.C_WHITE, MAT.T_ORANGE, MAT.SMOOTH_SAND, MAT.GLASS, 'smoothsand', 'warped', MAT.C_WHITE),
+      T('kyklades', MAT.CALCITE, MAT.C_BLUE, MAT.OAK, MAT.GLASS, 'quartz', 'warped', MAT.CALCITE),
+    ],
+    mid: [
+      T('kastro', MAT.C_WHITE, MAT.CALCITE, MAT.SMOOTH_SAND, MAT.GLASS, 'quartz', 'warped'),
+      T('oia', MAT.C_WHITE, MAT.SMOOTH_SAND, MAT.OAK, MAT.GLASS, 'smoothsand', 'warped'),
+      T('fira', MAT.SMOOTH_SAND, MAT.C_WHITE, MAT.OAK, MAT.GLASS, 'smoothsand', 'oak'),
+    ],
+    tower: [
+      T('pyrgos', MAT.C_WHITE, MAT.CALCITE, MAT.SMOOTH_SAND, MAT.GLASS, 'quartz', 'warped'),
+      T('faros', MAT.CALCITE, MAT.C_WHITE, MAT.OAK, MAT.GLASS, 'quartz', 'warped'),
+    ],
+  },
+  remap: {
+    ASPHALT: 'CALCITE', SIDEWALK: 'WHITE_PATH', LINE: 'CALCITE', CROSSWALK: 'SMOOTH_SAND', PATH: 'SMOOTH_SAND',
+    LAMP_POST: 'FENCE', STREET_LIGHT: 'LAMP', WALL_BODY: 'C_WHITE', WALL_CAP: 'C_BLUE', RETAIN: 'C_WHITE',
+    INTERIOR_WALL: 'C_WHITE', CANAL_BED: 'SMOOTH_SAND',
+  },
+  landmark: { ...MODERN_LANDMARK,
+    hallPave: MAT.SMOOTH_SAND, hallWall: MAT.C_WHITE, hallColumn: MAT.CALCITE, hallCapital: MAT.C_BLUE,
+    hallFloor: MAT.SMOOTH_SAND, hallGlass: MAT.GLASS, hallStair: 'quartz', hallDoor: 'warped', entablature: MAT.C_WHITE,
+    domeBase: MAT.C_WHITE, domeRing: MAT.C_WHITE, dome: MAT.C_BLUE, finial: MAT.LAMP,
+    clockPave: [MAT.SMOOTH_SAND, MAT.CALCITE], clockWall: MAT.C_WHITE, clockTrim: MAT.C_BLUE, clockFloor: MAT.OAK,
+    clockStair: 'quartz', clockDoor: 'warped', spire: MAT.C_BLUE,
+    libPave: MAT.SMOOTH_SAND, libWall: MAT.C_WHITE, libTrim: MAT.C_BLUE, libFloor: MAT.OAK, libStair: 'quartz', libDoor: 'warped',
+    schoolWall: MAT.C_WHITE, schoolTrim: MAT.C_LBLUE,
+    market: [MAT.SMOOTH_SAND, MAT.CALCITE], wellRim: MAT.C_WHITE, wellRoof: MAT.C_BLUE },
+};
+
+// Cyberpunk: black towers, deepslate and chrome, tinted glass; a band of neon round
+// every other floor, a blade sign down the street front, an antenna with a light on
+// every roof (stylebits.js: cyberDress); black streets with magenta lines and cyan
+// crossings, deepslate pavements, neon street lights, a wall capped in light.
+STYLES.cyberpunk = {
+  label: 'Cyberpunk',
+  neon: true,
+  noArcade: true,
+  themes: {
+    house: [
+      T('capsule', MAT.C_GRAY, MAT.C_BLACK2, MAT.POLISHED_DEEPSLATE, MAT.TINTED, 'deepslate', 'warped', MAT.DEEPSLATE),
+      T('stack', MAT.C_BLACK2, MAT.C_MAGENTA, MAT.POLISHED_DEEPSLATE, MAT.TINTED, 'blackstone', 'crimson', MAT.C_BLACK2),
+    ],
+    mid: [
+      T('arcology', MAT.C_BLACK2, MAT.C_GRAY, MAT.POLISHED_DEEPSLATE, MAT.TINTED, 'blackstone', 'crimson'),
+      T('neonblock', MAT.DEEPSLATE, MAT.C_MAGENTA, MAT.POLISHED_DEEPSLATE, MAT.SG_PURPLE, 'deepslate', 'warped'),
+      T('grid', MAT.C_GRAY, MAT.C_CYAN, MAT.POLISHED_DEEPSLATE, MAT.TINTED, 'deepslate', 'warped'),
+    ],
+    tower: [
+      T('megacorp', MAT.C_BLACK2, MAT.C_CYAN, MAT.POLISHED_DEEPSLATE, MAT.TINTED, 'blackstone', 'warped'),
+      T('spire', MAT.DEEPSLATE, MAT.C_MAGENTA, MAT.POLISHED_DEEPSLATE, MAT.SG_MAGENTA, 'deepslate', 'crimson'),
+      T('chrome', MAT.IRON, MAT.C_BLACK2, MAT.POLISHED_DEEPSLATE, MAT.TINTED, 'quartz', 'warped'),
+    ],
+  },
+  remap: {
+    ASPHALT: 'C_BLACK2', SIDEWALK: 'POLISHED_DEEPSLATE', LINE: 'C_MAGENTA', CROSSWALK: 'C_CYAN', PATH: 'POLISHED_DEEPSLATE',
+    STREET_LIGHT: 'FROG_PINK', WALL_BODY: 'C_BLACK2', WALL_CAP: 'SEA_LANTERN', RETAIN: 'DEEPSLATE_BRICKS',
+    INTERIOR_WALL: 'C_GRAY', CANAL_BED: 'POLISHED_DEEPSLATE',
+  },
+  landmark: { ...MODERN_LANDMARK,
+    hallPave: MAT.POLISHED_DEEPSLATE, hallWall: MAT.C_BLACK2, hallColumn: MAT.C_GRAY, hallCapital: MAT.SEA_LANTERN,
+    hallFloor: MAT.POLISHED_DEEPSLATE, hallGlass: MAT.TINTED, hallStair: 'blackstone', hallDoor: 'warped', entablature: MAT.C_MAGENTA,
+    domeBase: MAT.C_BLACK2, domeRing: MAT.C_CYAN, dome: MAT.TINTED, finial: MAT.SEA_LANTERN,
+    clockPave: [MAT.POLISHED_DEEPSLATE, MAT.C_BLACK2], clockWall: MAT.C_BLACK2, clockTrim: MAT.C_CYAN, clockFloor: MAT.POLISHED_DEEPSLATE,
+    clockStair: 'deepslate', clockDoor: 'warped', spire: MAT.IRON,
+    libPave: MAT.POLISHED_DEEPSLATE, libWall: MAT.DEEPSLATE, libTrim: MAT.C_MAGENTA, libFloor: MAT.POLISHED_DEEPSLATE, libStair: 'deepslate', libDoor: 'crimson',
+    schoolWall: MAT.C_GRAY, schoolTrim: MAT.C_CYAN,
+    market: [MAT.POLISHED_DEEPSLATE, MAT.C_BLACK2], wellRim: MAT.C_GRAY, wellRoof: MAT.C_MAGENTA },
+};
+
 export const STYLE_NAMES = Object.keys(STYLES);
 export const styleOf = (name) => STYLES[name] || STYLES.modern;
 

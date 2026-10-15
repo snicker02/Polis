@@ -81,6 +81,7 @@ const RENAME = {
   'minecraft:pumpkin': 'minecraft:pumpkin',
   'minecraft:cauldron': 'minecraft:cauldron',
   'minecraft:magma': 'minecraft:magma_block',
+  'minecraft:azalea_leaves_flowered': 'minecraft:flowering_azalea_leaves',
   'minecraft:yellow_flower': 'minecraft:dandelion',
   'minecraft:tallgrass': 'minecraft:short_grass',
   'minecraft:double_plant': 'minecraft:tall_grass',

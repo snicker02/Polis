@@ -217,6 +217,11 @@ export function generateCity(cfgIn, onProgress) {
     if (cfg.parkChance === DEFAULTS.parkChance) cfg.parkChance = 0.16;
     if (cfg.maxFloors === DEFAULTS.maxFloors) cfg.maxFloors = 6;
   }
+  // a Santorini town climbs its hillside, whitewashed and low
+  if (STYLE.hillTown) {
+    if (cfg.hills === DEFAULTS.hills) cfg.hills = 4;
+    if (cfg.maxFloors === DEFAULTS.maxFloors) cfg.maxFloors = 5;
+  }
   const rng = makeRng(cfg.seed);
   const plan = generatePlan(cfg, rng);
   const world = new VoxelWorld({ budget: cfg.budget });
@@ -464,7 +469,7 @@ export function generateCity(cfgIn, onProgress) {
         const cy = makeCourtyard(world, {
           x0: fx0, z0: fz0, x1: fx1, z1: fz1, face: front.side, kind, mirror: crng.chance(0.5), G: GROUND, flowers: cfg.flowers,
           building: (p) => makeBuilding(world, {
-            detail: cfg.detail, arcade: !LS.venetian, eaves: !!LS.eaves, lancets: !!LS.lancets, deco: !!LS.deco, rustic: !!LS.rustic,
+            detail: cfg.detail, arcade: !LS.venetian && !LS.noArcade, eaves: !!LS.eaves, lancets: !!LS.lancets, deco: !!LS.deco, steam: !!LS.steam, santorini: !!LS.santorini, neon: !!LS.neon, flatRoof: !!LS.flatRoofs, roofSlab: LS.roofSlab, rustic: !!LS.rustic,
             x0: p.x0, z0: p.z0, x1: p.x1, z1: p.z1, noStairs: p.noStairs,
             floors: lot.floors, pitch: cfg.pitch, groundY: GROUND,
             style: 'mid', facing: p.facing, theme,
@@ -505,7 +510,7 @@ export function generateCity(cfgIn, onProgress) {
       facing: front.side, theme, useStairs: cfg.useStairs, lights: cfg.lights,
       shape: towerShape(hash2(lot.z0, lot.x0, (cfg.seed ^ 0x5a9e) | 0), LS.towerShapes),
     }, makeRng(((lot.x0 * 73856093) ^ (lot.z0 * 19349663) ^ cfg.seed ^ 0x7157) >>> 0)) : makeBuilding(world, {
-      detail: cfg.detail, arcade: !LS.venetian, eaves: !!LS.eaves, lancets: !!LS.lancets, deco: !!LS.deco,
+      detail: cfg.detail, arcade: !LS.venetian && !LS.noArcade, eaves: !!LS.eaves, lancets: !!LS.lancets, deco: !!LS.deco, steam: !!LS.steam, santorini: !!LS.santorini, neon: !!LS.neon, flatRoof: !!LS.flatRoofs, roofSlab: LS.roofSlab,
       rustic: !!LS.rustic,
       x0: fx0, z0: fz0, x1: fx1, z1: fz1,
       floors: lot.floors, pitch: cfg.pitch, groundY: GROUND,
@@ -2058,6 +2063,7 @@ export function generateSingle(cfgIn) {
     style: cfg.style, facing: 'south', theme,
     roofAccess: cfg.roofAccess, useStairs: cfg.useStairs, stairStyle: cfg.stairStyle, lights: cfg.lights,
     setback: cfg.setback, setbackEvery: cfg.setbackEvery, lifts: cfg.lifts !== false,
+    ...(() => { const SS = styleOf(cfg.cityStyle); return { steam: !!SS.steam, santorini: !!SS.santorini, neon: !!SS.neon, flatRoof: !!SS.flatRoofs, roofSlab: SS.roofSlab }; })(),
   }, rng);
 
   const buildings = rec ? [rec] : [];

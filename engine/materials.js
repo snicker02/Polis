@@ -482,6 +482,27 @@ Object.assign(MAT, {
   PINE_LEAF:     A('PINE_LEAF', 'minecraft:spruce_leaves', '#3f6b3a', { persistent_bit: B(1), update_bit: B(0) }, { role: 'pine' }),
 });
 
+// ---- Steampunk, Santorini, Cyberpunk (0.66.0) ---------------------------------
+// (copper left unwaxed: in the game it turns green by itself as the days go by)
+Object.assign(MAT, {
+  DEEPSLATE_BRICKS: A('DEEPSLATE_BRICKS', 'minecraft:deepslate_bricks', '#4a4a4f'),
+  POLISHED_DEEPSLATE: A('POLISHED_DEEPSLATE', 'minecraft:polished_deepslate', '#48484d'),
+  COBBLED_DEEPSLATE: A('COBBLED_DEEPSLATE', 'minecraft:cobbled_deepslate', '#4d4d50'),
+  COPPER_BLK:    A('COPPER_BLK', 'minecraft:copper_block', '#c06a4a'),
+  COPPER_CUT:    A('COPPER_CUT', 'minecraft:cut_copper', '#bf6b50'),
+  COPPER_GRATE:  A('COPPER_GRATE', 'minecraft:copper_grate', '#b86a4c', {}, { transparent: true }),
+  LIGHTNING_ROD: A('LIGHTNING_ROD', 'minecraft:lightning_rod', '#c47a58', { facing_direction: I(1) }, { passable: true, transparent: true }),
+  CAMPFIRE_LIT:  A('CAMPFIRE_LIT', 'minecraft:campfire', '#c8762a', { extinguished: B(0), 'minecraft:cardinal_direction': S('south') }),
+  C_MAGENTA:     A('C_MAGENTA', 'minecraft:magenta_concrete', '#a9309f'),
+  C_PURPLE:      A('C_PURPLE', 'minecraft:purple_concrete', '#64209c'),
+  FROG_PINK:     A('FROG_PINK', 'minecraft:pearlescent_froglight', '#e8c5d8', { pillar_axis: S('y') }),
+  FROG_GREEN:    A('FROG_GREEN', 'minecraft:verdant_froglight', '#d6e8c0', { pillar_axis: S('y') }),
+  FROG_YELLOW:   A('FROG_YELLOW', 'minecraft:ochre_froglight', '#f1e3a4', { pillar_axis: S('y') }),
+  BOUGAINVILLEA: A('BOUGAINVILLEA', 'minecraft:azalea_leaves_flowered', '#c45a9a', { persistent_bit: B(1), update_bit: B(0) }, { transparent: true }),
+  // (roles of their own: the streets of a style, kept apart from the same blocks elsewhere)
+  WHITE_PATH:    A('WHITE_PATH', 'minecraft:white_concrete', '#e4e6e6', {}, { role: 'santorini' }),
+});
+
 // ---- doors -----------------------------------------------------------------
 // Bedrock door states: direction (0=east,1=south,2=west,3=north),
 // door_hinge_bit, open_bit, upper_block_bit.
@@ -561,6 +582,7 @@ const STAIR_BLOCKS = {
   crimson: ['minecraft:crimson_stairs', '#653147'],
   warped: ['minecraft:warped_stairs', '#2b6963'],
   bamboo: ['minecraft:bamboo_stairs', '#c9b25a'],
+  copper: ['minecraft:cut_copper_stairs', '#bf6b50'],
   purpur: ['minecraft:purpur_stairs', '#a97ca9'],
 };
 export const WEIRDO = { east: 0, west: 1, south: 2, north: 3 };
@@ -581,7 +603,7 @@ export const STAIR_SOLID = {
   smoothsand: MAT.SMOOTH_SAND, redsand: MAT.RED_SAND, acacia: MAT.ACACIA,
   cherry: MAT.CHERRY, cobble: MAT.COBBLE, mossy: MAT.MOSSY_BRICK,
   blackstone: MAT.BLACKSTONE, pbbrick: MAT.PB_BRICKS, netherbrick: MAT.NETHER_BRICK, rednether: MAT.RED_NETHER_BRICK,
-  crimson: MAT.CRIMSON_PLANKS, warped: MAT.WARPED_PLANKS, bamboo: MAT.BAMBOO_PLANKS,
+  crimson: MAT.CRIMSON_PLANKS, warped: MAT.WARPED_PLANKS, bamboo: MAT.BAMBOO_PLANKS, copper: MAT.COPPER_CUT,
 };
 
 // ---- building themes -------------------------------------------------------

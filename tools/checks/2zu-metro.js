@@ -188,6 +188,25 @@ export default async function run(ctx) {
     const jt = javaTiles(w, { prefix: 'city', spawns: r.spawns });
     const firstCity = jt.findIndex((t) => !t.plug && !t.drain), lastPlugJ = Math.max(...jt.map((t, i) => (t.plug ? i : -1)));
     check('metro, Java: the plug pieces placed before any of the city', jt.some((t) => t.plug) && lastPlugJ < firstCity);
+    // (0.65.1) and still a tunnel's end can stand open a moment onto a neighbour's ground as
+    // it loads: the rails under the city are laid by populate, not build
+    const { buildRailStructures, undergroundRail } = await import('../../engine/export.js');
+    const under = undergroundRail(w);
+    let want = 0; w.forEach((x, y, z, id) => { if (under(x, y, z, id)) want++; });
+    const railsIn = (sts) => { let n = 0, other = 0; for (const st of sts) { const S = decodeNbt(st.data).root.structure, pal = S.palette.default.block_palette; for (const i of S.block_indices[0]) { if (i < 0) continue; if (/^minecraft:(rail|golden_rail|detector_rail|activator_rail)$/.test(pal[i].name)) n++; else other++; } } return { n, other }; };
+    const inBuild = railsIn(tiles), rl = buildRailStructures(w, {}), inRl = railsIn(rl);
+    check('metro: no rail under the city in what build loads; every one of them in populate\'s own structures, nothing else in those', want > 100 && inBuild.n === 0 && inRl.n === want && inRl.other === 0, `${want} rails under the city; build ${inBuild.n}; populate ${inRl.n}, ${inRl.other} other blocks`);
+    let popBad = 0;
+    for (const n of ['populate', 'populate_centered']) {
+      const lines = fns.find((f) => f.fn === 'test/' + n).text.split('\n');
+      const rlLines = lines.map((l, i) => (/_rl /.test(l) ? i : -1)).filter((i) => i >= 0);
+      const firstMob = lines.findIndex((l) => /structure load/.test(l) && !/_rl /.test(l));
+      const firstSet = lines.findIndex((l) => /^setblock/.test(l));
+      const firstSummon = lines.findIndex((l) => /^summon/.test(l));
+      const last = Math.max(...rlLines);
+      if (rlLines.length !== rl.length || (firstMob >= 0 && firstMob < last) || (firstSet >= 0 && firstSet < last) || (firstSummon >= 0 && firstSummon < last)) popBad++;
+    }
+    check('metro: populate and populate_centered lay the rails under the city first: before the mobs, the minecarts and the rails set again', popBad === 0, `${popBad}`);
   }
   // none when switched off, on stilts, in the sky, up a cliff
   {
