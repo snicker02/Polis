@@ -370,11 +370,38 @@ export function javaTiles(world, opts = {}) {
       });
     }
   }
+  // the sea round a hall under it (sea.js): water in every cell of it the city leaves
+  // empty, in pieces placed after all the city's, so the glass is whole first
+  const seaOut = [];
+  if (world.sea) {
+    const sea = world.sea, WATER = MAT.WATER;
+    let m = 0;
+    for (let tx = sea.box.x0 + 1; tx < sea.box.x1; tx += step)
+      for (let tz = sea.box.z0 + 1; tz < sea.box.z1; tz += step) {
+        const c = [], bb = { x0: Infinity, y0: Infinity, z0: Infinity, x1: -Infinity, y1: -Infinity, z1: -Infinity };
+        for (let x = tx; x < Math.min(sea.box.x1, tx + step); x++)
+          for (let z = tz; z < Math.min(sea.box.z1, tz + step); z++)
+            for (let y = sea.G + 1; y <= sea.S; y++) {
+              if (!sea.at(x, y, z) || world.has(x, y, z)) continue;
+              c.push([x, y, z, WATER, null]);
+              if (x < bb.x0) bb.x0 = x; if (y < bb.y0) bb.y0 = y; if (z < bb.z0) bb.z0 = z;
+              if (x > bb.x1) bb.x1 = x; if (y > bb.y1) bb.y1 = y; if (z > bb.z1) bb.z1 = z;
+            }
+        if (!c.length) continue;
+        const st = writeJavaStructure(c, bb, { ...opts, spawns: [] });
+        seaOut.push({
+          name: `${opts.prefix || 'city'}_s${m++}`, sea: true,
+          nbt: st.nbt, size: st.size, palette: st.palette, blocks: st.blocks, entities: 0,
+          offset: [bb.x0 - box.x0, bb.y0 - (opts.groundDrop === undefined ? 2 : opts.groundDrop), bb.z0 - box.z0],
+        });
+      }
+  }
   if (world.dome) {
     const d = world.dome, inDome = domeAir(d), drains = new Map();
-    for (let x = Math.floor(d.cx - d.R); x <= Math.ceil(d.cx + d.R); x++)
-      for (let z = Math.floor(d.cz - d.R); z <= Math.ceil(d.cz + d.R); z++)
-        for (let y = d.G + 1; y <= d.G + d.c; y++) {
+    const B_ = d.bounds || { x0: Math.floor(d.cx - d.R), x1: Math.ceil(d.cx + d.R), z0: Math.floor(d.cz - d.R), z1: Math.ceil(d.cz + d.R), y0: d.G + 1, y1: d.G + d.c };
+    for (let x = B_.x0; x <= B_.x1; x++)
+      for (let z = B_.z0; z <= B_.z1; z++)
+        for (let y = B_.y0; y <= B_.y1; y++) {
           if (!inDome(x, y, z)) continue;
           const key = Math.floor((x - box.x0) / step) + ',' + Math.floor((y - box.y0) / step) + ',' + Math.floor((z - box.z0) / step);
           let t = drains.get(key);
@@ -394,9 +421,9 @@ export function javaTiles(world, opts = {}) {
         offset: [t.box.x0 - box.x0, t.box.y0 - (opts.groundDrop === undefined ? 2 : opts.groundDrop), t.box.z0 - box.z0],
       });
     }
-    return plugOut.concat(drainOut, out);
+    return plugOut.concat(drainOut, out, seaOut);
   }
-  return plugOut.concat(out);
+  return plugOut.concat(out, seaOut);
 }
 
 // ---- the datapack --------------------------------------------------------

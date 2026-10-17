@@ -157,5 +157,6 @@ export function buildDome(world, G, opts = {}) {
 // which this holds, so a city domed under water or in a hillside is emptied
 // inside and the world outside the shell is left exactly as it was.
 export function domeAir(d) {
+  if (d.air) return d.air;                    // (the hall under the sea: sea.js)
   return (x, y, z) => y >= d.G + 1 && ((x - d.cx) ** 2 + (z - d.cz) ** 2) / (d.R * d.R) + ((y - d.G) / d.c) ** 2 <= 1;
 }

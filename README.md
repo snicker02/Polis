@@ -1,4 +1,4 @@
-# Polis v0.67.0
+# Polis v0.68.0
 
 *Created with help from Claude AI.*
 
@@ -771,6 +771,58 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.68.0** — A city under the sea, in a hall of glass.
+
+A new option, "Under the sea, in a hall of glass" (off by default, not on fitted
+ground), builds the city on a flat seabed inside a glass hall (sea.js). The sea runs all
+round the hall and over its roof, held in by a second wall of glass outside.
+
+- The hall is a rounded rectangle round the whole city. Its walls stand straight up
+  and then vault over. The wall height and the vault are chosen together: every block
+  of the city has at least four blocks of air over it, and the hall stays as low as
+  that allows. It is glass between ribs of dark prismarine on a 16-block grid, with sea
+  lanterns along the ribs and along the foot of the wall. It is sealed the way the
+  dome is: neighbouring columns of the shell always meet.
+- The sea is ten blocks wide round the hall, its surface five blocks over the hall's
+  top. The outer wall is glass, with dark prismarine posts every eight blocks (sea
+  lanterns up them) and a rim of prismarine brick. The tank stands on your ground like
+  an aquarium, so it does not depend on there being an ocean where you build.
+- The seabed is sand, gravel and clay, with kelp, seagrass, coral heads (block and
+  coral or fan, five colours), sea pickle clusters for light, and broken prismarine
+  columns in the corners. 50–60 fish swim in the sea, summoned by populate and kept
+  like the canal's fish.
+- Four glass tunnels, one per side, run from a doorway in the hall's wall under the
+  sea to a double door in the outer wall. Each is put where the ground inside the
+  doorway is open.
+- With it come flat ground, no dome, no stilts, no floating islands, no cliff and no
+  harbour. The airport and theme park are not built beside it ("not under the sea").
+  The metro and cellars work under it as usual.
+- The sea is not stored as blocks of the world: a million or more water blocks would
+  swamp it. The world keeps a description of the sea, and each export writes the
+  water from that:
+  - **Bedrock:** build drains the hall, puts the city in, then loads one sea structure
+    per tile, last of all, so the glass is complete before any water arrives. remove
+    takes the sea and both walls away too.
+  - **Java:** sea pieces are placed after all the city's pieces.
+- The preview shows the sea's surface. Lower the cutaway slider to look in.
+- Java: kelp, seagrass, sea pickles and coral now carry over properly. Kelp is split
+  into kelp and kelp_plant, a pickle's count is one more than Bedrock's, and coral and
+  pickles are waterlogged.
+- New check 2zzw, over three cities (plain, medieval, and one with the metro plus a
+  dome, stilts, harbour, hills and airport asked for):
+  - every building walks through and nothing is dark;
+  - all of the city is inside the hall, the hall is sealed (no sea cell touches an open
+    cell outside the sea), the sea is at least four deep over the top, and the outer
+    wall is whole;
+  - all four tunnels are walked from the streets to their doors, and they are dry;
+  - the seabed has its plants, all standing in water, with a light near every open
+    cell;
+  - the fish are in the sea and summoned;
+  - Bedrock's sea structures hold exactly the sea's water and are loaded after the city
+    and the drains, and remove reaches the sea's top;
+  - Java's sea pieces hold the same water and are placed last;
+  - every block is a Bedrock state and a Java block.
 
 **0.67.0** — A nightclub with a jukebox panel of six songs.
 

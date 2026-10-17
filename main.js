@@ -15,9 +15,9 @@ import { exactGround, rebuildHeights } from './engine/bedrockblocks.js';
 import { makeZip } from './engine/blockcore.js';
 import { buildPregenPack, pregenFileName, siteRegion, viewRegion, pregenCommand, regionChunks } from './engine/pregen.js';
 import { decodeNbt } from './tools/nbt-read.js';
-import { THEMES } from './engine/materials.js';
+import { THEMES, MAT } from './engine/materials.js';
 
-const VERSION = '0.67.0';
+const VERSION = '0.68.0';
 const $ = (id) => document.getElementById(id);
 const numVal = (id) => Number($(id).value);      // readCfg has its own local num()
 
@@ -27,7 +27,7 @@ const SLIDERS = {
   maxFloors: 0, pitch: 0, setbackEvery: 0, bw: 0, bd: 0, floors: 0, clip: 0,
   farmChance: 2, pondChance: 2, twistChance: 2, courtyardChance: 2, hostileCount: 0, villagers: 0, wallHeight: 0, foundation: 0, clearAbove: 0, hills: 0, golemsPer10: 0,
 };
-const CHECKS = ['setback', 'roofAccess', 'useStairs', 'lights', 'lamps', 'trees', 'markings', 'landmarks', 'canal', 'harbour', 'bridges', 'detail', 'streetSigns', 'fish', 'megaliths', 'hostiles', 'dome', 'stilts', 'floating', 'cliff', 'underground', 'metro', 'terrainBreaks', 'jail', 'zoo', 'museum', 'hospital', 'firestation', 'police', 'theatre', 'hotel', 'factory', 'park', 'waterpark', 'garden', 'station', 'mall', 'airport', 'bouts', 'themepark', 'sports', 'bank', 'watertower', 'petrol', 'skatepark', 'wizard', 'nightclub', 'lifts'];
+const CHECKS = ['setback', 'roofAccess', 'useStairs', 'lights', 'lamps', 'trees', 'markings', 'landmarks', 'canal', 'harbour', 'bridges', 'detail', 'streetSigns', 'fish', 'megaliths', 'hostiles', 'dome', 'stilts', 'floating', 'cliff', 'underground', 'metro', 'terrainBreaks', 'jail', 'zoo', 'museum', 'hospital', 'firestation', 'police', 'theatre', 'hotel', 'factory', 'park', 'waterpark', 'garden', 'station', 'mall', 'airport', 'bouts', 'themepark', 'sports', 'bank', 'watertower', 'petrol', 'skatepark', 'wizard', 'nightclub', 'lifts', 'underwater'];
 
 let renderer = null;
 let result = null;       // { world, plan, buildings, cfg, stats }
@@ -294,7 +294,7 @@ function restoreRemembered() {
 // A city fitted to the world follows its ground: no dome, no stilts, no floating
 // islands, no cliff tiers. The page says so beside those options, and in the
 // summary for any that were ticked.
-const NOT_FITTED = { dome: 'glass dome', stilts: 'stilts', floating: 'floating islands', cliff: 'cliff tiers' };
+const NOT_FITTED = { dome: 'glass dome', stilts: 'stilts', floating: 'floating islands', cliff: 'cliff tiers', underwater: 'under the sea' };
 function markFitted() { document.body.classList.toggle('fitted', !!(world && world.site)); }
 
 function generate() {
@@ -630,6 +630,7 @@ function showStats(mesh, times) {
     if (s.stilts) line('stilts', `${s.stilts.piles} piles over ${s.stilts.open} columns of open water, ${s.stilts.lanterns} seabed lanterns`);
     if (s.fishSpawners) line('fish spawners', `${s.fishSpawners} in the park ponds`);
     if (s.lighting) line('lighting', `${s.lighting.added} lights (${s.lighting.hung} hung, ${s.lighting.flush} in the floor, ${s.lighting.standing} standing) · ${s.lighting.darkAfter} dark spots left of ${s.lighting.darkBefore}`);
+    if (s.sea) line('under the sea', `a hall ${s.sea.wide} by ${s.sea.deep}, walls ${s.sea.wall} high, ${s.sea.top} to its top, the sea's surface ${s.sea.surface} up · ${s.sea.glass.toLocaleString()} glass, ${s.sea.ribs.toLocaleString()} ribs · ${s.sea.tunnels} tunnels out · ${s.sea.kelp} kelp, ${s.sea.seagrass} seagrass, ${s.sea.coral} coral, ${s.sea.pickles} sea pickles, ${s.sea.fish} fish`);
     if (s.dome) line('dome', `radius ${s.dome.radius}, ${s.dome.height} high, ${s.dome.cells.toLocaleString()} blocks, ${s.dome.doors} doors`);
     if (s.hostiles) line('hostile mobs', `${s.hostiles}${result && result.cfg.hostiles ? ' (summoned by populate)' : ' (via /function …/hostiles)'}`);
     if (s.megaliths && s.megaliths.length) line('standing stones', s.megaliths.join(', '));
@@ -883,10 +884,23 @@ function showSite(g) {
 // The preview shows the city standing in the real land when one is loaded:
 // the land is added to a copy of the world, so the export is untouched by it.
 function previewWorld(res) {
+  if (res.sea) return seaPreview(res);
   if (!res.shell || !res.shell.length) return res.world;
   const copy = new VoxelWorld({ budget: res.cfg.budget + res.shell.length + 1000 });
   res.world.forEach((x, y, z, id) => copy.set(x, y, z, id));
   for (const [x, y, z, id] of res.shell) if (!copy.has(x, y, z)) copy.set(x, y, z, id);
+  copy.cityMask = res.world.cityMask;
+  return copy;
+}
+
+// the sea round a hall under it is not blocks of the world (the exports write it):
+// the preview shows its surface (the cutaway slider looks in under it)
+function seaPreview(res) {
+  const sea = res.world.sea, b = sea.box;
+  const copy = new VoxelWorld({ budget: res.cfg.budget + (b.x1 - b.x0 + 1) * (b.z1 - b.z0 + 1) + 1000 });
+  res.world.forEach((x, y, z, id) => copy.set(x, y, z, id));
+  const put = (x, y, z) => { if (!copy.has(x, y, z) && sea.at(x, y, z)) copy.set(x, y, z, MAT.WATER); };
+  for (let x = b.x0 + 1; x < b.x1; x++) for (let z = b.z0 + 1; z < b.z1; z++) put(x, sea.S, z);
   copy.cityMask = res.world.cityMask;
   return copy;
 }

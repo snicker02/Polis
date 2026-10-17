@@ -16,6 +16,7 @@ import { plantBeds } from './building.js';
 import { courtyardPlan, makeCourtyard } from './courtyard.js';
 import { hostileSpawns } from './hostiles.js';
 import { buildDome } from './dome.js';
+import { buildSeaCity } from './sea.js';
 import { lightUp, TARGET, TARGET_OUT } from './lighting.js';
 import { verifyBuilding } from './verify.js';
 import { planStyleDistricts } from './districts.js';
@@ -101,6 +102,7 @@ export const DEFAULTS = {
   dome: false,               // a glass dome over the whole city, sealed all round (invented cities only)
   lightAll: true,            // light every spot a hostile mob could spawn (lighting.js)
   stilts: false,             // the city on stilts over open water (invented cities only)
+  underwater: false,         // the city on the seabed in a hall of glass, the sea round it and over it, a second glass wall outside (sea.js; invented cities only)
   floating: false,           // the city on islands floating in the sky, chasms between them (invented cities only)
   cliff: false,              // the city in tiers up a cliff, stairs between them (invented cities only)
   underground: true,         // cellars under houses, a crypt under the cathedral (underground.js)
@@ -190,6 +192,10 @@ export function generateCity(cfgIn, onProgress) {
   }
   // a glass city climbs by stairs
   if (STYLE.glass) cfg.useStairs = true;
+  // a city under the sea: on a flat seabed, its own hall of glass (no dome, stilts,
+  // islands, cliff or harbour with it)
+  if (cfg.underwater && !cfg.terrain) { cfg.hills = 0; cfg.dome = false; cfg.stilts = false; cfg.floating = false; cfg.cliff = false; cfg.harbour = false; }
+  if (cfg.terrain) cfg.underwater = false;
   // a city on stilts stands over flat water
   if (cfg.stilts && !cfg.terrain) cfg.hills = 0;
   // a cliff city: tiers, so no water across them (canal, harbour), and on the ground
@@ -869,7 +875,7 @@ export function generateCity(cfgIn, onProgress) {
   let airportMissing = null;
   if (cfg.airport) {
     const why = cfg.terrain ? 'a city fitted to your world has no room of its own beside it for the airport'
-      : cfg.dome ? 'not with the dome' : cfg.stilts ? 'not on stilts' : floating ? 'not with floating islands' : hills.cliff ? 'not on a cliff' : null;
+      : cfg.dome ? 'not with the dome' : cfg.underwater ? 'not under the sea' : cfg.stilts ? 'not on stilts' : floating ? 'not with floating islands' : hills.cliff ? 'not on a cliff' : null;
     if (why) airportMissing = why;
     else {
       const A = buildAirport(world, plan, cfg, { GROUND, elevAt, signTags });
@@ -885,7 +891,7 @@ export function generateCity(cfgIn, onProgress) {
   let themeparkMissing = null;
   if (cfg.themepark) {
     const why = cfg.terrain ? 'a city fitted to your world has no room of its own beside it for the theme park'
-      : cfg.dome ? 'not with the dome' : cfg.stilts ? 'not on stilts' : floating ? 'not with floating islands' : hills.cliff ? 'not on a cliff' : null;
+      : cfg.dome ? 'not with the dome' : cfg.underwater ? 'not under the sea' : cfg.stilts ? 'not on stilts' : floating ? 'not with floating islands' : hills.cliff ? 'not on a cliff' : null;
     if (why) themeparkMissing = why;
     else {
       const air = landmarks.find((q) => q.kind === 'airport');
@@ -910,6 +916,12 @@ export function generateCity(cfgIn, onProgress) {
     ? buildDome(world, GROUND, { ground: remapTable(STYLE, FLOWERS).get(MAT.GRASS) ?? MAT.GRASS,
       beams: centre ? centre.beacons.map(([x, , z]) => x + ',' + z) : [] })       // the beacons shine up through it
     : null;
+  // ---- or the hall under the sea: likewise last, over everything
+  const sea = cfg.underwater && !cfg.terrain && !dome
+    ? buildSeaCity(world, GROUND, { ground: remapTable(STYLE, FLOWERS).get(MAT.GRASS) ?? MAT.GRASS, seed: cfg.seed,
+      beams: centre ? centre.beacons.map(([x, , z]) => x + ',' + z) : [] })
+    : null;
+  if (sea && cfg.fish) spawns = spawns.concat(sea.fish);
   // ---- no dark corners: light every spot a hostile mob could spawn -----------
   // (last of all, over everything, dome included: see lighting.js)
   let lighting = null;
@@ -920,8 +932,8 @@ export function generateCity(cfgIn, onProgress) {
     // they were graded to be: the wild land round them is the hillside's own)
     const graded = world.cutFaces || null;
     const inCity = (x, z) => inPlan(x, z) && !(graded && graded.has(x + ',' + z));
-    const inside = dome ? (x, z) => (x - dome.cx) ** 2 + (z - dome.cz) ** 2 < dome.R * dome.R : inCity;
-    const keepDome = dome ? (x, y, z) => ((x - dome.cx) ** 2 + (z - dome.cz) ** 2) / dome.R ** 2 + ((y - GROUND) / dome.c) ** 2 < 1 : () => true;
+    const inside = dome ? (x, z) => (x - dome.cx) ** 2 + (z - dome.cz) ** 2 < dome.R * dome.R : sea ? sea.inFoot : inCity;
+    const keepDome = dome ? (x, y, z) => ((x - dome.cx) ** 2 + (z - dome.cz) ** 2) / dome.R ** 2 + ((y - GROUND) / dome.c) ** 2 < 1 : sea ? sea.interior : () => true;
     // (and never in a landmark that lights itself: the botanical garden, where a
     // light set in a bed would take a plant's place, or a cactus's air)
     const unlit = landmarks.filter((L) => L.noLighting).map((L) => L.lot);
@@ -966,7 +978,7 @@ export function generateCity(cfgIn, onProgress) {
   }
 
   const shell = cfg.terrain ? terrainShell(plan, cfg.terrain, GROUND, cfg.cityStyle) : null;
-  const stats = summarise(world, plan, buildings, cfg, { farms, beds, spawns, bell, transit, wall, ranches, landmarks, hills, stairRuns, reach, canal, centre, streets, harbour, skirt, cutFaces, bridges, megaliths, ponds, courtyards, hostiles, dome, canals, lighting, styleDistricts: SD, spawners, stilts, islands, cliffWays, rooms, metro, stepRails, unsupported: stats_unsupported });
+  const stats = summarise(world, plan, buildings, cfg, { farms, beds, spawns, bell, transit, wall, ranches, landmarks, hills, stairRuns, reach, canal, centre, streets, harbour, skirt, cutFaces, bridges, megaliths, ponds, courtyards, hostiles, dome, sea, canals, lighting, styleDistricts: SD, spawners, stilts, islands, cliffWays, rooms, metro, stepRails, unsupported: stats_unsupported });
   // the jail's inmates, summoned by populate (every one named, so none despawns)
   // (the enderman goes in the structures, already riding its minecart, with the
   // villagers; the rest of the inmates are summoned)
@@ -1052,6 +1064,7 @@ export function generateCity(cfgIn, onProgress) {
   // the cells whose plant stands in water (the garden's kelp, seagrass, sea pickles):
   // their second layer is written as water (blockcore.js: writeMcStructure, opts.wet)
   world.wet = new Set(landmarks.flatMap((L) => (L.wetAt || []).map(([x, y, z]) => VoxelWorld.key(x, y, z))));
+  if (sea) for (const [x, y, z] of sea.wet) world.wet.add(VoxelWorld.key(x, y, z));   // (the seabed's kelp, seagrass, coral, pickles)
   for (const F of landmarks.filter((L) => L.kind === 'factory')) spawns.push({ type: 'cart', x: F.siding.cart[0], y: F.siding.cart[1], z: F.siding.cart[2], group: 'factory' });
   for (const P of landmarks.filter((L) => L.kind === 'park')) for (const c of P.carts) spawns.push({ type: 'cart', x: c[0], y: c[1], z: c[2], group: 'park' });
   for (const P of landmarks.filter((L) => L.kind === 'themepark')) for (const c of P.coaster.carts) spawns.push({ type: 'cart', x: c[0], y: c[1], z: c[2], group: 'themepark' });
@@ -1070,7 +1083,7 @@ export function generateCity(cfgIn, onProgress) {
   // a goto_<kind> function for each): a spot to stand on the street before its front
   const places = landmarkPlaces(world, landmarks, (x, z) => GROUND + elevAt(x, z));
   world.lifts = buildings.filter((b) => b.lift).length;     // (for the guide)
-  return { world, plan, buildings, cfg, stats, shell, bridges, farms, ranches, spawns, bell, transit, wall, landmarks, places, canal, centre, streets, harbour, harbourPlan, megaliths, ponds, courtyards, hostiles, inmates, zoo, stands, dome, canals, lighting, styleDistricts: SD, spawners, stilts, islands, cliffWays, rooms, metro, hills, stepRails,
+  return { world, plan, buildings, cfg, stats, shell, bridges, farms, ranches, spawns, bell, transit, wall, landmarks, places, canal, centre, streets, harbour, harbourPlan, megaliths, ponds, courtyards, hostiles, inmates, zoo, stands, dome, sea, canals, lighting, styleDistricts: SD, spawners, stilts, islands, cliffWays, rooms, metro, hills, stepRails,
     hills, stairRuns, reach, groundAt: (x, z) => GROUND + elevAt(x, z) };
 }
 
@@ -2763,6 +2776,8 @@ function summarise(world, plan, buildings, cfg, life = {}) {
     styleDistricts: life.styleDistricts ? life.styleDistricts.counts : null,
     lighting: life.lighting ? { added: life.lighting.hung + life.lighting.flush + life.lighting.standing, hung: life.lighting.hung, flush: life.lighting.flush, standing: life.lighting.standing, darkBefore: life.lighting.before, darkAfter: life.lighting.after } : null,
     dome: life.dome ? { radius: life.dome.R, height: life.dome.c, cells: life.dome.cells, doors: life.dome.doors.length } : null,
+    sea: life.sea ? { wide: Math.round(2 * life.sea.A), deep: Math.round(2 * life.sea.B), wall: life.sea.Hw, top: life.sea.top - GROUND, surface: life.sea.sea - GROUND,
+      glass: life.sea.glass, ribs: life.sea.ribs + life.sea.lights, tunnels: life.sea.tunnels.length, kelp: life.sea.kelp, seagrass: life.sea.seagrass, coral: life.sea.coral, pickles: life.sea.pickles, fish: life.sea.fish.length } : null,
     torii: plan.lots.reduce((n, l) => n + ((l.torii && l.torii.length) || 0), 0),
     stoneLanterns: plan.lots.reduce((n, l) => n + ((l.stoneLanterns && l.stoneLanterns.length) || 0), 0),
     pondsDeep: (life.ponds || []).filter((p) => p.deep > 0).length,

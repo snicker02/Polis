@@ -302,6 +302,15 @@ export function writeMcStructure(keys, ids, box, materials, opts = {}) {
         for (let y = box.y0; y <= box.y1; y++)
           if (opts.airAt(x, y, z)) layer0[((x - box.x0) * sy + (y - box.y0)) * sz + (z - box.z0)] = airSlot;
   }
+  // opts.seaAt(x, y, z): the sea round a hall under it (sea.js), water in every such
+  // cell; the world's own blocks (kelp, the glass) are written over it below
+  if (opts.seaAt && opts.seaId !== undefined) {
+    const seaSlot = slot(opts.seaId);
+    for (let x = box.x0; x <= box.x1; x++)
+      for (let z = box.z0; z <= box.z1; z++)
+        for (let y = box.y0; y <= box.y1; y++)
+          if (opts.seaAt(x, y, z)) layer0[((x - box.x0) * sy + (y - box.y0)) * sz + (z - box.z0)] = seaSlot;
+  }
   // Generated fill (foundations): opts.fillFn(x, y, z) returns a material id
   // for cells with y < opts.fillBelowY, filled before the world's own cells.
   if (opts.fillFn && opts.fillBelowY !== undefined) {

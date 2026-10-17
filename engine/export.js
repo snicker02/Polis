@@ -17,7 +17,7 @@ import { makeRng } from './rng.js';
 // Must match main.js VERSION, package.json and index.html data-version;
 // tools/validate.js fails if they drift. The app refuses to export when the
 // browser has mixed cached copies of old and new files.
-export const POLIS_VERSION = '0.67.0';
+export const POLIS_VERSION = '0.68.0';
 
 export const CHUNK = 64;          // Bedrock structure limit per horizontal axis
 export const GROUND_DROP = 2;     // base layer y=0 sits 2 below feet; surface y=1 replaces the block you stand on
@@ -360,6 +360,34 @@ export function buildDrainStructures(world, opts = {}) {
   });
 }
 
+// ---- the sea round a hall under it (sea.js) ---------------------------------------
+// The water outside the glass, one structure a tile: water in every cell of the sea
+// that holds none of the city's blocks, "leave alone" everywhere else. build loads
+// these after every tile of the city, so the glass is whole all round before any
+// water comes in.
+export function seaBoxes(world, opts = {}) {
+  const sea = world.sea;
+  if (!sea) return [];
+  const out = [];
+  for (const t of tileList(world, opts)) {
+    // (its own box: the tile's columns, from the seabed to the sea's surface; a tile's
+    // own box ends at its highest block, under the sea's top over the hall's roof)
+    const b = { x0: Math.max(t.box.x0, sea.box.x0 + 1), x1: Math.min(t.box.x1, sea.box.x1 - 1), z0: Math.max(t.box.z0, sea.box.z0 + 1), z1: Math.min(t.box.z1, sea.box.z1 - 1), y0: sea.G + 1, y1: sea.S };
+    if (b.x0 > b.x1 || b.z0 > b.z1) continue;
+    out.push({ name: t.name + '_s', box: b, offset: [b.x0, b.y0, b.z0] });
+  }
+  return out;
+}
+export function buildSeaStructures(world, opts = {}) {
+  const sea = world.sea;
+  if (!sea) return [];
+  const at = (x, y, z) => sea.at(x, y, z) && !world.has(x, y, z);
+  return seaBoxes(world, opts).map((t) => {
+    const res = writeMcStructure([], [], t.box, MATERIALS, { seaAt: at, seaId: MAT.WATER });
+    return { name: t.name, data: res.data, box: t.box, size: res.size, cells: 0, offset: t.offset, sea: true };
+  });
+}
+
 // ---- plugging the rooms under the city before it goes in ---------------------------
 // The city goes in a tile at a time. A tunnel crosses many tiles: while one is in
 // and the next is not, the tunnel stands open at the edge between them, onto the
@@ -393,13 +421,16 @@ export function buildPlugStructures(world, opts = {}) {
 export function buildRemoveStructures(world, opts = {}) {
   const g = world.cityGround;
   if (!g) return [];
-  const above = (x, y, z) => g.inside(x, z) && y > g.at(x, z);
+  const sb = world.sea && world.sea.box;
+  const above = (x, y, z) => (g.inside(x, z) && y > g.at(x, z)) || (sb && x >= sb.x0 && x <= sb.x1 && z >= sb.z0 && z <= sb.z1 && y > world.sea.G);
   // the ground: grass on the city's own surface, dirt under it (the writer's fill,
   // asked of every cell of the tile; nothing outside the outline)
   const ground = (x, y, z) => { if (!g.inside(x, z)) return -1; const top = g.at(x, z); return y > top ? -1 : y === top ? MAT.GRASS : MAT.DIRT; };
   return tileList(world, opts).map((t) => {
-    const res = writeMcStructure([], [], t.box, MATERIALS, { airAt: above, domeAirId: MAT.AIR, fillFn: ground, fillBelowY: t.box.y1 + 1 });
-    return { name: t.name + '_r', data: res.data, box: t.box, size: res.size, cells: 0, offset: t.offset, remove: true };
+    // (up to the sea's top, under a hall: its water too, over the roof)
+    const box = sb ? { ...t.box, y1: Math.max(t.box.y1, world.sea.S + 1) } : t.box;
+    const res = writeMcStructure([], [], box, MATERIALS, { airAt: above, domeAirId: MAT.AIR, fillFn: ground, fillBelowY: box.y1 + 1 });
+    return { name: t.name + '_r', data: res.data, box, size: res.size, cells: 0, offset: t.offset, remove: true };
   });
 }
 
@@ -644,6 +675,7 @@ export function functionFiles(tiles, world, opts = {}) {
     return metroCache.get(k);
   };
   const plugs = tiles.filter((t) => plugTiles.has(t.name + '_p')).map((t) => ({ ...t, name: t.name + '_p' }));
+  const seaTiles = seaBoxes(world, opts);
   // (a city with command blocks in it, the airport's pads or the stadium's: the game's
   // command block chat turned off, or every run of one is a line in the chat)
   const hasCommands = [...world.data.values()].some((d) => d && d.id === 'CommandBlock');
@@ -656,6 +688,8 @@ export function functionFiles(tiles, world, opts = {}) {
     ...plugs.map((t) => load(t, dx, dz)),                                                     // the rooms under the city plugged first
     ...(world.dome ? tiles.map((t) => load({ ...t, name: t.name + '_d' }, dx, dz)) : []),   // drain the dome first
     ...tiles.map((t) => load(t, dx, dz)),
+    // the sea round a hall under it: last, once all the glass is in
+    ...(seaTiles.length ? [`say Polis: letting the sea in round the glass...`, ...seaTiles.map((t) => load(t, dx, dz))] : []),
     // (its own ticking areas taken off first: built again, it never doubles them)
     ...areas.map((a) => `tickingarea remove ${a.name}`),
     ...areas.map((a) => `tickingarea add ${rel(a.x0 - dx)} ${rel(-GROUND_DROP)} ${rel(a.z0 - dz)} ${rel(a.x1 - dx)} ${rel(top)} ${rel(a.z1 - dz)} ${a.name}`),
@@ -1073,7 +1107,16 @@ export function placementGuide(tiles, opts = {}) {
   if (opts.floating) L.push('Floating islands: build it high in the sky (stand well above the ground, with room below for the islands\' undersides). The foundation setting does nothing here.');
   if ((opts.foundation | 0) && opts.stilts) L.push(`Foundation (on stilts): the piles go on ${opts.foundation | 0} blocks further down into the ground below; islands and the seawall stand on solid ground, and under open water nothing is put.`);
   else if (opts.foundation | 0) L.push(`Foundation: ${opts.foundation | 0} solid blocks under the city, so it sits into sloping ground.`);
-  if (opts.dome) {
+  if (opts.sea) {
+    L.push('UNDER THE SEA: the city stands on the seabed in a hall of glass, the sea all round and over it, held');
+    L.push('  in by a second wall of glass. build drains the hall first, puts the city in, and lets the sea in last,');
+    L.push('  once all the glass is standing. Four glass tunnels lead out under the sea, one a side, to double doors');
+    L.push('  in the outer wall. The tank stands on your ground like an aquarium: build it on open, level land (or');
+    L.push('  out in the ocean). If any of the sea did not appear (a chunk that was not loaded), run build again from');
+    L.push('  the same spot. remove takes the sea and both walls away with the city.');
+    L.push('');
+  }
+  else if (opts.dome) {
     L.push('Dome: build first drains the whole inside of the dome (air through every cell, the');
     L.push('  liquid layer too), then places the city into the dry space, so nothing comes out');
     L.push('  waterlogged. Built under water (or into a hillside), the dome is emptied and');
@@ -1123,9 +1166,9 @@ export async function exportPack(world, optsIn = {}) {
   // the city's marked centre unless the caller names one
   const opts = { ...optsIn, centre: optsIn.centre || world.centre };
   const tiles = tileList(world, opts);
-  const structures = buildStructures(world, opts).concat(buildDrainStructures(world, opts), buildPlugStructures(world, opts), buildRailStructures(world, opts), buildRemoveStructures(world, opts), buildAnimStructures(world, opts));
+  const structures = buildStructures(world, opts).concat(buildDrainStructures(world, opts), buildPlugStructures(world, opts), buildRailStructures(world, opts), buildRemoveStructures(world, opts), buildAnimStructures(world, opts), buildSeaStructures(world, opts));
   const mobStructs = buildMobStructures(opts.spawns, opts);
-  const guide = placementGuide(tiles, { ...opts, world, dome: !!world.dome, stilts: !!world.stiltGrid, floating: !!world.floating, plugs: !!(world.airBoxes && world.airBoxes.length) });
+  const guide = placementGuide(tiles, { ...opts, world, dome: !!world.dome, sea: !!world.sea, stilts: !!world.stiltGrid, floating: !!world.floating, plugs: !!(world.airBoxes && world.airBoxes.length) });
   const fns = functionFiles(tiles, world, { ...opts, mobTiles: mobStructs });
   // the fish's definitions where there are fish to keep: the ponds' or the
   // aquarium's (its fish are summoned with keep events these define); the mobs'
@@ -1141,9 +1184,9 @@ export async function exportPack(world, optsIn = {}) {
 
 export async function exportStructuresZip(world, opts = {}) {
   const tiles = tileList(world, opts);
-  const structures = buildStructures(world, opts).concat(buildDrainStructures(world, opts), buildPlugStructures(world, opts), buildRailStructures(world, opts), buildRemoveStructures(world, opts), buildAnimStructures(world, opts));
+  const structures = buildStructures(world, opts).concat(buildDrainStructures(world, opts), buildPlugStructures(world, opts), buildRailStructures(world, opts), buildRemoveStructures(world, opts), buildAnimStructures(world, opts), buildSeaStructures(world, opts));
   const mobStructs = buildMobStructures(opts.spawns, opts);
-  const guide = placementGuide(tiles, { ...opts, world, dome: !!world.dome, stilts: !!world.stiltGrid, floating: !!world.floating, plugs: !!(world.airBoxes && world.airBoxes.length) });
+  const guide = placementGuide(tiles, { ...opts, world, dome: !!world.dome, sea: !!world.sea, stilts: !!world.stiltGrid, floating: !!world.floating, plugs: !!(world.airBoxes && world.airBoxes.length) });
   const fns = functionFiles(tiles, world, { ...opts, mobTiles: mobStructs });
   const files = structures.concat(mobStructs).map((s) => ({ name: `${s.name}.mcstructure`, data: s.data }));
   for (const f of fns) files.push({ name: f.name, data: new TextEncoder().encode(f.text) });

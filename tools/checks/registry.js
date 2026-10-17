@@ -83,6 +83,7 @@ export const SECTIONS = [
   { id: '2zzt', file: '2zzt-tune-gallery.js',                  group: 'fast' },
   { id: '2zzu', file: '2zzu-steam-santorini-cyber.js',         group: 'fast' },
   { id: '2zzv', file: '2zzv-nightclub.js',                     group: 'fast' },
+  { id: '2zzw', file: '2zzw-underwater.js',                    group: 'fast' },
   { id: '2v', file: '2v-java-worlds.js',                      group: 'fast' },
   { id: '2w', file: '2w-square-stadium-cemetery-allotments.js', group: 'slow' },
   { id: '2x', file: '2x-village-style.js',                    group: 'fast' },
