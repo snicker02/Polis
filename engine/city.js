@@ -42,7 +42,7 @@ import { buildThemePark } from './themepark.js';
 import { planHills, liftBlocks, cutStairs, shiftBuilding, walkCity } from './terrain.js';
 import { styleOf, remapTable, STYLES } from './styles.js';
 import { signTags } from './landmarks.js';
-import { signId, SIGN_FACING, railId, poweredRailId, RAIL } from './materials.js';
+import { signId, SIGN_FACING, railId, poweredRailId, RAIL, glazedId } from './materials.js';
 import { buildCentre, centreCells, footprint } from './centre.js';
 import { PROFESSION_NAMES } from './entities.js';
 import { FLOWERS } from './materials.js';
@@ -231,6 +231,10 @@ export function generateCity(cfgIn, onProgress) {
     if (cfg.hills === DEFAULTS.hills) cfg.hills = 0;
     if (cfg.maxFloors === DEFAULTS.maxFloors) cfg.maxFloors = 8;
   }
+  // a Dwarven city digs: its metro, while that option is where it was
+  if (STYLE.dwarven && cfg.metro === DEFAULTS.metro) cfg.metro = true;
+  // a Mesoamerican city on hills: its open spaces paved plazas, each lot a terrace of its own
+  if (STYLE.meso && cfg.hills > 0) cfg.piazzas = true;
   // a Santorini town climbs its hillside, whitewashed and low
   if (STYLE.hillTown) {
     if (cfg.hills === DEFAULTS.hills) cfg.hills = 4;
@@ -446,7 +450,7 @@ export function generateCity(cfgIn, onProgress) {
       }
     }
     if (lot.kind === USE.PARK) { park(world, lot, rng, cfg, lifeRng, pandas, megaliths, ponds); continue; }
-    if (lot.kind === USE.PLAZA) { plaza(world, lot, rng, cfg); continue; }
+    if (lot.kind === USE.PLAZA) { plaza(world, lot, rng, cfg, lotStyleOf(lot)); continue; }
 
     if (lot.pen) {
       const rch = ranch(world, lot, frontage(plan, lot).side, lifeRng, GROUND, plan, lot.pen);
@@ -474,17 +478,19 @@ export function generateCity(cfgIn, onProgress) {
     const theme = themeRng.pick(LS.themes[lot.style] || LS.themes.mid);
     // An L or U round a courtyard: decided per lot from a hash, and built (and
     // furnished) from its own random stream. Every wing is a whole building.
-    if (cfg.courtyardChance > 0 && lot.style === 'mid') {
+    // (a style of courtyards, the Moorish, has more of them, while the slider is where it was)
+    const cChance = LS.courtyardChance !== undefined && cfg.courtyardChance === DEFAULTS.courtyardChance ? LS.courtyardChance : cfg.courtyardChance;
+    if (cChance > 0 && lot.style === 'mid') {
       const cp = courtyardPlan(fx0, fz0, fx1, fz1, front.side);
-      if (cp.kinds.length && hash2(lot.x0 + 7, lot.z0 + 3, (cfg.seed ^ 0xc0a7) | 0) < cfg.courtyardChance) {
+      if (cp.kinds.length && hash2(lot.x0 + 7, lot.z0 + 3, (cfg.seed ^ 0xc0a7) | 0) < cChance) {
         const crng = makeRng(((lot.x0 * 40503) ^ (lot.z0 * 65599) ^ cfg.seed ^ 0xc0a7) >>> 0);
         // a U needs a lot 21 across (three wings of seven): where one fits, it is usually built
         const kind = cp.kinds.includes('U') && crng.chance(0.7) ? 'U' : 'L';
         const cy = makeCourtyard(world, {
-          x0: fx0, z0: fz0, x1: fx1, z1: fz1, face: front.side, kind, mirror: crng.chance(0.5), G: GROUND, flowers: cfg.flowers,
+          x0: fx0, z0: fz0, x1: fx1, z1: fz1, face: front.side, kind, mirror: crng.chance(0.5), G: GROUND, flowers: cfg.flowers, fountain: !!LS.fountains,
           building: (p) => makeBuilding(world, {
-            detail: cfg.detail, arcade: !LS.venetian && !LS.noArcade, eaves: !!LS.eaves, lancets: !!LS.lancets, deco: !!LS.deco, steam: !!LS.steam, santorini: !!LS.santorini, neon: !!LS.neon, flatRoof: !!LS.flatRoofs, roofSlab: LS.roofSlab, rustic: !!LS.rustic,
-            x0: p.x0, z0: p.z0, x1: p.x1, z1: p.z1, noStairs: p.noStairs,
+            detail: cfg.detail, arcade: !LS.venetian && !LS.noArcade, eaves: !!LS.eaves, lancets: !!LS.lancets, deco: !!LS.deco, steam: !!LS.steam, santorini: !!LS.santorini, neon: !!LS.neon, flatRoof: !!LS.flatRoofs, roofSlab: LS.roofSlab, pyramid: !!LS.pyramid, meso: !!LS.meso, moorish: !!LS.moorish, pointed: !!LS.pointedArches, elven: !!LS.elven, endcity: !!LS.endcity, dwarven: !!LS.dwarven, brutal: !!LS.brutal, cantilever: !!LS.cantilever, rustic: !!LS.rustic,
+            x0: p.x0, z0: p.z0, x1: p.x1, z1: p.z1, noStairs: p.noStairs, wing: true,
             floors: lot.floors, pitch: cfg.pitch, groundY: GROUND,
             style: 'mid', facing: p.facing, theme,
             roofAccess: cfg.roofAccess, useStairs: cfg.useStairs, stairStyle: cfg.stairStyle, lights: cfg.lights,
@@ -524,7 +530,7 @@ export function generateCity(cfgIn, onProgress) {
       facing: front.side, theme, useStairs: cfg.useStairs, lights: cfg.lights,
       shape: towerShape(hash2(lot.z0, lot.x0, (cfg.seed ^ 0x5a9e) | 0), LS.towerShapes),
     }, makeRng(((lot.x0 * 73856093) ^ (lot.z0 * 19349663) ^ cfg.seed ^ 0x7157) >>> 0)) : makeBuilding(world, {
-      detail: cfg.detail, arcade: !LS.venetian && !LS.noArcade, eaves: !!LS.eaves, lancets: !!LS.lancets, deco: !!LS.deco, steam: !!LS.steam, santorini: !!LS.santorini, neon: !!LS.neon, flatRoof: !!LS.flatRoofs, roofSlab: LS.roofSlab,
+      detail: cfg.detail, arcade: !LS.venetian && !LS.noArcade, eaves: !!LS.eaves, lancets: !!LS.lancets, deco: !!LS.deco, steam: !!LS.steam, santorini: !!LS.santorini, neon: !!LS.neon, flatRoof: !!LS.flatRoofs, roofSlab: LS.roofSlab, pyramid: !!LS.pyramid, meso: !!LS.meso, moorish: !!LS.moorish, pointed: !!LS.pointedArches, elven: !!LS.elven, endcity: !!LS.endcity, dwarven: !!LS.dwarven, brutal: !!LS.brutal, cantilever: !!LS.cantilever,
       rustic: !!LS.rustic,
       x0: fx0, z0: fz0, x1: fx1, z1: fz1,
       floors: lot.floors, pitch: cfg.pitch, groundY: GROUND,
@@ -946,6 +952,19 @@ export function generateCity(cfgIn, onProgress) {
     }
   }
 
+  // ---- lava kept shut in: any cell of it that something since has opened (a wall taken
+  // down, a door cut) becomes a shroomlight, light without the flow
+  {
+    const LAVA = MAT.LAVA, opened = [];
+    world.forEach((x, y, z, id) => {
+      if (id !== LAVA) return;
+      for (const [a, c, d] of [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]]) {
+        const q = world.get(x + a, y + c, z + d);
+        if (q < 0 || (q !== LAVA && MATERIALS.isPassable(q))) { opened.push([x, y, z]); break; }
+      }
+    });
+    for (const [x, y, z] of opened) world.set(x, y, z, MAT.SHROOMLIGHT);
+  }
   // ---- no dark corners: light every spot a hostile mob could spawn -----------
   // (last of all, over everything, dome included: see lighting.js)
   let lighting = null;
@@ -1784,6 +1803,23 @@ function applyStyle(world, plan, style, groundAt, where = null) {
       }
     }
   }
+  // the End city's trees: their trunks chorus plants on end stone (their leaves are gone
+  // with the remap), a chorus flower on each
+  if (style.chorus) {
+    const LOGS = new Set([MAT.LOG, MAT.SPRUCE_LOG].filter((v) => v !== undefined));
+    const runs = [];
+    world.forEach((x, y, z, id) => {
+      if (!LOGS.has(id) || !mine(x, z) || LOGS.has(world.get(x, y - 1, z))) return;
+      const below = world.get(x, y - 1, z);
+      if (below !== MAT.END_STONE) return;                     // (a tree's foot: on the ground, the grass now end stone)
+      let top = y; while (LOGS.has(world.get(x, top + 1, z))) top++;
+      runs.push([x, y, z, top]);
+    });
+    for (const [x, y0, z, y1] of runs) {
+      for (let y = y0; y <= y1; y++) world.set(x, y, z, MAT.CHORUS_PLANT);
+      if (!world.has(x, y1 + 1, z)) world.set(x, y1 + 1, z, MAT.CHORUS_FLOWER);
+    }
+  }
   if (style.snow) {
     const { W, D } = plan;
     for (let z = 0; z < D; z++)
@@ -2103,7 +2139,7 @@ export function generateSingle(cfgIn) {
     style: cfg.style, facing: 'south', theme,
     roofAccess: cfg.roofAccess, useStairs: cfg.useStairs, stairStyle: cfg.stairStyle, lights: cfg.lights,
     setback: cfg.setback, setbackEvery: cfg.setbackEvery, lifts: cfg.lifts !== false,
-    ...(() => { const SS = styleOf(cfg.cityStyle); return { steam: !!SS.steam, santorini: !!SS.santorini, neon: !!SS.neon, flatRoof: !!SS.flatRoofs, roofSlab: SS.roofSlab }; })(),
+    ...(() => { const SS = styleOf(cfg.cityStyle); return { steam: !!SS.steam, santorini: !!SS.santorini, neon: !!SS.neon, flatRoof: !!SS.flatRoofs, roofSlab: SS.roofSlab, pyramid: !!SS.pyramid, meso: !!SS.meso, moorish: !!SS.moorish, pointed: !!SS.pointedArches, lancets: !!SS.lancets, elven: !!SS.elven, endcity: !!SS.endcity, dwarven: !!SS.dwarven, brutal: !!SS.brutal, cantilever: !!SS.cantilever }; })(),
   }, rng);
 
   const buildings = rec ? [rec] : [];
@@ -2652,13 +2688,26 @@ function park(world, lot, rng, cfg, lifeRng, pandas, megaliths, ponds) {
   }
 }
 
-function plaza(world, lot, rng, cfg) {
+function plaza(world, lot, rng, cfg, LS = {}) {
+  const meso = !!LS.meso, moorish = !!LS.moorish;
   for (let z = lot.z0; z <= lot.z1; z++)
     for (let x = lot.x0; x <= lot.x1; x++)
-      world.set(x, GROUND, z, ((x + z) & 1) ? MAT.PATH : MAT.QUARTZ);
+      world.set(x, GROUND, z, meso ? (((x + z) & 1) ? MAT.MOSSY_BRICK : MAT.STONEBRICK) : ((x + z) & 1) ? MAT.PATH : MAT.QUARTZ);
   const cx = Math.round((lot.x0 + lot.x1) / 2), cz = Math.round((lot.z0 + lot.z1) / 2);
   const w = lot.x1 - lot.x0 + 1, d = lot.z1 - lot.z0 + 1;
-  if (w >= 9 && d >= 9) {
+  if (meso && w >= 9 && d >= 9) {
+    // an altar in the middle of a Mesoamerican plaza: three steps up, a brazier on top
+    for (let k = 0; k < 3; k++) for (let dz = -(2 - k); dz <= 2 - k; dz++) for (let dx = -(2 - k); dx <= 2 - k; dx++)
+      world.set(cx + dx, GROUND + 1 + k, cz + dz, k === 2 ? MAT.CHISELED_STONE : MAT.MOSSY_BRICK);
+    world.set(cx, GROUND + 4, cz, MAT.CAMPFIRE_LIT);
+  } else if (moorish && w >= 9 && d >= 9) {
+    // a Moorish fountain: a basin rimmed in glazed tile, a water bowl on a column in it
+    for (let dz = -2; dz <= 2; dz++) for (let dx = -2; dx <= 2; dx++) {
+      const edge = Math.abs(dx) === 2 || Math.abs(dz) === 2;
+      world.set(cx + dx, GROUND, cz + dz, edge ? glazedId('blue', 2 + ((dx + dz + 4) & 3)) : MAT.WATER);
+    }
+    world.set(cx, GROUND, cz, MAT.CUT_SAND); world.set(cx, GROUND + 1, cz, MAT.CAULDRON_FULL);
+  } else if (w >= 9 && d >= 9) {
     for (let z = cz - 2; z <= cz + 2; z++)
       for (let x = cx - 2; x <= cx + 2; x++) {
         const edge = (x === cx - 2 || x === cx + 2 || z === cz - 2 || z === cz + 2);

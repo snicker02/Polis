@@ -1,4 +1,4 @@
-# Polis v0.70.1
+# Polis v0.72.0
 
 *Created with help from Claude AI.*
 
@@ -771,6 +771,138 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.72.0** — Four new styles: Elven / forest, End city, Dwarven, Brutalist.
+
+All four are in the Style menu and in the Mix styles list.
+
+**Elven / forest** (stylebits.js: elvenDress):
+- **Materials.** Mangrove planks and logs, moss blocks and mossy stone brick. Streets
+  are moss with mossy cobble pavements; trees are mangrove, lamp posts mangrove fences.
+- **Trees.** Every building is wrapped round a great tree: its corners are mangrove
+  trunks, floor after floor. On mid-rises and towers the trunks rise past the roof
+  (and the roof hut) into a crown of mangrove leaves spread over it, three layers with
+  a ragged edge.
+- **Lanterns and moss.** Lanterns hang on chains under the eaves along each front,
+  never lower than head height. Moss carpet grows in tufts round the buildings' feet.
+
+**End city** (stylebits.js: endDress; city.js: applyStyle):
+- **Materials.** Purpur blocks and pillars, end stone and end stone bricks, magenta and
+  purple glass. The ground is end stone; streets are end stone brick, pavements purpur.
+- **Lights.** End rods stand along the roofs' edges and corners and top the street
+  lamps, which have purpur pillar posts. Purpur pillars mark the buildings' corners.
+- **Chorus trees.** In the parks and yards each tree is a chorus plant standing on end
+  stone, with a chorus flower on top. Tree leaves, grass and flowers are gone.
+
+**Dwarven** (stylebits.js: dwarvenDress):
+- **Materials.** Deepslate bricks and tiles, polished blackstone and gilded blackstone,
+  with gold-block trim and tinted glass. Streets are blackstone lined in gold; street
+  lights and floor lights are shroomlights.
+- **Lava light.** Lava behind glass runs up the corners of every mid-rise and tower,
+  from head height to the roof. The corner itself is lava with glass over its two
+  outer faces; the walls, the corner below and the roof above close it in. A cell
+  where any of that doesn't hold stays as it was.
+- **Lava safety sweep.** A last pass over the whole city turns into a shroomlight any
+  lava that something later opened. In testing this caught a courtyard wing's walls
+  coming down where wings meet; courtyard wings now get no lava at all.
+- **Metro.** The metro is dug while its option is where it was.
+
+**Brutalist** (building.js: cantilever; stylebits.js: brutalDress):
+- **Materials.** Raw concrete (light grey and grey) and smooth stone, with flat
+  concrete roofs and concrete streets.
+- **Cantilevers.** Every mid-rise and tower of two floors or more has its ground floor
+  drawn in (two all round where the building is wide enough, else one). The floors
+  over it hang out to the full width, the overhang's floor whole out to its walls, on a
+  concrete column at each corner.
+- **Deep-set windows.** The windows sit deep in a grid of concrete: a slab a block out
+  at every floor's line, and fins a block out every third cell between them, over head
+  height only. A fin never stands in front of a window.
+
+**Under the hood:**
+- The stair and lift now go where every floor overlaps (the top of a building that
+  steps in, the ground floor of one that hangs out). Each floor's slab covers its whole
+  storey, so floors that hang out have floors.
+- New blocks: mangrove planks, logs, leaves, fences and stairs; moss carpet; purpur
+  block and pillar; end stone and end stone bricks; end rods; chorus plants and
+  flowers; deepslate tiles; lava.
+- Lighting: lava, pearlescent and verdant froglights now count as the lights they
+  are.
+- Java: purpur blocks stay purpur blocks (no longer turned to pillars), chorus stalks
+  are joined up and down, and Bedrock's end bricks are renamed to Java's end stone
+  bricks.
+
+**New check 2zzz:**
+- all four styles are registered and offered;
+- every building walks through and nothing is dark, in two cities each and a mixed
+  one;
+- Elven: trunked corners, crowns, chained lanterns hung from a block above head
+  height, and moss;
+- End city: no grass or leaves, and chorus stalks on end stone each with its flower,
+  plus end rods;
+- Dwarven: every cell of lava is closed in on all six sides and above head height,
+  there's gold, and the metro is there;
+- Brutalist: cantilevers whose floors are whole, columns under them, and no fin in
+  front of a window;
+- in the mixed city each style's dress appears only in its own districts;
+- every block is a Bedrock state and a Java block.
+
+**0.71.0** — Two new styles: Mesoamerican, and Moorish / Andalusian.
+
+Both are in the Style menu and in the Mix styles list.
+
+**Mesoamerican** (styles.js, building.js, stylebits.js: mesoDress):
+- **Materials.** Buildings are mossy stone, mossy and cracked stone brick, mud brick,
+  cut sandstone and jungle wood. Streets are packed mud and mossy brick, with moss
+  paths. Trees and lamp posts are jungle wood.
+- **Stepped pyramids.** Towers and mid-rises step in a block each way every floor, as
+  long as that way stays nine or more across (the temple on top needs room for its
+  stair). A long block keeps stepping along its length after its width has stopped.
+  The building gets as many floors as its steps allow.
+- **The temple on top.** It has a roof comb of chiseled stone along its roof, and lit
+  braziers (campfires) on its corners and on the corners of every step.
+- **Vines and leaves.** Vines hang down the street fronts and sides of the other
+  buildings, each against its wall and none lower than head height. Jungle leaves
+  sit in clumps along the eaves, out over the street.
+- **Terraced plazas on hills.** In a hilly city its open spaces are paved plazas of
+  mossy and plain stone brick, each lot a terrace of its own (retaining walls between
+  them). Each big plaza has a stepped altar in the middle with a brazier on top. A
+  level city keeps its parks.
+
+**Moorish / Andalusian** (styles.js, building.js, stylebits.js: moorishDress,
+courtyard.js, landmarks.js):
+- **Materials.** Whitewash, brick, cream sandstone and terracotta, with gable roofs of
+  brick, brick streets and cream pavements.
+- **Courtyards.** Courtyard blocks are much commoner (when the courtyard slider is
+  where it was). Each court gets a fountain: a bowl of water on a column inside a ring
+  of glazed tile.
+- **Arches and windows.** Mid-rises get arcades of pointed arches on their street
+  fronts: the arch's sides are a course lower and solid above, so the opening rises
+  to a point. Upper windows are pointed too.
+- **Glazed tiles.** Glazed terracotta in two colours runs as a dado round the foot of
+  the walls, each tile turned a quarter on from the last so the pattern runs. There's
+  a tile panel over the doorway and a frieze under the roof of the taller buildings.
+  Tiles only replace plain wall.
+- **The minaret.** The clock tower becomes a minaret. Over the clock stage there's a
+  railed gallery, then a slender shaft with cut corners and a window each way, a
+  second gallery, an open lantern with the bell, and a pointed cap with a gold
+  finial.
+- **Plazas.** Each plaza gets a tiled fountain.
+
+**Other changes:**
+- New blocks: jungle logs, leaves and fences; vines; jungle and mud brick stairs.
+- Java: vines are mapped to Java's own sides, and Bedrock's prismarine brick stairs
+  are renamed to Java's name.
+- New check 2zzy:
+  - both styles are registered and offered;
+  - every building walks through and nothing is dark, in two cities each and a mixed
+    one;
+  - Mesoamerican: the pyramids' steps are a block in each way per floor with a temple
+    nine across, the combs and braziers are there, every vine is against a wall above
+    head height, the eaves have leaves, and hilly cities get plazas and altars;
+  - Moorish: the tiles, pointed arcades, courtyard fountains and the minaret (bell
+    hung, clock faces whole) are there;
+  - in the mixed city each style's dress appears only in its own districts;
+  - every block is a Bedrock state and a Java block.
 
 **0.70.1** — Head room in the sunken city's rail tubes.
 

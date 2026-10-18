@@ -165,6 +165,23 @@ Object.assign(MAT, {
   MUD_BRICK:      A('MUD_BRICK', 'minecraft:mud_bricks', '#89694f'),
   PACKED_MUD:     A('PACKED_MUD', 'minecraft:packed_mud', '#8e6b50'),
   JUNGLE:         A('JUNGLE', 'minecraft:jungle_planks', '#a07350'),
+  JUNGLE_LOG:     A('JUNGLE_LOG', 'minecraft:jungle_log', '#55441f', { pillar_axis: S('y') }),
+  JUNGLE_LEAF:    A('JUNGLE_LEAF', 'minecraft:jungle_leaves', '#3f8f22', { persistent_bit: B(1), update_bit: B(0) }),
+  JUNGLE_FENCE:   A('JUNGLE_FENCE', 'minecraft:jungle_fence', '#a07350'),
+  MANGROVE:       A('MANGROVE', 'minecraft:mangrove_planks', '#773933'),
+  MANGROVE_LOG:   A('MANGROVE_LOG', 'minecraft:mangrove_log', '#5a4a2d', { pillar_axis: S('y') }),
+  MANGROVE_LEAF:  A('MANGROVE_LEAF', 'minecraft:mangrove_leaves', '#4f8f2a', { persistent_bit: B(1), update_bit: B(0) }),
+  MANGROVE_FENCE: A('MANGROVE_FENCE', 'minecraft:mangrove_fence', '#773933'),
+  MOSS_CARPET:    A('MOSS_CARPET', 'minecraft:moss_carpet', '#5a7a2a', {}, { passable: true, transparent: true, flat: true }),
+  PURPUR:         A('PURPUR', 'minecraft:purpur_block', '#a97ca9', { pillar_axis: S('y') }),
+  PURPUR_PILLAR:  A('PURPUR_PILLAR', 'minecraft:purpur_pillar', '#ab80ab', { pillar_axis: S('y') }),
+  END_STONE:      A('END_STONE', 'minecraft:end_stone', '#dbde9e'),
+  END_BRICKS:     A('END_BRICKS', 'minecraft:end_bricks', '#dadc9e'),
+  END_ROD:        A('END_ROD', 'minecraft:end_rod', '#f2eee4', { facing_direction: I(1) }, { transparent: true }),
+  CHORUS_PLANT:   A('CHORUS_PLANT', 'minecraft:chorus_plant', '#5e3a5e', {}, { transparent: true }),
+  CHORUS_FLOWER:  A('CHORUS_FLOWER', 'minecraft:chorus_flower', '#9a7a9a', { age: I(5) }, { transparent: true }),
+  DEEPSLATE_TILES: A('DEEPSLATE_TILES', 'minecraft:deepslate_tiles', '#363639'),
+  LAVA:           A('LAVA', 'minecraft:lava', '#d65a10', { liquid_depth: I(0) }, { transparent: true }),
 });
 Object.assign(MAT, {
   SPRUCE_FENCE: A('SPRUCE_FENCE', 'minecraft:spruce_fence', '#5b4430'),
@@ -588,6 +605,9 @@ const STAIR_BLOCKS = {
   copper: ['minecraft:cut_copper_stairs', '#bf6b50'],
   purpur: ['minecraft:purpur_stairs', '#a97ca9'],
   prismarine: ['minecraft:prismarine_bricks_stairs', '#5ea89a'],
+  jungle: ['minecraft:jungle_stairs', '#a07350'],
+  mangrove: ['minecraft:mangrove_stairs', '#773933'],
+  mudbrick: ['minecraft:mud_brick_stairs', '#8a6a4f'],
   darkprismarine: ['minecraft:dark_prismarine_stairs', '#335b4f'],
 };
 export const WEIRDO = { east: 0, west: 1, south: 2, north: 3 };
@@ -608,7 +628,7 @@ export const STAIR_SOLID = {
   smoothsand: MAT.SMOOTH_SAND, redsand: MAT.RED_SAND, acacia: MAT.ACACIA,
   cherry: MAT.CHERRY, cobble: MAT.COBBLE, mossy: MAT.MOSSY_BRICK,
   blackstone: MAT.BLACKSTONE, pbbrick: MAT.PB_BRICKS, netherbrick: MAT.NETHER_BRICK, rednether: MAT.RED_NETHER_BRICK,
-  crimson: MAT.CRIMSON_PLANKS, warped: MAT.WARPED_PLANKS, bamboo: MAT.BAMBOO_PLANKS, copper: MAT.COPPER_CUT, prismarine: MAT.AQUA_WALL, darkprismarine: MAT.DARK_PRISMARINE,
+  crimson: MAT.CRIMSON_PLANKS, warped: MAT.WARPED_PLANKS, bamboo: MAT.BAMBOO_PLANKS, copper: MAT.COPPER_CUT, prismarine: MAT.AQUA_WALL, darkprismarine: MAT.DARK_PRISMARINE, jungle: MAT.JUNGLE, mudbrick: MAT.MUD_BRICK, mangrove: MAT.MANGROVE,
 };
 
 // ---- building themes -------------------------------------------------------
@@ -637,3 +657,8 @@ export const THEMES = {
     { name: 'greenhome',wall: MAT.C_GREEN,   trim: MAT.OAK,       floor: MAT.OAK,     glass: MAT.GLASS,  stair: 'dark',       door: 'oak', roof: MAT.SPRUCE },
   ],
 };
+
+// A vine on the face of a wall: `toward` the side its wall is on (Bedrock's bits:
+// 1 south, 2 west, 4 north, 8 east).
+const VINE_BIT = { south: 1, west: 2, north: 4, east: 8 };
+export const vineId = (toward) => MATERIALS.add(null, 'minecraft:vine', '#3f7f2a', { vine_direction_bits: I(VINE_BIT[toward]) }, { passable: true, flowable: true, transparent: true });

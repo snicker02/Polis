@@ -26,7 +26,7 @@
 // Geometry works in street terms, as the school does: d runs back from the
 // street edge, a runs across (left to right seen from the street).
 
-import { MAT, FLOWERS } from './materials.js';
+import { MAT, FLOWERS, glazedId } from './materials.js';
 
 export const WING_MIN = 7, WING_MAX = 10, COURT_MIN = 5;
 // the back wing is as wide as the court; narrower than this and a building
@@ -140,6 +140,29 @@ export function makeCourtyard(world, spec, rng) {
       if (!edge || onPath.has(x + ',' + z) || nearDoor(x, z) || world.has(x, G + 1, z)) continue;
       if (spec.flowers !== false && rng.chance(0.45)) { world.set(x, G + 1, z, rng.pick(FLOWERS)); flowers++; }
     }
+  // a fountain in the court (the Moorish style's): a basin of glazed tile round a bowl of
+  // water on a column, off the path, clear of the doors, a block of court all round it
+  let fountain = null;
+  if (spec.fountain && court.x1 - court.x0 >= 4 && court.z1 - court.z0 >= 4) {
+    const fx = Math.floor((court.x0 + court.x1) / 2), fz = Math.floor((court.z0 + court.z1) / 2);
+    for (const [ox, oz] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]]) {
+      const x0 = fx + ox, z0 = fz + oz;
+      let ok = x0 - 1 > court.x0 && x0 + 1 < court.x1 && z0 - 1 > court.z0 && z0 + 1 < court.z1;
+      for (let dz = -1; dz <= 1 && ok; dz++) for (let dx = -1; dx <= 1 && ok; dx++) {
+        const x = x0 + dx, z = z0 + dz;
+        if (onPath.has(x + ',' + z) || nearDoor(x, z)) ok = false;
+      }
+      if (!ok) continue;
+      for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
+        const x = x0 + dx, z = z0 + dz;
+        if (world.has(x, G + 1, z)) world.clear(x, G + 1, z);
+        if (dx === 0 && dz === 0) { world.set(x, G, z, MAT.CUT_SAND); world.set(x, G + 1, z, MAT.CAULDRON_FULL); }
+        else world.set(x, G + 1, z, glazedId(spec.tile || 'blue', 2 + ((dx + 1 + (dz + 1) * 3) & 3)));
+      }
+      fountain = { at: [x0, G + 1, z0] };
+      break;
+    }
+  }
   // a lantern post in the court, off the path and clear of the doors
   let lamp = null;
   const cx = Math.floor((court.x0 + court.x1) / 2), cz = Math.floor((court.z0 + court.z1) / 2);
@@ -153,7 +176,7 @@ export function makeCourtyard(world, spec, rng) {
     lamp = [x, G + 3, z];
     break;
   }
-  return { kind, wings, court, path, flowers, lamp, t, joins };
+  return { kind, wings, court, path, flowers, lamp, fountain, t, joins };
 }
 
 // ---- opening the wings into one another ------------------------------------------

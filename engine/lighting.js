@@ -26,7 +26,7 @@ export const TARGET_OUT = 1;      // outside: any block light at all stops a spa
 
 const EMIT = { 'minecraft:sea_lantern': 15, 'minecraft:glowstone': 15, 'minecraft:lantern': 15, 'minecraft:shroomlight': 15,
   'minecraft:campfire': 15, 'minecraft:soul_lantern': 10, 'minecraft:soul_campfire': 10, 'minecraft:torch': 14,
-  'minecraft:end_rod': 14, 'minecraft:ochre_froglight': 15, 'minecraft:jack_o_lantern': 15, 'minecraft:beacon': 15 };
+  'minecraft:end_rod': 14, 'minecraft:ochre_froglight': 15, 'minecraft:lava': 15, 'minecraft:pearlescent_froglight': 15, 'minecraft:verdant_froglight': 15, 'minecraft:jack_o_lantern': 15, 'minecraft:beacon': 15 };
 const SEE_THROUGH = /glass|pane|leaves|fence|door|stairs|slab|bars|carpet|lantern|campfire|bed|chest|sign|flower|torch|cake|bell|anvil|cauldron|brewing|lectern|grindstone|stonecutter|rail|ladder|button|pressure|trapdoor|wall|vine|roots|fungus|sapling|bush|grass$|short_grass|fern|tulip|poppy|dandelion|allium|orchid|bluet|daisy|cornflower|lily|azalea|petals|crop|wheat|carrots|potatoes|beetroot|snow_layer|composter|hopper|chain|scaffolding|water|lava|kelp|seagrass|bamboo|sugar_cane|cactus|candle|flower_pot|skull|head|banner|rod|dripleaf|spore|moss_carpet|hay/;
 // the surfaces a mob cannot spawn on even though they are solid
 const NO_SPAWN_SURFACE = /farmland|dirt_path|grass_path|slab|stairs|glass|ice|magma|honey|soul_sand|bedrock|barrier|leaves|hay|campfire|carpet|bed|chest|cake/;

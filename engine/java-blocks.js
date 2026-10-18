@@ -29,6 +29,7 @@ const RAIL_SHAPE = ['north_south', 'east_west', 'ascending_east', 'ascending_wes
 // Blocks whose name differs. Everything not listed keeps its name.
 const RENAME = {
   'minecraft:prismarine_bricks_stairs': 'minecraft:prismarine_brick_stairs',
+  'minecraft:end_bricks': 'minecraft:end_stone_bricks',
   'minecraft:grass_block': 'minecraft:grass_block',
   'minecraft:brick_block': 'minecraft:bricks',
   'minecraft:stone_bricks': 'minecraft:stone_bricks',
@@ -222,6 +223,8 @@ export function toJava(block, states = {}, extra = {}) {
   if (name === 'minecraft:sea_pickle') { props.pickles = String(Number(props.cluster_count || 0) + 1); props.waterlogged = props.dead_bit === 'true' || props.dead_bit === '1' ? 'false' : 'true'; delete props.cluster_count; delete props.dead_bit; }
   if (/_coral(_fan)?$/.test(name)) { delete props.coral_fan_direction; props.waterlogged = 'true'; }
   if (name === 'minecraft:conduit') props.waterlogged = 'true';
+  // a vine's sides by Bedrock's bits (1 south, 2 west, 4 north, 8 east): Java names each side
+  if (name === 'minecraft:vine') { const v = Number(props.vine_direction_bits || 0); delete props.vine_direction_bits; props.south = v & 1 ? 'true' : 'false'; props.west = v & 2 ? 'true' : 'false'; props.north = v & 4 ? 'true' : 'false'; props.east = v & 8 ? 'true' : 'false'; props.up = 'false'; }
   if (name === 'minecraft:repeater') { props.locked = 'false'; props.powered = block === 'minecraft:powered_repeater' ? 'true' : 'false'; }
   if (name === 'minecraft:piston' || name === 'minecraft:sticky_piston') props.extended = 'false';
   if (name === 'minecraft:hopper') props.enabled = 'true';
@@ -266,7 +269,10 @@ export function toJava(block, states = {}, extra = {}) {
     props.flower_amount = String(Math.max(1, Math.min(4, Number(props.age) + 1)));
     delete props.age;
   }
-  if (name === 'minecraft:purpur_block' && props.axis) { name = 'minecraft:purpur_pillar'; }
+  // (Bedrock writes its purpur block with an axis; Java's has none, its pillar its own block)
+  if (name === 'minecraft:purpur_block') delete props.axis;
+  // a chorus plant's stem, joined up and down (the city's are straight stalks)
+  if (name === 'minecraft:chorus_plant') { props.up = 'true'; props.down = 'true'; props.north = 'false'; props.south = 'false'; props.east = 'false'; props.west = 'false'; }
   // Java has no "double slab": it is a slab with type=double
   if (/^minecraft:double_/.test(name)) { name = name.replace('double_', ''); props.type = 'double'; }
   return { name, props };

@@ -362,6 +362,38 @@ function clockTower(world, lot, face, cfg, rng, G) {
       }
     faces.push({ side, centre: [sx, y0 + 4, sz] });
   }
+  // a minaret (the Moorish style's): over the clock stage a gallery a block out all round,
+  // railed; a slender shaft, its corners cut, a window each way; a second gallery; an open
+  // lantern with the bell; a pointed cap with a gold finial
+  if (styleHere(cfg, lot).minaret) {
+    const RAIL_ = MAT.BARS, TRIM = LP.clockTrim, WALL = LP.clockWall;
+    const gallery = (y, r) => {
+      for (let dz = -r; dz <= r; dz++) for (let dx = -r; dx <= r; dx++) {
+        if (Math.abs(dx) === r && Math.abs(dz) === r) continue;
+        world.set(cx + dx, y, cz + dz, TRIM);
+        if (Math.max(Math.abs(dx), Math.abs(dz)) === r) world.set(cx + dx, y + 1, cz + dz, RAIL_);
+      }
+    };
+    gallery(y0 + 8, 4);
+    for (let y = y0 + 9; y <= y0 + 17; y++) for (let dz = -2; dz <= 2; dz++) for (let dx = -2; dx <= 2; dx++) {
+      if (Math.abs(dx) === 2 && Math.abs(dz) === 2) continue;
+      const ring = Math.max(Math.abs(dx), Math.abs(dz)) === 2;
+      if (!ring) { world.clear(cx + dx, y, cz + dz); continue; }
+      const win = (y === y0 + 12 || y === y0 + 13) && (dx === 0 || dz === 0);
+      world.set(cx + dx, y, cz + dz, win ? MAT.GLASS : (y - y0) % 4 === 1 ? TRIM : WALL);
+    }
+    gallery(y0 + 18, 3);
+    // the lantern: four corner posts, open sides, the bell hung under its roof
+    for (const [dx, dz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) for (let y = y0 + 19; y <= y0 + 21; y++) world.set(cx + dx, y, cz + dz, TRIM);
+    for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) world.set(cx + dx, y0 + 22, cz + dz, LP.spire);
+    world.set(cx, y0 + 21, cz, MAT.BELL_HANG);
+    world.set(cx, y0 + 23, cz, LP.spire); world.set(cx, y0 + 24, cz, LP.spire);
+    world.set(cx, y0 + 25, cz, LP.finial);
+    rec.topY = y0 + 25;
+    rec.rooms = (k) => (k === 0 ? 'hall' : (k % 2 ? 'office' : 'library'));
+    rec.landmark = 'clocktower';
+    return { kind: 'clocktower', rec, faces, belfryBell: [cx, y0 + 21, cz], lot, minaret: true, name: 'Minaret' };
+  }
   // belfry: solid floor, four corner piers, open arches, bell hanging from the roof
   for (let z = t.z0; z <= t.z1; z++) for (let x = t.x0; x <= t.x1; x++) world.set(x, y0 + 8, z, LP.clockWall);
   for (const [x, z] of [[t.x0, t.z0], [t.x1, t.z0], [t.x0, t.z1], [t.x1, t.z1]])

@@ -35,7 +35,7 @@
 
 import { perimeter } from './blockcore.js';
 import { makeRng } from './rng.js';
-import { steampunkDress, santoriniDress, cyberDress } from './stylebits.js';
+import { steampunkDress, santoriniDress, cyberDress, mesoDress, moorishDress, elvenDress, endDress, dwarvenDress, brutalDress } from './stylebits.js';
 import { MAT, MATERIALS, B, doorId, stairId, DIR, WEIRDO, STAIR_SOLID, FLOWERS } from './materials.js';
 
 export const OUTWARD = { north: [0, -1], south: [0, 1], west: [-1, 0], east: [1, 0] };
@@ -85,14 +85,40 @@ export function makeBuilding(world, spec, rng) {
 
   // ---- stepped setbacks ----------------------------------------------------
   const insets = [0];
+  let insetsX = null, insetsZ = null;            // (a pyramid steps each way on its own)
+  if (spec.pyramid && style !== 'house' && floors >= 3 && Math.min(w, d) >= 9 && Math.max(w, d) >= 11) {
+    // a stepped pyramid (the Mesoamerican style's towers and mid-rises): in a block a side every floor, each way while that way stays
+    // nine across or more (the temple on top needs it for its stair), as many floors as
+    // the steps take: a long block steps on along its length after its width has stopped
+    insetsX = [0]; insetsZ = [0];
+    for (let k = 1; k < floors; k++) {
+      const ix = insetsX[k - 1], iz = insetsZ[k - 1];
+      const sx = w - 2 * (ix + 1) >= 9 ? 1 : 0, sz = d - 2 * (iz + 1) >= 9 ? 1 : 0;
+      if (!sx && !sz) { floors = k; break; }
+      insetsX.push(ix + sx); insetsZ.push(iz + sz);
+    }
+    insetsX.length = floors; insetsZ.length = floors;
+    for (let k = 1; k < floors; k++) insets.push(Math.min(insetsX[k], insetsZ[k]));
+  } else if (spec.cantilever && style !== 'house' && floors >= 2 && Math.min(w, d) - 2 >= 9) {
+    // a cantilever (the Brutalist style's): the ground floor drawn in all round (two where
+    // the building is wide enough, else one), every floor over it out to the full width
+    insets[0] = Math.min(w, d) - 4 >= 9 ? 2 : 1;
+    for (let k = 1; k < floors; k++) insets.push(0);
+  } else
   for (let k = 1; k < floors; k++) {
     let ins = insets[k - 1];
     if (spec.setback && style === 'tower' && k % spec.setbackEvery === 0 &&
         Math.min(w, d) - 2 * (ins + 1) >= 9) ins++;
     insets.push(ins);
   }
-  const rect = (k) => ({ x0: x0 + insets[k], z0: z0 + insets[k], x1: x1 - insets[k], z1: z1 - insets[k] });
+  const rect = (k) => insetsX
+    ? { x0: x0 + insetsX[k], z0: z0 + insetsZ[k], x1: x1 - insetsX[k], z1: z1 - insetsZ[k] }
+    : { x0: x0 + insets[k], z0: z0 + insets[k], x1: x1 - insets[k], z1: z1 - insets[k] };
   let top = rect(floors - 1);
+  // (the floor every floor shares: where the stair and a lift can go all the way up;
+  // the top for a building that steps in, the ground floor for one that hangs out)
+  const innerOf = () => { let r = rect(0); for (let k = 1; k < floors; k++) { const q = rect(k); r = { x0: Math.max(r.x0, q.x0), z0: Math.max(r.z0, q.z0), x1: Math.min(r.x1, q.x1), z1: Math.min(r.z1, q.z1) }; } return r; };
+  let inner = innerOf();
 
   // ---- stair core placement -------------------------------------------------
   // Tries each kind in preference order, both orientations, first with open
@@ -124,12 +150,12 @@ export function makeBuilding(world, spec, rng) {
         // against the back wall when they can (0.3.0): that leaves one deep
         // strip at the front for rooms instead of two shallow ones either
         // side. Spirals need open floor all round, so they go in the middle.
-        const fx = fit(top.x0, top.x1, cw, alongX ? em : 2), fz = fit(top.z0, top.z1, cd, alongX ? 2 : em);
-        const endFit = kind === 'spiral' ? null : (alongX ? fit(top.x0, top.x1, cw, em) : fit(top.z0, top.z1, cd, em));
-        const sideFit = kind === 'spiral' ? null : (alongX ? fit(top.z0, top.z1, cd, 1) : fit(top.x0, top.x1, cw, 1));
+        const fx = fit(inner.x0, inner.x1, cw, alongX ? em : 2), fz = fit(inner.z0, inner.z1, cd, alongX ? 2 : em);
+        const endFit = kind === 'spiral' ? null : (alongX ? fit(inner.x0, inner.x1, cw, em) : fit(inner.z0, inner.z1, cd, em));
+        const sideFit = kind === 'spiral' ? null : (alongX ? fit(inner.z0, inner.z1, cd, 1) : fit(inner.x0, inner.x1, cw, 1));
         if (!(endFit && sideFit)) {
           if (fx && fz) {
-            const cx = centre(fx, top.x0, top.x1, cw), cz = centre(fz, top.z0, top.z1, cd);
+            const cx = centre(fx, inner.x0, inner.x1, cw), cz = centre(fz, inner.z0, inner.z1, cd);
             core = { x0: cx, z0: cz, x1: cx + cw - 1, z1: cz + cd - 1, kind, alongX };
             break outer;
           }
@@ -140,10 +166,10 @@ export function makeBuilding(world, spec, rng) {
           const back = alongX ? (face === 'north' ? sideFit[1] : sideFit[0])
                               : (face === 'west' ? sideFit[1] : sideFit[0]);
           if (alongX) {
-            const cx = centre(endFit, top.x0, top.x1, cw);
+            const cx = centre(endFit, inner.x0, inner.x1, cw);
             core = { x0: cx, z0: back, x1: cx + cw - 1, z1: back + cd - 1, kind, alongX };
           } else {
-            const cz = centre(endFit, top.z0, top.z1, cd);
+            const cz = centre(endFit, inner.z0, inner.z1, cd);
             core = { x0: back, z0: cz, x1: back + cw - 1, z1: cz + cd - 1, kind, alongX };
           }
           break outer;
@@ -153,6 +179,7 @@ export function makeBuilding(world, spec, rng) {
     if (!core) floors = 1;
   }
   top = rect(floors - 1);
+  inner = innerOf();
 
   const roofY = gy + floors * P;
   const topFloorY = gy + (floors - 1) * P;
@@ -254,10 +281,11 @@ export function makeBuilding(world, spec, rng) {
     const sy = gy + k * P;
     floorYs.push(sy);
 
-    slab(below, sy, theme.floor);
+    // (the floor under this one's whole storey: a storey hanging out has its floor out to its walls)
+    slab({ x0: Math.min(r.x0, below.x0), z0: Math.min(r.z0, below.z0), x1: Math.max(r.x1, below.x1), z1: Math.max(r.z1, below.z1) }, sy, theme.floor);
     world.ring(r.x0, r.z0, r.x1, r.z1, sy + 1, sy + P - 1, theme.wall);
     if (style !== 'house' && P >= 4) world.ring(r.x0, r.z0, r.x1, r.z1, sy + P - 1, sy + P - 1, theme.trim);
-    if (k > 0 && insets[k] > insets[k - 1]) world.ring(below.x0, below.z0, below.x1, below.z1, sy + 1, sy + 1, theme.trim);
+    if (k > 0 && !insetsX && insets[k] > insets[k - 1]) world.ring(below.x0, below.z0, below.x1, below.z1, sy + 1, sy + 1, theme.trim);
 
     // windows
     const lo = winLo(sy), hi = winHi(sy);
@@ -336,11 +364,11 @@ export function makeBuilding(world, spec, rng) {
     for (const [cx, cz] of doorCells) world.set(cx, gy + 3, cz, MAT.GLOWSTONE);
   }
 
-  let houseInfo = null, arcadeInfo = null, eavesInfo = null, lancetInfo = null, decoInfo = null, chimneyAt = null, steamInfo = null, santoriniInfo = null, neonInfo = null;
+  let houseInfo = null, arcadeInfo = null, eavesInfo = null, lancetInfo = null, decoInfo = null, chimneyAt = null, steamInfo = null, santoriniInfo = null, neonInfo = null, mesoInfo = null, moorishInfo = null, elvenInfo = null, endInfo = null, dwarvenInfo = null, brutalInfo = null;
   if (spec.detail !== false) {
     const ctx = {
       rects: Array.from({ length: floors }, (_, k) => rect(k)), floorYs, roofY, top, theme, style, face, P,
-      doorCells, outv, gy, floors, core, hut, hutDoor, rustic: spec.rustic, eaves: !!spec.eaves,
+      doorCells, outv, gy, floors, core, hut, hutDoor, rustic: spec.rustic, eaves: !!spec.eaves, pointed: !!spec.pointed, pyramid: !!insetsX, cantilever: insets[0] > 0 && floors > 1, wing: !!spec.wing,
     };
     facadeDetail(world, ctx, rng);
     chimneyAt = ctx.chimney || null;
@@ -359,11 +387,17 @@ export function makeBuilding(world, spec, rng) {
     if (spec.steam) steamInfo = steampunkDress(world, ctx, own(0x57ea));
     if (spec.santorini) santoriniInfo = santoriniDress(world, ctx, own(0x5a47));
     if (spec.neon) neonInfo = cyberDress(world, ctx, own(0xc1be));
+    if (spec.meso) mesoInfo = mesoDress(world, ctx, own(0x3e50));
+    if (spec.moorish) moorishInfo = moorishDress(world, ctx, own(0x300f));
+    if (spec.elven) elvenInfo = elvenDress(world, ctx, own(0xe1f));
+    if (spec.endcity) endInfo = endDress(world, ctx, own(0xe4d));
+    if (spec.dwarven) dwarvenInfo = dwarvenDress(world, ctx, own(0xd3a));
+    if (spec.brutal) brutalInfo = brutalDress(world, ctx, own(0xb72));
   }
 
   // ---- a bubble lift beside the stairs (a building of five floors and more) ---
   const lift = spec.lifts && style !== 'house' && floors >= LIFT_MIN_FLOORS && core
-    ? bubbleLift(world, { core, top, floors, P, gy, floorYs, theme, rects: Array.from({ length: floors }, (_, k) => rect(k)), doorCells, outv }) : null;
+    ? bubbleLift(world, { core, top: inner, floors, P, gy, floorYs, theme, rects: Array.from({ length: floors }, (_, k) => rect(k)), doorCells, outv }) : null;
 
   return {
     lift,
@@ -383,7 +417,7 @@ export function makeBuilding(world, spec, rng) {
     eaves: eavesInfo,
     lancets: lancetInfo,
     deco: decoInfo,
-    steam: steamInfo, santorini: santoriniInfo, neon: neonInfo, flatRoof: !!spec.flatRoof,
+    steam: steamInfo, santorini: santoriniInfo, neon: neonInfo, meso: mesoInfo, moorish: moorishInfo, elven: elvenInfo, endcity: endInfo, dwarven: dwarvenInfo, brutal: brutalInfo, cantilever: insets[0] > 0 && floors > 1, pyramid: !!insetsX, flatRoof: !!spec.flatRoof,
   };
 }
 
@@ -775,8 +809,14 @@ function romanesqueArcade(world, c) {
     bay.forEach(([x, z], j) => {
       world.set(x, gy + 1, z, theme.wall);                                    // the bulkhead
       for (let y = gy + 2; y < archRow; y++) world.set(x, y, z, theme.glass);
-      if (j === 1) world.set(x, archRow, z, theme.glass);                     // the crown of the arch
-      else world.set(x, archRow, z, stairId(theme.stair, CLIMB(along[0] * (j === 0 ? -1 : 1), along[1] * (j === 0 ? -1 : 1)), true));
+      const inward = stairId(theme.stair, CLIMB(along[0] * (j === 0 ? -1 : 1), along[1] * (j === 0 ? -1 : 1)), true);
+      if (c.pointed) {
+        // a pointed arch (the Moorish style's): the haunches a course lower, solid over
+        // them, the opening rising to a point of glass in the middle
+        if (j === 1) world.set(x, archRow, z, theme.glass);
+        else { world.set(x, archRow, z, theme.trim); world.set(x, archRow - 1, z, inward); }
+      } else if (j === 1) world.set(x, archRow, z, theme.glass);                     // the crown of the arch
+      else world.set(x, archRow, z, inward);
     });
     info.arches++;
     info.bays.push(bay.map(([x, z]) => [x, z]));

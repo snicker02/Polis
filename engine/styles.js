@@ -601,6 +601,258 @@ STYLES.sunken = {
     market: [MAT.AQUA_WALL, MAT.PRISMARINE], wellRim: MAT.DARK_PRISMARINE, wellRoof: MAT.PRISMARINE },
 };
 
+// Mesoamerican: mossy stone and jungle wood; the towers stepped pyramids, a temple on
+// top with a roof comb and braziers (building.js: pyramid; stylebits.js: mesoDress);
+// vines down the street fronts and leaves along the eaves over the streets; jungle trees;
+// on hills, the open spaces paved as plazas, each lot its own terrace (city.js).
+STYLES.mesoamerican = {
+  label: 'Mesoamerican',
+  meso: true,
+  pyramid: true,
+  noArcade: true,
+  shapedChance: 0,
+  themes: {
+    house: [
+      T('milpa', MAT.MOSSY_COBBLE, MAT.JUNGLE_LOG, MAT.JUNGLE, MAT.GLASS, 'jungle', 'jungle', MAT.JUNGLE),
+      T('adobe', MAT.MUD_BRICK, MAT.JUNGLE_LOG, MAT.PACKED_MUD, MAT.GLASS, 'mudbrick', 'jungle', MAT.MUD_BRICK),
+      T('jade', MAT.MOSSY_BRICK, MAT.CHISELED_STONE, MAT.JUNGLE, MAT.GLASS, 'jungle', 'jungle', MAT.MOSSY_BRICK),
+    ],
+    mid: [
+      T('palenque', MAT.MOSSY_BRICK, MAT.CHISELED_STONE, MAT.JUNGLE, MAT.GLASS, 'mossy', 'jungle'),
+      T('copan', MAT.STONEBRICK, MAT.MOSSY_BRICK, MAT.JUNGLE, MAT.GLASS, 'stonebrick', 'jungle'),
+      T('uxmal', MAT.CUT_SAND, MAT.CHISELED_SAND, MAT.JUNGLE, MAT.GLASS, 'sandstone', 'jungle'),
+    ],
+    tower: [
+      T('tikal', MAT.MOSSY_BRICK, MAT.CHISELED_STONE, MAT.JUNGLE, MAT.GLASS, 'mossy', 'jungle'),
+      T('chichen', MAT.CUT_SAND, MAT.CHISELED_SAND, MAT.JUNGLE, MAT.GLASS, 'sandstone', 'jungle'),
+      T('teotihuacan', MAT.MOSSY_COBBLE, MAT.MOSSY_BRICK, MAT.PACKED_MUD, MAT.GLASS, 'mossy', 'jungle'),
+    ],
+  },
+  remap: {
+    ASPHALT: 'PACKED_MUD', SIDEWALK: 'MOSSY_BRICK', LINE: 'MOSSY_COBBLE', CROSSWALK: 'CHISELED_STONE', PATH: 'MOSS_BLOCK',
+    LOG: 'JUNGLE_LOG', LEAVES: 'JUNGLE_LEAF', SPRUCE_LOG: 'JUNGLE_LOG', SPRUCE_LEAF: 'JUNGLE_LEAF',
+    LAMP_POST: 'JUNGLE_FENCE', STREET_LIGHT: 'LAMP',
+    WALL_BODY: 'MOSSY_COBBLE', WALL_CAP: 'CHISELED_STONE', RETAIN: 'MOSSY_BRICK', INTERIOR_WALL: 'JUNGLE', CANAL_BED: 'MOSSY_COBBLE',
+  },
+  landmark: { ...MODERN_LANDMARK,
+    hallPave: MAT.MOSSY_BRICK, hallWall: MAT.MOSSY_BRICK, hallColumn: MAT.CHISELED_STONE, hallCapital: MAT.GOLD,
+    hallFloor: MAT.JUNGLE, hallGlass: MAT.GLASS, hallStair: 'mossy', hallDoor: 'jungle', entablature: MAT.CHISELED_STONE,
+    domeBase: MAT.MOSSY_BRICK, domeRing: MAT.CHISELED_STONE, dome: MAT.MOSSY_COBBLE, finial: MAT.GOLD,
+    clockPave: [MAT.MOSSY_BRICK, MAT.STONEBRICK], clockWall: MAT.MOSSY_BRICK, clockTrim: MAT.CHISELED_STONE, clockFloor: MAT.JUNGLE,
+    clockStair: 'mossy', clockDoor: 'jungle', spire: MAT.MOSSY_COBBLE,
+    libPave: MAT.MOSSY_BRICK, libWall: MAT.MOSSY_BRICK, libTrim: MAT.CHISELED_STONE, libFloor: MAT.JUNGLE, libStair: 'jungle', libDoor: 'jungle',
+    schoolWall: MAT.MOSSY_COBBLE, schoolTrim: MAT.JUNGLE_LOG,
+    market: [MAT.MOSSY_BRICK, MAT.PACKED_MUD], wellRim: MAT.MOSSY_COBBLE, wellRoof: MAT.JUNGLE },
+};
+
+// Moorish / Andalusian: whitewash, brick and terracotta; courtyards with fountains
+// (courtyard.js), arcades of pointed arches on the mid-rises' street fronts and pointed
+// windows over them (building.js), glazed tile dados, panels and friezes (stylebits.js:
+// moorishDress), a minaret for a clock tower (landmarks.js); brick and terracotta
+// streets, cream pavements, tiled fountains in the plazas.
+STYLES.moorish = {
+  label: 'Moorish / Andalusian',
+  moorish: true,
+  pointedArches: true,
+  lancets: true,
+  minaret: true,
+  fountains: true,
+  courtyardChance: 0.65,
+  themes: {
+    house: [
+      T('carmen', MAT.C_WHITE, MAT.T_ORANGE, MAT.TERRACOTTA, MAT.GLASS, 'brick', 'dark', MAT.BRICK),
+      T('patio', MAT.T_WHITE, MAT.BRICK, MAT.SMOOTH_SAND, MAT.GLASS, 'brick', 'dark', MAT.BRICK),
+      T('zellige', MAT.CALCITE, MAT.C_LBLUE, MAT.TERRACOTTA, MAT.GLASS, 'brick', 'acacia', MAT.BRICK),
+    ],
+    mid: [
+      T('alcazar', MAT.C_WHITE, MAT.BRICK, MAT.TERRACOTTA, MAT.GLASS, 'brick', 'dark'),
+      T('medina', MAT.SMOOTH_SAND, MAT.T_ORANGE, MAT.TERRACOTTA, MAT.GLASS, 'smoothsand', 'acacia'),
+      T('mudejar', MAT.BRICK, MAT.CUT_SAND, MAT.SMOOTH_SAND, MAT.GLASS, 'brick', 'dark'),
+    ],
+    tower: [
+      T('giralda', MAT.BRICK, MAT.CUT_SAND, MAT.SMOOTH_SAND, MAT.GLASS, 'brick', 'dark'),
+      T('alhambra', MAT.T_ORANGE, MAT.C_WHITE, MAT.TERRACOTTA, MAT.GLASS, 'smoothsand', 'dark'),
+    ],
+  },
+  remap: {
+    ASPHALT: 'BRICK', SIDEWALK: 'SMOOTH_SAND', LINE: 'T_WHITE', CROSSWALK: 'C_WHITE', PATH: 'TERRACOTTA',
+    LOG: 'ACACIA_LOG', LEAVES: 'ACACIA_LEAF', LAMP_POST: 'DARK_FENCE', STREET_LIGHT: 'LAMP',
+    WALL_BODY: 'SMOOTH_SAND', WALL_CAP: 'T_ORANGE', RETAIN: 'BRICK', INTERIOR_WALL: 'C_WHITE', CANAL_BED: 'TERRACOTTA',
+  },
+  landmark: { ...MODERN_LANDMARK,
+    hallPave: MAT.SMOOTH_SAND, hallWall: MAT.C_WHITE, hallColumn: MAT.CUT_SAND, hallCapital: MAT.T_ORANGE,
+    hallFloor: MAT.TERRACOTTA, hallGlass: MAT.GLASS, hallStair: 'brick', hallDoor: 'dark', entablature: MAT.BRICK,
+    domeBase: MAT.C_WHITE, domeRing: MAT.T_ORANGE, dome: MAT.C_WHITE, finial: MAT.GOLD,
+    clockPave: [MAT.SMOOTH_SAND, MAT.TERRACOTTA], clockWall: MAT.BRICK, clockTrim: MAT.CUT_SAND, clockFloor: MAT.TERRACOTTA,
+    clockStair: 'brick', clockDoor: 'dark', spire: MAT.T_ORANGE,
+    libPave: MAT.SMOOTH_SAND, libWall: MAT.C_WHITE, libTrim: MAT.BRICK, libFloor: MAT.TERRACOTTA, libStair: 'brick', libDoor: 'dark',
+    schoolWall: MAT.C_WHITE, schoolTrim: MAT.T_ORANGE,
+    market: [MAT.SMOOTH_SAND, MAT.TERRACOTTA], wellRim: MAT.CUT_SAND, wellRoof: MAT.T_ORANGE },
+};
+
+// Elven / forest: mangrove and moss; every building wrapped round a great tree, its
+// corners trunks that rise past the roof into a crown of leaves; lanterns hung on chains
+// under the eaves (stylebits.js: elvenDress); moss streets, mangrove trees.
+STYLES.elven = {
+  label: 'Elven / forest',
+  elven: true,
+  noArcade: true,
+  shapedChance: 0,
+  themes: {
+    house: [
+      T('glade', MAT.MANGROVE, MAT.MANGROVE_LOG, MAT.MANGROVE, MAT.GLASS, 'mangrove', 'mangrove', MAT.MOSS_BLOCK),
+      T('hollow', MAT.MOSS_BLOCK, MAT.MANGROVE_LOG, MAT.MANGROVE, MAT.GLASS, 'mangrove', 'mangrove', MAT.MOSS_BLOCK),
+      T('bower', MAT.MOSSY_BRICK, MAT.MANGROVE_LOG, MAT.MANGROVE, MAT.GLASS, 'mangrove', 'mangrove', MAT.MANGROVE),
+    ],
+    mid: [
+      T('grove', MAT.MANGROVE, MAT.MANGROVE_LOG, MAT.MANGROVE, MAT.GLASS, 'mangrove', 'mangrove'),
+      T('mossgate', MAT.MOSS_BLOCK, MAT.MANGROVE, MAT.MANGROVE, MAT.GLASS, 'mangrove', 'mangrove'),
+      T('thornwall', MAT.MOSSY_BRICK, MAT.MANGROVE, MAT.MANGROVE, MAT.GLASS, 'mossy', 'mangrove'),
+    ],
+    tower: [
+      T('elderwood', MAT.MANGROVE, MAT.MOSS_BLOCK, MAT.MANGROVE, MAT.GLASS, 'mangrove', 'mangrove'),
+      T('starbough', MAT.MOSSY_BRICK, MAT.MANGROVE, MAT.MANGROVE, MAT.GLASS, 'mangrove', 'mangrove'),
+    ],
+  },
+  remap: {
+    ASPHALT: 'MOSS_BLOCK', SIDEWALK: 'MOSSY_COBBLE', LINE: 'MOSSY_BRICK', CROSSWALK: 'MANGROVE', PATH: 'MOSS_BLOCK',
+    LOG: 'MANGROVE_LOG', LEAVES: 'MANGROVE_LEAF', SPRUCE_LOG: 'MANGROVE_LOG', SPRUCE_LEAF: 'MANGROVE_LEAF',
+    LAMP_POST: 'MANGROVE_FENCE', STREET_LIGHT: 'LAMP',
+    WALL_BODY: 'MOSSY_COBBLE', WALL_CAP: 'MOSS_BLOCK', RETAIN: 'MOSSY_BRICK', INTERIOR_WALL: 'MANGROVE', CANAL_BED: 'MOSS_BLOCK',
+  },
+  landmark: { ...MODERN_LANDMARK,
+    hallPave: MAT.MOSSY_BRICK, hallWall: MAT.MANGROVE, hallColumn: MAT.MANGROVE_LOG, hallCapital: MAT.MOSS_BLOCK,
+    hallFloor: MAT.MANGROVE, hallGlass: MAT.GLASS, hallStair: 'mangrove', hallDoor: 'mangrove', entablature: MAT.MANGROVE_LOG,
+    domeBase: MAT.MANGROVE, domeRing: MAT.MANGROVE_LOG, dome: MAT.MANGROVE_LEAF, finial: MAT.LAMP,
+    clockPave: [MAT.MOSSY_BRICK, MAT.MOSS_BLOCK], clockWall: MAT.MANGROVE, clockTrim: MAT.MANGROVE_LOG, clockFloor: MAT.MANGROVE,
+    clockStair: 'mangrove', clockDoor: 'mangrove', spire: MAT.MANGROVE_LEAF,
+    libPave: MAT.MOSSY_BRICK, libWall: MAT.MANGROVE, libTrim: MAT.MANGROVE_LOG, libFloor: MAT.MANGROVE, libStair: 'mangrove', libDoor: 'mangrove',
+    schoolWall: MAT.MANGROVE, schoolTrim: MAT.MANGROVE_LOG,
+    market: [MAT.MOSSY_BRICK, MAT.MOSS_BLOCK], wellRim: MAT.MOSSY_COBBLE, wellRoof: MAT.MANGROVE },
+};
+
+// End city: purpur and end stone; purpur pillars at the corners, end rods for lights on
+// the roofs (stylebits.js: endDress) and on the street lamps; the ground end stone, the
+// trees chorus plants, a chorus flower on each (city.js: applyStyle).
+STYLES.endcity = {
+  label: 'End city',
+  endcity: true,
+  chorus: true,
+  noArcade: true,
+  shapedChance: 0,
+  lightBlock: MAT.FROG_PINK,
+  themes: {
+    house: [
+      T('shulker', MAT.PURPUR, MAT.PURPUR_PILLAR, MAT.END_BRICKS, MAT.SG_MAGENTA, 'purpur', 'crimson', MAT.PURPUR),
+      T('voidhut', MAT.END_BRICKS, MAT.PURPUR, MAT.END_STONE, MAT.SG_PURPLE, 'purpur', 'crimson', MAT.PURPUR),
+    ],
+    mid: [
+      T('outpost', MAT.PURPUR, MAT.END_BRICKS, MAT.END_BRICKS, MAT.SG_MAGENTA, 'purpur', 'crimson'),
+      T('enderhall', MAT.END_BRICKS, MAT.PURPUR_PILLAR, MAT.PURPUR, MAT.SG_PURPLE, 'purpur', 'crimson'),
+    ],
+    tower: [
+      T('spire', MAT.PURPUR, MAT.PURPUR_PILLAR, MAT.END_BRICKS, MAT.SG_MAGENTA, 'purpur', 'crimson'),
+      T('stronghold', MAT.END_BRICKS, MAT.PURPUR, MAT.PURPUR, MAT.SG_PURPLE, 'purpur', 'crimson'),
+    ],
+  },
+  remap: {
+    GRASS: 'END_STONE', PLANTER: 'END_STONE', ASPHALT: 'END_BRICKS', SIDEWALK: 'PURPUR', LINE: 'PURPUR_PILLAR', CROSSWALK: 'END_STONE', PATH: 'END_STONE',
+    LEAVES: null, SPRUCE_LEAF: null, FLOWERS: null,
+    LAMP_POST: 'PURPUR_PILLAR', STREET_LIGHT: 'END_ROD',
+    WALL_BODY: 'END_BRICKS', WALL_CAP: 'PURPUR', RETAIN: 'END_BRICKS', INTERIOR_WALL: 'PURPUR', CANAL_BED: 'END_STONE',
+  },
+  landmark: { ...MODERN_LANDMARK,
+    hallPave: MAT.END_BRICKS, hallWall: MAT.PURPUR, hallColumn: MAT.PURPUR_PILLAR, hallCapital: MAT.END_ROD,
+    hallFloor: MAT.END_BRICKS, hallGlass: MAT.SG_MAGENTA, hallStair: 'purpur', hallDoor: 'crimson', entablature: MAT.PURPUR_PILLAR,
+    domeBase: MAT.PURPUR, domeRing: MAT.PURPUR_PILLAR, dome: MAT.PURPUR, finial: MAT.END_ROD,
+    clockPave: [MAT.END_BRICKS, MAT.PURPUR], clockWall: MAT.PURPUR, clockTrim: MAT.PURPUR_PILLAR, clockFloor: MAT.END_BRICKS,
+    clockStair: 'purpur', clockDoor: 'crimson', spire: MAT.PURPUR,
+    libPave: MAT.END_BRICKS, libWall: MAT.END_BRICKS, libTrim: MAT.PURPUR, libFloor: MAT.PURPUR, libStair: 'purpur', libDoor: 'crimson',
+    schoolWall: MAT.PURPUR, schoolTrim: MAT.END_BRICKS,
+    market: [MAT.END_BRICKS, MAT.PURPUR], wellRim: MAT.PURPUR, wellRoof: MAT.PURPUR_PILLAR },
+};
+
+// Dwarven: deepslate and blackstone with gold trim; lava behind glass up the corners for
+// light (stylebits.js: dwarvenDress); blackstone streets lined in gold; the metro dug
+// under it, while that option is where it was (city.js).
+STYLES.dwarven = {
+  label: 'Dwarven',
+  dwarven: true,
+  noArcade: true,
+  shapedChance: 0,
+  lightBlock: MAT.SHROOMLIGHT,
+  themes: {
+    house: [
+      T('hearth', MAT.DEEPSLATE_BRICKS, MAT.GOLD, MAT.POLISHED_DEEPSLATE, MAT.TINTED, 'deepslate', 'dark', MAT.DEEPSLATE_TILES),
+      T('forge', MAT.POL_BLACKSTONE, MAT.GILDED_BLACKSTONE, MAT.POLISHED_DEEPSLATE, MAT.TINTED, 'blackstone', 'dark', MAT.DEEPSLATE_TILES),
+    ],
+    mid: [
+      T('hall', MAT.DEEPSLATE_BRICKS, MAT.GOLD, MAT.POLISHED_DEEPSLATE, MAT.TINTED, 'deepslate', 'dark'),
+      T('anvil', MAT.DEEPSLATE_TILES, MAT.GILDED_BLACKSTONE, MAT.POLISHED_DEEPSLATE, MAT.TINTED, 'deepslate', 'dark'),
+      T('vault', MAT.POL_BLACKSTONE, MAT.GOLD, MAT.DEEPSLATE_TILES, MAT.TINTED, 'blackstone', 'dark'),
+    ],
+    tower: [
+      T('throne', MAT.DEEPSLATE_BRICKS, MAT.GOLD, MAT.POLISHED_DEEPSLATE, MAT.TINTED, 'deepslate', 'dark'),
+      T('delve', MAT.DEEPSLATE_TILES, MAT.GOLD, MAT.POL_BLACKSTONE, MAT.TINTED, 'blackstone', 'dark'),
+    ],
+  },
+  remap: {
+    ASPHALT: 'POL_BLACKSTONE', SIDEWALK: 'POLISHED_DEEPSLATE', LINE: 'GOLD', CROSSWALK: 'DEEPSLATE_TILES', PATH: 'COBBLED_DEEPSLATE',
+    LAMP_POST: 'POL_BLACKSTONE', STREET_LIGHT: 'SHROOMLIGHT',
+    WALL_BODY: 'DEEPSLATE_BRICKS', WALL_CAP: 'GOLD', RETAIN: 'DEEPSLATE_BRICKS', INTERIOR_WALL: 'POLISHED_DEEPSLATE', CANAL_BED: 'COBBLED_DEEPSLATE',
+  },
+  landmark: { ...MODERN_LANDMARK,
+    hallPave: MAT.POLISHED_DEEPSLATE, hallWall: MAT.DEEPSLATE_BRICKS, hallColumn: MAT.POL_BLACKSTONE, hallCapital: MAT.GOLD,
+    hallFloor: MAT.POLISHED_DEEPSLATE, hallGlass: MAT.TINTED, hallStair: 'deepslate', hallDoor: 'dark', entablature: MAT.GOLD,
+    domeBase: MAT.DEEPSLATE_BRICKS, domeRing: MAT.GOLD, dome: MAT.DEEPSLATE_TILES, finial: MAT.GOLD,
+    clockPave: [MAT.POLISHED_DEEPSLATE, MAT.DEEPSLATE_TILES], clockWall: MAT.DEEPSLATE_BRICKS, clockTrim: MAT.GOLD, clockFloor: MAT.POLISHED_DEEPSLATE,
+    clockStair: 'deepslate', clockDoor: 'dark', spire: MAT.DEEPSLATE_TILES,
+    libPave: MAT.POLISHED_DEEPSLATE, libWall: MAT.DEEPSLATE_BRICKS, libTrim: MAT.GOLD, libFloor: MAT.POLISHED_DEEPSLATE, libStair: 'deepslate', libDoor: 'dark',
+    schoolWall: MAT.DEEPSLATE_BRICKS, schoolTrim: MAT.GILDED_BLACKSTONE,
+    market: [MAT.POLISHED_DEEPSLATE, MAT.POL_BLACKSTONE], wellRim: MAT.DEEPSLATE_BRICKS, wellRoof: MAT.GOLD },
+};
+
+// Brutalist: raw concrete; the windows set deep in a grid of concrete slabs and fins, the
+// floors over the ground floor hanging out over it on columns (building.js: cantilever;
+// stylebits.js: brutalDress); flat roofs; concrete streets and pavements.
+STYLES.brutalist = {
+  label: 'Brutalist',
+  brutal: true,
+  cantilever: true,
+  flatRoofs: true,
+  roofSlab: MAT.C_LGRAY,
+  noArcade: true,
+  shapedChance: 0,
+  themes: {
+    house: [
+      T('bunker', MAT.C_LGRAY, MAT.C_GRAY, MAT.SMOOTH, MAT.GLASS, 'stonebrick', 'spruce', MAT.C_LGRAY),
+      T('slab', MAT.SMOOTH, MAT.C_LGRAY, MAT.SMOOTH, MAT.GLASS, 'stonebrick', 'dark', MAT.SMOOTH),
+    ],
+    mid: [
+      T('estate', MAT.C_LGRAY, MAT.SMOOTH, MAT.SMOOTH, MAT.GLASS, 'stonebrick', 'spruce'),
+      T('barbican', MAT.C_GRAY, MAT.C_LGRAY, MAT.SMOOTH, MAT.TINTED, 'stonebrick', 'dark'),
+    ],
+    tower: [
+      T('trellick', MAT.C_LGRAY, MAT.C_GRAY, MAT.SMOOTH, MAT.GLASS, 'stonebrick', 'spruce'),
+      T('habitat', MAT.SMOOTH, MAT.C_LGRAY, MAT.SMOOTH, MAT.TINTED, 'stonebrick', 'dark'),
+    ],
+  },
+  remap: {
+    ASPHALT: 'C_GRAY', SIDEWALK: 'C_LGRAY', LINE: 'SMOOTH', CROSSWALK: 'SMOOTH', PATH: 'C_LGRAY',
+    LAMP_POST: 'C_GRAY', STREET_LIGHT: 'LAMP',
+    WALL_BODY: 'C_LGRAY', WALL_CAP: 'SMOOTH', RETAIN: 'C_LGRAY', INTERIOR_WALL: 'C_LGRAY', CANAL_BED: 'C_GRAY',
+  },
+  landmark: { ...MODERN_LANDMARK,
+    hallPave: MAT.C_LGRAY, hallWall: MAT.C_LGRAY, hallColumn: MAT.C_GRAY, hallCapital: MAT.SMOOTH,
+    hallFloor: MAT.SMOOTH, hallGlass: MAT.GLASS, hallStair: 'stonebrick', hallDoor: 'spruce', entablature: MAT.C_GRAY,
+    domeBase: MAT.C_LGRAY, domeRing: MAT.C_GRAY, dome: MAT.C_LGRAY, finial: MAT.LAMP,
+    clockPave: [MAT.C_LGRAY, MAT.SMOOTH], clockWall: MAT.C_LGRAY, clockTrim: MAT.C_GRAY, clockFloor: MAT.SMOOTH,
+    clockStair: 'stonebrick', clockDoor: 'spruce', spire: MAT.C_GRAY,
+    libPave: MAT.C_LGRAY, libWall: MAT.C_LGRAY, libTrim: MAT.C_GRAY, libFloor: MAT.SMOOTH, libStair: 'stonebrick', libDoor: 'spruce',
+    schoolWall: MAT.C_LGRAY, schoolTrim: MAT.C_GRAY,
+    market: [MAT.C_LGRAY, MAT.SMOOTH], wellRim: MAT.C_GRAY, wellRoof: MAT.C_LGRAY },
+};
+
 export const STYLE_NAMES = Object.keys(STYLES);
 export const styleOf = (name) => STYLES[name] || STYLES.modern;
 
