@@ -1,4 +1,4 @@
-# Polis v0.69.0
+# Polis v0.70.0
 
 *Created with help from Claude AI.*
 
@@ -771,6 +771,38 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.70.0** — Rails and the metro in a sunken city.
+
+Reported: a sunken city lost its trams and metro (0.69.0 turned both off, since the water
+would wash the rails away and pour down into the metro). Now both are kept.
+
+- **Rails in glass tubes.** Every rail over the flooded ground runs in a tube of glass.
+  This covers the trams down the streets, the railway, and the ramps and bridges where
+  one line climbs over another. The rail's cell and the cell over it are dry air, and
+  every cell beside them that the sea could fill is glass.
+  - **Through the wall:** where a line crosses the sunken district's wall, it runs
+    through it into the dry city.
+  - **Doors:** a door in the tube's side, at the end stations and about every 24
+    blocks along the flat, lets a swimmer step in out of the water.
+  - **Unchanged:** the carts and the shuttling work as before.
+- **Metro booths.** Every stair down to the metro comes up inside a booth of glass,
+  with a door on to the street. The metro stays dry under the flood, and none of its
+  rooms take water.
+- **Restrictions lifted.** A sunken city no longer has its metro or rails switched off.
+  A sunken district of a mixed city no longer stays dry because of them; it still stays
+  dry under the dome, in the hall under the sea, on stilts, in the sky, up a cliff or on
+  fitted ground.
+- **Cellars versus metro.** The metro's rooms are now marked as such (metro.js), so the
+  flood fills cellars but never the metro.
+- **Check 2zzx:**
+  - **Tubes:** every tram line cell is still a rail, and every rail over the flood has
+    air over it, never sea.
+  - **Doors and carts:** the tube doors open on to the water, and the carts are kept.
+  - **Metro:** no cell of the metro holds sea, and every booth has a door on to the
+    water.
+  - **Sealing:** the sealing test follows every way the water could go, now through the
+    tubes and booths too.
 
 **0.69.0** — The Sunken style: a flooded city you can swim through.
 

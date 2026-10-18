@@ -112,7 +112,7 @@ export function floodSunken(world, plan, ctx) {
   for (let z = 0; z < D; z++) for (let x = 0; x < W; x++) if (R[z * W + x] && N4.some(([a, b]) => !inR(x + a, z + b))) B[z * W + x] = 1;
   const inB = (x, z) => x >= 0 && z >= 0 && x < W && z < D && B[z * W + x] === 1;
   const wet = (x, z) => inR(x, z) && !inB(x, z);              // a column the sea covers
-  const info = { sea: SEA, columns: any, dryBuildings, wall: 0, doors: [], washed: 0, seagrass: 0, kelp: 0, coral: 0, pickles: 0, conduits: [], life: [], fish: [], gone: 0, drowned: 0, wetAt: [] };
+  const info = { sea: SEA, columns: any, dryBuildings, tubes: 0, tubeDoors: [], booths: [], wall: 0, doors: [], washed: 0, seagrass: 0, kelp: 0, coral: 0, pickles: 0, conduits: [], life: [], fish: [], gone: 0, drowned: 0, wetAt: [] };
   const name = (id) => (id < 0 ? 'air' : MATERIALS.def(id).block.replace('minecraft:', ''));
   const pass = (id) => id < 0 || MATERIALS.isPassable(id);
   const tight = (id) => {
@@ -123,6 +123,40 @@ export function floodSunken(world, plan, ctx) {
     if (MATERIALS.isPassable(id)) return false;
     return !LEAKY.test(n);
   };
+  // ---- the rails and the metro's ways down: kept dry, in glass
+  // Every rail over the flooded ground (the trams down the streets, the railway, the
+  // ramps and bridges where one line climbs over another) runs in a tube of glass: the
+  // rail's cell and the one over it are air, every cell beside them that the sea could
+  // fill is glass. Where a line crosses the wall it runs on through it into the dry. A
+  // door in the tube's side at each station and every so often along it lets a swimmer
+  // in out of the sea. Every stair down to the metro comes up in a booth of glass, its
+  // door on the street: the metro under the flooded city stays dry.
+  const dryAir = new Set();
+  const K3 = (x, y, z) => x + ',' + y + ',' + z;
+  const isRail = (n) => /(^|_)rail$/.test(n);
+  const railCells = [];
+  world.forEach((x, y, z, id) => {
+    if (!inR(x, z) || y > SEA || y <= g(x, z)) return;
+    if (isRail(name(id))) { railCells.push([x, y, z]); dryAir.add(K3(x, y, z)); dryAir.add(K3(x, y + 1, z)); }
+  });
+  info.tubes = railCells.length;
+  const metroBoxes = (world.airBoxes || []).filter((b) => b.metro);
+  const inMetro = (x, y, z) => metroBoxes.some((b) => x >= b.x0 && x <= b.x1 && y >= b.y0 && y <= b.y1 && z >= b.z0 && z <= b.z1);
+  const metroTop = new Uint8Array(W * D);                     // (columns where a metro room reaches up near the street)
+  for (const b of metroBoxes) for (let z = Math.max(0, b.z0); z <= Math.min(D - 1, b.z1); z++) for (let x = Math.max(0, b.x0); x <= Math.min(W - 1, b.x1); x++) if (b.y1 >= g(x, z) - 2) metroTop[z * W + x] = 1;
+  {
+    const seen = new Uint8Array(W * D);
+    for (let z = 0; z < D; z++) for (let x = 0; x < W; x++) {
+      if (!metroTop[z * W + x] || seen[z * W + x] || !inR(x, z)) continue;
+      const group = [[x, z]], q = [[x, z]]; seen[z * W + x] = 1;
+      while (q.length) { const [a, b] = q.pop(); for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) { const X = a + dx, Z = b + dz; if (X >= 0 && Z >= 0 && X < W && Z < D && metroTop[Z * W + X] && !seen[Z * W + X] && inR(X, Z)) { seen[Z * W + X] = 1; q.push([X, Z]); group.push([X, Z]); } } }
+      const cols = new Set();
+      for (const [a, b] of group) for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) if (inR(a + dx, b + dz)) cols.add((a + dx) + ',' + (b + dz));
+      const booth = { cols: [...cols].map((k) => k.split(',').map(Number)), door: null };
+      for (const [a, b] of booth.cols) for (let y = g(a, b) + 1; y <= g(a, b) + 3; y++) dryAir.add(K3(a, y, b));
+      info.booths.push(booth);
+    }
+  }
   // ---- the wall
   const DARK = MAT.DARK_PRISMARINE, CAP = MAT.AQUA_WALL;
   for (let z = 0; z < D; z++) for (let x = 0; x < W; x++) {
@@ -140,11 +174,13 @@ export function floodSunken(world, plan, ctx) {
       const inOpen = inR(ix, iz) && pass(world.get(ix, gy + 1, iz)) && pass(world.get(ix, gy + 2, iz));
       if (outOpen && here && inOpen) { doorOut = [a, b]; break; }
     }
+    if (dryAir.has(K3(x, gy + 1, z)) || dryAir.has(K3(x, gy + 2, z))) doorOut = null;   // (a rail runs through here)
     // (from the bottom of whatever opens under the ground here, a canal's cut, the air
     // under a bridge's deck, so the sea cannot run out under the wall)
     let yLow = gy + 1;
     for (let y = gy; y >= Math.max(world.box.y0, gy - 24); y--) { const id = world.get(x, y, z); if (id === MAT.WATER) break; if (id < 0 || !tight(id)) yLow = y; }
     for (let y = yLow; y <= SEA + 1; y++) {
+      if (dryAir.has(K3(x, y, z))) continue;                     // (a tube or a booth through the wall)
       const id = world.get(x, y, z);
       if (doorOut && (y === gy + 1 || y === gy + 2)) {
         const f = FACE(...doorOut), hinge = (x + z) & 1;
@@ -159,30 +195,89 @@ export function floodSunken(world, plan, ctx) {
       info.wall++;
     }
   }
+  // ---- the tubes' and booths' glass, and their doors
+  const GLASS = MAT.GLASS;
+  const canFill = (x, y, z) => inR(x, z) && y <= SEA && y > g(x, z) - 24 && !dryAir.has(K3(x, y, z));
+  for (const k of dryAir) {
+    const [x, y, z] = k.split(',').map(Number);
+    for (const [a, c, d] of [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]]) {
+      const X = x + a, Y = y + c, Z = z + d;
+      if (!canFill(X, Y, Z)) continue;
+      const id = world.get(X, Y, Z);
+      if (id === MAT.WATER || tight(id)) continue;
+      world.set(X, Y, Z, GLASS);
+    }
+  }
+  const sideOpen = (x, y, z) => wet(x, z) && !world.has(x, y, z) && !world.has(x, y + 1, z) && !dryAir.has(K3(x, y, z));
+  const putDoor = (x, y, z, out) => {
+    const f = FACE(...out);
+    world.set(x, y, z, doorId('warped', DIR[f], false, 0)); world.set(x, y + 1, z, doorId('warped', DIR[f], true, 0));
+  };
+  // a door in a tube's side: at each end of a line, and every twenty-four along the flat
+  const railSet = new Set(railCells.map(([x, y, z]) => K3(x, y, z)));
+  const stationAt = new Set((ctx.stations || []).map(([x, y, z]) => K3(x, y, z)));
+  let since = 99;
+  for (const [x, y, z] of railCells) {
+    since++;
+    if (y !== g(x, z) + 1 || !wet(x, z)) continue;
+    if (!stationAt.has(K3(x, y, z)) && since < 24) continue;
+    const alongX = railSet.has(K3(x + 1, y, z)) || railSet.has(K3(x - 1, y, z));
+    for (const [a, b] of alongX ? [[0, 1], [0, -1]] : [[1, 0], [-1, 0]]) {
+      const sx = x + a, sz = z + b;
+      if (!wet(sx, sz) || g(sx, sz) !== g(x, z) || dryAir.has(K3(sx, y, sz))) continue;
+      if (!/glass/.test(name(world.get(sx, y, sz))) || !/glass/.test(name(world.get(sx, y + 1, sz)))) continue;
+      if (!sideOpen(sx + a, y, sz + b)) continue;
+      putDoor(sx, y, sz, [a, b]);
+      info.tubeDoors.push({ at: [sx, y, sz], out: [a, b], rail: [x, y, z] });
+      since = 0;
+      break;
+    }
+  }
+  // a booth's door: on a side of it, out on to open water
+  for (const booth of info.booths) {
+    const mine = new Set(booth.cols.map(([a, b]) => a + ',' + b));
+    for (const [a, b] of booth.cols) {
+      if (booth.door) break;
+      for (const [dx, dz] of N4) {
+        const sx = a + dx, sz = b + dz;
+        if (mine.has(sx + ',' + sz)) continue;
+        const y = g(a, b) + 1;
+        if (!wet(sx, sz) || g(sx, sz) !== g(a, b) || !/glass/.test(name(world.get(sx, y, sz))) || !/glass/.test(name(world.get(sx, y + 1, sz)))) continue;
+        if (!sideOpen(sx + dx, y, sz + dz)) continue;
+        if (pass(world.get(a, y - 1, b)) || world.has(a, y, b)) continue;     // (stepping in on to floor)
+        putDoor(sx, y, sz, [dx, dz]);
+        booth.door = { at: [sx, y, sz], out: [dx, dz] };
+        break;
+      }
+    }
+  }
   // ---- the sea's cells
-  const rooms = inAirBox(world);
+  const allRooms = inAirBox(world);
+  const rooms = allRooms ? (x, y, z) => allRooms(x, y, z) && !inMetro(x, y, z) : null;
   // (and down whatever opens below the ground: the canal's cut over its water, a way down)
   const low = new Int16Array(W * D).fill(32767);
   let lowest = Infinity;
   for (let z = 0; z < D; z++) for (let x = 0; x < W; x++) {
     if (!wet(x, z)) continue;
     let y = g(x, z);
-    while (y > g(x, z) - 24 && !world.has(x, y, z)) y--;
+    while (y > g(x, z) - 24 && !world.has(x, y, z) && !(metroTop[z * W + x] && inMetro(x, y, z)) && !dryAir.has(K3(x, y, z))) y--;
     low[z * W + x] = y + 1;
     if (y + 1 < lowest) lowest = y + 1;
   }
   const seaAt = (x, y, z) => {
     if (!wet(x, z) || y > SEA) return false;
+    if (dryAir.has(K3(x, y, z))) return false;
     if (y >= low[z * W + x]) return true;
     return !!(rooms && rooms(x, y, z));                        // a cellar under it
   };
-  const flooded = (x, y, z) => seaAt(Math.floor(x), Math.floor(y), Math.floor(z)) || (wet(Math.floor(x), Math.floor(z)) && Math.floor(y) <= SEA && Math.floor(y) > g(Math.floor(x), Math.floor(z)));
+  const flooded = (x, y, z) => { const X = Math.floor(x), Y = Math.floor(y), Z = Math.floor(z); if (dryAir.has(K3(X, Y, Z))) return false; return seaAt(X, Y, Z) || (wet(X, Z) && Y <= SEA && Y > g(X, Z)); };
   // ---- what the water would break, taken out first
   const plantGrass = MAT.SEAGRASS;
   const changes = [];
   world.forEach((x, y, z, id) => {
     if (!wet(x, z) || y > SEA) return;
     if (y <= g(x, z) && !(rooms && rooms(x, y, z)) && y < low[z * W + x] - 1) return;
+    if (dryAir.has(K3(x, y, z))) return;                          // (in a tube or a booth: dry)
     const n = name(id);
     if (WASHED.test(n)) changes.push([x, y, z, -1]);
     else if (PLANTS.test(n)) {
@@ -248,11 +343,11 @@ export function floodSunken(world, plan, ctx) {
     if (!wet(x, z) || nearConduit(x, z)) continue;
     const gy = g(x, z);
     const ground = world.get(x, gy, z);
-    if (!world.has(x, gy + 1, z) && !world.has(x, gy + 2, z) && (ground === MAT.SAND || ground === MAT.GRAVEL)) {
+    if (!world.has(x, gy + 1, z) && !world.has(x, gy + 2, z) && !dryAir.has(K3(x, gy + 1, z)) && (ground === MAT.SAND || ground === MAT.GRAVEL)) {
       const p = rng();
       if (p < 0.035) {
         const h = Math.min(SEA - gy - 2, 3 + Math.floor(rng() * 8));
-        let ok = true; for (let y = gy + 1; y <= gy + h; y++) if (world.has(x, y, z)) ok = false;
+        let ok = true; for (let y = gy + 1; y <= gy + h; y++) if (world.has(x, y, z) || dryAir.has(K3(x, y, z))) ok = false;
         if (ok && h >= 2) { for (let y = gy + 1; y <= gy + h; y++) world.set(x, y, z, KELP(y === gy + h ? 25 : 0)); info.kelp++; continue; }
       }
       if (p < 0.12) { world.set(x, gy + 1, z, MAT.SEAGRASS); info.seagrass++; continue; }
@@ -316,6 +411,7 @@ export function floodSunken(world, plan, ctx) {
     return !flooded(x, y, z);
   };
   info.seaAt = seaAt;
+  info.dryAir = dryAir;
   info.flooded = flooded;
   info.inR = inR; info.inB = inB; info.wetCol = wet; info.ground = g;
   world.sea = { G: gMin, S: SEA, y0: rooms ? undefined : undefined, box: { x0: bx0 - 1, x1: bx1 + 1, z0: bz0 - 1, z1: bz1 + 1 }, at: seaAt, sunken: true };

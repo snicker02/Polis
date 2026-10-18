@@ -1,8 +1,9 @@
 // tools/checks/2zzx-sunken.js — the Sunken style and its flooding (styles.js, flood.js).
 //
 // - registered, offered in the page and in the Mix styles list;
-// - a sunken city: level, no metro, no rails; a mixed city floods only its sunken
-//   districts; with the metro (or the dome, or fitted ground) a sunken district stays dry
+// - a sunken city: level; its trams in tubes of glass, doors into them from the water;
+//   its metro dry, every stair down in a booth of glass; a mixed city floods only its
+//   sunken districts; under the dome (or on fitted ground) a sunken district stays dry
 //   and says why;
 // - in two sunken cities and a mixed one: every building walks through, every door
 //   reached, nothing dark;
@@ -50,11 +51,38 @@ export default async function run(ctx) {
     ['sunken 224, metro and trams asked for', generateCity({ ...DEFAULTS, size: 224, seed: 7, cityStyle: 'sunken', metro: true, transit: 'trams' })],
     ['mixed 256', generateCity({ ...DEFAULTS, size: 256, seed: 21, cityStyle: 'modern', mixStyles: true, mixList: ['modern', 'sunken', 'medieval', 'venetian'] })],
   ];
-  const dryMetro = generateCity({ ...DEFAULTS, size: 192, seed: 5, cityStyle: 'modern', mixStyles: true, mixList: ['modern', 'sunken'], metro: true, furnish: false });
+  const domed = generateCity({ ...DEFAULTS, size: 160, seed: 5, cityStyle: 'modern', mixStyles: true, mixList: ['modern', 'sunken'], dome: true, furnish: false });
   const c2 = cities[1][1];
-  check('Sunken: a sunken city level, with no metro and no rails; a sunken district with the metro stays dry and says why',
-    c2.cfg.hills === 0 && c2.cfg.metro === false && c2.cfg.transit === 'roads' && !c2.metro && !!c2.flood
-    && !dryMetro.flood && !dryMetro.world.sea && /metro/.test(dryMetro.stats.floodDry || ''), `${dryMetro.stats.floodDry}`);
+  check('Sunken: a sunken city level, its metro and trams kept; a sunken district under the dome stays dry and says why',
+    c2.cfg.hills === 0 && c2.cfg.metro === true && c2.cfg.transit === 'trams' && !!c2.metro && c2.metro.lines.length > 0 && !!c2.flood
+    && !domed.flood && !domed.world.sea && /dome/.test(domed.stats.floodDry || ''), `${domed.stats.floodDry}`);
+  // the rails in tubes of glass, the metro's stairs in booths
+  {
+    const w = c2.world, f = c2.flood, sea = w.sea;
+    const raw = (p) => { const i = w.get(...p); return i < 0 ? 'air' : MATERIALS.def(i).block.replace('minecraft:', ''); };
+    const K3 = (x, y, z) => x + ',' + y + ',' + z;
+    // every cell of every tram line still a rail; every rail over the flooded ground in the dry, the cell over it too
+    const lineCells = c2.transit.lines.flatMap((l) => l.cells);
+    const railsKept = lineCells.every((p) => /rail/.test(raw(p)));
+    let inWater = 0, overFlood = 0;
+    w.forEach((x, y, z, id) => {
+      if (!/(^|_)rail$/.test(MATERIALS.def(id).block) || !f.inR(x, z) || y <= f.ground(x, z) || y > sea.S) return;
+      overFlood++;
+      if (!f.dryAir.has(K3(x, y, z)) || !f.dryAir.has(K3(x, y + 1, z)) || sea.at(x, y, z) || sea.at(x, y + 1, z) || w.has(x, y + 1, z)) inWater++;
+    });
+    const tubeDoors = f.tubeDoors.length > 10 && f.tubeDoors.every((d) => /door/.test(raw(d.at)) && /door/.test(raw([d.at[0], d.at[1] + 1, d.at[2]])) && sea.at(d.at[0] + d.out[0], d.at[1], d.at[2] + d.out[1]));
+    // the metro: no cell of the sea in it; every way down in a booth with a door on to the water
+    const metroBoxes = w.airBoxes.filter((b) => b.metro);
+    let wetMetro = 0;
+    for (const b of metroBoxes) for (let x = b.x0; x <= b.x1; x++) for (let z = b.z0; z <= b.z1; z++) for (let y = b.y0; y <= b.y1; y++) if (sea.at(x, y, z)) wetMetro++;
+    const booths = f.booths.length > 0 && f.booths.every((bo) => bo.door && /door/.test(raw(bo.door.at)) && sea.at(bo.door.at[0] + bo.door.out[0], bo.door.at[1], bo.door.at[2] + bo.door.out[1])
+      && bo.cols.every(([x, z]) => !sea.at(x, f.ground(x, z) + 1, z)));
+    const carts = c2.spawns.filter((p) => p.type === 'minecart').length >= c2.transit.lines.length;
+    check('Sunken: the trams run on, every rail in a tube of glass (air over it, never sea), doors into the tubes from the water; the carts kept',
+      railsKept && overFlood > 100 && inWater === 0 && tubeDoors && carts, `${lineCells.length} line cells kept ${railsKept}, ${overFlood} rails over the flood, ${inWater} wet, ${f.tubeDoors.length} doors, carts ${carts}`);
+    check('Sunken: the metro dry under the flood, every way down to it in a booth of glass with a door on to the water',
+      metroBoxes.length > 0 && wetMetro === 0 && booths, `${metroBoxes.length} rooms, ${wetMetro} wet cells, ${f.booths.length} booths`);
+  }
 
   const LEAKY = /stairs|slab|fence|_wall$|pane|bars|trapdoor|(?<!sea_)lantern|chain|sign|ladder|scaffolding|campfire|candle|rail|carpet|torch|button|lever|plate|flower|sapling|grass(?!_path)|fern|kelp|seagrass|coral|pickle|vine|_bed$|^bed$|chest|banner|bell|anvil|cauldron|hopper|lectern|brewing|grindstone|stonecutter|composter|cake|pot$|head|skull|rod$|dripleaf|azalea|bamboo|cactus|bubble|snow_layer/;
   const WASHED = /(^|_)torch$|redstone_wire|(^|_)rail$|carpet|_button$|^lever$|pressure_plate|tripwire|repeater|comparator|cobweb|^fire$|snow_layer|waterlily|lily_pad|flower$|tulip|poppy|dandelion|allium|orchid|bluet|daisy|cornflower|sapling|short_grass|tallgrass|^grass$|wheat|carrots|potatoes|beetroot|reeds|sweet_berry|deadbush|pink_petals|torchflower|double_plant/;
@@ -114,6 +142,7 @@ export default async function run(ctx) {
     let washed = 0, dryPlant = 0, plants = 0;
     w.forEach((x, y, z, id) => {
       if (!sea.at(x, y, z) && !(f.wetCol(x, z) && y <= sea.S && y > f.ground(x, z))) return;
+      if (f.dryAir.has(x + ',' + y + ',' + z)) return;           // (in a tube or a booth: dry)
       const n = MATERIALS.def(id).block.replace('minecraft:', '');
       if (WASHED.test(n)) washed++;
       if (/kelp|seagrass|coral$|coral_fan|sea_pickle|conduit/.test(n)) { plants++; if (!w.wet.has(VoxelWorld.key(x, y, z))) dryPlant++; }

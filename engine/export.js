@@ -17,7 +17,7 @@ import { makeRng } from './rng.js';
 // Must match main.js VERSION, package.json and index.html data-version;
 // tools/validate.js fails if they drift. The app refuses to export when the
 // browser has mixed cached copies of old and new files.
-export const POLIS_VERSION = '0.69.0';
+export const POLIS_VERSION = '0.70.0';
 
 export const CHUNK = 64;          // Bedrock structure limit per horizontal axis
 export const GROUND_DROP = 2;     // base layer y=0 sits 2 below feet; surface y=1 replaces the block you stand on
@@ -1113,6 +1113,9 @@ export function placementGuide(tiles, opts = {}) {
     L.push('  ground) give Water Breathing, sight and quick mining to everyone within 96 blocks: stay near one. The doors in');
     L.push('  the glass wall hold the sea back, open or shut: walk through one and you are in the water. If any of the sea');
     L.push('  did not appear (a chunk that was not loaded), run build again from the same spot.');
+    L.push('  The trams and railway run on through the flood in tubes of glass: swim to one of the doors in a tube\'s side');
+    L.push('  (at the stations and every 24 blocks or so) and step in out of the water. The metro stays dry: its stairs');
+    L.push('  come up in glass booths with a door on to the street.');
     L.push('');
   }
   else if (opts.sea) {

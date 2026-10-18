@@ -375,6 +375,7 @@ export function buildMetro(world, plan, cfg, G, opts = {}) {
       }
     }
   }
+  for (const b of boxes) b.metro = true;                      // (told apart from cellars: flood.js keeps the metro dry)
   if (boxes.length) (world.airBoxes || (world.airBoxes = [])).push(...boxes);
   return { lines, carts: lines.flatMap((l) => l.carts) };
 }

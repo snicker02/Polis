@@ -225,13 +225,11 @@ export function generateCity(cfgIn, onProgress) {
     if (cfg.parkChance === DEFAULTS.parkChance) cfg.parkChance = 0.16;
     if (cfg.maxFloors === DEFAULTS.maxFloors) cfg.maxFloors = 6;
   }
-  // a sunken city: on level ground, its towers rising out of the sea; no metro or rails
-  // under or through it (the water would flood the one and wash away the other)
+  // a sunken city: on level ground, its towers rising out of the sea (its rails run in
+  // tubes of glass through the water, its metro's stairs come up in booths: flood.js)
   if (STYLE.sunken) {
     if (cfg.hills === DEFAULTS.hills) cfg.hills = 0;
     if (cfg.maxFloors === DEFAULTS.maxFloors) cfg.maxFloors = 8;
-    cfg.metro = false;
-    if (cfg.transit !== 'roads') cfg.transit = 'roads';
   }
   // a Santorini town climbs its hillside, whitewashed and low
   if (STYLE.hillTown) {
@@ -937,9 +935,10 @@ export function generateCity(cfgIn, onProgress) {
   if (sunkenHere) {
     floodDry = cfg.terrain ? 'not flooded on ground fitted to your world' : dome ? 'not flooded under the dome' : sea ? 'not flooded in the hall under the sea'
       : stilts ? 'not flooded on stilts' : islands ? 'not flooded in the sky' : hills.cliff ? 'not flooded up a cliff'
-      : cfg._noFlood ? 'not flooded (asked)' : cfg.metro ? 'not flooded with the metro (the water would run down into it)' : cfg.transit !== 'roads' ? 'not flooded with rails through it (the water would wash them away)' : null;
+      : cfg._noFlood ? 'not flooded (asked)' : null;
     if (!floodDry) {
-      flood = floodSunken(world, plan, { GROUND, elevAt, styleAt: STYLE_AT, base: STYLE, landmarks, buildings, seed: cfg.seed, hostiles });
+      flood = floodSunken(world, plan, { GROUND, elevAt, styleAt: STYLE_AT, base: STYLE, landmarks, buildings, seed: cfg.seed, hostiles,
+        stations: transit ? transit.lines.flatMap((l) => l.stations || []) : [] });
       if (flood) {
         spawns = spawns.filter(flood.keep);
         if (cfg.fish) spawns = spawns.concat(flood.fish);
