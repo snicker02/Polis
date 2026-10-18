@@ -1,4 +1,4 @@
-# Polis v0.70.0
+# Polis v0.70.1
 
 *Created with help from Claude AI.*
 
@@ -771,6 +771,20 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.70.1** — Head room in the sunken city's rail tubes.
+
+Reported, with a screenshot: over the bumps, where one line climbs over another, the
+tube's glass sat too low over the rails. The tube kept only the rail's cell and one
+cell over it. The transit lays every rail with two cells clear over it: a rider sits
+high, and on a ramp the cart climbs into the cell ahead. So the glass came down onto
+the ramps.
+
+- **The fix:** each tube now keeps the rail's cell and the two cells over it dry and
+  clear, everywhere: on the flat, up and down the ramps, and over the bridges. Under a
+  bridge the deck is the tube's roof, as it was.
+- **Check 2zzx:** now asks the same of every rail over the flood, the rail and two
+  clear cells over it.
 
 **0.70.0** — Rails and the metro in a sunken city.
 

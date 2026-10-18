@@ -68,7 +68,8 @@ export default async function run(ctx) {
     w.forEach((x, y, z, id) => {
       if (!/(^|_)rail$/.test(MATERIALS.def(id).block) || !f.inR(x, z) || y <= f.ground(x, z) || y > sea.S) return;
       overFlood++;
-      if (!f.dryAir.has(K3(x, y, z)) || !f.dryAir.has(K3(x, y + 1, z)) || sea.at(x, y, z) || sea.at(x, y + 1, z) || w.has(x, y + 1, z)) inWater++;
+      // (the rail and the two cells over it dry and clear, as the transit laid them: a rider's head room, on the ramps too)
+      if ([0, 1, 2].some((k) => !f.dryAir.has(K3(x, y + k, z)) || sea.at(x, y + k, z)) || w.has(x, y + 1, z) || w.has(x, y + 2, z)) inWater++;
     });
     const tubeDoors = f.tubeDoors.length > 10 && f.tubeDoors.every((d) => /door/.test(raw(d.at)) && /door/.test(raw([d.at[0], d.at[1] + 1, d.at[2]])) && sea.at(d.at[0] + d.out[0], d.at[1], d.at[2] + d.out[1]));
     // the metro: no cell of the sea in it; every way down in a booth with a door on to the water

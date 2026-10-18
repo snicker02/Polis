@@ -126,7 +126,7 @@ export function floodSunken(world, plan, ctx) {
   // ---- the rails and the metro's ways down: kept dry, in glass
   // Every rail over the flooded ground (the trams down the streets, the railway, the
   // ramps and bridges where one line climbs over another) runs in a tube of glass: the
-  // rail's cell and the one over it are air, every cell beside them that the sea could
+  // rail's cell and the two over it are air (as the transit clears them), every cell beside them that the sea could
   // fill is glass. Where a line crosses the wall it runs on through it into the dry. A
   // door in the tube's side at each station and every so often along it lets a swimmer
   // in out of the sea. Every stair down to the metro comes up in a booth of glass, its
@@ -137,7 +137,9 @@ export function floodSunken(world, plan, ctx) {
   const railCells = [];
   world.forEach((x, y, z, id) => {
     if (!inR(x, z) || y > SEA || y <= g(x, z)) return;
-    if (isRail(name(id))) { railCells.push([x, y, z]); dryAir.add(K3(x, y, z)); dryAir.add(K3(x, y + 1, z)); }
+    // (the rail and two over it, as the transit clears it: a rider sits high, and on a ramp
+    // the cart climbs into the cell ahead of it)
+    if (isRail(name(id))) { railCells.push([x, y, z]); for (let k = 0; k <= 2; k++) dryAir.add(K3(x, y + k, z)); }
   });
   info.tubes = railCells.length;
   const metroBoxes = (world.airBoxes || []).filter((b) => b.metro);
