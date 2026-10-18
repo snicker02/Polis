@@ -381,7 +381,7 @@ export function javaTiles(world, opts = {}) {
         const c = [], bb = { x0: Infinity, y0: Infinity, z0: Infinity, x1: -Infinity, y1: -Infinity, z1: -Infinity };
         for (let x = tx; x < Math.min(sea.box.x1, tx + step); x++)
           for (let z = tz; z < Math.min(sea.box.z1, tz + step); z++)
-            for (let y = sea.G + 1; y <= sea.S; y++) {
+            for (let y = sea.y0 !== undefined ? sea.y0 : sea.G + 1; y <= sea.S; y++) {
               if (!sea.at(x, y, z) || world.has(x, y, z)) continue;
               c.push([x, y, z, WATER, null]);
               if (x < bb.x0) bb.x0 = x; if (y < bb.y0) bb.y0 = y; if (z < bb.z0) bb.z0 = z;

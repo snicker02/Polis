@@ -17,7 +17,7 @@ import { makeRng } from './rng.js';
 // Must match main.js VERSION, package.json and index.html data-version;
 // tools/validate.js fails if they drift. The app refuses to export when the
 // browser has mixed cached copies of old and new files.
-export const POLIS_VERSION = '0.68.0';
+export const POLIS_VERSION = '0.69.0';
 
 export const CHUNK = 64;          // Bedrock structure limit per horizontal axis
 export const GROUND_DROP = 2;     // base layer y=0 sits 2 below feet; surface y=1 replaces the block you stand on
@@ -372,7 +372,7 @@ export function seaBoxes(world, opts = {}) {
   for (const t of tileList(world, opts)) {
     // (its own box: the tile's columns, from the seabed to the sea's surface; a tile's
     // own box ends at its highest block, under the sea's top over the hall's roof)
-    const b = { x0: Math.max(t.box.x0, sea.box.x0 + 1), x1: Math.min(t.box.x1, sea.box.x1 - 1), z0: Math.max(t.box.z0, sea.box.z0 + 1), z1: Math.min(t.box.z1, sea.box.z1 - 1), y0: sea.G + 1, y1: sea.S };
+    const b = { x0: Math.max(t.box.x0, sea.box.x0 + 1), x1: Math.min(t.box.x1, sea.box.x1 - 1), z0: Math.max(t.box.z0, sea.box.z0 + 1), z1: Math.min(t.box.z1, sea.box.z1 - 1), y0: sea.y0 !== undefined ? sea.y0 : sea.G + 1, y1: sea.S };
     if (b.x0 > b.x1 || b.z0 > b.z1) continue;
     out.push({ name: t.name + '_s', box: b, offset: [b.x0, b.y0, b.z0] });
   }
@@ -1107,7 +1107,15 @@ export function placementGuide(tiles, opts = {}) {
   if (opts.floating) L.push('Floating islands: build it high in the sky (stand well above the ground, with room below for the islands\' undersides). The foundation setting does nothing here.');
   if ((opts.foundation | 0) && opts.stilts) L.push(`Foundation (on stilts): the piles go on ${opts.foundation | 0} blocks further down into the ground below; islands and the seawall stand on solid ground, and under open water nothing is put.`);
   else if (opts.foundation | 0) L.push(`Foundation: ${opts.foundation | 0} solid blocks under the city, so it sits into sloping ground.`);
-  if (opts.sea) {
+  if (opts.sea && opts.world && opts.world.sea && opts.world.sea.sunken) {
+    L.push('THE SUNKEN CITY: build puts the city in, then lets the sea in over the sunken streets last, once the glass');
+    L.push('  wall round them is whole. Swim in through any doorway. The conduits (in their prismarine frames on the open');
+    L.push('  ground) give Water Breathing, sight and quick mining to everyone within 96 blocks: stay near one. The doors in');
+    L.push('  the glass wall hold the sea back, open or shut: walk through one and you are in the water. If any of the sea');
+    L.push('  did not appear (a chunk that was not loaded), run build again from the same spot.');
+    L.push('');
+  }
+  else if (opts.sea) {
     L.push('UNDER THE SEA: the city stands on the seabed in a hall of glass, the sea all round and over it, held');
     L.push('  in by a second wall of glass. build drains the hall first, puts the city in, and lets the sea in last,');
     L.push('  once all the glass is standing. Four glass tunnels lead out under the sea, one a side, to double doors');

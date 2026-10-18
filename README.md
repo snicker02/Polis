@@ -1,4 +1,4 @@
-# Polis v0.68.0
+# Polis v0.69.0
 
 *Created with help from Claude AI.*
 
@@ -771,6 +771,69 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.69.0** — The Sunken style: a flooded city you can swim through.
+
+Sunken is a new city style, in the Style menu and in the Mix styles list. A sunken city,
+or a sunken district of a mixed city, floods (flood.js). Water fills its streets,
+gardens, rooms and cellars to eleven blocks over its highest ground. The houses and
+low buildings are under it; the tall ones rise out of it.
+
+- **The look.** Buildings are prismarine, prismarine brick, mossy and cracked stone,
+  dark prismarine and sea lanterns. Streets are sand and prismarine brick, and gardens
+  are sand. Street lights and lanterns are sea lanterns, and fences are warped. There
+  are two new stair kinds, prismarine brick and dark prismarine.
+- **The wall.** The sea stands in a wall of glass wherever it meets ground that isn't
+  flooded:
+  - Where it runs: along the edge of the city, along the dry districts of a mixed city,
+    round a landmark that stays dry, and round a building the dry ground reaches (the
+    wall never runs through a building).
+  - How it's built: dark prismarine posts with sea lanterns up them, and a coping of
+    prismarine brick. It reaches down into a canal's cut and the air under a bridge, so
+    no water runs out underneath.
+  - Doors: there's a door wherever a street or path crosses the wall. A door holds back
+    the sea, open or shut, so walking through one puts you in the water.
+  - Small patches: a patch of sea too small to swim in stays dry.
+- **What the water would break goes first.** Torches, rails, redstone, carpets,
+  buttons, flowers and crops are removed from under the water. A plant on solid ground
+  becomes seagrass. The lighting pass then relights the city with sea lanterns in the
+  floor and hanging lanterns, both of which survive underwater.
+- **Landmarks.** The town hall, library, church, castle and the like go under with the
+  city. Landmarks with machines, mobs or lava in them stay dry in their own pocket of
+  air: the zoo and aquarium, jail, factory, parks, botanical garden, stadium, bank,
+  nightclub, bandstand, wizard's tower, museum and similar.
+- **Breathing.** Each part of the flooded city gets a conduit in a full prismarine
+  frame (all 42 blocks), with the water round it clear. A working conduit gives Water
+  Breathing, underwater sight and fast mining to everyone within 96 blocks. There are
+  as many as it takes for every flooded column to be within 80 blocks of one. They
+  stand on open ground where possible, otherwise over a street or low roofs.
+- **Life.** No villager, golem, cat or farm animal is left under the water. Instead
+  there are squid, glow squid, turtles on the sand, dolphins near the surface,
+  axolotls and fish, all kept like the aquarium's. A hostile mob that would spawn under
+  the water becomes a drowned. Kelp grows up through the streets, with seagrass, coral
+  on the roofs under water, and sea pickles.
+- **Restrictions.** A sunken city is level, with no metro and no rails: water would
+  pour down into the one and wash away the other. A sunken district of a mixed city
+  stays dry (and the stats say why) when you ask for the metro or rails, or build under
+  the dome, in the hall under the sea, on stilts, in the sky, up a cliff or on fitted
+  ground.
+- **Exports.** The sea goes into the exports the same way as the hall under the sea's:
+  last, once the wall is whole. Java gets the conduit waterlogged.
+- **New check 2zzx**, over two sunken cities (one with the metro and trams asked for)
+  and a mixed city:
+  - every building walks through, every door is reached, and nothing is dark;
+  - the sea stands eleven over the highest flooded ground, on sunken ground only, with
+    low roofs under it and tall buildings out of it;
+  - no building is cut by the wall;
+  - the water is sealed in: every path the water could take from the sea, through air
+    or anything it gets through, is followed, and none leads out;
+  - there's a door at each crossing;
+  - nothing the water would wash away is left under it, and every plant under it
+    stands in water;
+  - the conduits have whole frames and cover every flooded column;
+  - no land folk are under the water, and the sea creatures and fish are in it;
+  - the sea structures are exact and come last, and every block is a Bedrock state and
+    a Java block.
 
 **0.68.0** — A city under the sea, in a hall of glass.
 

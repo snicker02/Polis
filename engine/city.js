@@ -17,6 +17,7 @@ import { courtyardPlan, makeCourtyard } from './courtyard.js';
 import { hostileSpawns } from './hostiles.js';
 import { buildDome } from './dome.js';
 import { buildSeaCity } from './sea.js';
+import { floodSunken } from './flood.js';
 import { lightUp, TARGET, TARGET_OUT } from './lighting.js';
 import { verifyBuilding } from './verify.js';
 import { planStyleDistricts } from './districts.js';
@@ -223,6 +224,14 @@ export function generateCity(cfgIn, onProgress) {
     if (cfg.pitch === DEFAULTS.pitch) cfg.pitch = 6;
     if (cfg.parkChance === DEFAULTS.parkChance) cfg.parkChance = 0.16;
     if (cfg.maxFloors === DEFAULTS.maxFloors) cfg.maxFloors = 6;
+  }
+  // a sunken city: on level ground, its towers rising out of the sea; no metro or rails
+  // under or through it (the water would flood the one and wash away the other)
+  if (STYLE.sunken) {
+    if (cfg.hills === DEFAULTS.hills) cfg.hills = 0;
+    if (cfg.maxFloors === DEFAULTS.maxFloors) cfg.maxFloors = 8;
+    cfg.metro = false;
+    if (cfg.transit !== 'roads') cfg.transit = 'roads';
   }
   // a Santorini town climbs its hillside, whitewashed and low
   if (STYLE.hillTown) {
@@ -922,6 +931,22 @@ export function generateCity(cfgIn, onProgress) {
       beams: centre ? centre.beacons.map(([x, , z]) => x + ',' + z) : [] })
     : null;
   if (sea && cfg.fish) spawns = spawns.concat(sea.fish);
+  // ---- a sunken city, or a sunken district: the sea over it (flood.js) --------------
+  let flood = null, floodDry = null;
+  const sunkenHere = STYLE.sunken || (SD && mixNames.includes('sunken'));
+  if (sunkenHere) {
+    floodDry = cfg.terrain ? 'not flooded on ground fitted to your world' : dome ? 'not flooded under the dome' : sea ? 'not flooded in the hall under the sea'
+      : stilts ? 'not flooded on stilts' : islands ? 'not flooded in the sky' : hills.cliff ? 'not flooded up a cliff'
+      : cfg._noFlood ? 'not flooded (asked)' : cfg.metro ? 'not flooded with the metro (the water would run down into it)' : cfg.transit !== 'roads' ? 'not flooded with rails through it (the water would wash them away)' : null;
+    if (!floodDry) {
+      flood = floodSunken(world, plan, { GROUND, elevAt, styleAt: STYLE_AT, base: STYLE, landmarks, buildings, seed: cfg.seed, hostiles });
+      if (flood) {
+        spawns = spawns.filter(flood.keep);
+        if (cfg.fish) spawns = spawns.concat(flood.fish);
+      }
+    }
+  }
+
   // ---- no dark corners: light every spot a hostile mob could spawn -----------
   // (last of all, over everything, dome included: see lighting.js)
   let lighting = null;
@@ -978,7 +1003,7 @@ export function generateCity(cfgIn, onProgress) {
   }
 
   const shell = cfg.terrain ? terrainShell(plan, cfg.terrain, GROUND, cfg.cityStyle) : null;
-  const stats = summarise(world, plan, buildings, cfg, { farms, beds, spawns, bell, transit, wall, ranches, landmarks, hills, stairRuns, reach, canal, centre, streets, harbour, skirt, cutFaces, bridges, megaliths, ponds, courtyards, hostiles, dome, sea, canals, lighting, styleDistricts: SD, spawners, stilts, islands, cliffWays, rooms, metro, stepRails, unsupported: stats_unsupported });
+  const stats = summarise(world, plan, buildings, cfg, { farms, beds, spawns, bell, transit, wall, ranches, landmarks, hills, stairRuns, reach, canal, centre, streets, harbour, skirt, cutFaces, bridges, megaliths, ponds, courtyards, hostiles, dome, sea, flood, floodDry, canals, lighting, styleDistricts: SD, spawners, stilts, islands, cliffWays, rooms, metro, stepRails, unsupported: stats_unsupported });
   // the jail's inmates, summoned by populate (every one named, so none despawns)
   // (the enderman goes in the structures, already riding its minecart, with the
   // villagers; the rest of the inmates are summoned)
@@ -1051,7 +1076,7 @@ export function generateCity(cfgIn, onProgress) {
   if (cfg.station && !landmarks.some((q) => q.kind === 'station')) stats.stationMissing = !transit || !transit.lines || !transit.lines.length
     ? 'a station needs a railway or trams to stand by: set Transit to Railway or Trams'
     : 'no lot beside a straight stretch of the railway (eleven along it) for the station';
-  const zoo = landmarks.flatMap((L) => [...(L.animals || []), ...(L.fish || [])]);
+  const zoo = landmarks.flatMap((L) => [...(L.animals || []), ...(L.fish || [])]).concat(flood ? flood.life : []);   // (and the sunken city's sea life)
   // the stadium's fighters: in the stadium's own structures, each tagged a fighter and
   // with Resistance V for as long as an effect lasts (a billion ticks: over a year and
   // a half of the game running), saved on the mob; a silent command block under the
@@ -1064,7 +1089,8 @@ export function generateCity(cfgIn, onProgress) {
   // the cells whose plant stands in water (the garden's kelp, seagrass, sea pickles):
   // their second layer is written as water (blockcore.js: writeMcStructure, opts.wet)
   world.wet = new Set(landmarks.flatMap((L) => (L.wetAt || []).map(([x, y, z]) => VoxelWorld.key(x, y, z))));
-  if (sea) for (const [x, y, z] of sea.wet) world.wet.add(VoxelWorld.key(x, y, z));   // (the seabed's kelp, seagrass, coral, pickles)
+  if (sea) for (const [x, y, z] of sea.wet) world.wet.add(VoxelWorld.key(x, y, z));
+  if (flood) for (const [x, y, z] of flood.wetAt) world.wet.add(VoxelWorld.key(x, y, z));   // (the sunken city's plants and conduits)   // (the seabed's kelp, seagrass, coral, pickles)
   for (const F of landmarks.filter((L) => L.kind === 'factory')) spawns.push({ type: 'cart', x: F.siding.cart[0], y: F.siding.cart[1], z: F.siding.cart[2], group: 'factory' });
   for (const P of landmarks.filter((L) => L.kind === 'park')) for (const c of P.carts) spawns.push({ type: 'cart', x: c[0], y: c[1], z: c[2], group: 'park' });
   for (const P of landmarks.filter((L) => L.kind === 'themepark')) for (const c of P.coaster.carts) spawns.push({ type: 'cart', x: c[0], y: c[1], z: c[2], group: 'themepark' });
@@ -1083,7 +1109,7 @@ export function generateCity(cfgIn, onProgress) {
   // a goto_<kind> function for each): a spot to stand on the street before its front
   const places = landmarkPlaces(world, landmarks, (x, z) => GROUND + elevAt(x, z));
   world.lifts = buildings.filter((b) => b.lift).length;     // (for the guide)
-  return { world, plan, buildings, cfg, stats, shell, bridges, farms, ranches, spawns, bell, transit, wall, landmarks, places, canal, centre, streets, harbour, harbourPlan, megaliths, ponds, courtyards, hostiles, inmates, zoo, stands, dome, sea, canals, lighting, styleDistricts: SD, spawners, stilts, islands, cliffWays, rooms, metro, hills, stepRails,
+  return { world, plan, buildings, cfg, stats, shell, bridges, farms, ranches, spawns, bell, transit, wall, landmarks, places, canal, centre, streets, harbour, harbourPlan, megaliths, ponds, courtyards, hostiles, inmates, zoo, stands, dome, sea, flood, canals, lighting, styleDistricts: SD, spawners, stilts, islands, cliffWays, rooms, metro, hills, stepRails,
     hills, stairRuns, reach, groundAt: (x, z) => GROUND + elevAt(x, z) };
 }
 
@@ -2776,6 +2802,9 @@ function summarise(world, plan, buildings, cfg, life = {}) {
     styleDistricts: life.styleDistricts ? life.styleDistricts.counts : null,
     lighting: life.lighting ? { added: life.lighting.hung + life.lighting.flush + life.lighting.standing, hung: life.lighting.hung, flush: life.lighting.flush, standing: life.lighting.standing, darkBefore: life.lighting.before, darkAfter: life.lighting.after } : null,
     dome: life.dome ? { radius: life.dome.R, height: life.dome.c, cells: life.dome.cells, doors: life.dome.doors.length } : null,
+    flood: life.flood ? { surface: life.flood.sea - GROUND, columns: life.flood.columns, wall: life.flood.wall, doors: life.flood.doors.length, conduits: life.flood.conduits.length, uncovered: life.flood.uncovered,
+      washed: life.flood.washed, kelp: life.flood.kelp, seagrass: life.flood.seagrass, coral: life.flood.coral, life: life.flood.life.length, fish: life.flood.fish.length, drowned: life.flood.drowned } : null,
+    floodDry: life.floodDry || null,
     sea: life.sea ? { wide: Math.round(2 * life.sea.A), deep: Math.round(2 * life.sea.B), wall: life.sea.Hw, top: life.sea.top - GROUND, surface: life.sea.sea - GROUND,
       glass: life.sea.glass, ribs: life.sea.ribs + life.sea.lights, tunnels: life.sea.tunnels.length, kelp: life.sea.kelp, seagrass: life.sea.seagrass, coral: life.sea.coral, pickles: life.sea.pickles, fish: life.sea.fish.length } : null,
     torii: plan.lots.reduce((n, l) => n + ((l.torii && l.torii.length) || 0), 0),

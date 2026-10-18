@@ -557,6 +557,50 @@ STYLES.cyberpunk = {
     market: [MAT.POLISHED_DEEPSLATE, MAT.C_BLACK2], wellRim: MAT.C_GRAY, wellRoof: MAT.C_MAGENTA },
 };
 
+// Sunken: a city gone under the sea, to swim through. Prismarine, mossy and cracked
+// stone, dark prismarine trim, sea lanterns for lamps; sand for its ground and its
+// streets of prismarine brick. A sunken district floods (flood.js): the sea over its
+// streets and through its rooms to a dozen blocks up, the tall buildings standing out
+// of it, a glass wall holding it in where it meets the dry city (doors where the
+// streets cross), a conduit on its open ground giving water breathing; kelp, seagrass,
+// coral and sea life in place of villagers and farm animals.
+STYLES.sunken = {
+  label: 'Sunken',
+  sunken: true,
+  noArcade: true,
+  lightBlock: MAT.SEA_LANTERN,
+  themes: {
+    house: [
+      T('reef', MAT.AQUA_WALL, MAT.DARK_PRISMARINE, MAT.PRISMARINE, MAT.GLASS, 'prismarine', 'warped', MAT.DARK_PRISMARINE),
+      T('wreck', MAT.MOSSY_BRICK, MAT.PRISMARINE, MAT.SPRUCE, MAT.GLASS, 'mossy', 'spruce', MAT.PRISMARINE),
+      T('grotto', MAT.PRISMARINE, MAT.CRACKED_BRICK, MAT.AQUA_WALL, MAT.GLASS, 'darkprismarine', 'warped', MAT.DARK_PRISMARINE),
+    ],
+    mid: [
+      T('atlantis', MAT.AQUA_WALL, MAT.DARK_PRISMARINE, MAT.PRISMARINE, MAT.GLASS, 'prismarine', 'warped'),
+      T('drowned', MAT.MOSSY_BRICK, MAT.CRACKED_BRICK, MAT.SPRUCE, MAT.GLASS, 'mossy', 'spruce'),
+      T('lagoon', MAT.PRISMARINE, MAT.AQUA_WALL, MAT.DARK_PRISMARINE, MAT.GLASS, 'darkprismarine', 'warped'),
+    ],
+    tower: [
+      T('monument', MAT.DARK_PRISMARINE, MAT.SEA_LANTERN, MAT.PRISMARINE, MAT.GLASS, 'darkprismarine', 'warped'),
+      T('beacon', MAT.AQUA_WALL, MAT.DARK_PRISMARINE, MAT.AQUA_WALL, MAT.GLASS, 'prismarine', 'warped'),
+    ],
+  },
+  remap: {
+    GRASS: 'SAND', PLANTER: 'SAND', ASPHALT: 'SAND', SIDEWALK: 'AQUA_WALL', LINE: 'DARK_PRISMARINE', CROSSWALK: 'PRISMARINE', PATH: 'GRAVEL',
+    FLOWERS: null, LAMP_POST: 'WARPED_FENCE', STREET_LIGHT: 'SEA_LANTERN',
+    WALL_BODY: 'MOSSY_BRICK', WALL_CAP: 'DARK_PRISMARINE', RETAIN: 'MOSSY_BRICK', INTERIOR_WALL: 'PRISMARINE', CANAL_BED: 'SAND',
+  },
+  landmark: { ...MODERN_LANDMARK,
+    hallPave: MAT.AQUA_WALL, hallWall: MAT.PRISMARINE, hallColumn: MAT.DARK_PRISMARINE, hallCapital: MAT.SEA_LANTERN,
+    hallFloor: MAT.AQUA_WALL, hallGlass: MAT.GLASS, hallStair: 'prismarine', hallDoor: 'warped', entablature: MAT.DARK_PRISMARINE,
+    domeBase: MAT.AQUA_WALL, domeRing: MAT.DARK_PRISMARINE, dome: MAT.PRISMARINE, finial: MAT.SEA_LANTERN,
+    clockPave: [MAT.AQUA_WALL, MAT.PRISMARINE], clockWall: MAT.MOSSY_BRICK, clockTrim: MAT.DARK_PRISMARINE, clockFloor: MAT.AQUA_WALL,
+    clockStair: 'darkprismarine', clockDoor: 'warped', spire: MAT.PRISMARINE,
+    libPave: MAT.AQUA_WALL, libWall: MAT.PRISMARINE, libTrim: MAT.DARK_PRISMARINE, libFloor: MAT.AQUA_WALL, libStair: 'prismarine', libDoor: 'warped',
+    schoolWall: MAT.MOSSY_BRICK, schoolTrim: MAT.PRISMARINE,
+    market: [MAT.AQUA_WALL, MAT.PRISMARINE], wellRim: MAT.DARK_PRISMARINE, wellRoof: MAT.PRISMARINE },
+};
+
 export const STYLE_NAMES = Object.keys(STYLES);
 export const styleOf = (name) => STYLES[name] || STYLES.modern;
 

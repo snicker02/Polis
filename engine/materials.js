@@ -372,6 +372,9 @@ Object.assign(MAT, {
   PODZOL:            A('PODZOL', 'minecraft:podzol', '#5b3d1c'),
   SEA_LANTERN:       A('SEA_LANTERN', 'minecraft:sea_lantern', '#b8d8d0'),
   AQUA_WALL:         A('AQUA_WALL', 'minecraft:prismarine_bricks', '#5ea89a'),
+  PRISMARINE:        A('PRISMARINE', 'minecraft:prismarine', '#63a39a'),
+  DARK_PRISMARINE:   A('DARK_PRISMARINE', 'minecraft:dark_prismarine', '#335b4f'),
+  SEAGRASS:          A('SEAGRASS', 'minecraft:seagrass', '#2a8a4a', { sea_grass_type: S('default') }, { passable: true, flowable: true, transparent: true }),
   SNOW_BLOCK:        A('SNOW_BLOCK', 'minecraft:snow', '#f0f6f8'),
   // the museum (museum.js): its displays
   BONE_Y:            A('BONE_Y', 'minecraft:bone_block', '#e8e2c8', { pillar_axis: S('y'), deprecated: I(0) }),
@@ -584,6 +587,8 @@ const STAIR_BLOCKS = {
   bamboo: ['minecraft:bamboo_stairs', '#c9b25a'],
   copper: ['minecraft:cut_copper_stairs', '#bf6b50'],
   purpur: ['minecraft:purpur_stairs', '#a97ca9'],
+  prismarine: ['minecraft:prismarine_bricks_stairs', '#5ea89a'],
+  darkprismarine: ['minecraft:dark_prismarine_stairs', '#335b4f'],
 };
 export const WEIRDO = { east: 0, west: 1, south: 2, north: 3 };
 
@@ -603,7 +608,7 @@ export const STAIR_SOLID = {
   smoothsand: MAT.SMOOTH_SAND, redsand: MAT.RED_SAND, acacia: MAT.ACACIA,
   cherry: MAT.CHERRY, cobble: MAT.COBBLE, mossy: MAT.MOSSY_BRICK,
   blackstone: MAT.BLACKSTONE, pbbrick: MAT.PB_BRICKS, netherbrick: MAT.NETHER_BRICK, rednether: MAT.RED_NETHER_BRICK,
-  crimson: MAT.CRIMSON_PLANKS, warped: MAT.WARPED_PLANKS, bamboo: MAT.BAMBOO_PLANKS, copper: MAT.COPPER_CUT,
+  crimson: MAT.CRIMSON_PLANKS, warped: MAT.WARPED_PLANKS, bamboo: MAT.BAMBOO_PLANKS, copper: MAT.COPPER_CUT, prismarine: MAT.AQUA_WALL, darkprismarine: MAT.DARK_PRISMARINE,
 };
 
 // ---- building themes -------------------------------------------------------

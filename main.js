@@ -17,7 +17,7 @@ import { buildPregenPack, pregenFileName, siteRegion, viewRegion, pregenCommand,
 import { decodeNbt } from './tools/nbt-read.js';
 import { THEMES, MAT } from './engine/materials.js';
 
-const VERSION = '0.68.0';
+const VERSION = '0.69.0';
 const $ = (id) => document.getElementById(id);
 const numVal = (id) => Number($(id).value);      // readCfg has its own local num()
 
@@ -630,6 +630,8 @@ function showStats(mesh, times) {
     if (s.stilts) line('stilts', `${s.stilts.piles} piles over ${s.stilts.open} columns of open water, ${s.stilts.lanterns} seabed lanterns`);
     if (s.fishSpawners) line('fish spawners', `${s.fishSpawners} in the park ponds`);
     if (s.lighting) line('lighting', `${s.lighting.added} lights (${s.lighting.hung} hung, ${s.lighting.flush} in the floor, ${s.lighting.standing} standing) · ${s.lighting.darkAfter} dark spots left of ${s.lighting.darkBefore}`);
+    if (s.flood) line('sunken', `the sea ${s.flood.surface} up over ${s.flood.columns.toLocaleString()} columns · a glass wall of ${s.flood.wall.toLocaleString()}, ${s.flood.doors} doors · ${s.flood.conduits} conduit${s.flood.conduits === 1 ? '' : 's'} · ${s.flood.kelp} kelp, ${s.flood.seagrass} seagrass, ${s.flood.coral} coral · ${s.flood.life} sea creatures, ${s.flood.fish} fish${s.flood.drowned ? `, ${s.flood.drowned} drowned` : ''}`);
+    if (s.floodDry) line('sunken', s.floodDry);
     if (s.sea) line('under the sea', `a hall ${s.sea.wide} by ${s.sea.deep}, walls ${s.sea.wall} high, ${s.sea.top} to its top, the sea's surface ${s.sea.surface} up · ${s.sea.glass.toLocaleString()} glass, ${s.sea.ribs.toLocaleString()} ribs · ${s.sea.tunnels} tunnels out · ${s.sea.kelp} kelp, ${s.sea.seagrass} seagrass, ${s.sea.coral} coral, ${s.sea.pickles} sea pickles, ${s.sea.fish} fish`);
     if (s.dome) line('dome', `radius ${s.dome.radius}, ${s.dome.height} high, ${s.dome.cells.toLocaleString()} blocks, ${s.dome.doors} doors`);
     if (s.hostiles) line('hostile mobs', `${s.hostiles}${result && result.cfg.hostiles ? ' (summoned by populate)' : ' (via /function …/hostiles)'}`);
@@ -884,7 +886,7 @@ function showSite(g) {
 // The preview shows the city standing in the real land when one is loaded:
 // the land is added to a copy of the world, so the export is untouched by it.
 function previewWorld(res) {
-  if (res.sea) return seaPreview(res);
+  if (res.world.sea) return seaPreview(res);
   if (!res.shell || !res.shell.length) return res.world;
   const copy = new VoxelWorld({ budget: res.cfg.budget + res.shell.length + 1000 });
   res.world.forEach((x, y, z, id) => copy.set(x, y, z, id));

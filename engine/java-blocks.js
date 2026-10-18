@@ -28,6 +28,7 @@ const RAIL_SHAPE = ['north_south', 'east_west', 'ascending_east', 'ascending_wes
 
 // Blocks whose name differs. Everything not listed keeps its name.
 const RENAME = {
+  'minecraft:prismarine_bricks_stairs': 'minecraft:prismarine_brick_stairs',
   'minecraft:grass_block': 'minecraft:grass_block',
   'minecraft:brick_block': 'minecraft:bricks',
   'minecraft:stone_bricks': 'minecraft:stone_bricks',
@@ -220,6 +221,7 @@ export function toJava(block, states = {}, extra = {}) {
   if (name === 'minecraft:seagrass') { const t = props.sea_grass_type; delete props.sea_grass_type; if (t === 'double_top' || t === 'double_bot') { name = 'minecraft:tall_seagrass'; props.half = t === 'double_top' ? 'upper' : 'lower'; } }
   if (name === 'minecraft:sea_pickle') { props.pickles = String(Number(props.cluster_count || 0) + 1); props.waterlogged = props.dead_bit === 'true' || props.dead_bit === '1' ? 'false' : 'true'; delete props.cluster_count; delete props.dead_bit; }
   if (/_coral(_fan)?$/.test(name)) { delete props.coral_fan_direction; props.waterlogged = 'true'; }
+  if (name === 'minecraft:conduit') props.waterlogged = 'true';
   if (name === 'minecraft:repeater') { props.locked = 'false'; props.powered = block === 'minecraft:powered_repeater' ? 'true' : 'false'; }
   if (name === 'minecraft:piston' || name === 'minecraft:sticky_piston') props.extended = 'false';
   if (name === 'minecraft:hopper') props.enabled = 'true';
