@@ -17,7 +17,7 @@ import { makeRng } from './rng.js';
 // Must match main.js VERSION, package.json and index.html data-version;
 // tools/validate.js fails if they drift. The app refuses to export when the
 // browser has mixed cached copies of old and new files.
-export const POLIS_VERSION = '0.72.0';
+export const POLIS_VERSION = '0.72.1';
 
 export const CHUNK = 64;          // Bedrock structure limit per horizontal axis
 export const GROUND_DROP = 2;     // base layer y=0 sits 2 below feet; surface y=1 replaces the block you stand on
@@ -439,7 +439,7 @@ export function buildRemoveStructures(world, opts = {}) {
 // goes in a tile at a time: a curve at a tile's edge, its neighbour not in yet,
 // turned itself straight, and stayed so. Straights and climbs first, the curves
 // last (both their neighbours there when they go in).
-export function railLines(world, dx, dz) {
+function railItems(world, dx, dz) {
   // Only the rails the game can have reshaped: those within two of a tile's edge
   // (a rail there goes in before the one it joins, in the next tile, and turns to
   // what it finds) and every curve and slope; a straight inside a tile goes in with
@@ -456,8 +456,9 @@ export function railLines(world, dx, dz) {
   });
   const rank = (r) => (r.dir >= 6 ? 2 : r.dir >= 2 ? 1 : 0);
   rails.sort((a, b) => rank(a) - rank(b));
-  return rails.map((r) => `setblock ${rel(r.x - dx)} ${rel(r.y - GROUND_DROP)} ${rel(r.z - dz)} ${r.golden ? `minecraft:golden_rail ["rail_data_bit"=true,"rail_direction"=${r.dir}]` : `minecraft:rail ["rail_direction"=${r.dir}]`}`);
+  return rails.map((r) => ({ x: r.x, z: r.z, cmd: `setblock ${rel(r.x - dx)} ${rel(r.y - GROUND_DROP)} ${rel(r.z - dz)} ${r.golden ? `minecraft:golden_rail ["rail_data_bit"=true,"rail_direction"=${r.dir}]` : `minecraft:rail ["rail_direction"=${r.dir}]`}` }));
 }
+export function railLines(world, dx, dz) { return railItems(world, dx, dz).map((r) => r.cmd); }
 
 // Every rail under the city set by hand, one setblock each, straights and slopes first,
 // the curves last (both their neighbours there when they go in). populate loads the
@@ -465,7 +466,7 @@ export function railLines(world, dx, dz) {
 // tile whose chunks were not loaded, whatever the reason) is put down all the same, and
 // each one with its exact shape. Its own function (metro_rails), so it can be run again
 // on its own; in parts of at most 8000 lines (Bedrock will not load a longer function).
-export function undergroundRailLines(world, dx, dz) {
+function undergroundRailItems(world, dx, dz) {
   const under = undergroundRail(world);
   if (!under) return [];
   const rails = [];
@@ -480,8 +481,9 @@ export function undergroundRailLines(world, dx, dz) {
     const t = v && v.type, val = v && v.value !== undefined ? v.value : v;
     return `"${k}"=${t === 'string' ? `"${val}"` : /_bit$/.test(k) ? (val ? 'true' : 'false') : val}`;
   }).join(',');
-  return rails.map((r) => `setblock ${rel(r.x - dx)} ${rel(r.y - GROUND_DROP)} ${rel(r.z - dz)} ${r.d.block} [${stateText(r.d.states)}]`);
+  return rails.map((r) => ({ x: r.x, z: r.z, cmd: `setblock ${rel(r.x - dx)} ${rel(r.y - GROUND_DROP)} ${rel(r.z - dz)} ${r.d.block} [${stateText(r.d.states)}]` }));
 }
+export function undergroundRailLines(world, dx, dz) { return undergroundRailItems(world, dx, dz).map((r) => r.cmd); }
 
 // ---- mob structures ------------------------------------------------------------
 // Villagers and golems travel inside entity-only structures (no blocks, every
@@ -560,6 +562,46 @@ export function tickingAreas(world, ns) {
     for (let x = wb.x0; x <= wb.x1; x += S)
       out.push({ name: `${ns}_t${out.length + 1}`, x0: x, z0: z, x1: Math.min(wb.x1, x + S - 1), z1: Math.min(wb.z1, z + S - 1) });
   return out;
+}
+
+// A world holds ten ticking areas at most (Bedrock), each of 100 chunks at most. A
+// city over ten of the squares above (a 512 city with its harbour is twenty) cannot
+// be held loaded all at once: build asked for twenty, the game made ten (or none,
+// with another city's still on), and populate's rails, mobs and summons in the rest
+// went nowhere. Such a city is filled in parts instead: squares of 128 on the world's
+// own 128 grid (a tile never split; 9 x 9 chunks at most, however it sits), STAGE_AREAS
+// of them a part, held loaded one part at a time, plus one small area on the spot it
+// is run from. Half the world's ten left free for anything else.
+export const MAX_TICKING_AREAS = 10, STAGE_AREAS = 4, STAGE_SQ = 128;
+export function needsStages(world) { return tickingAreas(world, 'x').length > MAX_TICKING_AREAS; }
+export function stagePlan(world, ns) {
+  const wb = world.box, S = STAGE_SQ, fl = (v) => Math.floor(v / S);
+  const i0 = fl(wb.x0), i1 = fl(wb.x1), j0 = fl(wb.z0), j1 = fl(wb.z1);
+  const nc = i1 - i0 + 1, nr = j1 - j0 + 1;
+  // (the squares of a part side by side: 2 x 2, or 4 in a row, whichever makes fewest parts)
+  const shapes = [[2, 2], [4, 1], [1, 4]];
+  const count = ([a, b]) => Math.ceil(nc / a) * Math.ceil(nr / b);
+  const [a, b] = shapes.reduce((best, s) => (count(s) < count(best) ? s : best));
+  const sq = (i, j) => ({ i, j, x0: Math.max(wb.x0, i * S), z0: Math.max(wb.z0, j * S), x1: Math.min(wb.x1, i * S + S - 1), z1: Math.min(wb.z1, j * S + S - 1) });
+  const groups = new Map();
+  for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+    const k = Math.floor((i - i0) / a) + ',' + Math.floor((j - j0) / b);
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k).push(sq(i, j));
+  }
+  const mid = world.centre || [Math.floor((wb.x0 + wb.x1 + 1) / 2), Math.floor((wb.z0 + wb.z1 + 1) / 2)];
+  const d2 = (s) => ((s.x0 + s.x1) / 2 - mid[0]) ** 2 + ((s.z0 + s.z1) / 2 - mid[1]) ** 2;
+  const named = (list) => list.map((s, n) => ({ ...s, name: `${ns}_t${n + 1}` }));
+  // (the parts nearest the middle first, where the player stands)
+  const stages = [...groups.values()].map((list) => ({ squares: named(list), d: Math.min(...list.map(d2)) }))
+    .sort((p, q) => p.d - q.d).map((p) => p.squares);
+  const index = new Map();
+  stages.forEach((st, k) => st.forEach((s) => index.set(s.i + ',' + s.j, k)));
+  // the squares kept loaded once a part is done (and by build): the STAGE_AREAS nearest the middle
+  const all = stages.flat();
+  const home = named(all.slice().sort((p, q) => d2(p) - d2(q)).slice(0, STAGE_AREAS));
+  return { stages, home, mark: `${ns}_m`, names: [...Array(STAGE_AREAS)].map((_, n) => `${ns}_t${n + 1}`),
+    squareOf: (x, z) => fl(x) + ',' + fl(z), stageOf: (x, z) => index.get(fl(x) + ',' + fl(z)) ?? -1 };
 }
 
 // ---- functions ----------------------------------------------------------------
@@ -658,6 +700,50 @@ export function functionFiles(tiles, world, opts = {}) {
   const top = wb.y1 - wb.y0 + 2;
   const load = (t, dx, dz) =>
     `structure load ${ns}:${t.name} ${rel(t.offset[0] - dx)} ${rel(t.offset[1] - GROUND_DROP)} ${rel(t.offset[2] - dz)}`;
+  // (a city over ten ticking areas: filled in parts, see stagePlan)
+  const staged = areas.length > MAX_TICKING_AREAS;
+  const plan = staged ? stagePlan(world, ns) : null;
+  const holdAreas = staged ? plan.home : areas;             // what build, areas and the end of populate keep on
+  const areaNames = staged ? [...plan.names, plan.mark] : areas.map((a) => a.name);
+  const addArea = (a, dx, dz) => `tickingarea add ${rel(a.x0 - dx)} ${rel(-GROUND_DROP)} ${rel(a.z0 - dz)} ${rel(a.x1 - dx)} ${rel(top)} ${rel(a.z1 - dz)} ${a.name}`;
+  const MARK = `${ns}_pop`;                                  // the spot a part runs from (an armor stand, gone at the end)
+  // A run in parts: <base>_part<k> starts at part k (the player on the build spot: the
+  // marker put down there, and a small ticking area on it); _next swaps the ticking areas
+  // for the part's own; each _wait waits for one of them to load; _go runs the part from
+  // the marker (a scheduled function runs where its player is now, not where it began);
+  // _run does the work and starts the next part, or, the last, puts the middle's areas back.
+  const chain = (base, dx, dz, items, outro) => {
+    // (only the squares with work in them held loaded: no waiting on empty ones)
+    const used = new Set(items.map((it) => plan.squareOf(it.x, it.z)));
+    const parts = plan.stages.map((sqs, k) => ({ sqs: sqs.filter((q) => used.has(q.i + ',' + q.j)).map((q, n) => ({ ...q, name: plan.names[n] })),
+      items: items.filter((it) => plan.stageOf(it.x, it.z) === k) })).filter((p) => p.items.length);
+    if (!parts.length) return { files: [], entry: [] };
+    const N = parts.length, F = (n) => `${ns}/${base}_part${n}`, out = [];
+    const file = (fn, lines) => out.push({ name: `functions/${fn}.mcfunction`, fn, text: lines.join('\n') + '\n' });
+    parts.forEach((p, i) => {
+      const n = i + 1, sq = p.sqs;
+      file(F(n), [`# Polis: ${base}, from part ${n} of ${N} on. Run from the same spot as build${dx === wb.x0 ? '' : '_centered'}.`,
+        `kill @e[type=armor_stand,name=${MARK}]`, `summon armor_stand ${MARK} ~ ~ ~`,
+        `tickingarea remove ${plan.mark}`, `tickingarea add ~ ~ ~ ~ ~ ~ ${plan.mark}`, `function ${F(n)}_next`]);
+      const wait = (j) => `schedule on_area_loaded add tickingarea ${sq[j].name} ${j + 1 < sq.length ? `${F(n)}_wait${j + 2}` : `${F(n)}_go`}`;
+      file(`${F(n)}_next`, [`# Polis: ${base}, part ${n} of ${N}: its part of the city held loaded, then waited for`,
+        ...plan.names.map((nm) => `tickingarea remove ${nm}`), ...sq.map((a) => addArea(a, dx, dz)),
+        `say Polis: part ${n} of ${N}: waiting for its part of the city to load...`, wait(0)]);
+      for (let j = 1; j < sq.length; j++) file(`${F(n)}_wait${j + 1}`, [wait(j)]);
+      file(`${F(n)}_go`, [`execute at @e[type=armor_stand,name=${MARK},c=1] run function ${F(n)}_run`]);
+      const cmds = p.items.map((it) => it.cmd), chunks = [];
+      for (let c = 0; c < cmds.length; c += 7500) chunks.push(cmds.slice(c, c + 7500));
+      const tail = n < N ? [`function ${F(n + 1)}_next`] : [...plan.names.map((nm) => `tickingarea remove ${nm}`),
+        ...holdAreas.map((a) => addArea(a, dx, dz)), `tickingarea remove ${plan.mark}`, ...outro, `kill @e[type=armor_stand,name=${MARK}]`];
+      chunks.forEach((c, m) => file(`${F(n)}_run${m ? '_' + (m + 1) : ''}`, [
+        ...(m ? [] : [`say Polis: part ${n} of ${N}...`]), ...c,
+        ...(m + 1 < chunks.length ? [`function ${F(n)}_run_${m + 2}`] : tail)]));
+    });
+    return { files: out, entry: [
+      `say Polis: this city is bigger than a world can keep loaded at once (ten ticking areas at most), so it is done in ${N} parts, one after another.`,
+      `say Polis: each part needs ${STAGE_AREAS + 1} free ticking areas. If it stops before saying it is done: /tickingarea list, remove old ones, and from this spot run /function ${F('<n>')} for the part it stopped at.`,
+      `function ${F(1)}`] };
+  };
   // the armor stand build_centered leaves on its spot: this city's own name
   const anchor = centreAnchor(ns);
   const ctag = layoutTag(world);
@@ -691,8 +777,8 @@ export function functionFiles(tiles, world, opts = {}) {
     // the sea round a hall under it: last, once all the glass is in
     ...(seaTiles.length ? [`say Polis: letting the sea in round the glass...`, ...seaTiles.map((t) => load(t, dx, dz))] : []),
     // (its own ticking areas taken off first: built again, it never doubles them)
-    ...areas.map((a) => `tickingarea remove ${a.name}`),
-    ...areas.map((a) => `tickingarea add ${rel(a.x0 - dx)} ${rel(-GROUND_DROP)} ${rel(a.z0 - dz)} ${rel(a.x1 - dx)} ${rel(top)} ${rel(a.z1 - dz)} ${a.name}`),
+    ...areaNames.map((n) => `tickingarea remove ${n}`),
+    ...holdAreas.map((a) => addArea(a, dx, dz)),
     // the centred version marks this spot (an armor stand in the centre mark's
     // alcove), and the other centred functions run from it wherever you stand
     ...(pop === 'populate_centered' ? [`kill @e[type=armor_stand,name=${anchor}]`, `kill @e[type=armor_stand,tag=${ctag}]`, `summon armor_stand ${anchor} ~ ~ ~`, `tag @e[type=armor_stand,name=${anchor},r=2] add ${ctag}`] : []),
@@ -711,10 +797,10 @@ export function functionFiles(tiles, world, opts = {}) {
     `say Polis: taking the city away...`,
     `kill @e[type=!player,x=${rel(wb.x0 - dx)},y=${rel(wb.y0 - GROUND_DROP)},z=${rel(wb.z0 - dz)},dx=${wb.x1 - wb.x0},dy=${wb.y1 - wb.y0 + 8},dz=${wb.z1 - wb.z0}]`,
     ...removeTiles.map((t) => load(t, dx, dz)),
-    ...areas.map((a) => `tickingarea remove ${a.name}`),
+    ...areaNames.map((n) => `tickingarea remove ${n}`),
     'say Polis: the city is gone. Run it again from the same spot if any of it was not loaded.',
   ].join('\n') + '\n';
-  const populate = (dx, dz, title) => [
+  const populateWhole = (dx, dz, title) => [
     `# ${title}`,
     `# ${villagers} villagers, ${golems} iron golems, ${cats} cats, ${pandas} pandas and ${animals.length} farm animals ` +
       `arrive inside ${mobs.length} mob structure${mobs.length === 1 ? '' : 's'}` +
@@ -756,6 +842,44 @@ export function functionFiles(tiles, world, opts = {}) {
       `say Polis: then from this spot run /function ${ns}/${dx === wb.x0 ? 'areas' : 'areas_centered'}, wait a moment, and run ${[inmates.length ? `/function ${ns}/${dx === wb.x0 ? 'jail' : 'jail_centered'}` : '', zooFolk.length ? `/function ${ns}/${dx === wb.x0 ? 'zoo' : 'zoo_centered'}` : '', stands.length ? `/function ${ns}/${dx === wb.x0 ? 'museum' : 'museum_centered'}` : ''].filter(Boolean).join(' and ')}.`] : []),
     ...(areas.length ? [`say Polis: the city's ticking areas stay on (the whole city kept running). When everything is in, run /function ${ns}/${dx === wb.x0 ? 'release' : 'release_centered'} to take them off.`] : []),
   ].join('\n') + '\n';
+  // the same, in parts (a city over ten ticking areas): each part's rails, mobs, rails set
+  // again and summons, while its part of the city is held loaded
+  const popItems = (dx, dz) => [
+    ...railTiles.map((t) => ({ x: t.offset[0], z: t.offset[2], cmd: load(t, dx, dz) })),
+    ...undergroundRailItems(world, dx, dz),
+    ...mobs.map((t) => ({ x: t.offset[0], z: t.offset[2], cmd: load(t, dx, dz) })),
+    ...railItems(world, dx, dz),
+    ...summoned.map((p) => ({ x: p.x, z: p.z, cmd: sumLine(p, dx, dz) })),
+    ...(inPop ? hostiles.map((p) => ({ x: p.x, z: p.z, cmd: hostLine(p, dx, dz) })) : []),
+  ];
+  const sfx = (dx) => (dx === wb.x0 ? '' : '_centered');
+  const chainCache = new Map();
+  const popChain = (dx, dz) => {
+    const k = dx + ',' + dz;
+    if (!chainCache.has(k)) chainCache.set(k, chain('populate' + sfx(dx), dx, dz, popItems(dx, dz), [
+      ...(inPop ? hostileWarnings : []),
+      ...(inmates.length ? ['say Polis: the jail\'s inmates came in with the rest; on Peaceful the game takes hostile mobs away.'] : []),
+      'say Polis: done. Villagers take jobs from the workstations and claim beds over the next few minutes.',
+      ...(boats.length ? [`say Polis: any boat that did not appear, run /function ${ns}/boats${sfx(dx)} from beside the water.`] : []),
+      ...(fish.length ? [`say Polis: if the ponds or canal look empty, run /function ${ns}/fish${sfx(dx)} from beside the water.`] : []),
+      ...(inmates.length || zooFolk.length || stands.length ? [
+        `say Polis: if the ${[inmates.length ? 'jail' : '', zooFolk.length ? 'zoo or aquarium' : '', stands.length ? 'museum\'s armour room' : ''].filter(Boolean).join(' or ')} stays empty, run ${[inmates.length ? `/function ${ns}/jail${sfx(dx)}` : '', zooFolk.length ? `/function ${ns}/zoo${sfx(dx)}` : '', stands.length ? `/function ${ns}/museum${sfx(dx)}` : ''].filter(Boolean).join(' or ')} from this spot (each holds its own part of the city loaded while it runs).`] : []),
+      `say Polis: the middle of the city stays held loaded (${holdAreas.length} ticking areas). /function ${ns}/release${sfx(dx)} takes them off.`,
+    ]));
+    return chainCache.get(k);
+  };
+  const populate = (dx, dz, title) => !staged ? populateWhole(dx, dz, title) : [
+    `# ${title}`,
+    `# ${villagers} villagers, ${golems} iron golems, ${cats} cats, ${pandas} pandas and ${animals.length} farm animals ` +
+      `arrive inside ${mobs.length} mob structure${mobs.length === 1 ? '' : 's'}` + (summoned.length ? `; ${summonedNote()} are summoned.` : '.'),
+    '# Run ONCE, from the same spot you ran build from, after the city has appeared. It runs in parts, one part',
+    '# of the city held loaded at a time (a world holds ten ticking areas, not enough for all of it).',
+    `say Polis ${POLIS_VERSION} (${ns}): bringing in ${villagers} villagers, ${golems} golems, ${cats} cats, ${pandas} pandas, ` +
+      `${animals.length} farm animals` + (summoned.length ? `, ${summonedNote()}...` : '...'),
+    ...(railTiles.length ? [`say Polis: and laying the ${railCount} rails under the city (left out of build, so no water could take them).`,
+      `kill @e[type=item,x=${rel(wb.x0 - dx)},y=${rel(wb.y0 - GROUND_DROP)},z=${rel(wb.z0 - dz)},dx=${wb.x1 - wb.x0},dy=${Math.max(1, 1 - wb.y0)},dz=${wb.z1 - wb.z0}]`] : []),
+    ...popChain(dx, dz).entry,
+  ].join('\n') + '\n';
   const files = [
     { name: `functions/${ns}/build.mcfunction`, fn: `${ns}/build`,
       text: build(wb.x0, wb.z0, 'Polis: city corner at your feet', 'populate') },
@@ -769,10 +893,10 @@ export function functionFiles(tiles, world, opts = {}) {
         text: ['# Polis: every rail set again with its exact shape. Run from the same spot as build_centered.', ...rails(cx, cz)].join('\n') + '\n' },
     ] : []),
     // (the rails under the city by hand: populate calls these; they can be run again on their own)
-    ...metroParts(wb.x0, wb.z0).map((part, k) => ({ name: `functions/${ns}/metro_rails${k ? '_' + (k + 1) : ''}.mcfunction`, fn: `${ns}/metro_rails${k ? '_' + (k + 1) : ''}`,
+    ...(staged ? [] : metroParts(wb.x0, wb.z0)).map((part, k) => ({ name: `functions/${ns}/metro_rails${k ? '_' + (k + 1) : ''}.mcfunction`, fn: `${ns}/metro_rails${k ? '_' + (k + 1) : ''}`,
       text: [`# Polis ${POLIS_VERSION}: the rails under the city (metro), each set by hand${k ? ` (part ${k + 1})` : ''}. Run from the same spot as build.`, ...part,
         ...(k + 1 < metroParts(wb.x0, wb.z0).length ? [`function ${ns}/metro_rails_${k + 2}`] : [`say Polis: ${undergroundRailCount} rails under the city set.`])].join('\n') + '\n' })),
-    ...metroParts(cx, cz).map((part, k) => ({ name: `functions/${ns}/metro_rails_centered${k ? '_' + (k + 1) : ''}.mcfunction`, fn: `${ns}/metro_rails_centered${k ? '_' + (k + 1) : ''}`,
+    ...(staged ? [] : metroParts(cx, cz)).map((part, k) => ({ name: `functions/${ns}/metro_rails_centered${k ? '_' + (k + 1) : ''}.mcfunction`, fn: `${ns}/metro_rails_centered${k ? '_' + (k + 1) : ''}`,
       text: [`# Polis ${POLIS_VERSION}: the rails under the city (metro), each set by hand${k ? ` (part ${k + 1})` : ''}. Run from the same spot as build_centered.`, ...part,
         ...(k + 1 < metroParts(cx, cz).length ? [`function ${ns}/metro_rails_centered_${k + 2}`] : [`say Polis: ${undergroundRailCount} rails under the city set.`])].join('\n') + '\n' })),
     ...(removeTiles.length ? [
@@ -784,6 +908,16 @@ export function functionFiles(tiles, world, opts = {}) {
     { name: `functions/${ns}/populate_centered.mcfunction`, fn: `${ns}/populate_centered`,
       text: populate(cx, cz, 'Polis: villagers, golems and minecarts (pairs with build_centered)') },
   ];
+  if (staged) {
+    files.push(...popChain(wb.x0, wb.z0).files, ...popChain(cx, cz).files);
+    // the rails under the city by hand, in parts as populate is
+    for (const [dx, dz] of [[wb.x0, wb.z0], [cx, cz]]) {
+      const c = chain('metro_rails' + sfx(dx), dx, dz, undergroundRailItems(world, dx, dz), [`say Polis: ${undergroundRailCount} rails under the city set.`]);
+      if (!c.entry.length) continue;
+      files.push({ name: `functions/${ns}/metro_rails${sfx(dx)}.mcfunction`, fn: `${ns}/metro_rails${sfx(dx)}`,
+        text: [`# Polis ${POLIS_VERSION}: the rails under the city (metro), each set by hand, in parts. Run from the same spot as build${sfx(dx)}.`, ...c.entry].join('\n') + '\n' }, ...c.files);
+    }
+  }
   // hostile mobs, on demand: summon (from the build spot) and clear
   if (hostiles.length) {
     const hostileFn = (dx, dz, title) => [
@@ -832,6 +966,16 @@ export function functionFiles(tiles, world, opts = {}) {
       ...tiles.map((t) => load(t, dx, dz)),
       `say Polis: done (a structure goes in when its part of the world loads).`,
     ].join('\n') + '\n';
+    if (staged) {
+      // (in parts, each holding its own part of the city loaded while its structures go in)
+      for (const [dx, dz] of [[wb.x0, wb.z0], [cx, cz]]) {
+        const c = chain(group + sfx(dx), dx, dz, tiles.map((t) => ({ x: t.offset[0], z: t.offset[2], cmd: load(t, dx, dz) })), ['say Polis: done.']);
+        files.push({ name: `functions/${ns}/${group}${sfx(dx)}.mcfunction`, fn: `${ns}/${group}${sfx(dx)}`, text: [
+          `# Polis: ${noun} only (pairs with build${sfx(dx)}), in ${tiles.length} structure${tiles.length === 1 ? '' : 's'} of their own. Run once: each run brings another set.`,
+          `say Polis: bringing in the ${noun}...`, ...c.entry].join('\n') + '\n' }, ...c.files);
+      }
+      continue;
+    }
     files.push(
       { name: `functions/${ns}/${group}.mcfunction`, fn: `${ns}/${group}`, text: only(wb.x0, wb.z0, `Polis: ${noun} only (pairs with build)`) },
       { name: `functions/${ns}/${group}_centered.mcfunction`, fn: `${ns}/${group}_centered`, text: only(cx, cz, `Polis: ${noun} only (pairs with build_centered)`) });
@@ -842,16 +986,17 @@ export function functionFiles(tiles, world, opts = {}) {
     const areaFn = (dx, dz, title) => [
       `# ${title}`,
       '# A world holds ten ticking areas at most: /tickingarea list, and /tickingarea remove_all to clear old ones.',
-      ...areas.map((a) => `tickingarea remove ${a.name}`),
-      ...areas.map((a) => `tickingarea add ${rel(a.x0 - dx)} ${rel(-GROUND_DROP)} ${rel(a.z0 - dz)} ${rel(a.x1 - dx)} ${rel(top)} ${rel(a.z1 - dz)} ${a.name}`),
-      `say Polis: ${areas.length} ticking areas over the city. Give them a moment to load, then summon what is missing.`,
+      ...areaNames.map((n) => `tickingarea remove ${n}`),
+      ...holdAreas.map((a) => addArea(a, dx, dz)),
+      staged ? `say Polis: ${holdAreas.length} ticking areas over the middle of the city (it is too big for a world to keep all of it loaded).`
+        : `say Polis: ${areas.length} ticking areas over the city. Give them a moment to load, then summon what is missing.`,
     ].join('\n') + '\n';
     files.push(
       { name: `functions/${ns}/areas.mcfunction`, fn: `${ns}/areas`, text: areaFn(wb.x0, wb.z0, 'Polis: the city kept loaded (pairs with build)') },
       { name: `functions/${ns}/areas_centered.mcfunction`, fn: `${ns}/areas_centered`, text: areaFn(cx, cz, 'Polis: the city kept loaded (pairs with build_centered)') });
     // and taking them off, when everything is in (populate leaves them on)
-    const releaseFn = (title) => [`# ${title}`, ...areas.map((a) => `tickingarea remove ${a.name}`),
-      `say Polis: the city's ${areas.length} ticking areas are off. It runs only near players now, as the rest of the world does.`].join('\n') + '\n';
+    const releaseFn = (title) => [`# ${title}`, ...areaNames.map((n) => `tickingarea remove ${n}`),
+      `say Polis: the city's ${holdAreas.length} ticking areas are off. It runs only near players now, as the rest of the world does.`].join('\n') + '\n';
     files.push(
       { name: `functions/${ns}/release.mcfunction`, fn: `${ns}/release`, text: releaseFn('Polis: the city\'s ticking areas taken off (pairs with build)') },
       { name: `functions/${ns}/release_centered.mcfunction`, fn: `${ns}/release_centered`, text: releaseFn('Polis: the city\'s ticking areas taken off (pairs with build_centered)') });
@@ -1080,6 +1225,18 @@ export function placementGuide(tiles, opts = {}) {
     L.push('  push the stalks into the stream; the stream carries them to the barrel at its end. The top stalk drops');
     L.push('  at the foot of the cane now and then. Cane grows slowly (many minutes a block, at random),');
     L.push('  and only while you are near. To watch it work sooner: /gamerule randomtickspeed 20 (and back to 1 after).');
+    L.push('');
+  }
+  if (opts.world && needsStages(opts.world)) {
+    const plan = stagePlan(opts.world, ns);
+    L.push('A BIG CITY, FILLED IN PARTS. A world holds ten ticking areas at most, too few to keep all of');
+    L.push(`this city loaded at once. So populate (and metro_rails, jail, zoo...) work in ${plan.stages.length} parts or fewer:`);
+    L.push(`each holds its own part of the city loaded with ${STAGE_AREAS} ticking areas (and one small one on your spot),`);
+    L.push('waits for it to load, does that part\'s work, and goes on to the next. Stay in the world until it says');
+    L.push('"done" (it says "part 1 of N...", "part 2 of N..." as it goes). Afterwards the middle of the city stays');
+    L.push(`held loaded (${STAGE_AREAS} ticking areas): /function ${ns}/release_centered takes them off.`);
+    L.push('If it stops at a part: /tickingarea list, remove old ones (/tickingarea remove_all clears them all),');
+    L.push(`then from the build spot run /function ${ns}/populate_centered_part<n> for that part (e.g. populate_centered_part2).`);
     L.push('');
   }
   L.push('A JAIL, ZOO OR AQUARIUM EMPTY? Their animals are summoned, and a summon only reaches');

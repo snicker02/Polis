@@ -1,4 +1,4 @@
-# Polis v0.72.0
+# Polis v0.72.1
 
 *Created with help from Claude AI.*
 
@@ -771,6 +771,20 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.72.1** — Big cities filled in parts: the metro rails (and mobs, minecarts,
+fish) reach the far side again. A Bedrock world holds ten ticking areas at most,
+and a 512 city with its harbour needed twenty: build asked for all of them, the
+game made ten (or none, with another city's still on), and populate's rails and
+summons in the rest of the city silently failed. A city too big for ten areas
+now keeps only its middle held (four areas), and populate, metro_rails, jail,
+zoo, museum, mall and stadium work in parts: each part holds its own corner of
+the city loaded (four areas plus one on your spot, so half the world's ten stay
+free), waits for it with `schedule on_area_loaded`, runs from a marker on your
+spot, and moves on; it says "part 1 of N..." as it goes and "done" at the end.
+If a part stalls, `/function <city>/populate_centered_part<n>` resumes there.
+Smaller cities are exactly as before. New check 2zzza simulates the game's
+ticking areas over the reporter's own city.
 
 **0.72.0** — Four new styles: Elven / forest, End city, Dwarven, Brutalist.
 

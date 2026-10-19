@@ -155,7 +155,9 @@ export default async function run(ctx) {
     const inTiles = mallTiles.reduce((a, t) => a + t.villagers, 0);
     const opts = { namespace: 'chk', spawns: r.spawns, centre: r.world.centre, places: r.places };
     const fns = functionFiles(tileList(r.world, opts), r.world, { ...opts, mobTiles: mobs });
-    const fn = fns.find((f) => f.fn === 'chk/mall_centered');
+    // (a big city's in parts, 0.72.1: the mall function and every part it runs)
+    const fn0 = fns.find((f) => f.fn === 'chk/mall_centered');
+    const fn = fn0 && { text: fns.filter((f) => f.fn === 'chk/mall_centered' || /^chk\/mall_centered_part\d+/.test(f.fn)).map((f) => f.text).join('\n') };
     check('mall: every shopkeeper saved as a villager of its trade at the top level (its group, look and trade table)', bad.length === 0 && r.spawns.filter((p) => p.group === 'mall').length === 13, bad.slice(0, 4).join('; '));
     check('mall: the shopkeepers in structures of their own, and a mall function to bring them in again', inTiles === 13 && !!fn && mallTiles.every((t) => fn.text.includes(`${t.name} `)), `${inTiles} in ${mallTiles.length} tiles`);
   }

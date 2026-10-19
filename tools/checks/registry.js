@@ -87,6 +87,7 @@ export const SECTIONS = [
   { id: '2zzx', file: '2zzx-sunken.js',                        group: 'fast' },
   { id: '2zzy', file: '2zzy-meso-moorish.js',                  group: 'fast' },
   { id: '2zzz', file: '2zzz-four-styles.js',                   group: 'fast' },
+  { id: '2zzza', file: '2zzza-big-city-parts.js',              group: 'slow' },
   { id: '2v', file: '2v-java-worlds.js',                      group: 'fast' },
   { id: '2w', file: '2w-square-stadium-cemetery-allotments.js', group: 'slow' },
   { id: '2x', file: '2x-village-style.js',                    group: 'fast' },
