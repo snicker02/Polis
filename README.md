@@ -1,4 +1,4 @@
-# Polis v0.72.1
+# Polis v0.72.2
 
 *Created with help from Claude AI.*
 
@@ -771,6 +771,10 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.72.2** — Each part of a big city's populate (and metro_rails, jail, zoo...)
+now says "Polis: part n of N done." when its work is in, before the next part
+starts waiting for its area to load.
 
 **0.72.1** — Big cities filled in parts: the metro rails (and mobs, minecarts,
 fish) reach the far side again. A Bedrock world holds ten ticking areas at most,

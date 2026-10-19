@@ -17,7 +17,7 @@ import { makeRng } from './rng.js';
 // Must match main.js VERSION, package.json and index.html data-version;
 // tools/validate.js fails if they drift. The app refuses to export when the
 // browser has mixed cached copies of old and new files.
-export const POLIS_VERSION = '0.72.1';
+export const POLIS_VERSION = '0.72.2';
 
 export const CHUNK = 64;          // Bedrock structure limit per horizontal axis
 export const GROUND_DROP = 2;     // base layer y=0 sits 2 below feet; surface y=1 replaces the block you stand on
@@ -733,8 +733,8 @@ export function functionFiles(tiles, world, opts = {}) {
       file(`${F(n)}_go`, [`execute at @e[type=armor_stand,name=${MARK},c=1] run function ${F(n)}_run`]);
       const cmds = p.items.map((it) => it.cmd), chunks = [];
       for (let c = 0; c < cmds.length; c += 7500) chunks.push(cmds.slice(c, c + 7500));
-      const tail = n < N ? [`function ${F(n + 1)}_next`] : [...plan.names.map((nm) => `tickingarea remove ${nm}`),
-        ...holdAreas.map((a) => addArea(a, dx, dz)), `tickingarea remove ${plan.mark}`, ...outro, `kill @e[type=armor_stand,name=${MARK}]`];
+      const tail = [`say Polis: part ${n} of ${N} done.`, ...(n < N ? [`function ${F(n + 1)}_next`] : [])].concat(n < N ? [] : [...plan.names.map((nm) => `tickingarea remove ${nm}`),
+        ...holdAreas.map((a) => addArea(a, dx, dz)), `tickingarea remove ${plan.mark}`, ...outro, `kill @e[type=armor_stand,name=${MARK}]`]);
       chunks.forEach((c, m) => file(`${F(n)}_run${m ? '_' + (m + 1) : ''}`, [
         ...(m ? [] : [`say Polis: part ${n} of ${N}...`]), ...c,
         ...(m + 1 < chunks.length ? [`function ${F(n)}_run_${m + 2}`] : tail)]));
@@ -1233,7 +1233,7 @@ export function placementGuide(tiles, opts = {}) {
     L.push(`this city loaded at once. So populate (and metro_rails, jail, zoo...) work in ${plan.stages.length} parts or fewer:`);
     L.push(`each holds its own part of the city loaded with ${STAGE_AREAS} ticking areas (and one small one on your spot),`);
     L.push('waits for it to load, does that part\'s work, and goes on to the next. Stay in the world until it says');
-    L.push('"done" (it says "part 1 of N...", "part 2 of N..." as it goes). Afterwards the middle of the city stays');
+    L.push('"done" (it says "part 1 of N...", then "part 1 of N done.", and so on as it goes). Afterwards the middle of the city stays');
     L.push(`held loaded (${STAGE_AREAS} ticking areas): /function ${ns}/release_centered takes them off.`);
     L.push('If it stops at a part: /tickingarea list, remove old ones (/tickingarea remove_all clears them all),');
     L.push(`then from the build spot run /function ${ns}/populate_centered_part<n> for that part (e.g. populate_centered_part2).`);

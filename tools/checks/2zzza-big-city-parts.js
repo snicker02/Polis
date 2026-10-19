@@ -180,6 +180,15 @@ export default async function run(ctx) {
   for (const f of P.fns) for (const l of f.text.split('\n'))
     if (/^(schedule|execute at @e\[type=armor_stand,name=big_pop|function |kill @e\[type=armor_stand,name=big_pop|summon armor_stand big_pop|tickingarea add ~ ~ ~)/.test(l) && !FORMS.some((re) => re.test(l))) badForm = badForm || l;
   check('big city: the new commands in the forms the game takes', !badForm, badForm || '');
+  // each part says when it is done, before the next begins (0.72.2)
+  {
+    const s = simulate(P, ns, ['build_centered', 'populate_centered']);
+    const N = P.fns.filter((f) => /\/populate_centered_part\d+$/.test(f.fn)).length;
+    const dones = s.said.map((l) => (l.match(/^say Polis: part (\d+) of (\d+) done\.$/) || [])[1]).filter(Boolean).map(Number);
+    const order = s.said.filter((l) => /^say Polis: part \d+ of \d+(\.\.\.| done\.)$/.test(l));
+    const paired = order.every((l, i) => (i % 2 === 0 ? l.endsWith('...') : l.endsWith(' done.')) && l.match(/part (\d+)/)[1] === order[i - (i % 2)].match(/part (\d+)/)[1]);
+    check('big city: each part says "part n of N done." when its work is in, before the next part starts', N > 1 && dones.length === N && dones.every((d, i) => d === i + 1) && paired, `${dones.length} of ${N}`);
+  }
   check('big city: the guide says it is filled in parts, and how to go on from one', /FILLED IN PARTS/.test(P.guide) && P.guide.includes(`/function ${ns}/populate_centered_part<n>`));
   const parts = P.fns.filter((f) => /\/populate_centered_part\d+$/.test(f.fn)).length;
 
