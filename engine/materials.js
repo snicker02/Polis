@@ -523,6 +523,47 @@ Object.assign(MAT, {
   WHITE_PATH:    A('WHITE_PATH', 'minecraft:white_concrete', '#e4e6e6', {}, { role: 'santorini' }),
 });
 
+// ---- twelve styles (0.74.0): Classical, Gothic, Nordic, Byzantine, Wild West, Victorian,
+// Googie, Copper, Mushroom, Ice palace, Crystal, Overgrown ruins ----------------------
+// (the copper waxed: a Copper city's ages are set by district, and must stay as set)
+const WALLP = { wall_connection_type_east: S('none'), wall_connection_type_north: S('none'), wall_connection_type_south: S('none'), wall_connection_type_west: S('none'), wall_post_bit: B(1) };
+Object.assign(MAT, {
+  POL_DIORITE:   A('POL_DIORITE', 'minecraft:polished_diorite', '#c6c6c8'),
+  QUARTZ_BRICKS: A('QUARTZ_BRICKS', 'minecraft:quartz_bricks', '#ebe5de'),
+  COARSE_DIRT:   A('COARSE_DIRT', 'minecraft:coarse_dirt', '#77553b'),
+  MUSH_RED:      A('MUSH_RED', 'minecraft:red_mushroom_block', '#b42a26', { huge_mushroom_bits: I(14) }),
+  MUSH_BROWN:    A('MUSH_BROWN', 'minecraft:brown_mushroom_block', '#956f52', { huge_mushroom_bits: I(14) }),
+  MUSH_STEM:     A('MUSH_STEM', 'minecraft:mushroom_stem', '#d0c8b8', { huge_mushroom_bits: I(15) }),
+  MYCELIUM:      A('MYCELIUM', 'minecraft:mycelium', '#6f6265'),
+  RED_SHROOM:    A('RED_SHROOM', 'minecraft:red_mushroom', '#cc3333', {}, { passable: true, flowable: true, transparent: true }),
+  BROWN_SHROOM:  A('BROWN_SHROOM', 'minecraft:brown_mushroom', '#9a7556', {}, { passable: true, flowable: true, transparent: true }),
+  BLUE_ICE:      A('BLUE_ICE', 'minecraft:blue_ice', '#74a8fd'),
+  AMETHYST:      A('AMETHYST', 'minecraft:amethyst_block', '#8a62c0'),
+  AMETHYST_UP:   A('AMETHYST_UP', 'minecraft:amethyst_cluster', '#c79cf0', { 'minecraft:block_face': S('up') }, { passable: true, transparent: true }),
+  TUFF_BRICKS:   A('TUFF_BRICKS', 'minecraft:tuff_bricks', '#62655c'),
+  SMOOTH_BASALT2: A('SMOOTH_BASALT2', 'minecraft:smooth_basalt', '#4a4a4f'),
+  CU0:           A('CU0', 'minecraft:waxed_copper', '#c06a4a'),
+  CU0_CUT:       A('CU0_CUT', 'minecraft:waxed_cut_copper', '#bf6b50'),
+  CU0_GRATE:     A('CU0_GRATE', 'minecraft:waxed_copper_grate', '#b86a4c', {}, { transparent: true }),
+  STRIP_SPRUCE:  A('STRIP_SPRUCE', 'minecraft:stripped_spruce_log', '#73593a', { pillar_axis: S('y') }),
+  STRIP_DARK:    A('STRIP_DARK', 'minecraft:stripped_dark_oak_log', '#5a4430', { pillar_axis: S('y') }),
+  T_RED:         A('T_RED', 'minecraft:red_terracotta', '#8f3d2e'),
+  T_GREEN:       A('T_GREEN', 'minecraft:green_terracotta', '#4c532a'),
+  T_BLUE:        A('T_BLUE', 'minecraft:blue_terracotta', '#4a3b5b'),
+  T_CYAN:        A('T_CYAN', 'minecraft:cyan_terracotta', '#575b5b'),
+  DS_WALL:       A('DS_WALL', 'minecraft:deepslate_brick_wall', '#4a4a4f', WALLP, { transparent: true }),
+  STONE_WALL_P:  A('STONE_WALL_P', 'minecraft:stone_brick_wall', '#7b7b75', WALLP, { transparent: true }),
+  CRACKED_DS:    A('CRACKED_DS', 'minecraft:cracked_deepslate_bricks', '#444448'),
+  CHISELED_DS:   A('CHISELED_DS', 'minecraft:chiseled_deepslate', '#3a3a3d'),
+  OAK_LEAF_P:    A('OAK_LEAF_P', 'minecraft:oak_leaves', '#4a7a2a', { persistent_bit: B(1), update_bit: B(0) }),
+  OAK_LOG_R:     A('OAK_LOG_R', 'minecraft:oak_log', '#6b5433', { pillar_axis: S('y') }, { role: 'ruin' }),
+  SPRUCE_SLAB_T: A('SPRUCE_SLAB_T', 'minecraft:spruce_slab', '#7a5c37', { 'minecraft:vertical_half': S('top') }, { transparent: true }),
+  DARK_SLAB_T:   A('DARK_SLAB_T', 'minecraft:dark_oak_slab', '#4a3520', { 'minecraft:vertical_half': S('top') }, { transparent: true }),
+  // (roles of their own: a style's streets, kept apart from the same blocks elsewhere)
+  BOARDWALK:     A('BOARDWALK', 'minecraft:spruce_planks', '#7a5c37', {}, { role: 'boardwalk' }),
+  ICE_ROAD:      A('ICE_ROAD', 'minecraft:packed_ice', '#8db4f0', {}, { role: 'iceroad' }),
+});
+
 // ---- doors -----------------------------------------------------------------
 // Bedrock door states: direction (0=east,1=south,2=west,3=north),
 // door_hinge_bit, open_bit, upper_block_bit.
@@ -609,6 +650,10 @@ const STAIR_BLOCKS = {
   mangrove: ['minecraft:mangrove_stairs', '#773933'],
   mudbrick: ['minecraft:mud_brick_stairs', '#8a6a4f'],
   darkprismarine: ['minecraft:dark_prismarine_stairs', '#335b4f'],
+  diorite: ['minecraft:polished_diorite_stairs', '#c6c6c8'],
+  deepslatebrick: ['minecraft:deepslate_brick_stairs', '#4a4a4f'],
+  waxcopper: ['minecraft:waxed_cut_copper_stairs', '#bf6b50'],
+  tuff: ['minecraft:tuff_brick_stairs', '#62655c'],
 };
 export const WEIRDO = { east: 0, west: 1, south: 2, north: 3 };
 
@@ -629,6 +674,7 @@ export const STAIR_SOLID = {
   cherry: MAT.CHERRY, cobble: MAT.COBBLE, mossy: MAT.MOSSY_BRICK,
   blackstone: MAT.BLACKSTONE, pbbrick: MAT.PB_BRICKS, netherbrick: MAT.NETHER_BRICK, rednether: MAT.RED_NETHER_BRICK,
   crimson: MAT.CRIMSON_PLANKS, warped: MAT.WARPED_PLANKS, bamboo: MAT.BAMBOO_PLANKS, copper: MAT.COPPER_CUT, prismarine: MAT.AQUA_WALL, darkprismarine: MAT.DARK_PRISMARINE, jungle: MAT.JUNGLE, mudbrick: MAT.MUD_BRICK, mangrove: MAT.MANGROVE,
+  diorite: MAT.POL_DIORITE, deepslatebrick: MAT.DEEPSLATE_BRICKS, waxcopper: MAT.CU0_CUT, tuff: MAT.TUFF_BRICKS,
 };
 
 // ---- building themes -------------------------------------------------------

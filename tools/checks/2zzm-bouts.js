@@ -1,9 +1,10 @@
 // tools/checks/2zzm-bouts.js — exhibition bouts in the stadium (landmarks-extra.js).
 //
 // With bouts asked for, the stadium is always built (where a lot takes it), even in
-// a city that would have had none. On its pitch, two pits walled and roofed in glass,
-// each with an iron golem and its challenger (a vindicator, a husk), standing in
-// it; a pit three high inside (a golem fits) and sealed: walked as a mob walks, a
+// a city that would have had none. On its pitch, four bouts, one to each quarter,
+// each an iron golem and its challenger (a vindicator, a husk, a ravager, a zoglin);
+// the pitch caged in glass, up its edge from the grass to a glass roof eight clear
+// over it (0.73.0: a golem's swing threw a challenger over the old four-high wall); a pit three high inside (a golem fits) and sealed: walked as a mob walks, a
 // step or a jump of one, nothing leaves its pit (the roof keeps in what a golem
 // throws). A walk of a block at least round the pits: from the players' tunnel a fan
 // reaches the stands. In the pack: the fighters in the stadium's own structures,
@@ -44,7 +45,18 @@ export default async function run(ctx) {
     const onPitch = (x, z) => x >= P.x0 && x <= P.x1 && z >= P.z0 && z <= P.z1;
     // the fighters on the pitch, room over them (a golem stands near three high)
     const kinds = S.fighters.map((f) => f.type === 'golem' ? 'golem' : f.kind).sort().join('+');
-    if (kinds !== 'golem+golem+husk+vindicator') out.bad.push(`fighters ${kinds}`);
+    if (kinds !== 'golem+golem+golem+golem+husk+ravager+vindicator+zoglin') out.bad.push(`fighters ${kinds}`);
+    // one bout to each quarter of the pitch
+    const cxp = Math.floor((P.x0 + P.x1) / 2);
+    const quarter = (f) => (f.x < cxp ? 0 : 1) + (f.z < Math.floor((P.z0 + P.z1) / 2) ? 0 : 2);
+    if (new Set(S.fighters.filter((f) => f.type === 'golem').map(quarter)).size !== 4) out.bad.push('the bouts not one to each quarter');
+    // the glass cage: up the pitch's edge (round the goals' fences) to the roof, the roof whole, eight clear inside
+    for (let x = P.x0; x <= P.x1; x++) for (let z = P.z0; z <= P.z1; z++) {
+      const edge = x === P.x0 || x === P.x1 || z === P.z0 || z === P.z1;
+      if (blk(x, G + 9, z) !== 'glass') { out.bad.push(`the roof open at ${x},${z}`); break; }
+      if (edge && ![...Array(8)].every((_, d) => blk(x, G + 1 + d, z) === 'glass' || (d < 2 && /fence/.test(blk(x, G + 1 + d, z))))) { out.bad.push(`the cage open at ${x},${z}`); break; }
+      if (!edge && ![...Array(8)].every((_, d) => blk(x, G + 1 + d, z) === 'air')) { out.bad.push(`the pitch not clear eight high at ${x},${z}`); break; }
+    }
     for (const f of S.fighters) if (!onPitch(f.x, f.z) || ![0, 1, 2].every((d) => blk(f.x, f.y + d, f.z) === 'air') || blk(f.x, f.y - 1, f.z) === 'air') out.bad.push(`${f.kind || f.type} not standing on the pitch`);
     // walled four high all round: every cell round the pitch solid from G+1 to G+4
     for (let x = P.x0 - 1; x <= P.x1 + 1; x++) for (let z = P.z0 - 1; z <= P.z1 + 1; z++) {
@@ -92,7 +104,7 @@ export default async function run(ctx) {
   const ts = cities.map(([n, r]) => [n, r, inspect(r)]);
   const all = (f) => ts.every(([, , t]) => t.built && f(t));
   check('bouts: the stadium built with them, even in a city that had no stadium', ts.every(([, , t]) => t.built) && !without.landmarks.some((q) => q.kind === 'stadium'), ts.map(([n, , t]) => `${n}: ${t.built}`).join(', '));
-  check('bouts: two golems, a vindicator and a husk on the pitch, walled four high all round, sealed (nothing walks, jumps or is thrown off it)', all((t) => t.bad.length === 0), ts.map(([n, , t]) => (t.bad || []).slice(0, 2).join('; ')).filter(Boolean).join(' | '));
+  check('bouts: four golems and a vindicator, a husk, a ravager and a zoglin, one bout to each quarter; the pitch caged in glass to a roof eight clear over it, walled four high round that, sealed', all((t) => t.bad.length === 0), ts.map(([n, , t]) => (t.bad || []).slice(0, 2).join('; ')).filter(Boolean).join(' | '));
   check('bouts: one command block, silent (no output, every two seconds), giving the fighters Resistance V again', all((t) => t.commands));
   {
     const r = cities[0][1];
@@ -118,7 +130,7 @@ export default async function run(ctx) {
     const opts = { namespace: 'chk', spawns: r.spawns, centre: r.world.centre, places: r.places };
     const fn = functionFiles(tileList(r.world, opts), r.world, { ...opts, mobTiles: buildMobStructures(r.spawns, {}) }).find((f) => f.fn === 'chk/stadium_centered');
     check('bouts: the fighters in the stadium\'s own structures, each tagged, with Resistance V, kept; a stadium function to bring them again',
-      bad.length === 0 && kinds === 'minecraft:husk,minecraft:iron_golem,minecraft:iron_golem,minecraft:vindicator' && !!fn, bad.slice(0, 3).join('; ') || kinds);
+      bad.length === 0 && kinds === 'minecraft:husk,minecraft:iron_golem,minecraft:iron_golem,minecraft:iron_golem,minecraft:iron_golem,minecraft:ravager,minecraft:vindicator,minecraft:zoglin' && !!fn, bad.slice(0, 3).join('; ') || kinds);
   }
   {
     const r = generateCity({ ...DEFAULTS, ...L, size: 256, seed: 1, minBlock: 10 });

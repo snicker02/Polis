@@ -16,7 +16,7 @@
 // course itself), nothing on a roof hut or its way out. No random draws from the city's
 // stream: each building has its own, seeded from where it stands.
 
-import { MAT, MATERIALS, B, I, S, vineId, glazedId } from './materials.js';
+import { MAT, MATERIALS, B, I, S, vineId, glazedId, stairId, WEIRDO } from './materials.js';
 
 const put = (world, x, y, z, id) => { if (world.has(x, y, z)) return false; world.set(x, y, z, id); return true; };
 const sides = (r) => ({                // the cells just outside each wall, by side
@@ -444,3 +444,509 @@ export function brutalDress(world, c, rng) {
   void rng;
   return info;
 }
+
+// =============================================================================================
+// Twelve styles (0.74.0). Each keeps the rule above: nothing out from a wall lower than head
+// height, nothing but into empty cells (or in place of the building's own plain wall), nothing
+// on a roof's way out. DRESSES (at the end) names each by its style's `dress`.
+// =============================================================================================
+const corners4 = (r) => [[r.x0, r.z0], [r.x1, r.z0], [r.x0, r.z1], [r.x1, r.z1]];
+const ringOf = (r) => { const a = []; for (let x = r.x0; x <= r.x1; x++) a.push([x, r.z0], [x, r.z1]); for (let z = r.z0 + 1; z < r.z1; z++) a.push([r.x0, z], [r.x1, z]); return a; };
+const grow = (r, n) => ({ x0: r.x0 - n, z0: r.z0 - n, x1: r.x1 + n, z1: r.z1 + n });
+const solidAt = (world, x, y, z) => { const id = world.get(x, y, z); return id >= 0 && !MATERIALS.isPassable(id); };
+// the first free cell over a roof at (x, z), no higher than roofY + up; null if none
+const overRoof = (world, x, z, roofY, up = 2) => { let y = roofY + 1; while (world.has(x, y, z) && y <= roofY + up) y++; return y <= roofY + up && !world.has(x, y, z) && solidAt(world, x, y - 1, z) ? y : null; };
+// the highest block over a footprint (a pitched roof's ridge), from y up
+const peakOver = (world, r, y0) => { let top = y0; for (let x = r.x0; x <= r.x1; x++) for (let z = r.z0; z <= r.z1; z++) for (let y = y0; y <= y0 + 24; y++) if (world.has(x, y, z)) top = Math.max(top, y); return top; };
+// a box of cells all empty (and none on the roof's way out)
+const allFree = (world, busy, x0, x1, z0, z1, y0, y1) => { for (let x = x0; x <= x1; x++) for (let z = z0; z <= z1; z++) { if (busy && busy(x, z)) return false; for (let y = y0; y <= y1; y++) if (world.has(x, y, z)) return false; } return true; };
+// the free spot nearest the middle of a roof for something r round and h high (the stair's
+// hut is often in the middle): its centre, or null
+function roofSpot(world, c, r, h, margin = 0) {
+  const { top, roofY } = c, busy = roofBusy(c);
+  const mx = (top.x0 + top.x1) / 2, mz = (top.z0 + top.z1) / 2, cand = [];
+  for (let x = top.x0 + r + margin; x <= top.x1 - r - margin; x++) for (let z = top.z0 + r + margin; z <= top.z1 - r - margin; z++) cand.push([x, z]);
+  cand.sort((a, b) => (a[0] - mx) ** 2 + (a[1] - mz) ** 2 - ((b[0] - mx) ** 2 + (b[1] - mz) ** 2));
+  for (const [x, z] of cand) {
+    if (!allFree(world, busy, x - r, x + r, z - r, z + r, roofY + 1, roofY + h)) continue;
+    let held = true;
+    for (let dx = -r; dx <= r && held; dx++) for (let dz = -r; dz <= r; dz++) if (!solidAt(world, x + dx, roofY, z + dz)) { held = false; break; }
+    if (held) return [x, z];
+  }
+  return null;
+}
+const sideOf = (r, x, z) => (z < r.z0 ? 'north' : z > r.z1 ? 'south' : x < r.x0 ? 'west' : 'east');
+// a spire in the middle of a tower's roof: squares closing in, two layers each, its tip on top
+function spireOn(world, c, body, tip, finial) {
+  const { top, roofY } = c;
+  const w = top.x1 - top.x0 + 1, d = top.z1 - top.z0 + 1;
+  const h = Math.min(2, Math.floor((Math.min(w, d) - 5) / 2));
+  if (h < 1) return null;
+  const tall = 2 * (h + 1) + 3;
+  const spot = roofSpot(world, c, h, tall);
+  if (!spot) return null;
+  const [cx, cz] = spot;
+  let y = roofY + 1, n = 0;
+  for (let s = h; s >= 0; s--) for (let k = 0; k < 2; k++, y++) for (let dx = -s; dx <= s; dx++) for (let dz = -s; dz <= s; dz++) { world.set(cx + dx, y, cz + dz, body); n++; }
+  world.set(cx, y, cz, tip); n++;
+  if (finial) { world.set(cx, y + 1, cz, finial); n++; }
+  return { at: [cx, cz], top: y + (finial ? 1 : 0), cells: n };
+}
+
+// ---- Classical / Roman ------------------------------------------------------------------------
+// Quartz pillars up every corner, floor after floor; a cornice a block out round the roof; a
+// pediment over the door (two courses stepping in over it); a statue on each corner of the roof.
+export function classicalDress(world, c, rng) {
+  const { rects, floorYs, roofY, top, style, floors, P, gy, doorCells, outv } = c;
+  const info = { pillars: 0, cornice: 0, pediment: 0, statues: 0 };
+  for (let k = 0; k < floors; k++) for (const [x, z] of corners4(rects[k]))
+    for (let y = floorYs[k] + 1; y <= floorYs[k] + P - 1; y++) if (world.has(x, y, z)) { world.set(x, y, z, MAT.QUARTZ_PILLAR); info.pillars++; }
+  if (style !== 'house' || c.flatRoof) for (const [x, z] of ringOf(grow(top, 1))) if (put(world, x, roofY, z, MAT.SMOOTH_QUARTZ)) info.cornice++;
+  for (const [dx, dz] of doorCells) {
+    const x = dx + outv[0], z = dz + outv[1];
+    for (const s of [-1, 0, 1]) {
+      const lat = outv[0] === 0 ? [s, 0] : [0, s];
+      if (put(world, x + lat[0], gy + 4, z + lat[1], MAT.SMOOTH_QUARTZ)) info.pediment++;
+    }
+    if (put(world, x, gy + 5, z, MAT.CHISELED_QUARTZ)) info.pediment++;
+  }
+  if (style !== 'house') {
+    const busy = roofBusy(c);
+    for (const [x, z] of corners4(top)) {
+      if (busy(x, z)) continue;
+      const y = overRoof(world, x, z, roofY);
+      if (y === null || world.has(x, y + 1, z) || world.has(x, y + 2, z)) continue;
+      world.set(x, y, z, MAT.SMOOTH_QUARTZ); world.set(x, y + 1, z, MAT.QUARTZ_PILLAR); world.set(x, y + 2, z, MAT.CHISELED_QUARTZ);
+      info.statues++;
+    }
+  }
+  void rng;
+  return info;
+}
+
+// ---- Gothic ---------------------------------------------------------------------------------
+// Buttresses a block out up the walls between the windows, from head height to the roof;
+// pinnacles on the roof's corners; on a tower a spire, and over its door, high in the front, a
+// rose window of stained glass.
+const ROSE = [MAT.SG_RED, MAT.SG_BLUE];
+export function gothicDress(world, c, rng) {
+  const { rects, floorYs, roofY, top, style, floors, P, gy, face, theme } = c;
+  const info = { buttresses: 0, pinnacles: 0, spire: null, rose: 0 };
+  const r0 = rects[0];
+  for (const side of ['north', 'south', 'east', 'west']) {
+    (sides(r0)[side] || []).forEach(([x, z], i, all) => {
+      if (i < 1 || i > all.length - 2 || i % 4 !== 2) return;
+      const bx = x < r0.x0 ? r0.x0 : x > r0.x1 ? r0.x1 : x, bz = z < r0.z0 ? r0.z0 : z > r0.z1 ? r0.z1 : z;
+      let n = 0;
+      for (let y = gy + 3; y < roofY; y++) {
+        if (world.get(bx, y, bz) === theme.glass) break;          // (never across a window)
+        if (!put(world, x, y, z, MAT.DEEPSLATE_BRICKS)) break;
+        n++;
+      }
+      if (n) info.buttresses++;
+    });
+  }
+  if (style !== 'house') {
+    const busy = roofBusy(c);
+    for (const [x, z] of corners4(top)) {
+      if (busy(x, z)) continue;
+      const y = overRoof(world, x, z, roofY);
+      if (y === null || world.has(x, y + 1, z) || world.has(x, y + 2, z)) continue;
+      for (let k = 0; k < 3; k++) world.set(x, y + k, z, MAT.DS_WALL);
+      info.pinnacles++;
+    }
+  }
+  if (style === 'tower') info.spire = spireOn(world, c, MAT.DEEPSLATE_TILES, MAT.DS_WALL, MAT.GOLD);
+  // the rose window: in the front of the top floor of a tower or a mid-rise of floors
+  if (style !== 'house' && floors >= 2) {
+    const k = floors - 1, r = rects[k], sy = floorYs[k];
+    const R = P >= 6 ? 2 : 1;
+    const cy = sy + Math.ceil(P / 2);
+    const alongX = face === 'north' || face === 'south';
+    const wz = face === 'north' ? r.z0 : face === 'south' ? r.z1 : null, wx = face === 'west' ? r.x0 : face === 'east' ? r.x1 : null;
+    const mid = alongX ? Math.floor((r.x0 + r.x1) / 2) : Math.floor((r.z0 + r.z1) / 2);
+    for (let a = -R; a <= R; a++) for (let b = -R; b <= R; b++) {
+      if (a * a + b * b > R * R + R - 1) continue;
+      const y = cy + b;
+      if (y <= sy || y >= sy + P) continue;
+      const x = alongX ? mid + a : wx, z = alongX ? wz : mid + a;
+      const id = world.get(x, y, z);
+      if (id !== theme.wall && id !== theme.glass && id !== theme.trim) continue;
+      world.set(x, y, z, a === 0 && b === 0 ? MAT.SG_YELLOW : ROSE[(Math.abs(a) + Math.abs(b)) % 2]); info.rose++;
+    }
+  }
+  void rng;
+  return info;
+}
+
+// ---- Nordic / Viking ------------------------------------------------------------------------
+// Carved posts (stripped logs) up the corners; a dragon's head (a post and a stair turned out)
+// on each end of a house's ridge, on each corner of a hall's roof.
+export function nordicDress(world, c, rng) {
+  const { rects, floorYs, roofY, top, style, floors, P, theme } = c;
+  const info = { posts: 0, dragons: 0, turf: 0 };
+  for (let k = 0; k < floors; k++) for (const [x, z] of corners4(rects[k]))
+    for (let y = floorYs[k] + 1; y <= floorYs[k] + P - 1; y++) if (world.has(x, y, z)) { world.set(x, y, z, theme.trim); info.posts++; }
+  const head = (x, y, z, dir) => {
+    if (world.has(x, y, z) || world.has(x, y + 1, z)) return;
+    world.set(x, y, z, MAT.DARK_FENCE); world.set(x, y + 1, z, stairId('dark', WEIRDO[dir]));
+    info.dragons++;
+  };
+  if (style === 'house' && !c.flatRoof) {
+    // turf: the roof's top course, column by column, moss over the timber
+    const g = grow(top, 1);
+    for (let x = g.x0; x <= g.x1; x++) for (let z = g.z0; z <= g.z1; z++) {
+      let y = roofY + 24; while (y > roofY && !world.has(x, y, z)) y--;
+      if (y <= roofY) continue;
+      if (/_stairs$/.test(MATERIALS.def(world.get(x, y, z)).block)) { world.set(x, y, z, MAT.MOSS_BLOCK); info.turf = (info.turf || 0) + 1; }
+    }
+    const r = grow(top, 1), peak = peakOver(world, r, roofY);
+    const cells = [];
+    for (let x = r.x0; x <= r.x1; x++) for (let z = r.z0; z <= r.z1; z++) if (world.has(x, peak, z)) cells.push([x, z]);
+    if (cells.length) {
+      const alongX = top.x1 - top.x0 >= top.z1 - top.z0;
+      const key = (p) => (alongX ? p[0] : p[1]);
+      const lo = cells.reduce((a, b) => (key(b) < key(a) ? b : a)), hi = cells.reduce((a, b) => (key(b) > key(a) ? b : a));
+      head(lo[0], peak + 1, lo[1], alongX ? 'west' : 'north');
+      head(hi[0], peak + 1, hi[1], alongX ? 'east' : 'south');
+    }
+  } else {
+    const busy = roofBusy(c);
+    for (const [x, z] of corners4(top)) {
+      if (busy(x, z)) continue;
+      const y = overRoof(world, x, z, roofY);
+      if (y !== null) head(x, y, z, x === top.x0 ? 'west' : 'east');
+    }
+  }
+  void rng;
+  return info;
+}
+
+// ---- Byzantine / Russian ----------------------------------------------------------------------
+// Bands of the trim colour under every floor's line; an onion dome on a drum in the middle of
+// the roof (four small ones round it on a big roof), its bulb bright, gold at its tip.
+const BULBS = () => [[MAT.GOLD, MAT.GOLD], [MAT.COPPER_ROOF, MAT.COPPER_ROOF], [MAT.C_BLUE, MAT.GOLD], [MAT.C_RED, MAT.C_WHITE], [MAT.C_GREEN, MAT.C_WHITE], [MAT.T_GREEN, MAT.GOLD]];
+function onion(world, c, cx, cz, R, colours, drum) {
+  const { roofY } = c;
+  const layers = [R, R, R + 1, R + 1, R, Math.max(R - 1, 0), 0];
+  const reach = R + 1;
+  if (!allFree(world, roofBusy(c), cx - reach, cx + reach, cz - reach, cz + reach, roofY + 1, roofY + layers.length + 3)) return 0;
+  let n = 0;
+  layers.forEach((r, k) => {
+    const y = roofY + 1 + k;
+    for (let dx = -r; dx <= r; dx++) for (let dz = -r; dz <= r; dz++) {
+      if (dx * dx + dz * dz > r * r + r) continue;
+      const m = k < 1 ? drum : colours[(dx + dz + k + 64) % 2];
+      world.set(cx + dx, y, cz + dz, m); n++;
+    }
+  });
+  const ty = roofY + 1 + layers.length;
+  world.set(cx, ty, cz, MAT.GOLD); world.set(cx, ty + 1, cz, MAT.BARS); world.set(cx, ty + 2, cz, MAT.BARS);
+  return n + 3;
+}
+export function byzantineDress(world, c, rng) {
+  const { rects, floorYs, top, style, floors, P, theme } = c;
+  const info = { band: 0, domes: 0 };
+  for (let k = 0; k < floors; k++) for (const [x, z] of ringOf(rects[k])) {
+    const y = floorYs[k] + P - 1;
+    if (world.get(x, y, z) === theme.wall) { world.set(x, y, z, theme.trim); info.band++; }
+  }
+  if (style !== 'house') {
+    const w = top.x1 - top.x0 + 1, d = top.z1 - top.z0 + 1, m = Math.min(w, d);
+    const R = m >= 11 ? 2 : m >= 7 ? 1 : 0;
+    const cols = BULBS()[Math.floor(rng() * BULBS().length)];
+    const spot = R ? roofSpot(world, c, R + 1, 11) : null;
+    if (spot && onion(world, c, spot[0], spot[1], R, cols, theme.wall)) info.domes++;
+    if (m >= 15) for (const [x, z] of [[top.x0 + 2, top.z0 + 2], [top.x1 - 2, top.z0 + 2], [top.x0 + 2, top.z1 - 2], [top.x1 - 2, top.z1 - 2]])
+      if (onion(world, c, x, z, 0, cols, theme.wall)) info.domes++;
+  }
+  return info;
+}
+
+// ---- Wild West --------------------------------------------------------------------------------
+// The false front: the street wall carried up over the roof, its middle a course higher, a sign
+// board across it; a porch roof (a slab, at head height) along the front over the boardwalk.
+export function westernDress(world, c, rng) {
+  const { rects, roofY, top, style, gy, face, theme } = c;
+  const info = { front: 0, sign: 0, porch: 0 };
+  const busy = roofBusy(c);
+  const line = [];
+  if (face === 'north' || face === 'south') { const z = face === 'north' ? top.z0 : top.z1; for (let x = top.x0; x <= top.x1; x++) line.push([x, z]); }
+  else { const x = face === 'west' ? top.x0 : top.x1; for (let z = top.z0; z <= top.z1; z++) line.push([x, z]); }
+  const H = style === 'house' ? 2 : 3, n = line.length;
+  line.forEach(([x, z], i) => {
+    if (busy(x, z)) return;
+    const h = H + (i >= n / 3 && i < (2 * n) / 3 ? 1 : 0);
+    for (let y = roofY + 1; y <= roofY + h; y++) {
+      const id = world.get(x, y, z);
+      if (id >= 0 && id !== theme.wall && id !== theme.trim && !MATERIALS.isPassable(id) && y > roofY + 1) return;
+      if (MATERIALS.isPassable(id)) return;
+      world.set(x, y, z, y === roofY + 2 && i > 0 && i < n - 1 ? MAT.DARK_PLANKS : theme.wall);
+      if (y === roofY + 2 && i > 0 && i < n - 1) info.sign++;
+      info.front++;
+    }
+    put(world, x, roofY + h + 1, z, theme.trim);
+  });
+  for (const [x, z] of sides(rects[0])[face] || []) if (put(world, x, gy + 3, z, MAT.SPRUCE_SLAB_T)) info.porch++;
+  void rng;
+  return info;
+}
+
+// ---- Victorian --------------------------------------------------------------------------------
+// A bay window a block out on the front of every floor over the ground floor (glass between trim
+// posts, a sill and a hood); little iron balconies on the sides; a mansard of slate stairs
+// round a flat roof, just inside its parapet.
+export function victorianDress(world, c, rng) {
+  const { rects, floorYs, roofY, top, style, floors, P, face, theme } = c;
+  const info = { bays: 0, balconies: 0, mansard: 0 };
+  for (let k = 1; k < floors; k++) {
+    const r = rects[k], sy = floorYs[k];
+    const front = sides(r)[face] || [];
+    const spots = front.length >= 14 ? [Math.floor(front.length / 4), Math.floor((3 * front.length) / 4)] : front.length >= 7 ? [Math.floor(front.length / 2)] : [];
+    for (const m of spots) {
+      const cells = [front[m - 1], front[m], front[m + 1]];
+      if (!allFree(world, null, Math.min(...cells.map((p) => p[0])), Math.max(...cells.map((p) => p[0])), Math.min(...cells.map((p) => p[1])), Math.max(...cells.map((p) => p[1])), sy, sy + P - 1)) continue;
+      cells.forEach(([x, z], j) => {
+        world.set(x, sy, z, theme.trim);
+        for (let y = sy + 1; y <= sy + P - 2; y++) world.set(x, y, z, j === 1 ? theme.glass : theme.trim);
+        world.set(x, sy + P - 1, z, theme.trim);
+      });
+      info.bays++;
+    }
+    for (const side of ACROSS[face] || []) {
+      const row = sides(r)[side] || [];
+      if (row.length < 5) continue;
+      const m = Math.floor(row.length / 2);
+      const cells = [row[m - 1], row[m], row[m + 1]];
+      if (!cells.every(([x, z]) => !world.has(x, sy, z) && !world.has(x, sy + 1, z))) continue;
+      for (const [x, z] of cells) { world.set(x, sy, z, MAT.DARK_SLAB_T); world.set(x, sy + 1, z, MAT.BARS); }
+      info.balconies++;
+    }
+  }
+  if (style !== 'house') {
+    const busy = roofBusy(c), inner = grow(top, -1);
+    if (inner.x1 - inner.x0 >= 2 && inner.z1 - inner.z0 >= 2)
+      for (const [x, z] of ringOf(inner)) {
+        if (busy(x, z) || world.has(x, roofY + 1, z) || !solidAt(world, x, roofY, z)) continue;
+        const s = sideOf(grow(inner, -1), x, z);
+        world.set(x, roofY + 1, z, stairId('deepslate', WEIRDO[OPP[s]])); info.mansard++;
+      }
+  }
+  void rng;
+  return info;
+}
+
+// ---- Googie / retro-future ----------------------------------------------------------------------
+// A flying saucer over a tower's or a mid-rise's roof (a white disc on a stem, a teal rim, a
+// glass bubble on top); boomerang fins rising out from the roof's front corners; neon over doors.
+export function googieDress(world, c, rng) {
+  const { roofY, top, style, face, gy, doorCells } = c;
+  const info = { saucer: null, fins: 0, neon: 0 };
+  const busy = roofBusy(c);
+  const w = top.x1 - top.x0 + 1, d = top.z1 - top.z0 + 1;
+  if (style !== 'house' && Math.min(w, d) >= 7) {
+    let R = Math.min(5, Math.floor(Math.min(w, d) / 2) - 1), spot = null;
+    for (; R >= 2 && !spot; R--) spot = roofSpot(world, c, R, 6);
+    R++;
+    if (spot) {
+      const [cx, cz] = spot;
+      world.set(cx, roofY + 1, cz, MAT.QUARTZ_PILLAR); world.set(cx, roofY + 2, cz, MAT.QUARTZ_PILLAR);
+      let n = 2;
+      for (let dx = -R; dx <= R; dx++) for (let dz = -R; dz <= R; dz++) {
+        const q = dx * dx + dz * dz;
+        if (q > R * R) continue;
+        world.set(cx + dx, roofY + 3, cz + dz, q > (R - 1) * (R - 1) ? MAT.C_CYAN : MAT.C_WHITE); n++;
+        if (q <= (R - 2) * (R - 2)) { world.set(cx + dx, roofY + 4, cz + dz, q === 0 ? MAT.FROG_GREEN : MAT.SG_CYAN); n++; }
+      }
+      info.saucer = { at: [cx, cz], R, cells: n };
+    }
+  }
+  if (style !== 'tower') {
+    const alongX = face === 'north' || face === 'south';
+    const fz = face === 'north' ? top.z0 : face === 'south' ? top.z1 : null, fx = face === 'west' ? top.x0 : face === 'east' ? top.x1 : null;
+    for (const [end, out] of alongX ? [[top.x0, -1], [top.x1, 1]] : [[top.z0, -1], [top.z1, 1]]) {
+      const x0 = alongX ? end : fx, z0 = alongX ? fz : end;
+      const y0 = busy(x0, z0) ? null : overRoof(world, x0, z0, roofY);
+      if (y0 === null) continue;
+      for (let k = 0; k < 3; k++) {
+        const x = alongX ? end + out * k : fx, z = alongX ? fz : end + out * k;
+        if (!put(world, x, y0 + k, z, MAT.C_ORANGE)) break;
+        info.fins++;
+      }
+    }
+  }
+  for (const [dx, dz] of doorCells) { const id = world.get(dx, gy + 3, dz); if (id === MAT.GLOWSTONE || id === c.theme.wall || id === c.theme.trim) { world.set(dx, gy + 3, dz, MAT.FROG_PINK); info.neon++; } }
+  void rng;
+  return info;
+}
+
+// ---- Copper city -----------------------------------------------------------------------------
+// Lightning rods on the roof's corners (a house's on its ridge). The copper itself ages by
+// district once the city is built (city.js: applyStyle).
+export function copperDress(world, c, rng) {
+  const { roofY, top, style } = c;
+  const info = { rods: 0 };
+  if (style !== 'house' || c.flatRoof) {
+    const busy = roofBusy(c);
+    for (const [x, z] of corners4(top)) {
+      if (busy(x, z)) continue;
+      const y = overRoof(world, x, z, roofY);
+      if (y !== null && !world.has(x, y + 1, z)) { world.set(x, y, z, MAT.LIGHTNING_ROD); info.rods++; }
+    }
+  } else {
+    const peak = peakOver(world, grow(top, 1), roofY);
+    const cx = Math.floor((top.x0 + top.x1) / 2), cz = Math.floor((top.z0 + top.z1) / 2);
+    if (world.has(cx, peak, cz) && !world.has(cx, peak + 1, cz)) { world.set(cx, peak + 1, cz, MAT.LIGHTNING_ROD); info.rods++; }
+  }
+  void rng;
+  return info;
+}
+
+// ---- Mushroom / fungal ----------------------------------------------------------------------------
+// A great cap over the whole building, two blocks out past its walls all round: a dome of
+// mushroom block (red or brown, the building's trim) with a skirt hanging a course lower at its
+// rim; clear over the roof (and its hut) beneath.
+export function mushroomDress(world, c, rng) {
+  const { roofY, top, theme, hut } = c;
+  const info = { cap: 0 };
+  const base = roofY + (hut ? 6 : 4);
+  const cx = (top.x0 + top.x1) / 2, cz = (top.z0 + top.z1) / 2;
+  const A = (top.x1 - top.x0) / 2 + 2.5, B = (top.z1 - top.z0) / 2 + 2.5;
+  const red = theme.trim === MAT.MUSH_RED, cap = red ? MAT.MUSH_RED : MAT.MUSH_BROWN;
+  const layers = red ? [[-1, 0, 0.78], [0, 0, 0], [1, 1, 0], [2, 2.2, 0]] : [[-1, 0, 0.8], [0, 0, 0], [1, 1.5, 0]];
+  for (const [dy, shrink, ringOnly] of layers) {
+    const a = A - shrink, b = B - shrink;
+    if (a < 1 || b < 1) continue;
+    const y = base + dy;
+    for (let x = Math.floor(cx - a); x <= Math.ceil(cx + a); x++) for (let z = Math.floor(cz - b); z <= Math.ceil(cz + b); z++) {
+      const q = ((x - cx) / a) ** 2 + ((z - cz) / b) ** 2;
+      if (q > 1 || (ringOnly && q < ringOnly)) continue;
+      if (put(world, x, y, z, cap)) info.cap++;
+    }
+  }
+  void rng;
+  return info;
+}
+
+// ---- Ice palace -----------------------------------------------------------------------------------
+// Ice pinnacles on the roof's corners (packed ice, a tip of blue ice); a spire of ice on a tower.
+export function iceDress(world, c, rng) {
+  const { roofY, top, style } = c;
+  const info = { pinnacles: 0, spire: null };
+  if (style !== 'house') {
+    const busy = roofBusy(c);
+    for (const [x, z] of corners4(top)) {
+      if (busy(x, z)) continue;
+      const y = overRoof(world, x, z, roofY);
+      if (y === null || world.has(x, y + 1, z) || world.has(x, y + 2, z)) continue;
+      world.set(x, y, z, MAT.PACKED_ICE); world.set(x, y + 1, z, MAT.PACKED_ICE); world.set(x, y + 2, z, MAT.BLUE_ICE);
+      info.pinnacles++;
+    }
+  }
+  if (style === 'tower') info.spire = spireOn(world, c, MAT.PACKED_ICE, MAT.BLUE_ICE, MAT.SEA_LANTERN);
+  void rng;
+  return info;
+}
+
+// ---- Crystal / amethyst -----------------------------------------------------------------------------
+// Clusters of amethyst bursting from the roof: a few columns of crystal, each with shards round
+// its foot and a crystal cluster on its tip (they glow).
+export function crystalDress(world, c, rng) {
+  const { roofY, top, style } = c;
+  const info = { clusters: 0, crystals: 0 };
+  const busy = roofBusy(c);
+  if (style === 'house' && !c.flatRoof) {
+    const peak = peakOver(world, grow(top, 1), roofY);
+    const cx = Math.floor((top.x0 + top.x1) / 2), cz = Math.floor((top.z0 + top.z1) / 2);
+    if (world.has(cx, peak, cz) && !world.has(cx, peak + 1, cz) && !world.has(cx, peak + 2, cz)) { world.set(cx, peak + 1, cz, MAT.AMETHYST); world.set(cx, peak + 2, cz, MAT.AMETHYST_UP); info.clusters++; info.crystals += 2; }
+    return info;
+  }
+  const inner = grow(top, -1);
+  const want = Math.max(1, Math.min(5, Math.floor(((inner.x1 - inner.x0 + 1) * (inner.z1 - inner.z0 + 1)) / 20)));
+  for (let t = 0; t < want * 6 && info.clusters < want; t++) {
+    const x = inner.x0 + Math.floor(rng() * (inner.x1 - inner.x0 + 1)), z = inner.z0 + Math.floor(rng() * (inner.z1 - inner.z0 + 1));
+    const h = 1 + Math.floor(rng() * 3);
+    if (!allFree(world, busy, x - 1, x + 1, z - 1, z + 1, roofY + 1, roofY + h + 1) || !solidAt(world, x, roofY, z)) continue;
+    for (let y = roofY + 1; y <= roofY + h; y++) { world.set(x, y, z, MAT.AMETHYST); info.crystals++; }
+    world.set(x, roofY + h + 1, z, MAT.AMETHYST_UP); info.crystals++;
+    for (const [a, b] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) if (rng() < 0.6 && solidAt(world, x + a, roofY, z + b)) { world.set(x + a, roofY + 1, z + b, MAT.AMETHYST); world.set(x + a, roofY + 2, z + b, MAT.AMETHYST_UP); info.crystals += 2; }
+    info.clusters++;
+  }
+  return info;
+}
+
+// ---- Overgrown ruins ----------------------------------------------------------------------------------
+// Stone cracked and mossy (a third of the walls); vines down every side from the roof to head
+// height; the parapet broken; on a tower, jagged stumps of wall at the corners; a tree growing on
+// the roof of a mid-rise or a tower; moss and rubble over the roof.
+const AGED = () => new Map([[MAT.STONEBRICK, [MAT.MOSSY_BRICK, MAT.CRACKED_BRICK]], [MAT.COBBLE, [MAT.MOSSY_COBBLE]], [MAT.TUFF_BRICKS, [MAT.MOSSY_BRICK]], [MAT.MOSSY_BRICK, [MAT.CRACKED_BRICK]]]);
+export function ruinsDress(world, c, rng) {
+  const { rects, floorYs, roofY, top, style, floors, P, gy, doorCells, theme } = c;
+  const info = { aged: 0, vines: 0, broken: 0, stumps: 0, tree: null, moss: 0 };
+  const aged = AGED();
+  for (let k = 0; k < floors; k++) for (const [x, z] of ringOf(rects[k])) for (let y = floorYs[k] + 1; y <= floorYs[k] + P - 1; y++) {
+    const id = world.get(x, y, z), to = aged.get(id);
+    if (!to || rng() > 0.33) continue;
+    world.set(x, y, z, to[Math.floor(rng() * to.length)]); info.aged++;
+  }
+  const nearDoor = (x, z) => doorCells.some(([a, b]) => Math.abs(a - x) + Math.abs(b - z) <= 2);
+  const S_ = sides(top);
+  for (const side of ['north', 'south', 'east', 'west']) for (const [x, z] of S_[side] || []) {
+    if (nearDoor(x, z) || rng() > 0.4) continue;
+    const wx = x + (side === 'east' ? -1 : side === 'west' ? 1 : 0), wz = z + (side === 'south' ? -1 : side === 'north' ? 1 : 0);
+    let n = 0;
+    for (let y = roofY - 1; y >= gy + 3; y--) {
+      if (world.has(x, y, z) || !solidAt(world, wx, y, wz)) break;
+      world.set(x, y, z, vineId(OPP[side])); n++;
+    }
+    if (n) info.vines++;
+  }
+  if (style === 'house' && !c.flatRoof) return info;
+  const busy = roofBusy(c);
+  // the parapet broken here and there (never by the way out)
+  for (const [x, z] of ringOf(top)) {
+    if (busy(x, z) || rng() > 0.3) continue;
+    const id = world.get(x, roofY + 1, z);
+    if (id < 0 || MATERIALS.isPassable(id) || id === MAT.LAMP) continue;
+    world.clear(x, roofY + 1, z); info.broken++;
+  }
+  if (style === 'tower') for (const [x, z] of corners4(top)) {
+    if (busy(x, z)) continue;
+    const h = 1 + Math.floor(rng() * 4);
+    let y = roofY + 1; while (world.has(x, y, z) && y < roofY + 3) y++;
+    let n = 0;
+    for (let k = 0; k < h; k++) { if (!put(world, x, y + k, z, rng() < 0.5 ? MAT.MOSSY_BRICK : theme.wall)) break; n++; }
+    if (n) info.stumps++;
+  }
+  if (style !== 'house') {
+    const inner = grow(top, -3);
+    for (let t = 0; t < 12 && !info.tree && inner.x1 >= inner.x0 && inner.z1 >= inner.z0; t++) {
+      const x = inner.x0 + Math.floor(rng() * (inner.x1 - inner.x0 + 1)), z = inner.z0 + Math.floor(rng() * (inner.z1 - inner.z0 + 1));
+      const h = 3 + Math.floor(rng() * 2);
+      if (!solidAt(world, x, roofY, z) || !allFree(world, busy, x - 2, x + 2, z - 2, z + 2, roofY + 1, roofY + h + 3)) continue;
+      for (let y = roofY + 1; y <= roofY + h; y++) world.set(x, y, z, MAT.OAK_LOG_R);
+      let leaves = 0;
+      for (let dy = h - 1; dy <= h + 2; dy++) {
+        const r = dy >= h + 2 ? 1 : 2;
+        for (let dx = -r; dx <= r; dx++) for (let dz = -r; dz <= r; dz++) {
+          if (Math.abs(dx) === r && Math.abs(dz) === r && rng() < 0.6) continue;
+          if (put(world, x + dx, roofY + dy, z + dz, MAT.OAK_LEAF_P)) leaves++;
+        }
+      }
+      info.tree = { at: [x, z], h, leaves };
+    }
+    for (let x = top.x0 + 1; x < top.x1; x++) for (let z = top.z0 + 1; z < top.z1; z++) {
+      if (busy(x, z) || world.has(x, roofY + 1, z) || !solidAt(world, x, roofY, z)) continue;
+      const p = rng();
+      if (p < 0.3) { world.set(x, roofY + 1, z, MAT.MOSS_CARPET); info.moss++; }
+      else if (p < 0.34) world.set(x, roofY + 1, z, rng() < 0.5 ? MAT.MOSSY_COBBLE : MAT.COBBLE);
+    }
+  }
+  return info;
+}
+
+export const DRESSES = {
+  classical: classicalDress, gothic: gothicDress, nordic: nordicDress, byzantine: byzantineDress,
+  western: westernDress, victorian: victorianDress, googie: googieDress, copper: copperDress,
+  mushroom: mushroomDress, ice: iceDress, crystal: crystalDress, ruins: ruinsDress,
+};

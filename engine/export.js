@@ -17,7 +17,7 @@ import { makeRng } from './rng.js';
 // Must match main.js VERSION, package.json and index.html data-version;
 // tools/validate.js fails if they drift. The app refuses to export when the
 // browser has mixed cached copies of old and new files.
-export const POLIS_VERSION = '0.72.2';
+export const POLIS_VERSION = '0.74.0';
 
 export const CHUNK = 64;          // Bedrock structure limit per horizontal axis
 export const GROUND_DROP = 2;     // base layer y=0 sits 2 below feet; surface y=1 replaces the block you stand on
@@ -1142,6 +1142,8 @@ export function placementGuide(tiles, opts = {}) {
     L.push('THE STADIUM\'S BOUTS: the fighters come with populate (or /function ' + ns + '/stadium_centered); each is');
     L.push('  saved with Resistance V, so none is ever hurt, and a command block under the pitch gives it again (silently:');
     L.push('  build turns the command block chat off with /gamerule commandblockoutput false; needs command blocks on).');
+    L.push('  Four bouts, one to each quarter of the pitch: iron golems against a vindicator, a husk, a ravager and a zoglin.');
+    L.push('  The pitch is a glass cage, roofed in glass eight blocks up, so no fighter is thrown out of it.');
     L.push('  The fans go up into the stands by the stair from the street.');
     L.push('  The bouts run while you are near enough for the stadium to be simulated.');
     L.push('');

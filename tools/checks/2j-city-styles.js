@@ -28,7 +28,7 @@ export default async function run(ctx) {
   const { check, note, ROOT, deflateRaw, fx, WALK_THROUGH, refreshWalkThrough } = ctx;
   const name = (w, x, y, z) => { const id = w.get(x, y, z); return id < 0 ? null : MATERIALS.def(id).block; };
   const SOIL = { flower: ['minecraft:grass_block', 'minecraft:dirt'],
-    dead: ['minecraft:sand', 'minecraft:hardened_clay', 'minecraft:grass_block', 'minecraft:dirt'] };
+    dead: ['minecraft:sand', 'minecraft:hardened_clay', 'minecraft:grass_block', 'minecraft:dirt', 'minecraft:coarse_dirt'] };   // (coarse dirt: the Wild West's, a dirt a dead bush grows on)
   const FLOWER_NAMES = new Set(['dandelion', 'cornflower', 'allium', 'azure_bluet', 'blue_orchid', 'poppy', 'oxeye_daisy',
     'lily_of_the_valley', 'pink_tulip', 'red_tulip', 'pink_petals'].map((n) => 'minecraft:' + n));
   const summary = [];

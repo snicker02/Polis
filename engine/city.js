@@ -231,6 +231,8 @@ export function generateCity(cfgIn, onProgress) {
     if (cfg.hills === DEFAULTS.hills) cfg.hills = 0;
     if (cfg.maxFloors === DEFAULTS.maxFloors) cfg.maxFloors = 8;
   }
+  // a style that keeps itself low (the Wild West's frontier town), while the setting is where it was
+  if (STYLE.maxFloors && cfg.maxFloors === DEFAULTS.maxFloors) cfg.maxFloors = STYLE.maxFloors;
   // a Dwarven city digs: its metro, while that option is where it was
   if (STYLE.dwarven && cfg.metro === DEFAULTS.metro) cfg.metro = true;
   // a Mesoamerican city on hills: its open spaces paved plazas, each lot a terrace of its own
@@ -489,7 +491,7 @@ export function generateCity(cfgIn, onProgress) {
         const cy = makeCourtyard(world, {
           x0: fx0, z0: fz0, x1: fx1, z1: fz1, face: front.side, kind, mirror: crng.chance(0.5), G: GROUND, flowers: cfg.flowers, fountain: !!LS.fountains,
           building: (p) => makeBuilding(world, {
-            detail: cfg.detail, arcade: !LS.venetian && !LS.noArcade, eaves: !!LS.eaves, lancets: !!LS.lancets, deco: !!LS.deco, steam: !!LS.steam, santorini: !!LS.santorini, neon: !!LS.neon, flatRoof: !!LS.flatRoofs, roofSlab: LS.roofSlab, pyramid: !!LS.pyramid, meso: !!LS.meso, moorish: !!LS.moorish, pointed: !!LS.pointedArches, elven: !!LS.elven, endcity: !!LS.endcity, dwarven: !!LS.dwarven, brutal: !!LS.brutal, cantilever: !!LS.cantilever, rustic: !!LS.rustic,
+            detail: cfg.detail, arcade: !LS.venetian && !LS.noArcade, eaves: !!LS.eaves, lancets: !!LS.lancets, deco: !!LS.deco, steam: !!LS.steam, santorini: !!LS.santorini, neon: !!LS.neon, flatRoof: !!LS.flatRoofs, roofSlab: LS.roofSlab, pyramid: !!LS.pyramid, meso: !!LS.meso, moorish: !!LS.moorish, pointed: !!LS.pointedArches, elven: !!LS.elven, endcity: !!LS.endcity, dwarven: !!LS.dwarven, brutal: !!LS.brutal, cantilever: !!LS.cantilever, rustic: !!LS.rustic, dress: LS.dress,
             x0: p.x0, z0: p.z0, x1: p.x1, z1: p.z1, noStairs: p.noStairs, wing: true,
             floors: lot.floors, pitch: cfg.pitch, groundY: GROUND,
             style: 'mid', facing: p.facing, theme,
@@ -530,7 +532,7 @@ export function generateCity(cfgIn, onProgress) {
       facing: front.side, theme, useStairs: cfg.useStairs, lights: cfg.lights,
       shape: towerShape(hash2(lot.z0, lot.x0, (cfg.seed ^ 0x5a9e) | 0), LS.towerShapes),
     }, makeRng(((lot.x0 * 73856093) ^ (lot.z0 * 19349663) ^ cfg.seed ^ 0x7157) >>> 0)) : makeBuilding(world, {
-      detail: cfg.detail, arcade: !LS.venetian && !LS.noArcade, eaves: !!LS.eaves, lancets: !!LS.lancets, deco: !!LS.deco, steam: !!LS.steam, santorini: !!LS.santorini, neon: !!LS.neon, flatRoof: !!LS.flatRoofs, roofSlab: LS.roofSlab, pyramid: !!LS.pyramid, meso: !!LS.meso, moorish: !!LS.moorish, pointed: !!LS.pointedArches, elven: !!LS.elven, endcity: !!LS.endcity, dwarven: !!LS.dwarven, brutal: !!LS.brutal, cantilever: !!LS.cantilever,
+      detail: cfg.detail, arcade: !LS.venetian && !LS.noArcade, eaves: !!LS.eaves, lancets: !!LS.lancets, deco: !!LS.deco, steam: !!LS.steam, santorini: !!LS.santorini, neon: !!LS.neon, flatRoof: !!LS.flatRoofs, roofSlab: LS.roofSlab, pyramid: !!LS.pyramid, meso: !!LS.meso, moorish: !!LS.moorish, pointed: !!LS.pointedArches, elven: !!LS.elven, endcity: !!LS.endcity, dwarven: !!LS.dwarven, brutal: !!LS.brutal, cantilever: !!LS.cantilever, dress: LS.dress,
       rustic: !!LS.rustic,
       x0: fx0, z0: fz0, x1: fx1, z1: fz1,
       floors: lot.floors, pitch: cfg.pitch, groundY: GROUND,
@@ -761,8 +763,8 @@ export function generateCity(cfgIn, onProgress) {
     at: (x, z) => GROUND + elevAt(x, z),
     inside: (x, z) => x >= 0 && z >= 0 && x < plan.W && z < plan.D && (!plan.mask || plan.mask[z * plan.W + x] === 1),
   };
-  if (SD) for (const name of SD.names) applyStyle(world, plan, styleOf(name), (x, z) => GROUND + elevAt(x, z), (x, z) => SD.at(x, z) === name);
-  else applyStyle(world, plan, STYLE, (x, z) => GROUND + elevAt(x, z));
+  if (SD) for (const name of SD.names) applyStyle(world, plan, styleOf(name), (x, z) => GROUND + elevAt(x, z), (x, z) => SD.at(x, z) === name, { spawns, seed: cfg.seed });
+  else applyStyle(world, plan, STYLE, (x, z) => GROUND + elevAt(x, z), null, { spawns, seed: cfg.seed });
 
   // ---- the bridges between districts -----------------------------------------
   // (ringed whole, a deck is not bent toward a ring: the loop already runs over
@@ -1082,7 +1084,7 @@ export function generateCity(cfgIn, onProgress) {
       CEM.named.length ? `${CEM.named.length} named gravestone${CEM.named.length > 1 ? 's' : ''}${CEM.named.length < namesOf(cfg.graveNames).length ? ` (of ${namesOf(cfg.graveNames).length}: no more graves)` : ''}` : ''].filter(Boolean).join(', ');
   }
   { const S = landmarks.find((q) => q.kind === 'stadium');
-    if (cfg.bouts) { if (S && S.bouts) stats.bouts = `on the stadium's pitch, walled four high: ${BOUTS.map((b) => b.name).join(', ')}, fighting on and never hurt; the fans in by a stair from the street`;
+    if (cfg.bouts) { if (S && S.bouts) stats.bouts = `on the stadium's pitch, caged in glass: ${BOUTS.map((b) => b.name).join(', ')}, fighting on and never hurt; the fans in by a stair from the street`;
       else stats.boutsMissing = S ? 'the stadium\'s pitch is too small for the bouts' : cfg.landmarks ? 'no lot for the stadium (it needs 17 by 21)' : 'the bouts are in the stadium, a landmark: tick Landmarks'; } }
   { const T = landmarks.find((q) => q.kind === 'themepark');
     if (T) stats.themepark = `beside the city to the ${T.side}: a roller coaster of ${T.coaster.length} rails with a lift hill ${T.coaster.lift} high, two corkscrews and a dark tunnel, a big wheel of ${T.wheel.cabins.length} cabins that turns, a drop tower ${T.tower.height} high, a carousel, ${T.stalls.length} stalls; at the back bumper boats, a hedge maze, trampolines, an archery range`;
@@ -1743,7 +1745,7 @@ function markCentre(world, plan, buildings, G, elevAt, spawns = [], stairRuns = 
 // Swap every role material for the style's own (roads, ground, trees, flowers,
 // lamps, wall...), then lay snow on open ground for snowy cities.
 // (where(x, z): only these cells, for a city of several styles)
-function applyStyle(world, plan, style, groundAt, where = null) {
+function applyStyle(world, plan, style, groundAt, where = null, extra = {}) {
   const table = remapTable(style, FLOWERS);
   const mine = where || (() => true);
   if (table.size) {
@@ -1818,6 +1820,50 @@ function applyStyle(world, plan, style, groundAt, where = null) {
     for (const [x, y0, z, y1] of runs) {
       for (let y = y0; y <= y1; y++) world.set(x, y, z, MAT.CHORUS_PLANT);
       if (!world.has(x, y1 + 1, z)) world.set(x, y1 + 1, z, MAT.CHORUS_FLOWER);
+    }
+  }
+  // A Copper city's copper ages by district: bright in the new districts at the edge, green
+  // in the old town at the middle (waxed, every stage, so it stays as it is set). Each
+  // block of sixteen by sixteen takes one age, from its distance out and a little chance.
+  if (style.copperAge) {
+    const STAGES = ['', 'exposed_', 'weathered_', 'oxidized_'];
+    const KINDS = [['waxed_copper', 'waxed_%copper'], ['waxed_cut_copper', 'waxed_%cut_copper'], ['waxed_cut_copper_stairs', 'waxed_%cut_copper_stairs'], ['waxed_copper_grate', 'waxed_%copper_grate']];
+    const of = new Map();
+    for (const [base, pat] of KINDS) of.set('minecraft:' + base, pat);
+    const mx = plan.W / 2, mz = plan.D / 2, far = Math.hypot(mx, mz) || 1;
+    const ageAt = (x, z) => {
+      const bx = Math.floor(x / 16), bz = Math.floor(z / 16);
+      const t = Math.hypot(bx * 16 + 8 - mx, bz * 16 + 8 - mz) / far;          // 0 at the middle, 1 at the corners
+      const a = Math.round((1 - t) * 3.4 - 0.4 + (hash2(bx, bz, ((extra.seed || 0) ^ 0xc0b3) | 0) - 0.5) * 1.2);
+      return Math.max(0, Math.min(3, a));
+    };
+    const cache = new Map(), changes = [];
+    world.forEach((x, y, z, id) => {
+      if (!mine(x, z)) return;
+      const d = MATERIALS.def(id), pat = of.get(d.block);
+      if (!pat) return;
+      const age = ageAt(x, z);
+      if (!age) return;
+      const k = id + ':' + age;
+      if (!cache.has(k)) cache.set(k, MATERIALS.add(null, 'minecraft:' + pat.replace('%', STAGES[age]), ['#c06a4a', '#a57a62', '#6c9a6e', '#4fa888'][age], d.states, { transparent: d.transparent, passable: d.passable, flowable: d.flowable, flat: d.flat }));
+      changes.push([x, y, z, cache.get(k)]);
+    });
+    for (const [x, y, z, to] of changes) world.set(x, y, z, to);
+  }
+  // An Ice palace's canal frozen over: its top course of water ice (packed ice, which stays
+  // ice by a lamp), but open water round the boats at the dock.
+  if (style.freeze) {
+    const { W, D } = plan;
+    const boats = (extra.spawns || []).filter((p) => p.type === 'boat');
+    const open = (x, z) => boats.some((b) => Math.abs(b.x - x) <= 2 && Math.abs(b.z - z) <= 2);
+    for (let z = 0; z < D; z++) for (let x = 0; x < W; x++) {
+      if (!mine(x, z) || plan.use[z * W + x] !== USE_CANAL || open(x, z)) continue;
+      const g = groundAt(x, z);
+      for (let y = g + 1; y >= g - 8; y--) {
+        if (world.get(x, y, z) !== MAT.WATER) continue;
+        if (!world.has(x, y + 1, z)) world.set(x, y, z, MAT.PACKED_ICE);
+        break;
+      }
     }
   }
   if (style.snow) {
@@ -2139,7 +2185,7 @@ export function generateSingle(cfgIn) {
     style: cfg.style, facing: 'south', theme,
     roofAccess: cfg.roofAccess, useStairs: cfg.useStairs, stairStyle: cfg.stairStyle, lights: cfg.lights,
     setback: cfg.setback, setbackEvery: cfg.setbackEvery, lifts: cfg.lifts !== false,
-    ...(() => { const SS = styleOf(cfg.cityStyle); return { steam: !!SS.steam, santorini: !!SS.santorini, neon: !!SS.neon, flatRoof: !!SS.flatRoofs, roofSlab: SS.roofSlab, pyramid: !!SS.pyramid, meso: !!SS.meso, moorish: !!SS.moorish, pointed: !!SS.pointedArches, lancets: !!SS.lancets, elven: !!SS.elven, endcity: !!SS.endcity, dwarven: !!SS.dwarven, brutal: !!SS.brutal, cantilever: !!SS.cantilever }; })(),
+    ...(() => { const SS = styleOf(cfg.cityStyle); return { steam: !!SS.steam, santorini: !!SS.santorini, neon: !!SS.neon, flatRoof: !!SS.flatRoofs, roofSlab: SS.roofSlab, pyramid: !!SS.pyramid, meso: !!SS.meso, moorish: !!SS.moorish, pointed: !!SS.pointedArches, lancets: !!SS.lancets, elven: !!SS.elven, endcity: !!SS.endcity, dwarven: !!SS.dwarven, brutal: !!SS.brutal, cantilever: !!SS.cantilever, dress: SS.dress }; })(),
   }, rng);
 
   const buildings = rec ? [rec] : [];

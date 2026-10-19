@@ -117,7 +117,15 @@ export function townSquare(world, lot, face, cfg, rng, G) {
 // with Resistance V (in Bedrock, no damage at all) for as long as an effect can last
 // (export.js: saved on the mob itself; no command block, so nothing in the chat).
 // An announcer's sign at the foot of the stair.
-export const BOUTS = [{ challenger: 'vindicator', name: 'Golem v Vindicator' }, { challenger: 'husk', name: 'Golem v Husk' }];
+//
+// The pitch is a glass cage as well (0.73.0): an iron golem's swing flings its foe
+// high, and a challenger thrown over the four-high wall got away into the stands.
+// Glass up the pitch's own edge from the grass to a glass roof eight clear over
+// it, so nothing thrown, jumped or climbed leaves it, and the fans still see in.
+// Four bouts, one to each quarter of the pitch.
+export const BOUTS = [{ challenger: 'vindicator', name: 'Golem v Vindicator' }, { challenger: 'husk', name: 'Golem v Husk' },
+  { challenger: 'ravager', name: 'Golem v Ravager' }, { challenger: 'zoglin', name: 'Golem v Zoglin' }];
+export const CAGE = 8;                                       // clear inside the glass, from the grass up
 export const FIGHTER_TAG = 'polis_fighter';
 export function stadium(world, lot, face, cfg, rng, G, signTags = null) {
   const LP = styleOf(cfg.cityStyle).landmark;
@@ -219,15 +227,24 @@ export function stadium(world, lot, face, cfg, rng, G, signTags = null) {
       top = h;
     }
     tunnel.push(...up.map(([x, y, z]) => [x, y + 1, z]));
-    // the fighters: a golem and its challenger in each half of the pitch
+    // the cage: glass up the pitch's edge (round the goals, whose fences stand in it)
+    // and a glass roof over the whole pitch
+    for (let z = P.z0; z <= P.z1; z++)
+      for (let x = P.x0; x <= P.x1; x++) {
+        const edge = x === P.x0 || x === P.x1 || z === P.z0 || z === P.z1;
+        if (edge) for (let y = G + 1; y <= G + CAGE; y++) if (!world.has(x, y, z)) world.set(x, y, z, MAT.GLASS);
+        world.set(x, G + CAGE + 1, z, MAT.GLASS);
+      }
+    // the fighters: a golem and its challenger in each quarter of the pitch
     const fighters = [];
     const cxp = Math.floor((P.x0 + P.x1) / 2);
     const halves = [[P.z0 + 1, mz - 1], [mz + 1, P.z1 - 1]];
+    const sides = [[P.x0 + 1, cxp - 1], [cxp + 1, P.x1 - 1]];
     BOUTS.forEach((bout, i) => {
-      const [z0, z1] = halves[i];
+      const [z0, z1] = halves[i >> 1], [x0, x1] = sides[i & 1];
       const zm = Math.floor((z0 + z1) / 2);
-      fighters.push({ type: 'golem', x: Math.max(P.x0 + 1, cxp - 2), y: G + 1, z: zm, name: 'Champion', bout: i });
-      fighters.push({ type: 'mob', kind: bout.challenger, x: Math.min(P.x1 - 1, cxp + 2), y: G + 1, z: zm, name: 'Challenger', bout: i });
+      fighters.push({ type: 'golem', x: x0, y: G + 1, z: zm, name: 'Champion', bout: i });
+      fighters.push({ type: 'mob', kind: bout.challenger, x: x1, y: G + 1, z: x1 === x0 ? Math.min(z1, zm + 1) : zm, name: 'Challenger', bout: i });
     });
     // the announcer, at the stair's foot on the street
     const [fx0, , fz0] = up[0];
@@ -236,7 +253,7 @@ export function stadium(world, lot, face, cfg, rng, G, signTags = null) {
     for (const s2 of [2, -2, 3, -3]) {
       const x = fx0 + Rx * s2, z = fz0 + Rz * s2;
       if (world.has(x, G + 1, z)) continue;
-      world.set(x, G + 1, z, signId(SIGN_FACING[face])); world.setData(x, G + 1, z, { id: 'Sign', tags: signTags('Tonight!\n' + BOUTS.map((b) => b.name).join('\n') + '\nNo one gets hurt') });
+      world.set(x, G + 1, z, signId(SIGN_FACING[face])); world.setData(x, G + 1, z, { id: 'Sign', tags: signTags('Tonight: Golems v\n' + BOUTS.map((b) => b.challenger[0].toUpperCase() + b.challenger.slice(1)).join(', ') + '\nNo one gets hurt') });
       announcer = [x, G + 1, z];
       break;
     }
@@ -247,7 +264,7 @@ export function stadium(world, lot, face, cfg, rng, G, signTags = null) {
     const kx = Math.floor((P.x0 + P.x1) / 2), kz = mz + 1;
     world.set(kx, G, kz, REPEAT);
     world.setData(kx, G, kz, commandBlock(`effect @e[tag=${FIGHTER_TAG}] resistance 6 4 true`, { mode: 'repeat', delay: 40 }));
-    bouts = { fighters, stair: up, announcer, wall: G + rows + lift, command: [kx, G, kz] };
+    bouts = { fighters, stair: up, announcer, wall: G + rows + lift, cage: G + CAGE + 1, command: [kx, G, kz] };
   }
   return { kind: 'stadium', lot, pitch: P, goals, lights, tunnel, steps, rec: null, topY: G + 9 + lift, bouts, fighters: bouts ? bouts.fighters : [] };
 }

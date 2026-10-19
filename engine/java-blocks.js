@@ -273,6 +273,25 @@ export function toJava(block, states = {}, extra = {}) {
   if (name === 'minecraft:purpur_block') delete props.axis;
   // a chorus plant's stem, joined up and down (the city's are straight stalks)
   if (name === 'minecraft:chorus_plant') { props.up = 'true'; props.down = 'true'; props.north = 'false'; props.south = 'false'; props.east = 'false'; props.west = 'false'; }
+  // (0.74.0) a wall: Bedrock's connection types and post bit are Java's sides and up
+  if (/_wall$/.test(name) && props.wall_post_bit !== undefined) {
+    const T = { none: 'none', short: 'low', tall: 'tall' };
+    for (const side of ['east', 'north', 'south', 'west']) { const k = 'wall_connection_type_' + side; props[side] = T[String(props[k])] || 'none'; delete props[k]; }
+    props.up = props.wall_post_bit === 'true' || props.wall_post_bit === '1' || props.wall_post_bit === 1 || props.wall_post_bit === true ? 'true' : 'false';
+    delete props.wall_post_bit; props.waterlogged = 'false';
+  }
+  // waxed copper's plain block: Java calls it waxed_copper_block (the aged ones keep their names)
+  if (name === 'minecraft:waxed_copper') name = 'minecraft:waxed_copper_block';
+  // a huge mushroom's block: Bedrock's one number for which faces show, Java a flag a face
+  // (14: the cap's outside all round; 15: a stem all round; 0: inside all round)
+  if (/^minecraft:(red_mushroom_block|brown_mushroom_block|mushroom_stem)$/.test(name) && props.huge_mushroom_bits !== undefined) {
+    const v = Number(props.huge_mushroom_bits); delete props.huge_mushroom_bits;
+    const all = v === 14 || v === 15 ? 'true' : 'false';
+    for (const f of ['up', 'down', 'north', 'south', 'east', 'west']) props[f] = all;
+    if (v === 10) { props.up = 'false'; props.down = 'false'; for (const f of ['north', 'south', 'east', 'west']) props[f] = 'true'; }
+  }
+  // an amethyst cluster (or bud): the face it grows from is Java's facing
+  if (/amethyst_(cluster|bud)$/.test(name) && props['minecraft:block_face'] !== undefined) { props.facing = String(props['minecraft:block_face']); delete props['minecraft:block_face']; props.waterlogged = 'false'; }
   // Java has no "double slab": it is a slab with type=double
   if (/^minecraft:double_/.test(name)) { name = name.replace('double_', ''); props.type = 'double'; }
   return { name, props };

@@ -35,7 +35,7 @@
 
 import { perimeter } from './blockcore.js';
 import { makeRng } from './rng.js';
-import { steampunkDress, santoriniDress, cyberDress, mesoDress, moorishDress, elvenDress, endDress, dwarvenDress, brutalDress } from './stylebits.js';
+import { steampunkDress, santoriniDress, cyberDress, mesoDress, moorishDress, elvenDress, endDress, dwarvenDress, brutalDress, DRESSES } from './stylebits.js';
 import { MAT, MATERIALS, B, doorId, stairId, DIR, WEIRDO, STAIR_SOLID, FLOWERS } from './materials.js';
 
 export const OUTWARD = { north: [0, -1], south: [0, 1], west: [-1, 0], east: [1, 0] };
@@ -364,7 +364,7 @@ export function makeBuilding(world, spec, rng) {
     for (const [cx, cz] of doorCells) world.set(cx, gy + 3, cz, MAT.GLOWSTONE);
   }
 
-  let houseInfo = null, arcadeInfo = null, eavesInfo = null, lancetInfo = null, decoInfo = null, chimneyAt = null, steamInfo = null, santoriniInfo = null, neonInfo = null, mesoInfo = null, moorishInfo = null, elvenInfo = null, endInfo = null, dwarvenInfo = null, brutalInfo = null;
+  let dressInfo = null, houseInfo = null, arcadeInfo = null, eavesInfo = null, lancetInfo = null, decoInfo = null, chimneyAt = null, steamInfo = null, santoriniInfo = null, neonInfo = null, mesoInfo = null, moorishInfo = null, elvenInfo = null, endInfo = null, dwarvenInfo = null, brutalInfo = null;
   if (spec.detail !== false) {
     const ctx = {
       rects: Array.from({ length: floors }, (_, k) => rect(k)), floorYs, roofY, top, theme, style, face, P,
@@ -393,6 +393,8 @@ export function makeBuilding(world, spec, rng) {
     if (spec.endcity) endInfo = endDress(world, ctx, own(0xe4d));
     if (spec.dwarven) dwarvenInfo = dwarvenDress(world, ctx, own(0xd3a));
     if (spec.brutal) brutalInfo = brutalDress(world, ctx, own(0xb72));
+    // (0.74.0: the twelve styles' dresses, by name)
+    if (spec.dress && DRESSES[spec.dress]) { ctx.flatRoof = !!spec.flatRoof; dressInfo = DRESSES[spec.dress](world, ctx, own(0xd2e55 ^ spec.dress.length * 977)); }
   }
 
   // ---- a bubble lift beside the stairs (a building of five floors and more) ---
@@ -418,6 +420,7 @@ export function makeBuilding(world, spec, rng) {
     lancets: lancetInfo,
     deco: decoInfo,
     steam: steamInfo, santorini: santoriniInfo, neon: neonInfo, meso: mesoInfo, moorish: moorishInfo, elven: elvenInfo, endcity: endInfo, dwarven: dwarvenInfo, brutal: brutalInfo, cantilever: insets[0] > 0 && floors > 1, pyramid: !!insetsX, flatRoof: !!spec.flatRoof,
+    dress: dressInfo ? { name: spec.dress, ...dressInfo } : null,
   };
 }
 

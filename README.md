@@ -1,4 +1,4 @@
-# Polis v0.72.2
+# Polis v0.74.0
 
 *Created with help from Claude AI.*
 
@@ -771,6 +771,54 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.74.0** — Twelve new city styles, each in the Mix styles list too. Each has
+its own palettes for houses, mid-rises and towers, its own streets, trees,
+lamps and landmarks, and a dress laid on every building (stylebits.js:
+DRESSES):
+
+- **Classical / Roman**: white quartz and polished diorite; quartz pillars up
+  every corner, a cornice round the roof, a pediment over the door, statues on
+  the roof's corners.
+- **Gothic**: deepslate and dark oak, pointed windows; buttresses up the walls
+  between the windows, pinnacles on the roofs, a spire on each tower, a rose
+  window of stained glass high in the front.
+- **Nordic / Viking**: spruce longhouses with turf (moss) roofs, carved posts up
+  the corners, a dragon's head on each end of the ridge; pine trees, gravel
+  streets, plank walks.
+- **Byzantine / Russian**: terracotta and brick in bands; onion domes (gold,
+  green copper, or striped) with gold tips, a big roof getting four small ones.
+- **Wild West**: false fronts standing over the roofs with sign boards across
+  them, porch roofs over plank boardwalks, dirt streets, dead bushes, acacias;
+  four floors at most.
+- **Victorian**: brick and painted terraces; bay windows on the fronts, iron
+  balconies on the sides, a slate mansard round the roofs, gas lamps.
+- **Googie / retro-future**: white and teal; flying saucers over the roofs,
+  orange boomerang fins, neon over the doors.
+- **Copper city**: copper walls, roofs and trim, aged by district (waxed, so it
+  stays): green in the old town at the middle, bright in the new districts at
+  the edge; lightning rods on the roofs.
+- **Mushroom / fungal**: buildings of mushroom stem under great red and brown
+  caps, mycelium for grass, the trees giant mushrooms, shroomlights.
+- **Ice palace**: packed and blue ice and snow; ice pinnacles and spires, snow on
+  the ground, the canal frozen over (open water left by the boats).
+- **Crystal / amethyst**: amethyst and calcite; clusters of crystal bursting out
+  of the roofs, pearlescent lamps.
+- **Overgrown ruins**: stone cracked and mossy, vines down every wall, parapets
+  broken, jagged stumps on the towers, trees growing on the roofs.
+
+The Java export now maps walls, waxed copper, huge mushroom blocks and amethyst
+clusters. New check 2zzzb.
+
+**0.73.0** — The stadium's bouts: caged in glass, and four of them. An iron
+golem's swing flings its foe high, and challengers were thrown over the pitch's
+four-high wall into the stands. The pitch is now walled in glass up its edge
+from the grass to a glass roof eight blocks over it (the fans still see in).
+Two more bouts, one to each quarter of the pitch: golems against a ravager and
+a zoglin, with the vindicator and the husk; the announcer's sign names all four.
+Lighting no longer sets a light in place of a command block (under a glass roof
+the pitch wanted more light, and one took the place of the fighters' Resistance
+block on a hilly city).
 
 **0.72.2** — Each part of a big city's populate (and metro_rails, jail, zoo...)
 now says "Polis: part n of N done." when its work is in, before the next part
