@@ -173,4 +173,12 @@ export function joinOffset(joinTo, road, centre) {
   const [ex, ey, ez] = joinTo.end;                     // the bridge's end, from the other city's spot
   return [ex - (road.start.x - cx), ey - road.start.y, ez - (road.start.z - cz)];
 }
+// The ground a city covers, from its build spot (x east, z south): its own square and the
+// grounds of its own beside it (the airport, the theme park); not its bridges (each known by
+// its end). What a link between two bridges keeps off (link.js).
+export function cityFootprint(world, plan) {
+  const c = world.centre || [Math.floor(plan.W / 2), Math.floor(plan.D / 2)];
+  const rel = (r) => [r.x0 - c[0], r.z0 - c[1], r.x1 - c[0], r.z1 - c[1]];
+  return [rel({ x0: 0, z0: 0, x1: plan.W - 1, z1: plan.D - 1 }), ...(world.extraInside || []).map(rel)];
+}
 void MATERIALS; void stairId; void WEIRDO; void OUT;

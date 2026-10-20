@@ -8,6 +8,7 @@ import { buildMesh } from './engine/mesher.js';
 import { VoxelWorld } from './engine/blockcore.js';
 import { Renderer } from './engine/renderer.js';
 import { exportPack, exportStructuresZip, tileList, commandList, cityId, exportSalt, POLIS_VERSION, placeOffsets, GROUND_DROP, layoutTag } from './engine/export.js';
+import { planLink, linkPack, DIRV } from './engine/link.js';
 import { readWorld, readLevelDat, siteGround, findSites, SEA_LEVEL, worldReport } from './engine/worldfile.js';
 import { javaTiles, javaPackFiles } from './engine/export-java.js';
 import { readJavaWorld, readJavaLevelDat, worldKind } from './engine/javaworld.js';
@@ -17,7 +18,7 @@ import { buildPregenPack, pregenFileName, siteRegion, viewRegion, pregenCommand,
 import { decodeNbt } from './tools/nbt-read.js';
 import { THEMES, MAT } from './engine/materials.js';
 
-const VERSION = '0.75.0';
+const VERSION = '0.75.1';
 const $ = (id) => document.getElementById(id);
 const numVal = (id) => Number($(id).value);      // readCfg has its own local num()
 
@@ -153,7 +154,10 @@ function boot() {
   document.addEventListener('change', later);
   document.addEventListener('input', later);
   fillJoinTo();
+  for (const id of ['linkA', 'linkB', 'linkSpotA', 'linkSpotB']) if ($(id)) { $(id).addEventListener('change', refreshLink); $(id).addEventListener('input', refreshLink); }
+  if ($('linkGo')) $('linkGo').addEventListener('click', exportLink);
   restoreRemembered();
+  refreshLink();
   document.body.className = 'mode-' + $('mode').value;
   requestAnimationFrame(loop);
   generate();
@@ -267,8 +271,117 @@ function fillJoinTo() {
   // (a page without real options, the checks' own: the value kept as it was)
   const opts = sel.options ? Array.from(sel.options) : [];
   if (opts.some((o) => o.value === keep)) sel.value = keep;
+  for (const id of ['linkA', 'linkB']) {
+    const ls = $(id); if (!ls) continue;
+    const k2 = ls.value;
+    ls.innerHTML = '<option value="">a bridge</option>' + joinEnds().filter((j) => !j.takenBy).map((j) =>
+      `<option value="${j.id}">${(j.name || j.ns).replace(/[<&>"]/g, '')}: its ${j.side} bridge</option>`).join('');
+    const o2 = ls.options ? Array.from(ls.options) : [];
+    if (o2.some((o) => o.value === k2)) ls.value = k2;
+  }
+}
+
+// ---- a link between two free bridges (link.js) ----------------------------------------------
+const spotOf = (id) => { const m = String($(id).value || '').trim().split(/[\s,]+/).map(Number); return m.length === 3 && m.every(Number.isFinite) ? m : null; };
+function linkPlan() {
+  const ends = joinEnds(), A = ends.find((j) => j.id === $('linkA').value), B = ends.find((j) => j.id === $('linkB').value);
+  if (!A || !B) return { why: 'Pick two free bridges.' };
+  if (A.id === B.id) return { why: 'Pick two different bridges.' };
+  // where B's city stands from A's: through the joins between them if both are in one chain,
+  // else from the two spots typed in
+  const pa = placeOf(A.ctag), pb = placeOf(B.ctag);
+  let off = null, how = '';
+  if (A.ctag === B.ctag) { off = [0, 0, 0]; how = 'the same city'; }
+  else if (pa && pb && pa.root === pb.root && (knownCities().some((q) => q.ctag === A.ctag) && knownCities().some((q) => q.ctag === B.ctag))) { off = [pb.pos[0] - pa.pos[0], pb.pos[1] - pa.pos[1], pb.pos[2] - pa.pos[2]]; how = 'placed through their joins'; }
+  else { const sa = spotOf('linkSpotA'), sb = spotOf('linkSpotB'); if (sa && sb) { off = [sb[0] - sa[0], sb[1] - sa[1], sb[2] - sa[2]]; how = 'placed by the spots typed in'; } }
+  if (!off) return { why: 'These two cities are not joined through others exported here: type both cities\' build spots (x y z).' };
+  const a = { x: A.end[0], y: A.end[1], z: A.end[2], dir: A.side };
+  const b = { x: off[0] + B.end[0], y: off[1] + B.end[1], z: off[2] + B.end[2], dir: B.side };
+  // what to keep off: every city and bridge whose place from A's city is known
+  const rects = [], cities = knownCities(), placed = [];
+  const at = (ctag) => {
+    if (ctag === A.ctag) return [0, 0, 0];
+    if (ctag === B.ctag) return off;
+    const p = placeOf(ctag);
+    return p && pa && p.root === pa.root ? [p.pos[0] - pa.pos[0], p.pos[1] - pa.pos[1], p.pos[2] - pa.pos[2]] : null;
+  };
+  for (const c of cities) { const o = at(c.ctag); if (!o || !c.rects) continue; for (const q of c.rects) rects.push({ x0: o[0] + q[0], z0: o[2] + q[1], x1: o[0] + q[2], z1: o[2] + q[3], pad: 2, city: c.name }); placed.push(c.ctag); }
+  for (const j of ends) {
+    const o = at(j.ctag); if (!o) continue;
+    const d = DIRV[j.side], Lb = (j.gap || 64) + 5, ex = o[0] + j.end[0], ez = o[2] + j.end[2];
+    const p1 = [ex - d[0], ez - d[1]], p2 = [ex - d[0] * Lb, ez - d[1] * Lb];
+    rects.push({ x0: Math.min(p1[0], p2[0]) - (d[0] ? 0 : 3), x1: Math.max(p1[0], p2[0]) + (d[0] ? 0 : 3), z0: Math.min(p1[1], p2[1]) - (d[1] ? 0 : 3), z1: Math.max(p1[1], p2[1]) + (d[1] ? 0 : 3), pad: 0, bridge: true });
+  }
+  const unknown = [A, B].filter((j) => !placed.includes(j.ctag)).map((j) => j.name);
+  const plan = planLink(a, b, rects);
+  return { A, B, a, b, off, how, rects, plan, unknown };
+}
+function drawLink(L) {
+  const cv = $('linkMap'); if (!cv || !cv.getContext) return;
+  const g = cv.getContext('2d'); if (!g) return;
+  g.clearRect(0, 0, cv.width, cv.height);
+  if (!L || !L.a) return;
+  const pts = [[L.a.x, L.a.z], [L.b.x, L.b.z], ...(L.plan && L.plan.path ? L.plan.path.map((p) => [p[0], p[1]]) : [])];
+  for (const r of L.rects) pts.push([r.x0, r.z0], [r.x1, r.z1]);
+  const xs = pts.map((p) => p[0]), zs = pts.map((p) => p[1]);
+  const x0 = Math.min(...xs) - 4, x1 = Math.max(...xs) + 4, z0 = Math.min(...zs) - 4, z1 = Math.max(...zs) + 4;
+  const k = Math.min(cv.width / (x1 - x0), cv.height / (z1 - z0));
+  const X = (x) => (x - x0) * k, Z = (z) => (z - z0) * k;
+  for (const r of L.rects) { g.fillStyle = r.bridge ? '#6b6f78' : '#3a4150'; g.fillRect(X(r.x0), Z(r.z0), Math.max(1, (r.x1 - r.x0 + 1) * k), Math.max(1, (r.z1 - r.z0 + 1) * k)); }
+  if (L.plan && L.plan.path) { g.strokeStyle = '#e5533d'; g.lineWidth = Math.max(2, 5 * k); g.beginPath(); L.plan.path.forEach(([x, z], i) => (i ? g.lineTo(X(x + 0.5), Z(z + 0.5)) : g.moveTo(X(x + 0.5), Z(z + 0.5)))); g.stroke(); }
+  g.fillStyle = '#ffd34d'; g.font = '11px sans-serif';
+  for (const [p, t] of [[L.a, 'A'], [L.b, 'B']]) { g.beginPath(); g.arc(X(p.x + 0.5), Z(p.z + 0.5), 4, 0, 7); g.fill(); const ty = Z(p.z) < 14 ? Z(p.z) + 16 : Z(p.z) - 4; g.fillText(t, Math.min(cv.width - 10, X(p.x) + 6), ty); }
+  g.fillStyle = '#8b93a1'; g.fillText('N ↑', cv.width - 26, 12);
+}
+function refreshLink() {
+  const n = $('linkNote'), go = $('linkGo'); if (!n || !go) return null;
+  const L = linkPlan();
+  drawLink(L);
+  if (L.why) { n.textContent = L.why; go.disabled = true; return null; }
+  if (L.plan.missing) { n.textContent = `${L.how}: ${L.plan.missing}.`; go.disabled = true; return null; }
+  n.textContent = `${L.how}: ${L.plan.length} blocks of deck, ${L.plan.turns} turn${L.plan.turns === 1 ? '' : 's'}, ${Math.abs(L.plan.rise)} ${L.plan.rise >= 0 ? 'up' : 'down'}.` +
+    (L.unknown.length ? ` (${L.unknown.join(' and ')} exported before Polis 0.75.1: the link does not know ${L.unknown.length > 1 ? 'their' : 'its'} ground; check the map.)` : '');
+  go.disabled = false;
+  return L;
+}
+async function exportLink() {
+  const L = refreshLink(); if (!L) return;
+  busy(true);
+  try {
+    const ns = ('link_' + (L.A.ns || 'a').slice(0, 14) + '_' + (L.B.ns || 'b').slice(0, 14)).replace(/[^a-z0-9_]/g, '_');
+    const out = await linkPack(L.plan, { ns, ctag: L.A.ctag, drop: GROUND_DROP, spot: spotOf('linkSpotA'), nameA: L.A.name || L.A.ns, nameB: L.B.name || L.B.ns });
+    const name = `${ns}_v${VERSION}.mcpack`;
+    download(out.data, name);
+    const list = joinEnds();
+    for (const j of list) if (j.id === L.A.id || j.id === L.B.id) j.takenBy = 'a link';
+    saveJoinEnds(list); fillJoinTo(); refreshLink();
+    toast(`${name} — in game: from ${L.A.name || L.A.ns}'s build spot, /function ${ns}/build`);
+  } catch (e) { console.error(e); toast('Link export failed: ' + e.message, true); } finally { busy(false); }
+}
+// the cities exported here: where each stands from the one it joined (so a chain of them is
+// placed one from another), and the ground it covers from its own build spot
+const CITIES_KEY = 'polis.cities';
+function knownCities() { try { return JSON.parse(localStorage.getItem(CITIES_KEY) || '[]'); } catch (e) { return []; } }
+function rememberCity(w, ns, name) {
+  const tag = layoutTag(w), b = w.box, c = w.centre || [Math.floor((b.x0 + b.x1 + 1) / 2), Math.floor((b.z0 + b.z1 + 1) / 2)];
+  const list = knownCities().filter((q) => q.ctag !== tag);
+  list.push({ ns, name: name || ns, ctag: tag, rects: w.footprint || [[b.x0 - c[0], b.z0 - c[1], b.x1 - c[0], b.z1 - c[1]]], parent: w.joinFrom ? { ctag: w.joinFrom.ctag, offset: w.joinFrom.offset } : null, version: VERSION });
+  try { localStorage.setItem(CITIES_KEY, JSON.stringify(list.slice(-80))); } catch (e) { /* storage off */ }
+}
+// where a city stands from the first of its chain: [x, y, z] and that first city's tag
+function placeOf(ctag) {
+  const cities = knownCities();
+  let pos = [0, 0, 0], cur = ctag;
+  for (let guard = 0; guard < 80; guard++) {
+    const c = cities.find((q) => q.ctag === cur);
+    if (!c || !c.parent) return { root: cur, pos };
+    pos = [pos[0] + c.parent.offset[0], pos[1] + c.parent.offset[1], pos[2] + c.parent.offset[2]];
+    cur = c.parent.ctag;
+  }
+  return null;
 }
 function rememberJoins(w, ns, name) {
+  rememberCity(w, ns, name);
   let list = joinEnds();
   const tag = layoutTag(w);
   if (w.joins && w.joins.length) {

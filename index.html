@@ -153,12 +153,12 @@
   }
 </style>
 </head>
-<body class="mode-city" data-version="0.75.0">
+<body class="mode-city" data-version="0.75.1">
 <div id="app">
   <div id="panel">
     <div id="panelScroll">
       <h1>PO<span>L</span>IS</h1>
-      <div class="sub">procedural city → Minecraft Bedrock · v0.75.0</div>
+      <div class="sub">procedural city → Minecraft Bedrock · v0.75.1</div>
 
       <fieldset>
         <legend>Mode</legend>
@@ -425,6 +425,18 @@
         <div class="hint" id="joinNote"></div>
       </fieldset>
 
+      <fieldset class="city-only" id="linkBox">
+        <legend>Link two bridges</legend>
+        <div class="hint">Two free bridges of cities you have exported, ending near each other: a link joins their landings, turning and rising as it must, kept off the cities and bridges it knows. When the two cities are joined through others it knows where they stand; otherwise type each city's build spot (stand on its armor stand marker, F3: the block you stand in).</div>
+        <div class="row"><label>From</label><select id="linkA"><option value="">a bridge</option></select></div>
+        <div class="row"><label>Its city's spot</label><input type="text" id="linkSpotA" placeholder="x y z (if not known)" style="width:150px"></div>
+        <div class="row"><label>To</label><select id="linkB"><option value="">a bridge</option></select></div>
+        <div class="row"><label>Its city's spot</label><input type="text" id="linkSpotB" placeholder="x y z (if not known)" style="width:150px"></div>
+        <canvas id="linkMap" width="270" height="190" style="width:100%;background:#0d1117;border:1px solid #2a2f38;border-radius:4px;margin-top:4px"></canvas>
+        <div class="hint" id="linkNote"></div>
+        <button id="linkGo" disabled>Export the link (.mcpack)</button>
+      </fieldset>
+
       <fieldset>
         <legend>View</legend>
         <div class="row"><label>Cutaway</label><input type="range" id="clip" min="0" max="100" step="1" value="100"><span class="val" id="clip_v"></span></div>
@@ -497,6 +509,6 @@
     <div id="busy">generating…</div>
   </div>
 </div>
-<script type="module" src="./main.js?v=0.75.0"></script>
+<script type="module" src="./main.js?v=0.75.1"></script>
 </body>
 </html>

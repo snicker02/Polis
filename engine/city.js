@@ -19,7 +19,7 @@ import { buildDome } from './dome.js';
 import { buildSeaCity } from './sea.js';
 import { floodSunken } from './flood.js';
 import { buildAqueduct, buildLongships } from './signature.js';
-import { buildJoinBridge, joinRoad, joinOffset, JOIN_SIDES } from './joins.js';
+import { buildJoinBridge, joinRoad, joinOffset, JOIN_SIDES, cityFootprint } from './joins.js';
 import { lightUp, TARGET, TARGET_OUT } from './lighting.js';
 import { verifyBuilding } from './verify.js';
 import { planStyleDistricts } from './districts.js';
@@ -972,6 +972,8 @@ export function generateCity(cfgIn, onProgress) {
   }
   const [jcx, jcz] = world.centre || [0, 0];
   world.joins = joins.map((b) => ({ side: b.side, kind: b.kind, gap: b.gap, end: [b.end.x - jcx, b.end.y, b.end.z - jcz] }));
+  // (the ground it covers, for a link between two bridges to keep off: link.js)
+  world.footprint = cityFootprint(world, plan);
   world.joinFrom = joinFrom ? { ctag: joinFrom.ctag, name: joinFrom.name, ns: joinFrom.ns, side: joinFrom.side, offset: joinFrom.offset } : null;
   // ---- a Classical city's aqueducts, along its canals, high over the water (signature.js) ----
   const aqueducts = STYLE.aqueduct && !floating && !cfg.terrain ? canals.map((cn) => buildAqueduct(world, plan, cn, GROUND)).filter(Boolean) : [];

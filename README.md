@@ -1,4 +1,4 @@
-# Polis v0.75.0
+# Polis v0.75.1
 
 *Created with help from Claude AI.*
 
@@ -771,6 +771,21 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.75.1** — Link two bridges (link.js). Joined cities make a tree: two free
+bridges ending near each other never met (a report of four cities joined, the
+fourth's bridge out beside another's). A new panel, Link two bridges, joins any
+two free bridges' landings: a deck five wide on piers, straight out of each
+landing, turning as little as it can, rising or falling a block at a time (one
+in three at most), kept off the cities' ground (their squares, airports and
+theme parks) and every bridge it knows. Cities joined through others exported
+in the same browser are placed through their joins; otherwise type each city's
+build spot (stand on its marker, F3). A map in the panel shows the cities, the
+bridges and the way the link takes before you export it. Its pack loads from
+the first city's marker (/function <link>/build), or at given coordinates
+(build_at). Cities now record the ground they cover when exported (for a city
+exported by 0.75.0, check the map: the link knows only its bridges). New check
+2zzzd.
 
 **0.75.0** — Cities joined by bridges (joins.js), as many as you like.
 
