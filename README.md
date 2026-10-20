@@ -1,4 +1,4 @@
-# Polis v0.75.1
+# Polis v0.75.2
 
 *Created with help from Claude AI.*
 
@@ -771,6 +771,14 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.75.2** — Sets of joined cities. The bridges and cities remembered for Join to
+and Link are kept in sets, each a group of cities built together in one place:
+pick the set, start a new one (named, or Set 2, Set 3...), clear the current
+one, or forget a single bridge. A city exported goes into the current set, so an
+old city reused in a new place is exported again into the new set. What earlier
+versions remembered becomes the "First set". (The sets live in the browser:
+they are not part of a city's saved settings.)
 
 **0.75.1** — Link two bridges (link.js). Joined cities make a tree: two free
 bridges ending near each other never met (a report of four cities joined, the

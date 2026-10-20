@@ -18,7 +18,7 @@ import { buildPregenPack, pregenFileName, siteRegion, viewRegion, pregenCommand,
 import { decodeNbt } from './tools/nbt-read.js';
 import { THEMES, MAT } from './engine/materials.js';
 
-const VERSION = '0.75.1';
+const VERSION = '0.75.2';
 const $ = (id) => document.getElementById(id);
 const numVal = (id) => Number($(id).value);      // readCfg has its own local num()
 
@@ -153,7 +153,12 @@ function boot() {
   const later = () => { clearTimeout(rememberTimer); rememberTimer = setTimeout(rememberSettings, 300); };
   document.addEventListener('change', later);
   document.addEventListener('input', later);
+  fillJoinSets();
   fillJoinTo();
+  if ($('joinSet')) $('joinSet').addEventListener('change', switchJoinSet);
+  if ($('joinSetNew')) $('joinSetNew').addEventListener('click', newJoinSet);
+  if ($('joinSetClear')) $('joinSetClear').addEventListener('click', clearJoinSet);
+  if ($('joinForget')) $('joinForget').addEventListener('click', forgetBridge);
   for (const id of ['linkA', 'linkB', 'linkSpotA', 'linkSpotB']) if ($(id)) { $(id).addEventListener('change', refreshLink); $(id).addEventListener('input', refreshLink); }
   if ($('linkGo')) $('linkGo').addEventListener('click', exportLink);
   restoreRemembered();
@@ -260,9 +265,58 @@ function readCfg() {
 // city's build spot, the city's marker tag, its name); Join to lists them. A city exported
 // joined to one marks it taken (it can still be picked again: a second city at the same
 // bridge would stand where the first does).
-const JOINS_KEY = 'polis.joins';
-function joinEnds() { try { return JSON.parse(localStorage.getItem(JOINS_KEY) || '[]'); } catch (e) { return []; } }
-function saveJoinEnds(list) { try { localStorage.setItem(JOINS_KEY, JSON.stringify(list.slice(-60))); } catch (e) { /* storage off: nothing remembered */ } }
+// (0.75.2) Kept in sets, one a group of cities built together somewhere: Join to and Link
+// list only the current set's. A new set starts empty; a set can be cleared, a bridge
+// forgotten. What 0.75.0 and 0.75.1 remembered becomes the first set.
+const SETS_KEY = 'polis.joinSets', JOINS_KEY = 'polis.joins', CITIES_KEY = 'polis.cities';
+function joinSets() {
+  let d = null;
+  try { d = JSON.parse(localStorage.getItem(SETS_KEY) || 'null'); } catch (e) { d = null; }
+  if (!d || typeof d !== 'object' || !d.sets) {
+    let joins = [], cities = [];
+    try { joins = JSON.parse(localStorage.getItem(JOINS_KEY) || '[]'); cities = JSON.parse(localStorage.getItem(CITIES_KEY) || '[]'); } catch (e) { /* none */ }
+    d = { current: 'First set', sets: { 'First set': { joins, cities } } };
+  }
+  if (!d.sets[d.current]) d.current = Object.keys(d.sets)[0] || 'First set';
+  if (!d.sets[d.current]) d.sets[d.current] = { joins: [], cities: [] };
+  return d;
+}
+function saveJoinSets(d) { try { localStorage.setItem(SETS_KEY, JSON.stringify(d)); localStorage.removeItem(JOINS_KEY); localStorage.removeItem(CITIES_KEY); } catch (e) { /* storage off: nothing remembered */ } }
+function joinEnds() { return joinSets().sets[joinSets().current].joins || []; }
+function saveJoinEnds(list) { const d = joinSets(); d.sets[d.current].joins = list.slice(-60); saveJoinSets(d); }
+function fillJoinSets() {
+  const sel = $('joinSet'); if (!sel) return;
+  const d = joinSets();
+  sel.innerHTML = Object.keys(d.sets).map((n) => `<option value="${n.replace(/[<&>"]/g, '')}">${n.replace(/[<&>"]/g, '')} (${(d.sets[n].joins || []).length} bridge${(d.sets[n].joins || []).length === 1 ? '' : 's'})</option>`).join('');
+  sel.value = d.current;
+}
+function switchJoinSet() { const d = joinSets(), v = $('joinSet').value; if (d.sets[v]) { d.current = v; saveJoinSets(d); } fillJoinSets(); fillJoinTo(); refreshLink(); }
+function newJoinSet() {
+  const d = joinSets();
+  let name = String(($('joinSetName') && $('joinSetName').value) || '').trim().replace(/[<&>"]/g, '').slice(0, 40);
+  if (!name) { let k = Object.keys(d.sets).length + 1; while (d.sets['Set ' + k]) k++; name = 'Set ' + k; }
+  if (!d.sets[name]) d.sets[name] = { joins: [], cities: [] };
+  d.current = name; saveJoinSets(d);
+  if ($('joinSetName')) $('joinSetName').value = '';
+  fillJoinSets(); fillJoinTo(); refreshLink();
+  toast(`New set: ${name}. Cities you export now are joined within it.`);
+}
+function clearJoinSet() {
+  const d = joinSets(), n = d.current;
+  if (typeof confirm === 'function' && !confirm(`Forget every city and bridge in "${n}"? (Your packs and your world are not touched.)`)) return;
+  delete d.sets[n];
+  if (!Object.keys(d.sets).length) d.sets[n] = { joins: [], cities: [] };
+  d.current = d.sets[n] ? n : Object.keys(d.sets)[0];
+  saveJoinSets(d); fillJoinSets(); fillJoinTo(); refreshLink();
+  toast(`"${n}" cleared.`);
+}
+function forgetBridge() {
+  const id = $('joinTo').value || $('linkA').value;
+  if (!id) { toast('Pick a bridge under Join to (or From) to forget it.', true); return; }
+  saveJoinEnds(joinEnds().filter((j) => j.id !== id));
+  fillJoinSets(); fillJoinTo(); refreshLink();
+  toast('Bridge forgotten.');
+}
 function fillJoinTo() {
   const sel = $('joinTo'); if (!sel) return;
   const keep = sel.value;
@@ -360,13 +414,12 @@ async function exportLink() {
 }
 // the cities exported here: where each stands from the one it joined (so a chain of them is
 // placed one from another), and the ground it covers from its own build spot
-const CITIES_KEY = 'polis.cities';
-function knownCities() { try { return JSON.parse(localStorage.getItem(CITIES_KEY) || '[]'); } catch (e) { return []; } }
+function knownCities() { return joinSets().sets[joinSets().current].cities || []; }
 function rememberCity(w, ns, name) {
   const tag = layoutTag(w), b = w.box, c = w.centre || [Math.floor((b.x0 + b.x1 + 1) / 2), Math.floor((b.z0 + b.z1 + 1) / 2)];
   const list = knownCities().filter((q) => q.ctag !== tag);
   list.push({ ns, name: name || ns, ctag: tag, rects: w.footprint || [[b.x0 - c[0], b.z0 - c[1], b.x1 - c[0], b.z1 - c[1]]], parent: w.joinFrom ? { ctag: w.joinFrom.ctag, offset: w.joinFrom.offset } : null, version: VERSION });
-  try { localStorage.setItem(CITIES_KEY, JSON.stringify(list.slice(-80))); } catch (e) { /* storage off */ }
+  const d = joinSets(); d.sets[d.current].cities = list.slice(-80); saveJoinSets(d);
 }
 // where a city stands from the first of its chain: [x, y, z] and that first city's tag
 function placeOf(ctag) {
@@ -390,6 +443,7 @@ function rememberJoins(w, ns, name) {
   }
   if (w.joinFrom) { const used = list.find((j) => j.ctag === w.joinFrom.ctag && j.side === ({ north: 'south', south: 'north', east: 'west', west: 'east' })[w.joinFrom.side]); if (used) used.takenBy = name || ns; }
   saveJoinEnds(list);
+  fillJoinSets();
   fillJoinTo();
 }
 function joinNote(res) {

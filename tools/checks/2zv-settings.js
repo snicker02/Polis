@@ -52,6 +52,7 @@ export default async function run(ctx) {
   for (const ca of a) {
     if (!ca.id && !/mixStyle/.test(ca.className)) continue;
     if (ca.type === 'file') continue;
+    if (ca.id === 'joinSet' || ca.id === 'joinSetName') continue;     // (the joined cities' sets: the browser's, not a city's settings)
     const cb = b.find((x) => (ca.id ? x.id === ca.id : x.className === ca.className && x.value === ca.value));
     if (!cb) { differ++; continue; }
     if (ca.type === 'checkbox' ? ca.checked !== cb.checked : ca.value !== cb.value) differ++;
@@ -60,7 +61,7 @@ export default async function run(ctx) {
   check('settings: the downtown\'s place saved and put back', res.focal && res.focal[0] === 0.31 && res.focal[1] === 0.72);
   const iStyle = order.indexOf('style'), iTheme = order.indexOf('theme');
   check('settings: the building style goes back before the theme (it refills the theme list)', iStyle >= 0 && iTheme > iStyle && order.slice(0, FIRST.length).every((id) => FIRST.includes(id)));
-  check('settings: the world file is never saved', !('worldFile' in saved.settings) && !('settingsFile' in saved.settings));
+  check('settings: the world file is never saved (nor the joined cities\' sets)', !('worldFile' in saved.settings) && !('settingsFile' in saved.settings) && !('joinSet' in saved.settings) && !('joinSetName' in saved.settings));
   // settings from an older Polis, naming a control this one has not got
   const old = { ...saved, version: '0.1.0', settings: { ...saved.settings, aControlLongGone: '5' } };
   delete old.settings.seed;

@@ -18,7 +18,7 @@
 // page's input and select elements are, so they can be checked without a page.
 
 export const SETTINGS_FORMAT = 1;
-const SKIP_IDS = new Set(['worldFile', 'settingsFile']);
+const SKIP_IDS = new Set(['worldFile', 'settingsFile', 'joinSet', 'joinSetName']);   // (the joined cities' sets live in the browser, not in a city's settings)
 const SKIP_TYPES = new Set(['file', 'button', 'submit', 'reset', 'hidden']);
 // changed first, in this order: each redraws others when it changes
 export const FIRST = ['mode', 'style', 'edition', 'cityStyle'];

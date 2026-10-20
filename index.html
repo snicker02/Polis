@@ -153,12 +153,12 @@
   }
 </style>
 </head>
-<body class="mode-city" data-version="0.75.1">
+<body class="mode-city" data-version="0.75.2">
 <div id="app">
   <div id="panel">
     <div id="panelScroll">
       <h1>PO<span>L</span>IS</h1>
-      <div class="sub">procedural city → Minecraft Bedrock · v0.75.1</div>
+      <div class="sub">procedural city → Minecraft Bedrock · v0.75.2</div>
 
       <fieldset>
         <legend>Mode</legend>
@@ -421,7 +421,11 @@
           <option value="suspension">Suspension (towers and cables)</option>
         </select></div>
         <div class="row"><label>Bridge length</label><input type="range" id="joinGap" min="24" max="192" step="8" value="64"><span class="val" id="joinGap_v"></span></div>
+        <div class="row"><label>Set</label><select id="joinSet"></select></div>
+        <div class="row"><label>New set</label><input type="text" id="joinSetName" placeholder="a name (optional)" style="width:110px"><button id="joinSetNew" type="button">Start</button></div>
+        <div class="hint">A set is a group of cities built together in one place. Join to and Link list only the current set's bridges; a city you export goes into the current set (an old city reused in a new place: export it again into the new set).</div>
         <div class="row"><label>Join to</label><select id="joinTo"><option value="">no other city</option></select></div>
+        <div class="btnrow"><button id="joinForget" type="button">Forget the picked bridge</button><button id="joinSetClear" type="button">Clear this set</button></div>
         <div class="hint" id="joinNote"></div>
       </fieldset>
 
@@ -509,6 +513,6 @@
     <div id="busy">generating…</div>
   </div>
 </div>
-<script type="module" src="./main.js?v=0.75.1"></script>
+<script type="module" src="./main.js?v=0.75.2"></script>
 </body>
 </html>
