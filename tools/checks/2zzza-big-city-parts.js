@@ -184,12 +184,30 @@ export default async function run(ctx) {
   {
     const s = simulate(P, ns, ['build_centered', 'populate_centered']);
     const N = P.fns.filter((f) => /\/populate_centered_part\d+$/.test(f.fn)).length;
-    const dones = s.said.map((l) => (l.match(/^say Polis: part (\d+) of (\d+) done\.$/) || [])[1]).filter(Boolean).map(Number);
-    const order = s.said.filter((l) => /^say Polis: part \d+ of \d+(\.\.\.| done\.)$/.test(l));
+    const W8 = '\\((the middle|north|north-east|east|south-east|south|south-west|west|north-west)\\)';
+    const dones = s.said.map((l) => (l.match(new RegExp(`^say Polis: part (\\d+) of (\\d+) ${W8} done\\.$`)) || [])[1]).filter(Boolean).map(Number);
+    const order = s.said.filter((l) => new RegExp(`^say Polis: part \\d+ of \\d+ ${W8}(\\.\\.\\.| done\\.)$`).test(l));
     const paired = order.every((l, i) => (i % 2 === 0 ? l.endsWith('...') : l.endsWith(' done.')) && l.match(/part (\d+)/)[1] === order[i - (i % 2)].match(/part (\d+)/)[1]);
     check('big city: each part says "part n of N done." when its work is in, before the next part starts', N > 1 && dones.length === N && dones.every((d, i) => d === i + 1) && paired, `${dones.length} of ${N}`);
   }
   check('big city: the guide says it is filled in parts, and how to go on from one', /FILLED IN PARTS/.test(P.guide) && P.guide.includes(`/function ${ns}/populate_centered_part<n>`));
+  // (0.74.2) each part named by where it lies from the build spot, in chat and in a table in
+  // the guide: the part that takes in the spot "the middle", the rest a point of the compass
+  // that matches where its squares are (north is -Z)
+  {
+    const { stagePlan } = ex;
+    const SP = stagePlan(r.world, ns);
+    const rows = P.guide.split('\n').filter((l) => /^    part \d+ /.test(l));
+    const named = SP.where.every((w, k) => {
+      const ex2 = (w.box.x0 + w.box.x1) / 2, ez2 = (w.box.z0 + w.box.z1) / 2;
+      const midIn = w.box.x0 <= 0 && w.box.x1 >= 0 && w.box.z0 <= 0 && w.box.z1 >= 0;
+      const okDir = midIn ? w.name === 'the middle' : (!/north/.test(w.name) || ez2 < 0) && (!/south/.test(w.name) || ez2 > 0) && (!/east/.test(w.name) || ex2 > 0) && (!/west/.test(w.name) || ex2 < 0);
+      return okDir && rows[k] && rows[k].includes(w.name) && rows[k].includes(`part ${k + 1}`);
+    });
+    const say1 = fn('populate_centered_part1_next').text.includes(`part 1 of ${SP.stages.length} (${SP.where[0].name})`);
+    check('big city: every part named by where it lies from the build spot (the middle, or a point of the compass), in chat and in the guide\'s table, numbered alike',
+      named && rows.length === SP.stages.length && say1 && SP.where[0].name === 'the middle', `${rows.length} rows; ${SP.where.map((w) => w.name).join(', ')}`);
+  }
   const parts = P.fns.filter((f) => /\/populate_centered_part\d+$/.test(f.fn)).length;
 
   // ---- a small city: as it was

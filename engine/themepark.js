@@ -145,7 +145,7 @@ export function buildThemePark(world, plan, cfg, ctx) {
   const U0 = -L / 2, U1 = L / 2 - 1;
   // away from the airport where there is one: its opposite side first, then either of the others
   const avoid = ctx.avoid || [];
-  const sides = ctx.awayFrom ? [OPPOSITE[ctx.awayFrom], ...['north', 'south', 'west', 'east'].filter((s) => s !== ctx.awayFrom && s !== OPPOSITE[ctx.awayFrom])] : undefined;
+  const sides = ctx.sides || (ctx.awayFrom ? [OPPOSITE[ctx.awayFrom], ...['north', 'south', 'west', 'east'].filter((s) => s !== ctx.awayFrom && s !== OPPOSITE[ctx.awayFrom])] : undefined);
   const route = edgeRoute(plan, world, ctx.GROUND, ctx.elevAt, { sides, avoid, footprint: [U0, U1, VD] });
   if (!route) return { missing: 'no street leads straight out of the city across open ground for the theme park\'s road' + (ctx.awayFrom ? ' (on a side the airport does not take)' : '') };
   const acc = accessRoad(world, plan, route, ctx, 'Theme Park', MAT.C_GRAY);

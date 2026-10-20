@@ -153,12 +153,12 @@
   }
 </style>
 </head>
-<body class="mode-city" data-version="0.74.0">
+<body class="mode-city" data-version="0.75.0">
 <div id="app">
   <div id="panel">
     <div id="panelScroll">
       <h1>PO<span>L</span>IS</h1>
-      <div class="sub">procedural city → Minecraft Bedrock · v0.74.0</div>
+      <div class="sub">procedural city → Minecraft Bedrock · v0.75.0</div>
 
       <fieldset>
         <legend>Mode</legend>
@@ -407,6 +407,24 @@
         <div class="hint">Beds, workstations, bookshelves and planters indoors. Villagers are summoned next to beds; iron golems patrol the streets, never indoors. Hostile mobs stay out unless the box above is ticked; either way <code>/function …/hostiles_centered</code> brings them in and <code>…/hostiles_clear</code> removes them.</div>
       </fieldset>
 
+      <fieldset class="city-only" id="joinBox">
+        <legend>Joined cities</legend>
+        <div class="hint">Bridges out of this city to others beside it. Export this city, then generate the next with <b>Join to</b> set to one of its bridges: that city's road comes in at the bridge's far end, and its pack's <code>stand_here</code> takes you from this city's build spot to its own. Join as many as you like, each to a free bridge of one already exported.</div>
+        <div class="checks">
+          <label class="chk"><input type="checkbox" id="joinN">Bridge out to the north</label>
+          <label class="chk"><input type="checkbox" id="joinE">Bridge out to the east</label>
+          <label class="chk"><input type="checkbox" id="joinS">Bridge out to the south</label>
+          <label class="chk"><input type="checkbox" id="joinW">Bridge out to the west</label>
+        </div>
+        <div class="row"><label>Bridges</label><select id="joinKind">
+          <option value="viaduct">Viaduct (arches on stone piers)</option>
+          <option value="suspension">Suspension (towers and cables)</option>
+        </select></div>
+        <div class="row"><label>Bridge length</label><input type="range" id="joinGap" min="24" max="192" step="8" value="64"><span class="val" id="joinGap_v"></span></div>
+        <div class="row"><label>Join to</label><select id="joinTo"><option value="">no other city</option></select></div>
+        <div class="hint" id="joinNote"></div>
+      </fieldset>
+
       <fieldset>
         <legend>View</legend>
         <div class="row"><label>Cutaway</label><input type="range" id="clip" min="0" max="100" step="1" value="100"><span class="val" id="clip_v"></span></div>
@@ -479,6 +497,6 @@
     <div id="busy">generating…</div>
   </div>
 </div>
-<script type="module" src="./main.js?v=0.74.0"></script>
+<script type="module" src="./main.js?v=0.75.0"></script>
 </body>
 </html>

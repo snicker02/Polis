@@ -18,6 +18,7 @@
 
 import { MAT, MATERIALS, B, I, S, stairId, WEIRDO, wallSignId, signId, SIGN_FACING, WOOLS } from './materials.js';
 import { lotFrame } from './zoo.js';
+import { styleOf } from './styles.js';
 import { helpers } from './services.js';
 import { N } from './blockcore.js';
 
@@ -43,12 +44,16 @@ export function waterTower(world, lot, face, cfg, rng, G, signTags) {
   if (!F) return null;
   const { put, clear, pos, sign, FRONT, BACK } = F;
   const c = 4, TF = G + 14, TT = G + 21, ROOF = G + 22;    // the middle; the tank's floor, top, roof
-  const LBLUE = MAT.C_LBLUE;
+  // (a Wild West town's is wooden, a railroad's: stripped spruce legs braced with fence, a tank
+  // of spruce staves banded in dark oak, its roof the same; 0.74.2)
+  const wood = !!styleOf(cfg.cityStyle).woodenTower;
+  const LBLUE = wood ? MAT.DARK_PLANKS : MAT.C_LBLUE, SHELL = wood ? MAT.SPRUCE : MAT.C_WHITE, LEG = wood ? MAT.STRIP_SPRUCE : MAT.IRON,
+    BRACE = wood ? MAT.SPRUCE_FENCE : MAT.BARS, BASE = wood ? MAT.DARK_PLANKS : MAT.IRON, DECK = wood ? MAT.SPRUCE : MAT.SMOOTH;
   for (let u = 0; u < 9; u++) for (let v = 0; v < 9; v++) for (let y = G + 1; y <= ROOF + 4; y++) clear(u, v, y);
   // the legs: iron, from the ground to the tank, braced with bars between them every four up
   const legs = [[c - 2, c - 2], [c + 2, c - 2], [c - 2, c + 2], [c + 2, c + 2]];
-  for (const [u, v] of legs) for (let y = G + 1; y < TF; y++) put(u, v, y, MAT.IRON);
-  for (let y = G + 4; y < TF; y += 4) for (let k = -1; k <= 1; k++) { put(c + k, c - 2, y, MAT.BARS); put(c + k, c + 2, y, MAT.BARS); put(c - 2, c + k, y, MAT.BARS); put(c + 2, c + k, y, MAT.BARS); }
+  for (const [u, v] of legs) for (let y = G + 1; y < TF; y++) put(u, v, y, LEG);
+  for (let y = G + 4; y < TF; y += 4) for (let k = -1; k <= 1; k++) { put(c + k, c - 2, y, BRACE); put(c + k, c + 2, y, BRACE); put(c - 2, c + k, y, BRACE); put(c + 2, c + k, y, BRACE); }
   // the tank: five across with its corners cut, on a floor nine by nine that is also the
   // catwalk round it, a railing on the outer ring. (Round on the grid, a catwalk a block
   // wide came out in pieces that met only at their corners: square, it goes all the way round.)
@@ -56,15 +61,15 @@ export function waterTower(world, lot, face, cfg, rng, G, signTags) {
   const inTank = (du, dv) => Math.abs(du) <= 2 && Math.abs(dv) <= 2 && !(Math.abs(du) === 2 && Math.abs(dv) === 2);
   for (let u = 0; u < 9; u++) for (let v = 0; v < 9; v++) {
     const du = u - c, dv = v - c, ring = Math.max(Math.abs(du), Math.abs(dv));
-    put(u, v, TF, inTank(du, dv) ? MAT.IRON : MAT.SMOOTH);
+    put(u, v, TF, inTank(du, dv) ? BASE : DECK);
     if (ring === 4) { put(u, v, TF + 1, MAT.FENCE); rail.push(pos(u, v, TF + 1)); continue; }
     if (!inTank(du, dv)) { catwalk.push(pos(u, v, TF + 1)); continue; }
     const inner = Math.abs(du) <= 1 && Math.abs(dv) <= 1;
     for (let y = TF + 1; y <= TT; y++) {
       if (inner && y < TT) { put(u, v, y, MAT.WATER); water.push(pos(u, v, y)); }
-      else if (!inner) put(u, v, y, y === TF + 3 || y === TF + 4 ? LBLUE : MAT.C_WHITE);
+      else if (!inner) put(u, v, y, y === TF + 3 || y === TF + 4 || (wood && y === TT - 1) ? LBLUE : SHELL);
     }
-    put(u, v, ROOF, MAT.C_WHITE);
+    put(u, v, ROOF, SHELL);
     if (Math.abs(du) <= 1 && Math.abs(dv) <= 1) put(u, v, ROOF + 1, LBLUE);
   }
   put(c, c, ROOF + 2, LBLUE);
@@ -82,7 +87,7 @@ export function waterTower(world, lot, face, cfg, rng, G, signTags) {
   clear(c, c - 1, ROOF); clear(c, c - 1, ROOF + 1);         // the hatch, over the water
   const hatch = pos(c, c - 1, ROOF);
   sign(c + 2, 0, G + 1, F.neg(F.fr.back), 'Water tower\nladder up the leg\nhatch on the roof');
-  return { kind: 'watertower', lot, legs: legs.map(([u, v]) => pos(u, v, G + 1)), water, catwalk, rail, lanterns, ladder, roofLadder, hatch, top,
+  return { kind: 'watertower', wooden: wood, lot, legs: legs.map(([u, v]) => pos(u, v, G + 1)), water, catwalk, rail, lanterns, ladder, roofLadder, hatch, top,
     sideways: F.fr.sideways, door: pos(c, -1, G + 1), frame: { at: F.fr.at, c, TF, TT, ROOF } };
 }
 

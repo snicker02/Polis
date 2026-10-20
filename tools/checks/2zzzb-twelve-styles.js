@@ -119,6 +119,82 @@ export default async function run(ctx) {
   check('Crystal: clusters of amethyst on the roofs, crystal clusters on their tips', T.crystal.clusters > 100 && T.crystal.crystals > 800 && count('crystal', /amethyst_cluster/) > 150, JSON.stringify(T.crystal));
   check('Ruins: the stone aged (cracked and mossy), vines down the walls, parapets broken, trees on the roofs', T.ruins.aged > 8000 && T.ruins.vines > 600 && T.ruins.broken > 400 && (T.ruins.tree || 0) >= 15, JSON.stringify(T.ruins));
 
+  // ---- the signature pieces (0.74.2): the amphitheatre, the aqueduct, the longships, the
+  // railroad and its wooden water tower
+  {
+    const { USE_CANAL, WATER_LO, WATER_HI } = await import('../../engine/water.js');
+    // Classical: an amphitheatre in each city (a sand arena, an arcade round it, its name), and
+    // over the canal an aqueduct: piers standing in open water down to the bed, a deck three
+    // wide, a trough of water shut in on every side but the sky; never a pier on a bridge
+    let amph = 0, amphBad = [];
+    for (const r of cities.classical) {
+      const S = r.landmarks.find((l) => l.kind === 'stadium');
+      if (!S) { amphBad.push('none'); continue; }
+      const P = S.pitch, G0 = S.tunnel[0][1] - 1;
+      let sand = 0, all = 0;
+      for (let x = P.x0; x <= P.x1; x++) for (let z = P.z0; z <= P.z1; z++) { all++; if (/^(sand|lantern|sea_lantern|glowstone|shroomlight|.*froglight)$/.test(blk(r.world, x, G0, z))) sand++; }   // (sand, or a light the lighting set in it)
+      const place = r.places.find((q) => q.kind === 'stadium');
+      if (S.name === 'Amphitheatre' && sand >= all * 0.97 && S.arcade && S.arcade.piers > 20 && S.arcade.arches > 40 && place && place.name === 'Amphitheatre') amph++;
+      else amphBad.push(`${S.name} ${sand}/${all} ${JSON.stringify(S.arcade)}`);
+    }
+    check('Classical: an amphitheatre in every city (an arena of sand, two storeys of arches round it, named so in Find a landmark)', amph === cities.classical.length, amphBad.join('; '));
+    let runs = 0, piers = 0, aqBad = [];
+    for (const r of cities.classical) for (const [i, A] of (r.aqueducts || []).entries()) {
+      const cn = r.canals[i], mid = cn.ch0 + 1, G0 = 1;
+      for (const run of A.runs) {
+        runs++;
+        const Y = (() => { const [x, z] = cn.cell(run.u0 + 1, mid); for (let y = 30; y > 0; y--) if (blk(r.world, x, y, z) === 'smooth_quartz') return y; return null; })();
+        if (Y === null) { aqBad.push('no deck'); continue; }
+        for (let u = run.u0; u <= run.u1; u++) {
+          for (const a of [cn.ch0, mid, cn.ch1]) { const [x, z] = cn.cell(u, a); if (blk(r.world, x, Y, z) !== 'smooth_quartz') aqBad.push(`deck ${u}`); }
+          const [x, z] = cn.cell(u, mid);
+          const top = blk(r.world, x, Y + 1, z);
+          if (u === run.u0 || u === run.u1) { if (top !== 'quartz_bricks') aqBad.push(`end ${u}`); }
+          else {
+            if (top !== 'water') aqBad.push(`trough ${u}`);
+            for (const a of [cn.ch0, cn.ch1]) { const [sx, sz] = cn.cell(u, a); if (blk(r.world, sx, Y + 1, sz) !== 'quartz_bricks') aqBad.push(`wall ${u}`); }
+          }
+        }
+      }
+      for (const [x, z] of A.piers) {
+        piers++;
+        if (r.plan.use[z * r.plan.W + x] !== USE_CANAL) aqBad.push(`pier on ${x},${z}`);
+        for (let y = WATER_LO; y <= WATER_HI; y++) if (blk(r.world, x, y, z) !== 'polished_diorite') { aqBad.push(`pier ${x},${z} at ${y}`); break; }
+      }
+      void G0;
+    }
+    check('Classical: an aqueduct along the canal, high over it: piers in open water to the bed (never on a bridge), a deck three wide, a trough of water walled in', runs >= 2 && piers >= 15 && aqBad.length === 0, `${runs} runs, ${piers} piers; ${aqBad.slice(0, 4).join(', ')}`);
+    // Nordic: longships in the harbour's basin, shields along their sides, a dragon at the prow,
+    // a striped sail; every boat left moored on open water, none inside a ship
+    let ships = 0, shipBad = [];
+    for (const r of cities.nordic) {
+      for (const S of r.longships || []) {
+        ships++;
+        const [x, y, z] = S.at;
+        let shields = 0, sail = 0;
+        for (let dx = -6; dx <= 6; dx++) for (let dz = -6; dz <= 6; dz++) {
+          if (/_wool$/.test(blk(r.world, x + dx, y + 1, z + dz))) shields++;
+          for (let dy = 3; dy <= 7; dy++) if (/_wool$/.test(blk(r.world, x + dx, y + dy, z + dz))) sail++;
+        }
+        const head = blk(r.world, S.prow[0], y + 4, S.prow[1]);
+        if (shields < 6 || sail < 10 || head !== 'dark_oak_stairs' || blk(r.world, x, y + 8, z) !== 'stripped_spruce_log') shipBad.push(`${shields} shields, ${sail} sail, head ${head}`);
+      }
+      for (const b of r.spawns.filter((p) => p.type === 'boat')) {
+        const bx = Math.floor(b.x), bz = Math.floor(b.z), by = Math.floor(b.y);
+        if (blk(r.world, bx, by, bz) !== 'water' || r.world.has(bx, by + 1, bz)) shipBad.push(`boat at ${bx},${bz}`);
+      }
+    }
+    check('Nordic: longships in the harbour (shields along the sides, a dragon at the prow, a striped sail on the mast); every boat still on open water', ships >= 2 && shipBad.length === 0, `${ships} ships; ${shipBad.slice(0, 3).join('; ')}`);
+    // Wild West: the railroad (the railway on) and its water tower in wood
+    let wood = 0, rail = 0;
+    for (const r of cities.western) {
+      if (r.cfg.transit === 'rails' && r.transit && r.transit.lines.length > 5) rail++;
+      const T = r.landmarks.find((l) => l.kind === 'watertower');
+      if (T && T.wooden && T.legs.every(([x, y, z]) => blk(r.world, x, y, z) === 'stripped_spruce_log') && T.water.length > 20) wood++;
+    }
+    check('Wild West: a railroad through town, and a wooden water tower (spruce legs, a tank of staves) full of water', rail === cities.western.length && wood === cities.western.length, `${rail} railroads, ${wood} wooden towers`);
+  }
+
   // nothing of any dress out from a wall lower than head height: no block of a dress's kinds
   // at street level just outside an ordinary building's walls, but what was there before
   {

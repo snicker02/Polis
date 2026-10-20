@@ -17,7 +17,7 @@ import { makeRng } from './rng.js';
 // Must match main.js VERSION, package.json and index.html data-version;
 // tools/validate.js fails if they drift. The app refuses to export when the
 // browser has mixed cached copies of old and new files.
-export const POLIS_VERSION = '0.74.0';
+export const POLIS_VERSION = '0.75.0';
 
 export const CHUNK = 64;          // Bedrock structure limit per horizontal axis
 export const GROUND_DROP = 2;     // base layer y=0 sits 2 below feet; surface y=1 replaces the block you stand on
@@ -290,9 +290,10 @@ export function buildStructures(world, opts = {}) {
 // dome, and every room dug under a building (in the game the ground there is the
 // world's own: without air it would fill the room)
 export function cityAir(world) {
-  const dome = world.dome ? domeAir(world.dome) : null, rooms = inAirBox(world);
-  if (!dome && !rooms) return null;
-  return (x, y, z) => (dome && dome(x, y, z)) || (rooms && rooms(x, y, z));
+  const dome = world.dome ? domeAir(world.dome) : null, rooms = inAirBox(world), bridge = world.bridgeAir || null;
+  if (!dome && !rooms && !bridge) return null;
+  // (and the air over a bridge out to another city: joins.js)
+  return (x, y, z) => (dome && dome(x, y, z)) || (rooms && rooms(x, y, z)) || (bridge && bridge(x, y, z));
 }
 
 // ---- fish that stay ------------------------------------------------------------
@@ -597,10 +598,21 @@ export function stagePlan(world, ns) {
     .sort((p, q) => p.d - q.d).map((p) => p.squares);
   const index = new Map();
   stages.forEach((st, k) => st.forEach((s) => index.set(s.i + ',' + s.j, k)));
+  // where each part lies, from the middle (the build_centered spot): the middle if it takes
+  // in that spot, else a point of the compass (north is -Z); its reach in blocks from it
+  const where = stages.map((st) => {
+    const x0 = Math.min(...st.map((q) => q.x0)), x1 = Math.max(...st.map((q) => q.x1)), z0 = Math.min(...st.map((q) => q.z0)), z1 = Math.max(...st.map((q) => q.z1));
+    const box = { x0: x0 - mid[0], x1: x1 - mid[0], z0: z0 - mid[1], z1: z1 - mid[1] };
+    if (box.x0 <= 0 && box.x1 >= 0 && box.z0 <= 0 && box.z1 >= 0) return { name: 'the middle', box };
+    const ex = (box.x0 + box.x1) / 2, ez = (box.z0 + box.z1) / 2;
+    const ang = (Math.atan2(ex, -ez) * 180) / Math.PI;            // 0 north, 90 east
+    const NAMES = ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west'];
+    return { name: NAMES[((Math.round(ang / 45) % 8) + 8) % 8], box };
+  });
   // the squares kept loaded once a part is done (and by build): the STAGE_AREAS nearest the middle
   const all = stages.flat();
   const home = named(all.slice().sort((p, q) => d2(p) - d2(q)).slice(0, STAGE_AREAS));
-  return { stages, home, mark: `${ns}_m`, names: [...Array(STAGE_AREAS)].map((_, n) => `${ns}_t${n + 1}`),
+  return { stages, where, home, mark: `${ns}_m`, names: [...Array(STAGE_AREAS)].map((_, n) => `${ns}_t${n + 1}`),
     squareOf: (x, z) => fl(x) + ',' + fl(z), stageOf: (x, z) => index.get(fl(x) + ',' + fl(z)) ?? -1 };
 }
 
@@ -712,11 +724,16 @@ export function functionFiles(tiles, world, opts = {}) {
   // for the part's own; each _wait waits for one of them to load; _go runs the part from
   // the marker (a scheduled function runs where its player is now, not where it began);
   // _run does the work and starts the next part, or, the last, puts the middle's areas back.
-  const chain = (base, dx, dz, items, outro) => {
+  // (every: each of the city's parts, numbered as the guide numbers them, even one with
+  // nothing to do; otherwise only the parts with work in them)
+  const chain = (base, dx, dz, items, outro, every = false) => {
     // (only the squares with work in them held loaded: no waiting on empty ones)
     const used = new Set(items.map((it) => plan.squareOf(it.x, it.z)));
-    const parts = plan.stages.map((sqs, k) => ({ sqs: sqs.filter((q) => used.has(q.i + ',' + q.j)).map((q, n) => ({ ...q, name: plan.names[n] })),
-      items: items.filter((it) => plan.stageOf(it.x, it.z) === k) })).filter((p) => p.items.length);
+    const parts = plan.stages.map((sqs, k) => {
+      const busy = sqs.filter((q) => used.has(q.i + ',' + q.j));
+      return { sqs: (busy.length ? busy : sqs.slice(0, 1)).map((q, n) => ({ ...q, name: plan.names[n] })), where: plan.where[k].name,
+        items: items.filter((it) => plan.stageOf(it.x, it.z) === k) };
+    }).filter((p) => every || p.items.length);
     if (!parts.length) return { files: [], entry: [] };
     const N = parts.length, F = (n) => `${ns}/${base}_part${n}`, out = [];
     const file = (fn, lines) => out.push({ name: `functions/${fn}.mcfunction`, fn, text: lines.join('\n') + '\n' });
@@ -728,20 +745,20 @@ export function functionFiles(tiles, world, opts = {}) {
       const wait = (j) => `schedule on_area_loaded add tickingarea ${sq[j].name} ${j + 1 < sq.length ? `${F(n)}_wait${j + 2}` : `${F(n)}_go`}`;
       file(`${F(n)}_next`, [`# Polis: ${base}, part ${n} of ${N}: its part of the city held loaded, then waited for`,
         ...plan.names.map((nm) => `tickingarea remove ${nm}`), ...sq.map((a) => addArea(a, dx, dz)),
-        `say Polis: part ${n} of ${N}: waiting for its part of the city to load...`, wait(0)]);
+        `say Polis: part ${n} of ${N} (${p.where}): waiting for its part of the city to load...`, wait(0)]);
       for (let j = 1; j < sq.length; j++) file(`${F(n)}_wait${j + 1}`, [wait(j)]);
       file(`${F(n)}_go`, [`execute at @e[type=armor_stand,name=${MARK},c=1] run function ${F(n)}_run`]);
       const cmds = p.items.map((it) => it.cmd), chunks = [];
       for (let c = 0; c < cmds.length; c += 7500) chunks.push(cmds.slice(c, c + 7500));
-      const tail = [`say Polis: part ${n} of ${N} done.`, ...(n < N ? [`function ${F(n + 1)}_next`] : [])].concat(n < N ? [] : [...plan.names.map((nm) => `tickingarea remove ${nm}`),
+      const tail = [`say Polis: part ${n} of ${N} (${p.where}) done.`, ...(n < N ? [`function ${F(n + 1)}_next`] : [])].concat(n < N ? [] : [...plan.names.map((nm) => `tickingarea remove ${nm}`),
         ...holdAreas.map((a) => addArea(a, dx, dz)), `tickingarea remove ${plan.mark}`, ...outro, `kill @e[type=armor_stand,name=${MARK}]`]);
       chunks.forEach((c, m) => file(`${F(n)}_run${m ? '_' + (m + 1) : ''}`, [
-        ...(m ? [] : [`say Polis: part ${n} of ${N}...`]), ...c,
+        ...(m ? [] : [`say Polis: part ${n} of ${N} (${p.where})...`]), ...c,
         ...(m + 1 < chunks.length ? [`function ${F(n)}_run_${m + 2}`] : tail)]));
     });
     return { files: out, entry: [
       `say Polis: this city is bigger than a world can keep loaded at once (ten ticking areas at most), so it is done in ${N} parts, one after another.`,
-      `say Polis: each part needs ${STAGE_AREAS + 1} free ticking areas. If it stops before saying it is done: /tickingarea list, remove old ones, and from this spot run /function ${F('<n>')} for the part it stopped at.`,
+      `say Polis: each part needs ${STAGE_AREAS + 1} free ticking areas. If it stops before saying it is done: /tickingarea list, remove old ones, and from this spot run /function ${F('<n>')} for the part it stopped at (the placement guide has a table of the parts).`,
       `function ${F(1)}`] };
   };
   // the armor stand build_centered leaves on its spot: this city's own name
@@ -865,7 +882,7 @@ export function functionFiles(tiles, world, opts = {}) {
       ...(inmates.length || zooFolk.length || stands.length ? [
         `say Polis: if the ${[inmates.length ? 'jail' : '', zooFolk.length ? 'zoo or aquarium' : '', stands.length ? 'museum\'s armour room' : ''].filter(Boolean).join(' or ')} stays empty, run ${[inmates.length ? `/function ${ns}/jail${sfx(dx)}` : '', zooFolk.length ? `/function ${ns}/zoo${sfx(dx)}` : '', stands.length ? `/function ${ns}/museum${sfx(dx)}` : ''].filter(Boolean).join(' or ')} from this spot (each holds its own part of the city loaded while it runs).`] : []),
       `say Polis: the middle of the city stays held loaded (${holdAreas.length} ticking areas). /function ${ns}/release${sfx(dx)} takes them off.`,
-    ]));
+    ], true));
     return chainCache.get(k);
   };
   const populate = (dx, dz, title) => !staged ? populateWhole(dx, dz, title) : [
@@ -912,7 +929,7 @@ export function functionFiles(tiles, world, opts = {}) {
     files.push(...popChain(wb.x0, wb.z0).files, ...popChain(cx, cz).files);
     // the rails under the city by hand, in parts as populate is
     for (const [dx, dz] of [[wb.x0, wb.z0], [cx, cz]]) {
-      const c = chain('metro_rails' + sfx(dx), dx, dz, undergroundRailItems(world, dx, dz), [`say Polis: ${undergroundRailCount} rails under the city set.`]);
+      const c = chain('metro_rails' + sfx(dx), dx, dz, undergroundRailItems(world, dx, dz), [`say Polis: ${undergroundRailCount} rails under the city set.`], true);
       if (!c.entry.length) continue;
       files.push({ name: `functions/${ns}/metro_rails${sfx(dx)}.mcfunction`, fn: `${ns}/metro_rails${sfx(dx)}`,
         text: [`# Polis ${POLIS_VERSION}: the rails under the city (metro), each set by hand, in parts. Run from the same spot as build${sfx(dx)}.`, ...c.entry].join('\n') + '\n' }, ...c.files);
@@ -1016,6 +1033,19 @@ export function functionFiles(tiles, world, opts = {}) {
       `execute unless entity @e[type=armor_stand,tag=${ctag}] run say Polis: the city's centre marker was not found (a city built from an older pack has none, or you are too far away for it to be loaded). Stand exactly where you ran build_centered, run /function ${ns}/mark_centre, then try again. Or use Find a landmark in the Polis app for the coordinates.`,
     ].join('\n') + '\n' });
   }
+  // a city joined to another's bridge (joins.js): stand_here takes you from the other city's
+  // marked build spot to this city's, where build_centered puts its road against the bridge
+  if (world.joinFrom && world.joinFrom.ctag) {
+    const J = world.joinFrom, [ox, oy, oz] = J.offset, who = J.name || 'the other city';
+    const r = (a) => `~${a || ''}`;
+    files.push({ name: `functions/${ns}/stand_here.mcfunction`, fn: `${ns}/stand_here`, text: [
+      `# Polis: to this city's build spot, from ${who}'s (its build_centered marker), so its road meets ${who}'s ${J.side === 'west' ? 'east' : J.side === 'east' ? 'west' : J.side === 'north' ? 'south' : 'north'} bridge.`,
+      `# Or from that marker yourself: /tp @s ${r(ox)} ${r(oy)} ${r(oz)}`,
+      `execute at @e[type=armor_stand,tag=${J.ctag},c=1] run tp @s ${r(ox)} ${r(oy)} ${r(oz)}`,
+      `execute if entity @e[type=armor_stand,tag=${J.ctag}] run say Polis: this is the build spot for ${ns}, against ${who.replace(/[^A-Za-z0-9 _'-]/g, '')}'s bridge. Run /function ${ns}/build_centered from here (do not move first).`,
+      `execute unless entity @e[type=armor_stand,tag=${J.ctag}] run say Polis: the other city's centre marker was not found (too far away to be loaded, or that city was built from an older pack). Stand on its build_centered spot and try again.`,
+    ].join('\n') + '\n' });
+  }
   if (places.length) files.push({ name: `functions/${ns}/mark_centre.mcfunction`, fn: `${ns}/mark_centre`, text: [
     `# Polis: mark this spot as the city's centre, for the goto functions. Stand exactly where you ran build_centered`,
     `# (in the centre monument's alcove, under its sign). Needed only for a city built from a pack older than 0.56.0.`,
@@ -1106,6 +1136,27 @@ export function placementGuide(tiles, opts = {}) {
     L.push('standing on the right block: the corner for build, the alcove for build_centered.');
     L.push('');
   }
+  if (opts.world && opts.world.joinFrom) {
+    const J = opts.world.joinFrom, who = J.name || 'the other city';
+    L.push(`THIS CITY JOINS ${who.toUpperCase()}, by its bridge. Build ${who} first (its build_centered, then populate_centered).`);
+    L.push(`Then stand on ${who}'s build spot (its armor stand marker) and run:`);
+    L.push('');
+    L.push(`    /function ${ns}/stand_here          (takes you to this city's build spot)`);
+    L.push(`    /function ${ns}/build_centered      (from there, without moving)`);
+    L.push(`    /function ${ns}/populate_centered   (once it has finished appearing)`);
+    L.push('');
+    L.push(`  Or by hand, from ${who}'s marker: /tp @s ~${J.offset[0] || ''} ~${J.offset[1] || ''} ~${J.offset[2] || ''}  (x east, y up, z south).`);
+    L.push(`  This city's road comes out on its ${J.side} side and meets the bridge's landing.`);
+    L.push('');
+  }
+  if (opts.world && opts.world.joins && opts.world.joins.length) {
+    L.push('BRIDGES TO OTHER CITIES. Each ends at a landing where the next city\'s road comes in.');
+    for (const j of opts.world.joins) L.push(`    ${j.side.padEnd(6)} a ${j.kind}, ${j.gap} blocks across: its far end x ${j.end[0] >= 0 ? '+' : ''}${j.end[0]}, z ${j.end[2] >= 0 ? '+' : ''}${j.end[2]} from the build spot`);
+    L.push('  To build a city at the end of one: in the Polis app, after exporting this city, pick it under');
+    L.push('  "Join to" (this city\'s name and the bridge\'s side), generate the next city and export it. Its');
+    L.push('  pack has a stand_here function that takes you from this city\'s build spot to its own.');
+    L.push('');
+  }
   if (opts.centre) L.push('The city centre is a diamond monument with beacons on top: build_centered puts you in its alcove, under the sign.');
   L.push('To take the city away again: /function <city id>/remove_centered from the build_centered spot (or remove from the build spot).'.replace('<city id>', opts.namespace || 'polis'));
   L.push('  It clears the city to a clean site (grass on the city\'s own ground) and removes every non-player entity in the area.');
@@ -1136,6 +1187,8 @@ export function placementGuide(tiles, opts = {}) {
     L.push('THE AIRPORT\'S LAUNCH PADS run command blocks: take an elytra and rockets from the chest beside a');
     L.push('  pad, put the elytra on, step on the plate; it lifts you high and slows your fall, so open the elytra');
     L.push('  (jump in the air). If a pad does nothing: /gamerule commandblocksenabled true (cheats must be on).');
+    L.push('  On the grass beside the terminal, a compass rose set in the ground, true to the world: its red point');
+    L.push('  and the red N point north (-Z). Fly over it to get your bearings.');
     L.push('');
   }
   if ((opts.spawns || []).some((p) => p.group === 'stadium')) {
@@ -1239,6 +1292,15 @@ export function placementGuide(tiles, opts = {}) {
     L.push(`held loaded (${STAGE_AREAS} ticking areas): /function ${ns}/release_centered takes them off.`);
     L.push('If it stops at a part: /tickingarea list, remove old ones (/tickingarea remove_all clears them all),');
     L.push(`then from the build spot run /function ${ns}/populate_centered_part<n> for that part (e.g. populate_centered_part2).`);
+    L.push('');
+    L.push('THE PARTS, from the build_centered spot (the armor stand in the centre monument\'s alcove).');
+    L.push('North is -Z (F3 says "Facing: north"): x is blocks east (+) or west (-) of the spot, z blocks south (+) or north (-).');
+    L.push('In chat each part names itself the same way: "part 3 of 6 (south-east)...".');
+    const sg = (v) => (v > 0 ? '+' + v : String(v));
+    plan.where.forEach((w, k) => {
+      L.push(`    part ${String(k + 1).padEnd(2)}  ${w.name.padEnd(11)}  x ${sg(w.box.x0)} to ${sg(w.box.x1)},  z ${sg(w.box.z0)} to ${sg(w.box.z1)}`);
+    });
+    L.push(`(populate_centered and metro_rails_centered go part by part in this order; populate and metro_rails, run from the corner, have the same parts.)`);
     L.push('');
   }
   L.push('A JAIL, ZOO OR AQUARIUM EMPTY? Their animals are summoned, and a summon only reaches');

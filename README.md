@@ -1,4 +1,4 @@
-# Polis v0.74.0
+# Polis v0.75.0
 
 *Created with help from Claude AI.*
 
@@ -771,6 +771,55 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.75.0** — Cities joined by bridges (joins.js), as many as you like.
+
+- Joined cities (a new panel): a bridge out of the city on any of its four sides,
+  a viaduct (a deck on arches between stone piers) or a suspension bridge (two
+  red towers, iron cables hung between them and down to the ends, hangers to
+  the deck), 24 to 192 blocks long. Each runs from one of the city's streets out
+  through its wall, railed and lit, to a landing at the far end.
+- Exporting a city with bridges remembers them in the browser; "Join to" lists
+  them. A city generated joined to one gets a road out on the facing side, and
+  its pack a stand_here function: from the first city's build spot (its armor
+  stand marker) it takes you to the new city's own build spot, where
+  build_centered puts its road against the landing at the same height.
+- Any number of cities: each new one joins any free bridge of a city already
+  exported, and can have bridges of its own (a chain, or a hub with a bridge on
+  every side). A joined city's airport and theme park keep off the side it is
+  joined on.
+- The placement guides say it: the first city lists its bridges and where each
+  ends from its build spot; the joined city how to stand on its spot and build.
+- (Java: the bridges are built, but stand_here and the joined placement are
+  Bedrock only for now.)
+
+**0.74.2** — Directions for a big city's parts, and three styles' signature pieces.
+
+- A big city filled in parts now names each part by where it lies from the
+  build spot, in chat ("part 3 of 6 (south-east)...", "... done.") and in a
+  table in the placement guide, with each part's reach in blocks east/west (x)
+  and south/north (z) of the spot. The part that takes in the spot is "the
+  middle"; parts are numbered the same in chat, in the guide and in the
+  populate_centered_part<n> functions.
+- Classical / Roman: the stadium is an amphitheatre (an arena of sand, two
+  storeys of arches round it between piers, a cornice and pennants on top;
+  named Amphitheatre in Find a landmark), always built where a lot takes it;
+  and an aqueduct along each canal, eight over it: piers standing in the
+  canal's open water (boats pass either side), arches, a deck three wide with
+  a trough of water along it, wherever the air over the canal is clear.
+- Nordic / Viking: longships moored in the harbour's basin, shields along their
+  sides, a dragon's head at the prow, a striped sail on the mast (a moored boat
+  in the way is moved to open water).
+- Wild West: a railroad through town (the railway, while that setting is at its
+  default) and a wooden water tower for it: stripped spruce legs braced with
+  fence, a tank of spruce staves banded in dark oak.
+
+**0.74.1** — A compass rose at the airport: on the grass between the terminal
+and the hangar, a white concrete card nineteen across, rimmed in grey, true to
+the world (north is -Z): an eight-pointed star with its north point red, the
+letters N E S W round it (N red), a sea lantern in the middle that lights it.
+If that stretch of grass is taken, it goes wherever on the airfield's grass it
+fits. Checked in 2zzl.
 
 **0.74.0** — Twelve new city styles, each in the Mix styles list too. Each has
 its own palettes for houses, mid-rises and towers, its own streets, trees,

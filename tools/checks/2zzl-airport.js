@@ -109,6 +109,25 @@ export default async function run(ctx) {
     const [mx, mz] = F.at(0, 30), [rx, , rz] = A.road[0];
     out.packGround = [!!inside, inside(mx, mz), inside(rx, rz), fill(mx, YA - 4, mz) !== -1, !inside(...F.at(0, F.VD + 5))].every(Boolean) || [!!inside, inside(mx, mz), inside(rx, rz), fill(mx, YA - 4, mz) !== -1, !inside(...F.at(0, F.VD + 5))].join('/');
     out.place = r.places.find((P) => P.kind === 'airport');
+    // (0.74.1) the compass rose on the grass: a card of concrete nineteen across, its north
+    // point red and to the north (-Z), the letter N red over it, E to the east, W to the west,
+    // S to the south; a light in its middle; nothing standing on it; every cell of it lit
+    const C = A.compass;
+    if (C) {
+      const [cx, cy, cz] = C.centre;
+      const at = (dx, dz) => blk(cx + dx, cy, cz + dz);
+      let card = 0, over = 0;
+      for (let dx = -C.R; dx <= C.R; dx++) for (let dz = -C.R; dz <= C.R; dz++) {
+        if (dx * dx + dz * dz > (C.R + 0.25) ** 2) continue;
+        if (/concrete|sea_lantern/.test(at(dx, dz))) card++;
+        if (blk(cx + dx, cy + 1, cz + dz) !== 'air') over++;
+      }
+      const ink = (L, w) => { let n = 0; for (let r = 0; r < 5; r++) for (let k = 0; k < w; k++) if (/red_concrete|black_concrete/.test(blk(C.letters[L][0] + k, cy, C.letters[L][1] + r))) n++; return n; };
+      out.compass = card >= 250 && over === 0 && at(0, 0) === 'sea_lantern' && at(0, -2) === 'red_concrete' && at(0, 2) === 'black_concrete'
+        && at(2, 0) === 'black_concrete' && at(-2, 0) === 'black_concrete' && C.letters.N[1] < cz && C.letters.S[1] > cz && C.letters.E[0] > cx && C.letters.W[0] < cx
+        && blk(C.letters.N[0], cy, C.letters.N[1]) === 'red_concrete' && ink('N', 4) === 12 && ink('E', 3) === 10 && ink('S', 3) === 11 && ink('W', 5) === 13 && cy === YA;
+      if (!out.compass) out.compass = `card ${card}, over ${over}, ${at(0, 0)}, inks ${ink('N', 4)}/${ink('E', 3)}/${ink('S', 3)}/${ink('W', 5)}`;
+    } else out.compass = 'none';
     return out;
   };
   const ts = cities.map(([n, r]) => [n, r, inspect(r)]);
@@ -129,6 +148,7 @@ export default async function run(ctx) {
   check('airport: the runway over a hundred long, nine wide, black and white, lit along both edges, nothing over it', all((t) => t.runway.length >= 100 && t.runway.width === 9 && t.runway.bad === 0 && t.runway.over === 0 && t.runway.lights >= 40), ts.map(([n, , t]) => `${n}: ${JSON.stringify(t.runway)}`).join(' | '));
   check('airport: three launch pads, each a plate on a command block that lifts you, a chain block that slows your fall, a chest of elytras and rockets', all((t) => t.pads.length === 3 && t.pads.every(Boolean)));
   check('airport: three aircraft, whole', all((t) => t.planes === 3));
+  check('airport: a compass rose on the grass, true to the world (its north point and the N to -Z, E to +X), lit, nothing on it', all((t) => t.compass === true), ts.map(([n, , t]) => `${n}: ${t.compass}`).join(', '));
   check('airport: every piece of its open ground lit', all((t) => t.dark === 0), ts.map(([n, , t]) => `${n}: ${t.dark}`).join(', '));
   check('airport: in the pack, its ground founded and cleared like the city\'s own (and no more)', all((t) => t.packGround === true), ts.map(([n, , t]) => `${n}: ${t.packGround}`).join(', '));
   {

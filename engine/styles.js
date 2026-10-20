@@ -863,6 +863,8 @@ const LM = (o) => ({ ...MODERN_LANDMARK, ...o });
 STYLES.classical = {
   label: 'Classical / Roman',
   dress: 'classical',
+  amphitheatre: true,
+  aqueduct: true,
   flatRoofs: true,
   roofSlab: MAT.SMOOTH_QUARTZ,
   shapedChance: 0,
@@ -942,6 +944,7 @@ STYLES.gothic = {
 STYLES.nordic = {
   label: 'Nordic / Viking',
   dress: 'nordic',
+  longships: true,
   noArcade: true,
   shapedChance: 0,
   themes: {
@@ -1019,6 +1022,8 @@ STYLES.byzantine = {
 STYLES.western = {
   label: 'Wild West',
   dress: 'western',
+  railroad: true,
+  woodenTower: true,
   noArcade: true,
   flatRoofs: true,
   roofSlab: MAT.SPRUCE,

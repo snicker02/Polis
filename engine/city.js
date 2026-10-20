@@ -18,6 +18,8 @@ import { hostileSpawns } from './hostiles.js';
 import { buildDome } from './dome.js';
 import { buildSeaCity } from './sea.js';
 import { floodSunken } from './flood.js';
+import { buildAqueduct, buildLongships } from './signature.js';
+import { buildJoinBridge, joinRoad, joinOffset, JOIN_SIDES } from './joins.js';
 import { lightUp, TARGET, TARGET_OUT } from './lighting.js';
 import { verifyBuilding } from './verify.js';
 import { planStyleDistricts } from './districts.js';
@@ -86,6 +88,10 @@ export const DEFAULTS = {
   landmarks: true,
   landmarkShare: 0.16,       // at most this share of the city's lots become landmarks           // town hall, clock tower, library, market square near downtown
   transit: 'roads',
+  joinSides: [],             // bridges out of the city to others, by side: north, east, south, west (joins.js)
+  joinKind: 'viaduct',       // the bridges: 'viaduct' (arches on piers) or 'suspension' (towers and cables)
+  joinGap: 64,               // how far each bridge reaches across the gap, in blocks
+  joinTo: null,              // another city's bridge to come in by: { end, side, ctag, name, ns } (joins.js)
   wallHeight: 3,             // perimeter wall, blocks above ground (0 = none)          // 'roads' | 'rails' (railway instead of roads) | 'trams' (rails down the roads)
   farmChance: 0.2,
   ranchChance: 0.1,          // suburban lots that become animal pens
@@ -233,6 +239,10 @@ export function generateCity(cfgIn, onProgress) {
   }
   // a style that keeps itself low (the Wild West's frontier town), while the setting is where it was
   if (STYLE.maxFloors && cfg.maxFloors === DEFAULTS.maxFloors) cfg.maxFloors = STYLE.maxFloors;
+  // a Wild West town: a railroad (the railway, while that setting is where it was) and a
+  // water tower, in wood, for its engines
+  if (STYLE.railroad && cfg.transit === DEFAULTS.transit) cfg.transit = 'rails';
+  if (STYLE.woodenTower && cfg.watertower === DEFAULTS.watertower) cfg.watertower = true;
   // a Dwarven city digs: its metro, while that option is where it was
   if (STYLE.dwarven && cfg.metro === DEFAULTS.metro) cfg.metro = true;
   // a Mesoamerican city on hills: its open spaces paved plazas, each lot a terrace of its own
@@ -352,6 +362,8 @@ export function generateCity(cfgIn, onProgress) {
 
   // ---- harbour ---------------------------------------------------------------
   const harbour = harbourPlan ? buildHarbour(world, plan, harbourPlan, cfg, rng.fork(), GROUND, buildings) : null;
+  // a Nordic city's longships, moored in the harbour's basin (signature.js)
+  const longships = harbour && STYLE.longships ? buildLongships(world, harbourPlan, harbour) : [];
 
   // ---- railways ------------------------------------------------------------
   const transit = layTransit(world, plan, cfg.transit, GROUND);
@@ -884,6 +896,15 @@ export function generateCity(cfgIn, onProgress) {
   deepenPonds(world, ponds);
   const spawners = cfg.fish ? pondSpawners(world, ponds) : [];
 
+  // the sides the airport and the theme park may take: not the one facing a bridge this city
+  // comes in by (joins.js), this city's own bridges' sides last; away from the airport first
+  const offsiteSides = (away = null) => {
+    const facing = cfg.joinTo && cfg.joinTo.side ? { north: 'south', south: 'north', east: 'west', west: 'east' }[cfg.joinTo.side] : null;
+    let all = away ? [{ north: 'south', south: 'north', east: 'west', west: 'east' }[away], ...['north', 'south', 'west', 'east'].filter((q) => q !== away && q !== { north: 'south', south: 'north', east: 'west', west: 'east' }[away])] : ['north', 'south', 'west', 'east'];
+    all = all.filter((q) => q !== facing);
+    const own = cfg.joinSides || [];
+    return [...all.filter((q) => !own.includes(q)), ...all.filter((q) => own.includes(q))];
+  };
   // ---- the airport: an airfield of its own beside the city, a road out to it ----
   // (not on a city fitted to your world, whose land round it is the world's own; not
   // with a dome, on stilts, floating or on a cliff, which have no ground beside them)
@@ -893,7 +914,9 @@ export function generateCity(cfgIn, onProgress) {
       : cfg.dome ? 'not with the dome' : cfg.underwater ? 'not under the sea' : cfg.stilts ? 'not on stilts' : floating ? 'not with floating islands' : hills.cliff ? 'not on a cliff' : null;
     if (why) airportMissing = why;
     else {
-      const A = buildAirport(world, plan, cfg, { GROUND, elevAt, signTags });
+      // (never on the side facing a bridge this city comes in by: it would stand on the bridge;
+      // the sides of this city's own bridges last)
+      const A = buildAirport(world, plan, cfg, { GROUND, elevAt, signTags, route: { sides: offsiteSides() } });
       if (A.missing) airportMissing = A.missing;
       else {
         landmarks.push(A);
@@ -910,7 +933,7 @@ export function generateCity(cfgIn, onProgress) {
     if (why) themeparkMissing = why;
     else {
       const air = landmarks.find((q) => q.kind === 'airport');
-      const T = buildThemePark(world, plan, cfg, { GROUND, elevAt, signTags, awayFrom: air ? air.side : null, avoid: air ? [air.lot, air.roadRect] : [] });
+      const T = buildThemePark(world, plan, cfg, { GROUND, elevAt, signTags, awayFrom: air ? air.side : null, avoid: air ? [air.lot, air.roadRect] : [], sides: offsiteSides(air ? air.side : null) });
       if (T.missing) themeparkMissing = T.missing;
       else {
         landmarks.push(T);
@@ -919,6 +942,39 @@ export function generateCity(cfgIn, onProgress) {
       }
     }
   }
+  // ---- cities joined by bridges (joins.js): the road in from another city's bridge, then
+  // this city's own bridges out (not on the side the road in takes) ----------------------------
+  const joins = [], joinMissing = [];
+  let joinFrom = null;
+  const joinable = !cfg.terrain && !cfg.dome && !cfg.underwater && !floating && !hills.cliff && !cfg.stilts;
+  if (joinable && (cfg.joinTo || (cfg.joinSides || []).length)) {
+    // (a city with no centre mark is still built round the middle of its square: the export's
+    // own fallback, the middle of all its blocks, would move with the bridges)
+    if (!world.centre) world.centre = [Math.floor(plan.W / 2), Math.floor(plan.D / 2)];
+    const avoid = landmarks.filter((q) => q.kind === 'airport' || q.kind === 'themepark').flatMap((q) => [q.lot, q.roadRect].filter(Boolean));
+    const jctx = { GROUND, elevAt, signTags, avoid };
+    const rectOf = (cells) => ({ x0: Math.min(...cells.map((p) => p[0])), x1: Math.max(...cells.map((p) => p[0])), z0: Math.min(...cells.map((p) => p[2])), z1: Math.max(...cells.map((p) => p[2])) });
+    if (cfg.joinTo && cfg.joinTo.end) {
+      const r = joinRoad(world, plan, cfg.joinTo, jctx);
+      if (r.missing) joinMissing.push(r.missing);
+      else {
+        joinFrom = { ctag: cfg.joinTo.ctag, name: cfg.joinTo.name || null, ns: cfg.joinTo.ns || null, side: r.side, offset: joinOffset(cfg.joinTo, r, world.centre), road: r.road };
+        avoid.push(rectOf(r.road));
+      }
+    }
+    for (const side of JOIN_SIDES) {
+      if (!(cfg.joinSides || []).includes(side) || (joinFrom && joinFrom.side === side)) continue;
+      const b = buildJoinBridge(world, plan, side, cfg, jctx);
+      if (b.missing) { joinMissing.push(b.missing); continue; }
+      joins.push(b);
+      avoid.push(rectOf(b.deck));
+    }
+  }
+  const [jcx, jcz] = world.centre || [0, 0];
+  world.joins = joins.map((b) => ({ side: b.side, kind: b.kind, gap: b.gap, end: [b.end.x - jcx, b.end.y, b.end.z - jcz] }));
+  world.joinFrom = joinFrom ? { ctag: joinFrom.ctag, name: joinFrom.name, ns: joinFrom.ns, side: joinFrom.side, offset: joinFrom.offset } : null;
+  // ---- a Classical city's aqueducts, along its canals, high over the water (signature.js) ----
+  const aqueducts = STYLE.aqueduct && !floating && !cfg.terrain ? canals.map((cn) => buildAqueduct(world, plan, cn, GROUND)).filter(Boolean) : [];
   // ---- fish: last, once no more water will change ----------------------------
   // their own random stream, so a city's blocks and other spawns are the same
   // with fish on or off
@@ -1129,7 +1185,7 @@ export function generateCity(cfgIn, onProgress) {
   // a goto_<kind> function for each): a spot to stand on the street before its front
   const places = landmarkPlaces(world, landmarks, (x, z) => GROUND + elevAt(x, z));
   world.lifts = buildings.filter((b) => b.lift).length;     // (for the guide)
-  return { world, plan, buildings, cfg, stats, shell, bridges, farms, ranches, spawns, bell, transit, wall, landmarks, places, canal, centre, streets, harbour, harbourPlan, megaliths, ponds, courtyards, hostiles, inmates, zoo, stands, dome, sea, flood, canals, lighting, styleDistricts: SD, spawners, stilts, islands, cliffWays, rooms, metro, hills, stepRails,
+  return { joins, joinFrom, joinMissing, longships, aqueducts, world, plan, buildings, cfg, stats, shell, bridges, farms, ranches, spawns, bell, transit, wall, landmarks, places, canal, centre, streets, harbour, harbourPlan, megaliths, ponds, courtyards, hostiles, inmates, zoo, stands, dome, sea, flood, canals, lighting, styleDistricts: SD, spawners, stilts, islands, cliffWays, rooms, metro, hills, stepRails,
     hills, stairRuns, reach, groundAt: (x, z) => GROUND + elevAt(x, z) };
 }
 

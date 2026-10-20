@@ -7,7 +7,7 @@ import { verifyAll } from './engine/verify.js';
 import { buildMesh } from './engine/mesher.js';
 import { VoxelWorld } from './engine/blockcore.js';
 import { Renderer } from './engine/renderer.js';
-import { exportPack, exportStructuresZip, tileList, commandList, cityId, exportSalt, POLIS_VERSION, placeOffsets, GROUND_DROP } from './engine/export.js';
+import { exportPack, exportStructuresZip, tileList, commandList, cityId, exportSalt, POLIS_VERSION, placeOffsets, GROUND_DROP, layoutTag } from './engine/export.js';
 import { readWorld, readLevelDat, siteGround, findSites, SEA_LEVEL, worldReport } from './engine/worldfile.js';
 import { javaTiles, javaPackFiles } from './engine/export-java.js';
 import { readJavaWorld, readJavaLevelDat, worldKind } from './engine/javaworld.js';
@@ -17,7 +17,7 @@ import { buildPregenPack, pregenFileName, siteRegion, viewRegion, pregenCommand,
 import { decodeNbt } from './tools/nbt-read.js';
 import { THEMES, MAT } from './engine/materials.js';
 
-const VERSION = '0.74.0';
+const VERSION = '0.75.0';
 const $ = (id) => document.getElementById(id);
 const numVal = (id) => Number($(id).value);      // readCfg has its own local num()
 
@@ -25,7 +25,7 @@ const SLIDERS = {
   size: 0, minBlock: 0, blockIrregularity: 2, avenueWidth: 0, streetWidth: 0,
   downtownRadius: 2, zoneNoise: 2, parkChance: 2, lotDowntown: 0, lotSuburb: 0,
   maxFloors: 0, pitch: 0, setbackEvery: 0, bw: 0, bd: 0, floors: 0, clip: 0,
-  farmChance: 2, pondChance: 2, twistChance: 2, courtyardChance: 2, hostileCount: 0, villagers: 0, wallHeight: 0, foundation: 0, clearAbove: 0, hills: 0, golemsPer10: 0,
+  farmChance: 2, pondChance: 2, twistChance: 2, courtyardChance: 2, hostileCount: 0, villagers: 0, wallHeight: 0, foundation: 0, clearAbove: 0, hills: 0, golemsPer10: 0, joinGap: 0,
 };
 const CHECKS = ['setback', 'roofAccess', 'useStairs', 'lights', 'lamps', 'trees', 'markings', 'landmarks', 'canal', 'harbour', 'bridges', 'detail', 'streetSigns', 'fish', 'megaliths', 'hostiles', 'dome', 'stilts', 'floating', 'cliff', 'underground', 'metro', 'terrainBreaks', 'jail', 'zoo', 'museum', 'hospital', 'firestation', 'police', 'theatre', 'hotel', 'factory', 'park', 'waterpark', 'garden', 'station', 'mall', 'airport', 'bouts', 'themepark', 'sports', 'bank', 'watertower', 'petrol', 'skatepark', 'wizard', 'nightclub', 'lifts', 'underwater'];
 
@@ -152,6 +152,7 @@ function boot() {
   const later = () => { clearTimeout(rememberTimer); rememberTimer = setTimeout(rememberSettings, 300); };
   document.addEventListener('change', later);
   document.addEventListener('input', later);
+  fillJoinTo();
   restoreRemembered();
   document.body.className = 'mode-' + $('mode').value;
   requestAnimationFrame(loop);
@@ -234,6 +235,11 @@ function readCfg() {
     }
     cfg.hills = num('hills');
     cfg.focal = focal.slice();
+    // joined cities (joins.js): this city's bridges out, and the bridge of another it comes in by
+    cfg.joinSides = [['joinN', 'north'], ['joinE', 'east'], ['joinS', 'south'], ['joinW', 'west']].filter(([id]) => $(id).checked).map(([, side]) => side);
+    cfg.joinKind = $('joinKind').value;
+    cfg.joinGap = num('joinGap');
+    cfg.joinTo = joinEnds().find((j) => j.id === $('joinTo').value) || null;
   } else {
     cfg.bw = num('bw');
     cfg.bd = num('bd');
@@ -245,6 +251,43 @@ function readCfg() {
 }
 
 // ---- generate ---------------------------------------------------------------
+// ---- joined cities: the bridges of cities exported in this browser ----------------------------
+// Each export of a city with bridges out records their far ends (where each lies from that
+// city's build spot, the city's marker tag, its name); Join to lists them. A city exported
+// joined to one marks it taken (it can still be picked again: a second city at the same
+// bridge would stand where the first does).
+const JOINS_KEY = 'polis.joins';
+function joinEnds() { try { return JSON.parse(localStorage.getItem(JOINS_KEY) || '[]'); } catch (e) { return []; } }
+function saveJoinEnds(list) { try { localStorage.setItem(JOINS_KEY, JSON.stringify(list.slice(-60))); } catch (e) { /* storage off: nothing remembered */ } }
+function fillJoinTo() {
+  const sel = $('joinTo'); if (!sel) return;
+  const keep = sel.value;
+  sel.innerHTML = '<option value="">no other city</option>' + joinEnds().map((j) =>
+    `<option value="${j.id}">${(j.name || j.ns).replace(/[<&>"]/g, '')}: its ${j.side} bridge${j.takenBy ? ` (joined by ${String(j.takenBy).replace(/[<&>"]/g, '')})` : ''}</option>`).join('');
+  // (a page without real options, the checks' own: the value kept as it was)
+  const opts = sel.options ? Array.from(sel.options) : [];
+  if (opts.some((o) => o.value === keep)) sel.value = keep;
+}
+function rememberJoins(w, ns, name) {
+  let list = joinEnds();
+  const tag = layoutTag(w);
+  if (w.joins && w.joins.length) {
+    list = list.filter((j) => j.ns !== ns);
+    for (const j of w.joins) list.push({ id: `${ns}:${j.side}`, ns, name: name || ns, ctag: tag, side: j.side, end: j.end, kind: j.kind, gap: j.gap, version: VERSION });
+  }
+  if (w.joinFrom) { const used = list.find((j) => j.ctag === w.joinFrom.ctag && j.side === ({ north: 'south', south: 'north', east: 'west', west: 'east' })[w.joinFrom.side]); if (used) used.takenBy = name || ns; }
+  saveJoinEnds(list);
+  fillJoinTo();
+}
+function joinNote(res) {
+  const n = $('joinNote'); if (!n || !res) return;
+  const bits = [];
+  if (res.joins && res.joins.length) bits.push(`bridges out: ${res.joins.map((b) => `${b.side} (${b.kind}, ${b.gap})`).join(', ')}; export this city to join others to them`);
+  if (res.joinFrom) bits.push(`comes in by ${res.joinFrom.name || 'the other city'}'s bridge on its ${res.joinFrom.side} side`);
+  if (res.joinMissing && res.joinMissing.length) bits.push(res.joinMissing.join('; '));
+  n.textContent = bits.join(' · ');
+}
+
 // ---- saving and loading settings ----------------------------------------------
 // Save downloads every setting as a file; Load puts them all back; the page also
 // remembers the last settings in the browser and starts from them. While they are
@@ -321,6 +364,7 @@ function generate() {
       refreshFind();
       drawMap();
       showStats(mesh, [t1 - t0, t2 - t1, t3 - t2]);
+      joinNote(result);
       refreshCommands();
     } catch (e) {
       console.error(e);
@@ -1097,7 +1141,11 @@ async function doExport(kind) {
       // the name given, or the city id: polis_<seed>_<hash>_v<version>
       const name = `${nameSlug() || cityNs}_v${VERSION}.` + (kind === 'mcpack' ? 'mcpack' : 'zip');
       download(out.data, name);
-      toast(`${name} — in game: /function ${cityNs}/build_centered, then populate_centered`);
+      // (its bridges remembered for Join to; the bridge it joins marked taken)
+      if (kind === 'mcpack') rememberJoins(result.world, cityNs, cityName() || cityNs);
+      toast(result.world.joinFrom
+        ? `${name} — in game: from ${result.world.joinFrom.name || 'the other city'}'s build spot, /function ${cityNs}/stand_here, then build_centered`
+        : `${name} — in game: /function ${cityNs}/build_centered, then populate_centered`);
     }
   } catch (e) {
     console.error(e);

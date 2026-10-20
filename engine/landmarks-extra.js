@@ -129,6 +129,8 @@ export const CAGE = 8;                                       // clear inside the
 export const FIGHTER_TAG = 'polis_fighter';
 export function stadium(world, lot, face, cfg, rng, G, signTags = null) {
   const LP = styleOf(cfg.cityStyle).landmark;
+  // (a Classical city's stadium is an amphitheatre: sand for its floor, an arcade round it)
+  const amph = !!styleOf(cfg.cityStyle).amphitheatre;
   pave(world, lot, G, () => LP.hallFloor);
   const I = { x0: lot.x0 + 1, z0: lot.z0 + 1, x1: lot.x1 - 1, z1: lot.z1 - 1 };
   const rows = 3;
@@ -150,14 +152,14 @@ export function stadium(world, lot, face, cfg, rng, G, signTags = null) {
   // the pitch
   for (let z = P.z0; z <= P.z1; z++)
     for (let x = P.x0; x <= P.x1; x++) {
-      world.set(x, G, z, MAT.GRASS);
+      world.set(x, G, z, amph ? MAT.SAND : MAT.GRASS);
       for (let y = G + 1; y <= G + 6 + lift; y++) world.clear(x, y, z);
     }
-  // the halfway line and the goals
+  // the halfway line and the goals (an amphitheatre's arena: none)
   const mz = Math.floor((P.z0 + P.z1) / 2);
-  for (let x = P.x0; x <= P.x1; x++) world.set(x, G, mz, MAT.C_WHITE);
+  if (!amph) for (let x = P.x0; x <= P.x1; x++) world.set(x, G, mz, MAT.C_WHITE);
   const goals = [];
-  for (const z of [P.z0, P.z1]) {
+  for (const z of amph ? [] : [P.z0, P.z1]) {
     const gx = Math.floor((P.x0 + P.x1) / 2);
     for (let dx = -1; dx <= 1; dx++) {
       world.set(gx + dx, G + 1, z, MAT.FENCE);
@@ -266,7 +268,34 @@ export function stadium(world, lot, face, cfg, rng, G, signTags = null) {
     world.setData(kx, G, kz, commandBlock(`effect @e[tag=${FIGHTER_TAG}] resistance 6 4 true`, { mode: 'repeat', delay: 40 }));
     bouts = { fighters, stair: up, announcer, wall: G + rows + lift, cage: G + CAGE + 1, command: [kx, G, kz] };
   }
-  return { kind: 'stadium', lot, pitch: P, goals, lights, tunnel, steps, rec: null, topY: G + 9 + lift, bouts, fighters: bouts ? bouts.fighters : [] };
+  // the amphitheatre's arcade (0.74.2): round the lot's edge, two storeys of arches between
+  // piers, a band over each storey, a cornice on top and pennants on it; the way in left open
+  // (five wide where the street meets it), the arches walked through to the stands
+  let arcade = null;
+  if (amph) {
+    const H = G + 9;
+    const ring = [];
+    for (let x = lot.x0; x <= lot.x1; x++) ring.push([x, lot.z0], [x, lot.z1]);
+    for (let z = lot.z0 + 1; z < lot.z1; z++) ring.push([lot.x0, z], [lot.x1, z]);
+    const gx = ex + Fx, gz = ez + Fz;                       // the ring's cell where the way in meets the street
+    const gate = (x, z) => Math.abs(x - gx) + Math.abs(z - gz) <= 2 && (Fx ? x === gx : z === gz);
+    const along = (x, z) => (x === lot.x0 || x === lot.x1 ? z - lot.z0 : x - lot.x0);
+    arcade = { piers: 0, arches: 0, pennants: 0 };
+    for (const [x, z] of ring) {
+      if (gate(x, z) || (bouts && bouts.announcer && bouts.announcer[0] === x && bouts.announcer[2] === z)) continue;
+      const corner = (x === lot.x0 || x === lot.x1) && (z === lot.z0 || z === lot.z1);
+      const pier = corner || along(x, z) % 3 === 0;
+      for (let y = G + 1; y <= H; y++) {
+        if (world.has(x, y, z)) continue;
+        const band = y === G + 4 || y === G + 7 || y >= G + 8;
+        if (!pier && !band) continue;                       // the arch: open
+        world.set(x, y, z, y === H ? LP.entablature : pier && !band ? LP.hallColumn : LP.hallWall);
+      }
+      if (pier) arcade.piers++; else arcade.arches++;
+      if (corner || along(x, z) % 6 === 0) if (!world.has(x, H + 1, z) && !world.has(x, H + 2, z)) { world.set(x, H + 1, z, MAT.FENCE); world.set(x, H + 2, z, WOOLS[0]); arcade.pennants++; }
+    }
+  }
+  return { kind: 'stadium', ...(amph ? { name: 'Amphitheatre' } : {}), lot, pitch: P, goals, lights, tunnel, steps, rec: null, topY: G + 9 + lift + (amph ? 3 : 0), bouts, arcade, fighters: bouts ? bouts.fighters : [] };
 }
 const nameOfDir = (dx, dz) => (dx > 0 ? 'east' : dx < 0 ? 'west' : dz > 0 ? 'south' : 'north');
 

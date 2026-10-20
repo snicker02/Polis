@@ -133,7 +133,7 @@ export function chooseLandmarks(plan, cfg, hills = null, canal = null, transit =
   // (names typed in for the cemetery's stones: the cemetery always, if a lot takes it)
   const named = /\S/.test(cfg.memorial || '') || /\S/.test(cfg.graveNames || '');
   const take = (kind, list) => {
-    if (!CORE.has(kind) && !(kind === 'cemetery' && named) && !(kind === 'stadium' && cfg.bouts) && out.length >= budget) return;
+    if (!CORE.has(kind) && !(kind === 'cemetery' && named) && !(kind === 'stadium' && (cfg.bouts || styleOf(cfg.cityStyle).amphitheatre)) && out.length >= budget) return;
     const pick = list.find((c) => fits(c, kind)) || list.find((c) => fitsLoose(c, kind));
     if (pick) { pick.l.landmark = kind; out.push(pick.l); }
   };
@@ -178,7 +178,8 @@ export function chooseLandmarks(plan, cfg, hills = null, canal = null, transit =
   }
   // (the stadium with its bouts, asked for: its lot first, before the mansion and the
   // school take the big ones; the roomiest away from the very middle)
-  if (cfg.bouts) take('stadium', all.slice().sort((p, q) => (q.a * q.b) - (p.a * p.b)));
+  // (and a Classical city's amphitheatre likewise: it always has one where a lot takes it)
+  if (cfg.bouts || styleOf(cfg.cityStyle).amphitheatre) take('stadium', all.slice().sort((p, q) => (q.a * q.b) - (p.a * p.b)));
   const downtown = all.filter((c) => c.l.style !== 'house' && c.d <= reach).sort((p, q) => p.d - q.d);
   // a walled fortress town: the keep takes the heart of the town first, the
   // market square the next nearest lot

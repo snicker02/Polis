@@ -225,6 +225,49 @@ export function buildAirport(world, plan, cfg, ctx) {
   const ORANGE = WOOLS[5], WHITE = WOOLS[3];
   put(0, 48, YA + 5, ORANGE); put(1, 48, YA + 5, WHITE); put(2, 48, YA + 5, ORANGE);
 
+  // ---- a compass rose on the grass (0.74.1) -----------------------------------------------------
+  // In the stretch of grass between the terminal and the hangar, on the city's side of the apron:
+  // a white card nineteen across, rimmed in grey, true to the world (north is -Z); an eight-
+  // pointed star in its middle, the north point red, the others black, the four between grey;
+  // round the star the letters N E S W, upright to someone facing north (N red); a light set
+  // flush in the middle, which lights the whole card.
+  const compass = (() => {
+    const R = 9;
+    const turf = (x, z) => world.get(x, YA, z) === TURF && ![1, 2, 3, 4].some((d) => world.has(x, YA + d, z));
+    const fits = (u, v) => { for (let du = -R; du <= R; du++) for (let dv = -R; dv <= R; dv++) { if (du * du + dv * dv > (R + 0.25) ** 2) continue; const [x, z] = at(u + du, v + dv); if (!turf(x, z)) return false; } return true; };
+    // (the far side of the terminal from the tower, the middle of the run of places it fits;
+    // failing that, anywhere on the grass it fits)
+    let ok = [];
+    for (let u = T.u0 - 2 - R; u >= U0 + 1 + R; u--) if (fits(u, R + 1)) ok.push([u, R + 1]);
+    if (!ok.length) for (let v = R + 1; v < VD - R - 1; v++) for (let u = U0 + R + 1; u <= U1 - R - 1; u++) if (fits(u, v)) ok.push([u, v]);
+    if (!ok.length) return null;
+    const [uc, vc] = ok[Math.floor(ok.length / 2)];
+    const [cx, cz] = at(uc, vc);
+    const RED = mat('red_concrete', '#8e2121'), CARD = MAT.C_WHITE, RIM = MAT.C_GRAY, INK = MAT.C_BLACK, MID = MAT.C_LGRAY;
+    const cells = new Map();
+    const paint = (dx, dz, id) => cells.set(dx + ',' + dz, id);          // dx east, dz south: world offsets from the middle
+    for (let dx = -R; dx <= R; dx++) for (let dz = -R; dz <= R; dz++) { const q = dx * dx + dz * dz; if (q <= (R + 0.25) ** 2) paint(dx, dz, q > (R - 0.5) ** 2 ? RIM : CARD); }
+    // the star: the four between, then the four points (each three long, a block wide either
+    // side at its foot)
+    for (const [ex, ez] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) for (let t = 1; t <= 3; t++) paint(ex * t, ez * t, MID);
+    for (const [ex, ez, id] of [[1, 0, INK], [-1, 0, INK], [0, 1, INK], [0, -1, RED]]) {
+      for (let t = 1; t <= 3; t++) paint(ex * t, ez * t, id);
+      paint(ex - ez, ez + ex, id); paint(ex + ez, ez - ex, id);
+    }
+    paint(0, 0, LIGHT);
+    // the letters: rows north to south, columns west to east
+    const FONT = {
+      N: ['1..1', '11.1', '1.11', '1..1', '1..1'], E: ['111', '1..', '11.', '1..', '111'],
+      S: ['111', '1..', '111', '..1', '111'], W: ['1...1', '1...1', '1.1.1', '11.11', '1...1'],
+    };
+    const letter = (ch, x0, z0, id) => FONT[ch].forEach((row, r) => [...row].forEach((c, k) => { if (c === '1') paint(x0 + k, z0 + r, id); }));
+    letter('N', -2, -8, RED); letter('S', -1, 4, INK); letter('E', 4, -2, INK); letter('W', -8, -2, INK);
+    let n = 0;
+    for (const [k, id] of cells) { const [dx, dz] = k.split(',').map(Number); const x = cx + dx, z = cz + dz; if (world.get(x, YA, z) !== TURF) continue; world.set(x, YA, z, id); n++; }
+    lights.push([cx, YA, cz]);
+    return { centre: [cx, YA, cz], R, cells: n, north: [cx, YA, cz - 1], letters: { N: [cx - 2, cz - 8], E: [cx + 4, cz - 2], S: [cx - 1, cz + 4], W: [cx - 8, cz - 2] } };
+  })();
+
   // ---- no dark corners: a lamp wherever the airfield's ground is out of reach of a light ----
   const lit = [...lamps, ...lights];
   const near = (x, yy, z) => lit.some(([a, b, c]) => Math.abs(a - x) + Math.abs(b - yy) + Math.abs(c - z) <= 11);
@@ -250,7 +293,7 @@ export function buildAirport(world, plan, cfg, ctx) {
     kind: 'airport', lot: rect, roadRect, side, street: [route.street[0], GROUND + elevAt(...route.street), route.street[1]], gate, streetSign, ground: YA, noLighting: true, rec: null,
     road, runway: { ...runway, length: runway.u1 - runway.u0 + 1, width: RW.v1 - RW.v0 + 1, cells: (u, v) => pos(u, v, YA) }, lights,
     terminal: { ...T, doors, desks, seats }, tower: { ...TW, ladder, consoles, top: TW.cab + 5, door: pos(tu, TW.v0, YA + 1) },
-    pads, planes, hangar, fence, lamps, sock,
+    pads, planes, hangar, fence, lamps, sock, compass,
     visit: [vx, YA + 1, vz], visitLook: [lx, YA + 2, lz],
     frame: { at, pos, U0, U1, VD, YA, F, across, T, TW, AP, TX, RW, HG },
     acrossName, backName,
