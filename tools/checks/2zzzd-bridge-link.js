@@ -113,6 +113,10 @@ export default async function run(ctx) {
       const i = st.block_indices[0][((x - x0) * sy + (y + 2 - y0)) * sz + (z - z0)];
       cell = i < 0 ? 'void' : st.palette.default.block_palette[i].name;
     }
+    const pk2 = await linkPack(P, { ns: 'link_ab', ctag: layoutTag(A.world), anchor: 'alpha_centre', drop: GROUND_DROP, nameA: 'Alpha', nameB: 'Beta' });
+    const b2 = pk2.functions.find((f) => f.name === 'functions/link_ab/build.mcfunction').data;
+    const named = b2.split('\n').filter((l) => l.startsWith(`execute unless entity @e[type=armor_stand,tag=${layoutTag(A.world)}] at @e[type=armor_stand,name=alpha_centre,c=1] run structure load`)).length;
+    check('the pack: failing the marker\'s tag, its tiles loaded from the marker found by its name (0.75.3)', named === pk2.structures.length, `${named} of ${pk2.structures.length}`);
     check('the pack: its tiles loaded from the first city\'s marker by its tag (and at given coordinates); the air over the deck written as air', okLoads && !!abs && cell === 'minecraft:air', `${loads.length} loads, at ${!!abs}, ${cell}`);
   }
   // what it cannot do, said

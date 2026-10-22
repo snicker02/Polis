@@ -1,4 +1,4 @@
-# Polis v0.75.2
+# Polis v0.78.0
 
 *Created with help from Claude AI.*
 
@@ -771,6 +771,70 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.78.0** — Two new grounds beside the city, like the airport and the theme park,
+each at the end of its own road (two new checkboxes, beside the theme park):
+- **The Mega Arena** (east when that side is free): a covered arena 111 blocks
+  across, its outer wall 35 high under a roof with a raised glass-sided crown.
+  Doors and a tunnel under the stands lead to a walkway round the cage, and 25
+  rows of seats rise all round to a concourse at the top. In the middle a glass
+  cage 41 across, roofed in glass 14 up, holds twelve iron golems and two of each
+  of 21 hostile mobs (zombie, husk, drowned, zombie villager, skeleton, stray,
+  bogged, wither skeleton, spider, cave spider, silverfish, endermite, witch,
+  slime, magma cube, blaze, breeze, pillager, vindicator, ravager, zoglin). Every
+  fighter is named, tagged and saved with Resistance V, and a silent command block
+  under the sand gives it again: they fight forever and nobody dies. Left out, and
+  why, in the guide (creepers would blow the cage open; endermen and shulkers
+  teleport out; the Warden's boom goes through walls...). /function
+  <city>/arena_centered brings the fighters again.
+- **The University** (west when free): a gate, an avenue across a quad of trees
+  and fountains to a clock tower 47 high (a clock face each side, a ladder up to
+  the belfry and its bell); eight schools round the quad, each furnished for what
+  it teaches (Science, Medicine, Engineering, Agriculture, Law, Arts, Music,
+  Astronomy); the Great Library with an enchanting table among its shelves; the
+  Great Hall, a lecture theatre; and a sports field behind it all.
+Both are lit throughout, and appear on the map, in the summary and in Find a
+landmark (goto_arena, goto_university). New check 2zzzg.
+
+**0.77.0** — Cities up to 1024 across (the size slider stopped at 768). A 1024
+city is about nine million blocks and takes about five minutes to make, all on
+the page, so past 640 the page says so while it works, and that if the browser
+says the page is not responding, choose Wait. It needs a desktop browser with a
+gigabyte or so to spare. Its metro stays within 136 blocks of the middle, as at
+768, under the four areas held loaded; the city is filled in parts (about 18).
+Blocks that would fall off the edge of the engine's grid are now counted, and a
+1024 city with an airport and a theme park checked to have none. Check 2zzzf
+now builds a 1024 city.
+
+**0.76.0** — Bigger cities, and the metro kept near the middle. The size slider
+now goes to 768 (it stopped at 512); a city past 512 gets room for its blocks
+(the block budget grows with its ground), so none are dropped. A 768 city takes
+about two minutes to make. The metro now stays within 136 blocks of the city's
+middle, however big the city: its cross lines and its loop are drawn in to that.
+And on a city filled in parts, the four ticking areas left held at the end of
+populate (and by build) are now centred on the metro rather than on the 128
+grid, so the whole metro lies under them, kept loaded with the middle of town.
+A part with nothing in it now still runs and says it is done (a metro_rails
+part could stop there). New check 2zzzf.
+
+**0.75.4** — The mansion is back (a report: "what ever happened to my mansion?").
+With the big landmarks ticked (jail, zoo, museum, hospital...), they chose their
+lots first and took every lot the mansion fits, so it came last and was never
+built. Now, when no lot is left for it, the smallest landmark lot it could use
+out of the middle of town hands its landmark on to another free lot that fits,
+and the mansion takes the one freed; failing that it builds on a 15 x 15 lot.
+No landmark asked for is lost for it. With all of them on: a mansion in every
+city tested at 256 and 320, most at 160; a small city with everything ticked
+may still have no room. New check 2zzze.
+
+**0.75.3** — stand_here made surer (a report: "the other city's centre marker was
+not found"). A marker is only found while it is loaded, so stand_here must be run
+near the first city's build spot; it now also finds that city's marker by its
+name when its tag is not there (a marker made by another export of the city),
+and when it finds neither it says plainly to go to that city's build spot. A new
+stand_here_from_spot does the same with no marker at all, run standing exactly
+on the first city's build spot. A link's build finds its marker the same two
+ways.
 
 **0.75.2** — Sets of joined cities. The bridges and cities remembered for Join to
 and Link are kept in sets, each a group of cities built together in one place:

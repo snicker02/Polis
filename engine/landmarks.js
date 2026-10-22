@@ -116,7 +116,9 @@ export function chooseLandmarks(plan, cfg, hills = null, canal = null, transit =
   // A school wants the biggest lot it can get — hall, yard and a field
   // behind — but a small town may have nothing that size, and a town with no
   // school is worse than a tight one, so it settles for less if it must.
-  const FALLBACK = { school: [14, 20] };
+  // (and the mansion likewise: on a smaller lot a smaller estate, the house alone with its
+  // lawn and drive, no wings or garden: 0.75.4)
+  const FALLBACK = { school: [14, 20], mansion: [15, 15] };
   const fits = (c, kind) => !c.l.landmark && c.a >= NEED[kind][0] && c.b >= NEED[kind][1];
   const fitsLoose = (c, kind) => {
     const n = FALLBACK[kind];
@@ -192,6 +194,25 @@ export function chooseLandmarks(plan, cfg, hills = null, canal = null, transit =
   // the mansion takes the biggest lot it can find out of the middle of town
   const byArea = all.slice().filter((c) => c.d > maxD * 0.25).sort((p, q) => (q.a * q.b) - (p.a * p.b));
   take('mansion', byArea);
+  // (0.75.4) No lot left for the mansion: the big landmarks asked for chose first and took
+  // every lot it fits (none was ever built with them all on). One of them moves to a free lot
+  // it fits as well, the smallest that does, and the mansion takes the lot it leaves (out of
+  // the middle of town, the smallest such): nothing asked for is lost to it.
+  if (!out.some((l) => l.landmark === 'mansion')) {
+    const OPTIONAL = new Set(['jail', 'zoo', 'aquarium', 'museum', 'hospital', 'firestation', 'police', 'theatre', 'hotel', 'factory', 'workshop', 'mill', 'park', 'waterpark', 'lazyriver', 'garden', 'mall', 'sports', 'bank', 'petrol', 'skatepark', 'wizard', 'nightclub', 'watertower']);
+    const area = (c) => c.a * c.b;
+    const held = all.filter((c) => OPTIONAL.has(c.l.landmark) && c.d > maxD * 0.25 && c.a >= NEED.mansion[0] && c.b >= NEED.mansion[1]).sort((p, q) => area(p) - area(q));
+    for (const c of held) {
+      const kind = c.l.landmark;
+      const alt = all.filter((o) => fits(o, kind)).sort((p, q) => area(p) - area(q))[0];
+      if (!alt) continue;
+      alt.l.landmark = kind;
+      out[out.indexOf(c.l)] = alt.l;
+      c.l.landmark = 'mansion';
+      out.push(c.l);
+      break;
+    }
+  }
   // prefer a lot that runs deep back from its street: room for a sports field behind
   const depthOf = (c) => { const side = frontage(plan, c.l).side; return side === 'north' || side === 'south' ? c.l.z1 - c.l.z0 + 1 : c.l.x1 - c.l.x0 + 1; };
   // A school takes the biggest lot it can: deep enough for a field behind,
@@ -929,7 +950,7 @@ const BUILDERS = { townhall: townHall, clocktower: clockTower, library, market, 
   nightclub: (w, l, f, c, r, G) => nightclub(w, l, f, c, r, G, signTags) };
 export const LANDMARK_NAMES = { townhall: 'Town Hall', clocktower: 'Clock Tower', library: 'Library', market: 'Market',
   church: 'Church', school: 'School', lighthouse: 'Lighthouse', castle: 'Castle', mansion: 'Mansion',
-  townsquare: 'Town Square', stadium: 'Stadium', cemetery: 'Cemetery', allotments: 'Allotments', bandstand: 'Bandstand', jail: 'Jail', zoo: 'Zoo', aquarium: 'Aquarium', museum: 'Museum', hospital: 'Hospital', firestation: 'Fire Station', police: 'Police Station', theatre: 'Theatre', hotel: 'Hotel', factory: 'Factory', workshop: 'Workshop', mill: 'Mill', park: 'Amusement Park', waterpark: 'Water Park', lazyriver: 'Lazy River', garden: 'Botanical Garden', station: 'Station', mall: 'Shopping Mall', sports: 'Sports Centre', bank: 'Bank', watertower: 'Water Tower', petrol: 'Petrol Station', skatepark: 'Skate Park', wizard: "Wizard's Tower", nightclub: 'Nightclub', airport: 'Airport', themepark: 'Theme Park' };
+  townsquare: 'Town Square', stadium: 'Stadium', cemetery: 'Cemetery', allotments: 'Allotments', bandstand: 'Bandstand', jail: 'Jail', zoo: 'Zoo', aquarium: 'Aquarium', museum: 'Museum', hospital: 'Hospital', firestation: 'Fire Station', police: 'Police Station', theatre: 'Theatre', hotel: 'Hotel', factory: 'Factory', workshop: 'Workshop', mill: 'Mill', park: 'Amusement Park', waterpark: 'Water Park', lazyriver: 'Lazy River', garden: 'Botanical Garden', station: 'Station', mall: 'Shopping Mall', sports: 'Sports Centre', bank: 'Bank', watertower: 'Water Tower', petrol: 'Petrol Station', skatepark: 'Skate Park', wizard: "Wizard's Tower", nightclub: 'Nightclub', airport: 'Airport', themepark: 'Theme Park', arena: 'Mega Arena', university: 'University' };
 
 export function buildLandmark(world, lot, face, cfg, rng, G) {
   const L = BUILDERS[lot.landmark](world, lot, face, cfg, rng, G);

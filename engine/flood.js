@@ -45,7 +45,7 @@ export const DEPTH = 11;
 const REACH = 80;
 const MIN_PATCH = 300;
 export const DRY_KINDS = new Set(['zoo', 'aquarium', 'jail', 'factory', 'workshop', 'mill', 'park', 'waterpark', 'lazyriver', 'garden', 'stadium', 'bank',
-  'nightclub', 'bandstand', 'petrol', 'themepark', 'airport', 'sports', 'wizard', 'station', 'museum']);              // (columns: a patch of sea smaller than this stays dry)
+  'nightclub', 'bandstand', 'petrol', 'themepark', 'airport', 'arena', 'university', 'sports', 'wizard', 'station', 'museum']);              // (columns: a patch of sea smaller than this stays dry)
 const PLANT = { passable: true, flowable: true, transparent: true };
 const mat = (block, color, states = {}, flags = {}) => MATERIALS.add(null, 'minecraft:' + block, color, states, flags);
 const N4 = [[1, 0], [-1, 0], [0, 1], [0, -1]];

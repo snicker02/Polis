@@ -38,7 +38,7 @@ export class VoxelWorld {
 
   set(x, y, z, id) {
     if (id === EMPTY || id === undefined || id === null) return this.clear(x, y, z);
-    if (!this.inRange(x, y, z)) return false;
+    if (!this.inRange(x, y, z)) { this.outside = (this.outside || 0) + 1; return false; }   // (counted: a check looks)
     const k = K(x, y, z);
     if (!this.cells.has(k)) {
       if (this.cells.size >= this.budget) { this.overflow++; return false; }

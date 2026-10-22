@@ -123,6 +123,7 @@ function translateState(block, key, value) {
     case 'minecraft:vertical_half': return ['type', String(value) === 'top' ? 'top' : 'bottom'];
     case 'height': return ['layers', String(Math.min(8, value + 1))];      // snow layers count from one
     case 'covered_bit': return null;
+    case 'conditional_bit': return ['conditional', value ? 'true' : 'false'];       // a command block's (0.78.0)
     case 'toggle_bit': return null;
     case 'age_bit': return ['age', value ? '1' : '0'];
     case 'bamboo_leaf_size': return ['leaves', value === 'large_leaves' ? 'large' : value === 'small_leaves' ? 'small' : 'none'];
@@ -225,6 +226,9 @@ export function toJava(block, states = {}, extra = {}) {
   if (name === 'minecraft:conduit') props.waterlogged = 'true';
   // a vine's sides by Bedrock's bits (1 south, 2 west, 4 north, 8 east): Java names each side
   if (name === 'minecraft:vine') { const v = Number(props.vine_direction_bits || 0); delete props.vine_direction_bits; props.south = v & 1 ? 'true' : 'false'; props.west = v & 2 ? 'true' : 'false'; props.north = v & 4 ? 'true' : 'false'; props.east = v & 8 ? 'true' : 'false'; props.up = 'false'; }
+  // a lit redstone lamp is its own block in Bedrock, a state in Java (0.78.0)
+  if (name === 'minecraft:lit_redstone_lamp') { name = 'minecraft:redstone_lamp'; props.lit = 'true'; }
+  if (name === 'minecraft:redstone_lamp' && block === 'minecraft:redstone_lamp') props.lit = 'false';
   if (name === 'minecraft:repeater') { props.locked = 'false'; props.powered = block === 'minecraft:powered_repeater' ? 'true' : 'false'; }
   if (name === 'minecraft:piston' || name === 'minecraft:sticky_piston') props.extended = 'false';
   if (name === 'minecraft:hopper') props.enabled = 'true';

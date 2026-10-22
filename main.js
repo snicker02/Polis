@@ -18,7 +18,7 @@ import { buildPregenPack, pregenFileName, siteRegion, viewRegion, pregenCommand,
 import { decodeNbt } from './tools/nbt-read.js';
 import { THEMES, MAT } from './engine/materials.js';
 
-const VERSION = '0.75.2';
+const VERSION = '0.78.0';
 const $ = (id) => document.getElementById(id);
 const numVal = (id) => Number($(id).value);      // readCfg has its own local num()
 
@@ -28,7 +28,7 @@ const SLIDERS = {
   maxFloors: 0, pitch: 0, setbackEvery: 0, bw: 0, bd: 0, floors: 0, clip: 0,
   farmChance: 2, pondChance: 2, twistChance: 2, courtyardChance: 2, hostileCount: 0, villagers: 0, wallHeight: 0, foundation: 0, clearAbove: 0, hills: 0, golemsPer10: 0, joinGap: 0,
 };
-const CHECKS = ['setback', 'roofAccess', 'useStairs', 'lights', 'lamps', 'trees', 'markings', 'landmarks', 'canal', 'harbour', 'bridges', 'detail', 'streetSigns', 'fish', 'megaliths', 'hostiles', 'dome', 'stilts', 'floating', 'cliff', 'underground', 'metro', 'terrainBreaks', 'jail', 'zoo', 'museum', 'hospital', 'firestation', 'police', 'theatre', 'hotel', 'factory', 'park', 'waterpark', 'garden', 'station', 'mall', 'airport', 'bouts', 'themepark', 'sports', 'bank', 'watertower', 'petrol', 'skatepark', 'wizard', 'nightclub', 'lifts', 'underwater'];
+const CHECKS = ['setback', 'roofAccess', 'useStairs', 'lights', 'lamps', 'trees', 'markings', 'landmarks', 'canal', 'harbour', 'bridges', 'detail', 'streetSigns', 'fish', 'megaliths', 'hostiles', 'dome', 'stilts', 'floating', 'cliff', 'underground', 'metro', 'terrainBreaks', 'jail', 'zoo', 'museum', 'hospital', 'firestation', 'police', 'theatre', 'hotel', 'factory', 'park', 'waterpark', 'garden', 'station', 'mall', 'airport', 'bouts', 'themepark', 'arena', 'university', 'sports', 'bank', 'watertower', 'petrol', 'skatepark', 'wizard', 'nightclub', 'lifts', 'underwater'];
 
 let renderer = null;
 let result = null;       // { world, plan, buildings, cfg, stats }
@@ -403,7 +403,7 @@ async function exportLink() {
   busy(true);
   try {
     const ns = ('link_' + (L.A.ns || 'a').slice(0, 14) + '_' + (L.B.ns || 'b').slice(0, 14)).replace(/[^a-z0-9_]/g, '_');
-    const out = await linkPack(L.plan, { ns, ctag: L.A.ctag, drop: GROUND_DROP, spot: spotOf('linkSpotA'), nameA: L.A.name || L.A.ns, nameB: L.B.name || L.B.ns });
+    const out = await linkPack(L.plan, { ns, ctag: L.A.ctag, anchor: L.A.ns ? `${L.A.ns}_centre` : null, drop: GROUND_DROP, spot: spotOf('linkSpotA'), nameA: L.A.name || L.A.ns, nameB: L.B.name || L.B.ns });
     const name = `${ns}_v${VERSION}.mcpack`;
     download(out.data, name);
     const list = joinEnds();
@@ -511,6 +511,9 @@ function generate() {
   markFitted();
   if (applyingSettings) return;
   rememberSettings();                                         // (the downtown's place changes by a click on the map)
+  // (a city past 640 takes minutes, all of it on this page: said, and what to do if the browser asks)
+  $('busy').textContent = $('mode').value === 'city' && numVal('size') > 640
+    ? `generating… a ${numVal('size')} city takes a few minutes. If the browser says the page is not responding, choose Wait.` : 'generating…';
   busy(true);
   $('gen').disabled = true;
   setTimeout(() => {
@@ -573,8 +576,10 @@ function drawMap() {
   const { W, D, use } = result.plan;
   const air = (result.landmarks || []).find((l) => l.kind === 'airport');
   const fun = (result.landmarks || []).find((l) => l.kind === 'themepark');
+  const arena = (result.landmarks || []).find((l) => l.kind === 'arena');
+  const uni = (result.landmarks || []).find((l) => l.kind === 'university');
   mapExt = { x0: 0, z0: 0, x1: W - 1, z1: D - 1 };
-  for (const o of [air, fun]) if (o) mapExt = { x0: Math.min(mapExt.x0, o.lot.x0), z0: Math.min(mapExt.z0, o.lot.z0), x1: Math.max(mapExt.x1, o.lot.x1), z1: Math.max(mapExt.z1, o.lot.z1) };
+  for (const o of [air, fun, arena, uni]) if (o) mapExt = { x0: Math.min(mapExt.x0, o.lot.x0), z0: Math.min(mapExt.z0, o.lot.z0), x1: Math.max(mapExt.x1, o.lot.x1), z1: Math.max(mapExt.z1, o.lot.z1) };
   cv.width = mapExt.x1 - mapExt.x0 + 1; cv.height = mapExt.z1 - mapExt.z0 + 1;
   const ctx = cv.getContext('2d');
   ctx.fillStyle = '#0b0d10'; ctx.fillRect(0, 0, cv.width, cv.height);
@@ -614,6 +619,25 @@ function drawMap() {
     ctx.fillStyle = '#c0392b'; ctx.fillRect(fun.map.tower[0] - 2, fun.map.tower[1] - 2, 5, 5);
     ctx.fillStyle = '#f2cf3e'; ctx.beginPath(); ctx.arc(fun.map.carousel[0] + 0.5, fun.map.carousel[1] + 0.5, 5, 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = '#5c6063'; for (const [x, , z] of fun.road) ctx.fillRect(x, z, 1, 1);
+  }
+  // the arena: its grass, the hall, the cage; the university: its grass, its halls, the field
+  const frameRect = (F, u0, v0, u1, v1, col) => {
+    const a = F.at(u0, v0), b = F.at(u1, v1);
+    ctx.fillStyle = col; ctx.fillRect(Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.abs(a[0] - b[0]) + 1, Math.abs(a[1] - b[1]) + 1);
+  };
+  if (arena) {
+    const F = arena.frame;
+    frameRect(F, F.U0, 0, F.U1, F.VD - 1, '#3f6b33');
+    frameRect(F, -F.R, F.VC - F.R, F.R, F.VC + F.R, '#2f3034');
+    frameRect(F, -21, F.VC - 21, 21, F.VC + 21, '#d8cf9a');
+    ctx.fillStyle = '#5c6063'; for (const [x, , z] of arena.road) ctx.fillRect(x, z, 1, 1);
+  }
+  if (uni) {
+    const F = uni.frame;
+    frameRect(F, F.U0, 0, F.U1, F.VD - 1, '#4a7a3a');
+    for (const h of uni.halls) frameRect(F, h.box.u0, h.box.v0, h.box.u1, h.box.v1, '#b9a88a');
+    frameRect(F, -60, 148, 60, 174, '#8f3d2e'); frameRect(F, -57, 151, 57, 171, '#4f8a33');
+    ctx.fillStyle = '#5c6063'; for (const [x, , z] of uni.road) ctx.fillRect(x, z, 1, 1);
   }
   // railway: green corridors and the track lines
   if (result.transit) {
@@ -811,14 +835,14 @@ function showStats(mesh, times) {
       const skipped = Object.keys(NOT_FITTED).filter((id) => $(id) && $(id).checked).map((id) => NOT_FITTED[id]);
       if (skipped.length) line('not on fitted ground', `${skipped.join(', ')}: a fitted city follows your world's own ground`);
     }
-    for (const [k, label] of [['police', 'police station'], ['theatre', 'theatre'], ['hotel', 'hotel'], ['factory', 'factory'], ['workshop', 'workshop'], ['mill', 'mill'], ['park', 'amusement park'], ['waterpark', 'water park'], ['lazyriver', 'lazy river'], ['garden', 'botanical garden'], ['station', 'station'], ['mall', 'shopping mall'], ['sports', 'sports centre'], ['bank', 'bank'], ['watertower', 'water tower'], ['petrol', 'petrol station'], ['skatepark', 'skate park'], ['wizard', "wizard's tower"], ['nightclub', 'nightclub'], ['bandstand', 'bandstand'], ['airport', 'airport'], ['bouts', 'stadium bouts'], ['themepark', 'theme park']]) {
+    for (const [k, label] of [['police', 'police station'], ['theatre', 'theatre'], ['hotel', 'hotel'], ['factory', 'factory'], ['workshop', 'workshop'], ['mill', 'mill'], ['park', 'amusement park'], ['waterpark', 'water park'], ['lazyriver', 'lazy river'], ['garden', 'botanical garden'], ['station', 'station'], ['mall', 'shopping mall'], ['sports', 'sports centre'], ['bank', 'bank'], ['watertower', 'water tower'], ['petrol', 'petrol station'], ['skatepark', 'skate park'], ['wizard', "wizard's tower"], ['nightclub', 'nightclub'], ['bandstand', 'bandstand'], ['airport', 'airport'], ['bouts', 'stadium bouts'], ['themepark', 'theme park'], ['arena', 'Mega Arena'], ['university', 'University']]) {
       if (s[k + 'Missing']) line(label, s[k + 'Missing']);
       if (s[k]) line(label, s[k]);
     }
     // where the asked-for landmarks are, from the build_centered spot (in the pack:
     // /function <city>/goto_<name>, and the guide lists every one)
     if (result.places && result.places.length) {
-      const asked = new Set(['jail', 'zoo', 'aquarium', 'museum', 'hospital', 'firestation', 'police', 'theatre', 'hotel', 'factory', 'workshop', 'mill', 'park', 'waterpark', 'lazyriver', 'garden', 'station', 'mall', 'sports', 'bank', 'watertower', 'petrol', 'skatepark', 'wizard', 'nightclub', 'airport', 'themepark', 'memorial']);
+      const asked = new Set(['jail', 'zoo', 'aquarium', 'museum', 'hospital', 'firestation', 'police', 'theatre', 'hotel', 'factory', 'workshop', 'mill', 'park', 'waterpark', 'lazyriver', 'garden', 'station', 'mall', 'sports', 'bank', 'watertower', 'petrol', 'skatepark', 'wizard', 'nightclub', 'airport', 'themepark', 'arena', 'university', 'memorial']);
       const ps = placeOffsets(result.world, { places: result.places.filter((P) => asked.has(P.kind)) });
       if (ps.length) line('where (from the centre)', ps.map((P) => `${P.name}: ${P.words}`).join(' · ') + ' — in the game, /function <city>/goto_<name>');
     }
@@ -1099,7 +1123,7 @@ function showSite(g) {
 function previewWorld(res) {
   if (res.world.sea) return seaPreview(res);
   if (!res.shell || !res.shell.length) return res.world;
-  const copy = new VoxelWorld({ budget: res.cfg.budget + res.shell.length + 1000 });
+  const copy = new VoxelWorld({ budget: (res.world.budget || res.cfg.budget) + res.shell.length + 1000 });
   res.world.forEach((x, y, z, id) => copy.set(x, y, z, id));
   for (const [x, y, z, id] of res.shell) if (!copy.has(x, y, z)) copy.set(x, y, z, id);
   copy.cityMask = res.world.cityMask;
@@ -1110,7 +1134,7 @@ function previewWorld(res) {
 // the preview shows its surface (the cutaway slider looks in under it)
 function seaPreview(res) {
   const sea = res.world.sea, b = sea.box;
-  const copy = new VoxelWorld({ budget: res.cfg.budget + (b.x1 - b.x0 + 1) * (b.z1 - b.z0 + 1) + 1000 });
+  const copy = new VoxelWorld({ budget: (res.world.budget || res.cfg.budget) + (b.x1 - b.x0 + 1) * (b.z1 - b.z0 + 1) + 1000 });
   res.world.forEach((x, y, z, id) => copy.set(x, y, z, id));
   const put = (x, y, z) => { if (!copy.has(x, y, z) && sea.at(x, y, z)) copy.set(x, y, z, MAT.WATER); };
   for (let x = b.x0 + 1; x < b.x1; x++) for (let z = b.z0 + 1; z < b.z1; z++) put(x, sea.S, z);

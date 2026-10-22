@@ -17,7 +17,7 @@ import { makeRng } from './rng.js';
 // Must match main.js VERSION, package.json and index.html data-version;
 // tools/validate.js fails if they drift. The app refuses to export when the
 // browser has mixed cached copies of old and new files.
-export const POLIS_VERSION = '0.75.2';
+export const POLIS_VERSION = '0.78.0';
 
 export const CHUNK = 64;          // Bedrock structure limit per horizontal axis
 export const GROUND_DROP = 2;     // base layer y=0 sits 2 below feet; surface y=1 replaces the block you stand on
@@ -573,7 +573,7 @@ export function tickingAreas(world, ns) {
 // own 128 grid (a tile never split; 9 x 9 chunks at most, however it sits), STAGE_AREAS
 // of them a part, held loaded one part at a time, plus one small area on the spot it
 // is run from. Half the world's ten left free for anything else.
-export const MAX_TICKING_AREAS = 10, STAGE_AREAS = 4, STAGE_SQ = 128;
+export const MAX_TICKING_AREAS = 10, STAGE_AREAS = 4, STAGE_SQ = 128, HOME_SQ = 144;
 export function needsStages(world) { return tickingAreas(world, 'x').length > MAX_TICKING_AREAS; }
 export function stagePlan(world, ns) {
   const wb = world.box, S = STAGE_SQ, fl = (v) => Math.floor(v / S);
@@ -609,9 +609,16 @@ export function stagePlan(world, ns) {
     const NAMES = ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west'];
     return { name: NAMES[((Math.round(ang / 45) % 8) + 8) % 8], box };
   });
-  // the squares kept loaded once a part is done (and by build): the STAGE_AREAS nearest the middle
-  const all = stages.flat();
-  const home = named(all.slice().sort((p, q) => d2(p) - d2(q)).slice(0, STAGE_AREAS));
+  // the squares kept loaded once a part is done (and by build): STAGE_AREAS of them
+  // (four areas of HOME_SQ round the middle of the metro, if the city has one, else round the
+  // middle: not on the grid, so the whole metro, within METRO_REACH of the city's middle, is
+  // under them; 144 across is ten chunks at most, however it sits)
+  const mb = world.metroBox, hc = mb ? [Math.floor((mb.x0 + mb.x1 + 1) / 2), Math.floor((mb.z0 + mb.z1 + 1) / 2)] : mid;
+  const H = HOME_SQ, home = [];
+  for (const [za, zb] of [[hc[1] - H, hc[1] - 1], [hc[1], hc[1] + H - 1]]) for (const [xa, xb] of [[hc[0] - H, hc[0] - 1], [hc[0], hc[0] + H - 1]]) {
+    const q = { x0: Math.max(wb.x0, xa), x1: Math.min(wb.x1, xb), z0: Math.max(wb.z0, za), z1: Math.min(wb.z1, zb) };
+    if (q.x0 <= q.x1 && q.z0 <= q.z1) home.push({ ...q, name: `${ns}_t${home.length + 1}` });
+  }
   return { stages, where, home, mark: `${ns}_m`, names: [...Array(STAGE_AREAS)].map((_, n) => `${ns}_t${n + 1}`),
     squareOf: (x, z) => fl(x) + ',' + fl(z), stageOf: (x, z) => index.get(fl(x) + ',' + fl(z)) ?? -1 };
 }
@@ -750,6 +757,7 @@ export function functionFiles(tiles, world, opts = {}) {
       file(`${F(n)}_go`, [`execute at @e[type=armor_stand,name=${MARK},c=1] run function ${F(n)}_run`]);
       const cmds = p.items.map((it) => it.cmd), chunks = [];
       for (let c = 0; c < cmds.length; c += 7500) chunks.push(cmds.slice(c, c + 7500));
+      if (!chunks.length) chunks.push([]);                   // (a part with nothing to do still says so and goes on)
       const tail = [`say Polis: part ${n} of ${N} (${p.where}) done.`, ...(n < N ? [`function ${F(n + 1)}_next`] : [])].concat(n < N ? [] : [...plan.names.map((nm) => `tickingarea remove ${nm}`),
         ...holdAreas.map((a) => addArea(a, dx, dz)), `tickingarea remove ${plan.mark}`, ...outro, `kill @e[type=armor_stand,name=${MARK}]`]);
       chunks.forEach((c, m) => file(`${F(n)}_run${m ? '_' + (m + 1) : ''}`, [
@@ -973,7 +981,7 @@ export function functionFiles(tiles, world, opts = {}) {
   // the jail and the zoo on their own, to fill them again (after the areas below)
   // each landmark's mobs again on their own: its own structure tiles loaded (a
   // structure waits for its chunks, as a summon does not)
-  for (const [group, noun] of [['jail', 'inmates for the jail'], ['zoo', 'animals and fish for the zoo and aquarium'], ['museum', 'suits of armour for the museum'], ['mall', 'shopkeepers for the mall'], ['stadium', 'fighters for the stadium\'s bouts']]) {
+  for (const [group, noun] of [['jail', 'inmates for the jail'], ['zoo', 'animals and fish for the zoo and aquarium'], ['museum', 'suits of armour for the museum'], ['mall', 'shopkeepers for the mall'], ['stadium', 'fighters for the stadium\'s bouts'], ['arena', 'fighters for the Mega Arena\'s cage']]) {
     const tiles = mobs.filter((t) => t.group === group);
     if (!tiles.length) continue;
     const only = (dx, dz, title) => [
@@ -1037,13 +1045,23 @@ export function functionFiles(tiles, world, opts = {}) {
   // marked build spot to this city's, where build_centered puts its road against the bridge
   if (world.joinFrom && world.joinFrom.ctag) {
     const J = world.joinFrom, [ox, oy, oz] = J.offset, who = J.name || 'the other city';
-    const r = (a) => `~${a || ''}`;
+    const r = (a) => `~${a || ''}`, clean = (t) => String(t).replace(/[^A-Za-z0-9 _'-]/g, '');
     files.push({ name: `functions/${ns}/stand_here.mcfunction`, fn: `${ns}/stand_here`, text: [
       `# Polis: to this city's build spot, from ${who}'s (its build_centered marker), so its road meets ${who}'s ${J.side === 'west' ? 'east' : J.side === 'east' ? 'west' : J.side === 'north' ? 'south' : 'north'} bridge.`,
       `# Or from that marker yourself: /tp @s ${r(ox)} ${r(oy)} ${r(oz)}`,
+      // (found by the other city's tag; failing that by its marker's name, a marker made by
+      // another export of it; failing both, said what to do: 0.75.4)
       `execute at @e[type=armor_stand,tag=${J.ctag},c=1] run tp @s ${r(ox)} ${r(oy)} ${r(oz)}`,
-      `execute if entity @e[type=armor_stand,tag=${J.ctag}] run say Polis: this is the build spot for ${ns}, against ${who.replace(/[^A-Za-z0-9 _'-]/g, '')}'s bridge. Run /function ${ns}/build_centered from here (do not move first).`,
-      `execute unless entity @e[type=armor_stand,tag=${J.ctag}] run say Polis: the other city's centre marker was not found (too far away to be loaded, or that city was built from an older pack). Stand on its build_centered spot and try again.`,
+      ...(J.ns ? [`execute unless entity @e[type=armor_stand,tag=${J.ctag}] at @e[type=armor_stand,name=${centreAnchor(J.ns)},c=1] run tp @s ${r(ox)} ${r(oy)} ${r(oz)}`] : []),
+      `execute if entity @e[type=armor_stand,tag=${J.ctag}] run say Polis: this is the build spot for ${ns}, against ${clean(who)}'s bridge. Run /function ${ns}/build_centered from here (do not move first).`,
+      ...(J.ns ? [`execute unless entity @e[type=armor_stand,tag=${J.ctag}] if entity @e[type=armor_stand,name=${centreAnchor(J.ns)}] run say Polis: this is the build spot for ${ns}, against ${clean(who)}'s bridge (found by its marker's name). Run /function ${ns}/build_centered from here (do not move first).`] : []),
+      `execute unless entity @e[type=armor_stand,tag=${J.ctag}]${J.ns ? ` unless entity @e[type=armor_stand,name=${centreAnchor(J.ns)}]` : ''} run say Polis: ${clean(who)}'s centre marker was not found: it is only found when you are near it. Go to ${clean(who)}'s build spot (its armor stand, in the centre monument's alcove) and run this again. Or stand exactly on that spot and run /function ${ns}/stand_here_from_spot.`,
+    ].join('\n') + '\n' });
+    // the same, with no marker: run on the other city's build spot itself
+    files.push({ name: `functions/${ns}/stand_here_from_spot.mcfunction`, fn: `${ns}/stand_here_from_spot`, text: [
+      `# Polis: to this city's build spot, from ${who}'s build spot. Run standing exactly where ${who}'s build_centered was run (no marker needed).`,
+      `tp @s ${r(ox)} ${r(oy)} ${r(oz)}`,
+      `say Polis: this is the build spot for ${ns}, if you ran this from ${clean(who)}'s. Run /function ${ns}/build_centered from here (do not move first).`,
     ].join('\n') + '\n' });
   }
   if (places.length) files.push({ name: `functions/${ns}/mark_centre.mcfunction`, fn: `${ns}/mark_centre`, text: [
@@ -1145,6 +1163,8 @@ export function placementGuide(tiles, opts = {}) {
     L.push(`    /function ${ns}/build_centered      (from there, without moving)`);
     L.push(`    /function ${ns}/populate_centered   (once it has finished appearing)`);
     L.push('');
+    L.push(`  stand_here finds ${who}'s marker only when you are near it: stand on ${who}'s build spot first.`);
+    L.push(`  Standing exactly on that spot, /function ${ns}/stand_here_from_spot does the same with no marker.`);
     L.push(`  Or by hand, from ${who}'s marker: /tp @s ~${J.offset[0] || ''} ~${J.offset[1] || ''} ~${J.offset[2] || ''}  (x east, y up, z south).`);
     L.push(`  This city's road comes out on its ${J.side} side and meets the bridge's landing.`);
     L.push('');
@@ -1199,6 +1219,29 @@ export function placementGuide(tiles, opts = {}) {
     L.push('  The pitch is a glass cage, roofed in glass eight blocks up, so no fighter is thrown out of it.');
     L.push('  The fans go up into the stands by the stair from the street.');
     L.push('  The bouts run while you are near enough for the stadium to be simulated.');
+    L.push('');
+  }
+  if ((opts.spawns || []).some((p) => p.group === 'arena')) {
+    const kinds = [...new Set(opts.spawns.filter((p) => p.group === 'arena' && p.type === 'mob').map((p) => p.kind.replace(/_/g, ' ')))];
+    L.push('THE MEGA ARENA: a covered arena beside the city, its doors at the end of its own road. A tunnel under the stands');
+    L.push('  leads in to the walkway round the cage; climb the rows of seats (a staircase all round) to the concourse at the top.');
+    L.push('  In the glass cage, roofed in glass fourteen blocks up, every mob a cage can hold, two of each, and a dozen');
+    L.push('  iron golems to take them on: ' + kinds.join(', ') + '.');
+    L.push('  Every fighter is saved with Resistance V (no damage at all) and named (a named mob never despawns), and a');
+    L.push('  silent command block under the sand gives the Resistance again every two seconds: the fights go on and');
+    L.push('  nobody dies. The roof keeps the sun off. They come with populate, or /function ' + ns + '/arena_centered');
+    L.push('  (each run brings another set). Command blocks must be on (/gamerule commandblocksenabled true).');
+    L.push('  Not in the cage: creeper (would blow it open), ghast, guardian and elder guardian (fly or need water),');
+    L.push('  enderman and shulker (teleport out), evoker and vex (pass through walls), Wither, Warden, Ender Dragon (no cage');
+    L.push('  holds them), phantom (fights only players), piglins and hoglins (turn into other mobs in the Overworld), creaking.');
+    L.push('');
+  }
+  if ((opts.places || []).some((P) => P.kind === 'university')) {
+    L.push('THE UNIVERSITY: a campus beside the city through its gate: the avenue across the quad to the clock tower, eight');
+    L.push('  schools round the quad (Science, Medicine, Engineering, Agriculture, Law, Arts, Music, Astronomy), each with');
+    L.push('  its name over its door; the Great Library (an enchanting table among its shelves, in the middle) and the Great');
+    L.push('  Hall (a lecture theatre) either side of the clock tower; a ladder inside the tower climbs to the belfry and its');
+    L.push('  bell. Behind it all, the sports field.');
     L.push('');
   }
   if ((opts.places || []).some((P) => P.kind === 'themepark')) {

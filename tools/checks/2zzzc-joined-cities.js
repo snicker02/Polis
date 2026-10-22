@@ -80,7 +80,7 @@ export default async function run(ctx) {
 
   // ---- three cities: B joined to A's east bridge, C to B's south bridge
   const A = generateCity({ ...DEFAULTS, size: 192, seed: 7, joinSides: ['east'], joinKind: 'viaduct', joinGap: 48, airport: true, themepark: true });
-  const endOf = (r, side, nm) => ({ ...r.world.joins.find((j) => j.side === side), ctag: layoutTag(r.world), name: nm });
+  const endOf = (r, side, nm) => ({ ...r.world.joins.find((j) => j.side === side), ctag: layoutTag(r.world), name: nm, ns: nm.toLowerCase() });
   const B = generateCity({ ...DEFAULTS, size: 160, seed: 5, hills: 3, cityStyle: 'nordic', airport: true, themepark: true, joinSides: ['south'], joinKind: 'suspension', joinGap: 64, joinTo: endOf(A, 'east', 'Alpha') });
   const C = generateCity({ ...DEFAULTS, size: 160, seed: 99, cityStyle: 'western', joinTo: endOf(B, 'south', 'Beta') });
   check('three cities: the second joined to the first\'s bridge, the third to the second\'s, each its road in found, none missing', !!B.world.joinFrom && !!C.world.joinFrom && !B.joinMissing.length && !C.joinMissing.length && B.joins.length === 1, `${B.joinMissing.join('; ')} ${C.joinMissing.join('; ')}`);
@@ -136,6 +136,12 @@ export default async function run(ctx) {
     const o = B.world.joinFrom.offset, r = (a) => `~${a || ''}`;
     const line = `execute at @e[type=armor_stand,tag=${layoutTag(A.world)},c=1] run tp @s ${r(o[0])} ${r(o[1])} ${r(o[2])}`;
     check('the pack: stand_here takes you from the first city\'s marker (by its tag) to the joined city\'s build spot', !!sh && sh.text.includes(line), sh ? sh.text.split('\n')[2] : 'none');
+    // (0.75.3) failing the tag, by the marker's name; failing both, it says to go to that spot,
+    // and stand_here_from_spot does it with no marker from the spot itself
+    const byName = `execute unless entity @e[type=armor_stand,tag=${layoutTag(A.world)}] at @e[type=armor_stand,name=alpha_centre,c=1] run tp @s ${r(o[0])} ${r(o[1])} ${r(o[2])}`;
+    const fs = fns.find((f) => f.fn === 'beta/stand_here_from_spot');
+    check('the pack: stand_here finds the marker by its name when the tag is not there, says where to stand when neither is; stand_here_from_spot needs no marker',
+      !!sh && sh.text.includes(byName) && /Go to Alpha's build spot/.test(sh.text) && !!fs && fs.text.includes(`\ntp @s ${r(o[0])} ${r(o[1])} ${r(o[2])}\n`), sh ? '' : 'none');
     const gB = placementGuide(tileList(B.world, {}), { namespace: 'beta', world: B.world, centre: B.world.centre });
     const gA = placementGuide(tileList(A.world, {}), { namespace: 'alpha', world: A.world, centre: A.world.centre });
     check('the guide: the joined city says how to stand on its spot and build; the first lists its bridges and where each ends', /THIS CITY JOINS ALPHA/.test(gB) && gB.includes('/function beta/stand_here') && /BRIDGES TO OTHER CITIES/.test(gA) && /east\s+a viaduct, 48 blocks across/.test(gA));

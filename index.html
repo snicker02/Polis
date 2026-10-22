@@ -153,12 +153,12 @@
   }
 </style>
 </head>
-<body class="mode-city" data-version="0.75.2">
+<body class="mode-city" data-version="0.78.0">
 <div id="app">
   <div id="panel">
     <div id="panelScroll">
       <h1>PO<span>L</span>IS</h1>
-      <div class="sub">procedural city → Minecraft Bedrock · v0.75.2</div>
+      <div class="sub">procedural city → Minecraft Bedrock · v0.78.0</div>
 
       <fieldset>
         <legend>Mode</legend>
@@ -209,7 +209,7 @@
 
       <fieldset class="city-only">
         <legend>City</legend>
-        <div class="row"><label>Size</label><input type="range" id="size" min="64" max="512" step="16" value="160"><span class="val" id="size_v"></span></div>
+        <div class="row"><label>Size</label><input type="range" id="size" min="64" max="1024" step="16" value="160"><span class="val" id="size_v"></span></div>
         <div class="row"><label>City style</label><select id="cityStyle" style="width:150px">
           <option value="modern" selected>Modern</option>
           <option value="desert">Desert</option>
@@ -392,6 +392,8 @@
           <label class="chk city-only"><input type="checkbox" id="sports">A sports centre: a court, a climbing wall, a pool lane, a parkour room, a running track on the roof</label>
           <label class="chk city-only"><input type="checkbox" id="bouts">Exhibition bouts in the stadium: mobs that fight but never die</label>
           <label class="chk city-only"><input type="checkbox" id="themepark">A theme park beside the city: a giant roller coaster, a big wheel, a drop tower, a carousel</label>
+          <label class="chk city-only"><input type="checkbox" id="arena">The Mega Arena beside the city (east): a covered arena, a giant glass cage of every mob that fights forever</label>
+          <label class="chk city-only"><input type="checkbox" id="university">The University beside the city (west): eight schools round a quad, a great library, a great hall, a clock tower</label>
           <label class="chk city-only"><input type="checkbox" id="airport">An airport beside the city: runway, terminal, control tower, elytra launch pads</label>
           <div class="city-only" style="margin-top:6px">
             <label for="memorial" style="display:block">In memory of: names for a memorial in the cemetery, side by side under a cherry tree (one a line, up to three)</label>
@@ -513,6 +515,6 @@
     <div id="busy">generating…</div>
   </div>
 </div>
-<script type="module" src="./main.js?v=0.75.2"></script>
+<script type="module" src="./main.js?v=0.78.0"></script>
 </body>
 </html>

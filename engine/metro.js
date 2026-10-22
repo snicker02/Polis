@@ -30,6 +30,8 @@
 import { MAT, MATERIALS, stairId, WEIRDO, railId, poweredRailId, RAIL } from './materials.js';
 import { USE } from './plan.js';
 
+// how far out from the middle of the city the metro reaches, each way (0.76.0)
+export const METRO_REACH = 136;
 const SOFT = new Set([MAT.BASE, MAT.DIRT, MAT.RETAIN, MAT.CLAY, MAT.GRAVEL, MAT.CANAL_BED]);
 const FURNITURE = /fence|lantern|sign|flower|tulip|poppy|dandelion|allium|orchid|bluet|daisy|cornflower|lily|grass|fern|bush|carpet|torch/;
 
@@ -254,14 +256,20 @@ export function buildMetro(world, plan, cfg, G, opts = {}) {
   };
 
   // ---- the cross lines ----------------------------------------------------------
+  // (0.76.0) The metro kept near the middle of the city, within METRO_REACH of it each way:
+  // in a big city its lines and loop no further out than the middle's own part, where the
+  // player stands to populate it
+  const R = opts.reach || METRO_REACH, MX = Math.floor(W / 2), MZ = Math.floor(D / 2);
   const pick = (axis) => {
     let best = null;
     for (const c of corridors || []) {
       if (c.axis !== axis || c.w < 5) continue;
-      const len = axis === 'x' ? c.x1 - c.x0 + 1 : c.z1 - c.z0 + 1;
-      if (len < 64) continue;
       const a = axis === 'x' ? Math.floor((c.z0 + c.z1) / 2) : Math.floor((c.x0 + c.x1) / 2);
-      const u0 = axis === 'x' ? c.x0 : c.z0, u1 = axis === 'x' ? c.x1 : c.z1;
+      if (Math.abs(a - (axis === 'x' ? MZ : MX)) > R - 8) continue;
+      const mid = axis === 'x' ? MX : MZ;
+      const u0 = Math.max(axis === 'x' ? c.x0 : c.z0, mid - R), u1 = Math.min(axis === 'x' ? c.x1 : c.z1, mid + R);
+      const len = u1 - u0 + 1;
+      if (len < 64) continue;
       let ok = 0, all = 0;
       for (let u = u0; u <= u1; u++) { const [x, z] = axis === 'x' ? [u, a] : [a, u]; if (!inCity(x, z)) continue; all++; if (isStreet(x, z)) ok++; }
       if (all < 64 || ok < all) continue;
@@ -304,6 +312,8 @@ export function buildMetro(world, plan, cfg, G, opts = {}) {
     // the city all round. Only its stations need a street over them.
     let x0 = W, x1 = -1, z0 = D, z1 = -1;
     for (let z = 0; z < D; z++) for (let x = 0; x < W; x++) if (inCity(x, z)) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z); }
+    // (no further out than METRO_REACH from the middle)
+    x0 = Math.max(x0, MX - R); x1 = Math.min(x1, MX + R); z0 = Math.max(z0, MZ - R); z1 = Math.min(z1, MZ + R);
     let best = null;
     const ringInside = (xW, xE, zN, zS) => {
       for (let x = xW - 6; x <= xE + 6; x++) for (const z of [zN - 6, zN + 6, zS - 6, zS + 6]) if (!inCity(x, z)) return false;
@@ -377,5 +387,7 @@ export function buildMetro(world, plan, cfg, G, opts = {}) {
   }
   for (const b of boxes) b.metro = true;                      // (told apart from cellars: flood.js keeps the metro dry)
   if (boxes.length) (world.airBoxes || (world.airBoxes = [])).push(...boxes);
+  // (where it all lies: export.js holds the squares over it loaded, round its middle)
+  if (boxes.length) world.metroBox = { x0: Math.min(...boxes.map((b) => b.x0)), x1: Math.max(...boxes.map((b) => b.x1)), z0: Math.min(...boxes.map((b) => b.z0)), z1: Math.max(...boxes.map((b) => b.z1)) };
   return { lines, carts: lines.flatMap((l) => l.carts) };
 }

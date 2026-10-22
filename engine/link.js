@@ -156,13 +156,16 @@ export async function linkPack(plan, opts) {
   }
   const rel = (v) => (v === 0 ? '~' : `~${v}`);
   const loads = structures.map((s) => `execute at @e[type=armor_stand,tag=${ctag},c=1] run structure load ${ns}:${s.name} ${rel(s.offset[0])} ${rel(s.offset[1] - drop)} ${rel(s.offset[2])}`);
+  // (failing the tag, the marker by its name: a marker made by another export of the city)
+  if (opts.anchor) for (const s of structures) loads.push(`execute unless entity @e[type=armor_stand,tag=${ctag}] at @e[type=armor_stand,name=${opts.anchor},c=1] run structure load ${ns}:${s.name} ${rel(s.offset[0])} ${rel(s.offset[1] - drop)} ${rel(s.offset[2])}`);
   const files = [{ name: `functions/${ns}/build.mcfunction`, data: [
     `# Polis: the link from ${nameA}'s bridge to ${nameB}'s, loaded from ${nameA}'s build_centered marker (its armor stand).`,
     '# Stand near the middle of the link with a good render distance: only loaded chunks are filled.',
     `say Polis: linking ${nameA}'s bridge to ${nameB}'s...`,
     ...loads,
-    `execute unless entity @e[type=armor_stand,tag=${ctag}] run say Polis: ${nameA}'s centre marker was not found (too far away to be loaded, or the city was built from an older pack). Go nearer to it and try again${spot ? `, or run /function ${ns}/build_at` : ''}.`,
+    `execute unless entity @e[type=armor_stand,tag=${ctag}]${opts.anchor ? ` unless entity @e[type=armor_stand,name=${opts.anchor}]` : ''} run say Polis: ${nameA}'s centre marker was not found (too far away to be loaded, or the city was built from an older pack). Go nearer to it and try again${spot ? `, or run /function ${ns}/build_at` : ''}.`,
     `execute if entity @e[type=armor_stand,tag=${ctag}] run say Polis: the link is in (${plan.length} long, ${plan.turns} turns).`,
+    ...(opts.anchor ? [`execute unless entity @e[type=armor_stand,tag=${ctag}] if entity @e[type=armor_stand,name=${opts.anchor}] run say Polis: the link is in (${plan.length} long, ${plan.turns} turns; ${nameA}'s marker found by its name).`] : []),
   ].join('\n') + '\n' }];
   if (spot) files.push({ name: `functions/${ns}/build_at.mcfunction`, data: [
     `# Polis: the link, at its own coordinates (${nameA}'s build spot at ${spot.join(' ')}). Run from anywhere near it.`,

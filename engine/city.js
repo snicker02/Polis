@@ -41,6 +41,8 @@ import { chooseLandmarks, buildLandmark, LANDMARK_NAMES } from './landmarks.js';
 import { namesOf, FIGHTER_TAG, BOUTS } from './landmarks-extra.js';
 import { buildAirport } from './airport.js';
 import { buildThemePark } from './themepark.js';
+import { buildArena, ARENA_KINDS } from './arena.js';
+import { buildUniversity, SCHOOLS } from './university.js';
 import { planHills, liftBlocks, cutStairs, shiftBuilding, walkCity } from './terrain.js';
 import { styleOf, remapTable, STYLES } from './styles.js';
 import { signTags } from './landmarks.js';
@@ -129,6 +131,8 @@ export const DEFAULTS = {
   graveNames: '',            // names for the cemetery's other gravestones (one a line)
   bouts: false,              // exhibition bouts in the stadium: mobs that fight and never die (landmarks-extra.js)
   themepark: false,          // a theme park beside the city: a giant coaster, a big wheel, a drop tower, a carousel (themepark.js)
+  arena: false,              // the Mega Arena beside the city (east first): a covered arena, a giant cage of every mob that fights forever (arena.js)
+  university: false,         // the University beside the city (west first): eight schools round a quad, a library, a great hall, a clock tower (university.js)
   airport: false,            // an airport beside the city: runway, terminal, control tower, elytra launch pads (airport.js)
   mall: false,               // a shopping mall: two floors of shops, each shopkeeper a villager of its trade (mall.js)
   watertower: false,         // a water tower: a tank on iron legs, a catwalk, a hatch to swim in it (townbits.js)
@@ -154,7 +158,7 @@ export const DEFAULTS = {
   lamps: true,
   trees: true,
   markings: true,
-  budget: 9000000,          // room for a 512-block city
+  budget: 9000000,          // room for a 512-block city (more for a bigger one: generateCity)
 };
 
 const GROUND = 1;   // surface layer; players walk at GROUND+1
@@ -254,7 +258,8 @@ export function generateCity(cfgIn, onProgress) {
   }
   const rng = makeRng(cfg.seed);
   const plan = generatePlan(cfg, rng);
-  const world = new VoxelWorld({ budget: cfg.budget });
+  // (room for the blocks of a big city: past 512 the budget grows with its ground, 0.76.0)
+  const world = new VoxelWorld({ budget: cfg.budget === DEFAULTS.budget ? Math.max(DEFAULTS.budget, Math.round((cfg.size || 0) * (cfg.size || 0) * 26)) : cfg.budget });
   const W = plan.W, D = plan.D;
   // organic cities carry their outline, so the export leaves the land outside it alone
   if (cfg.outline === 'organic' || cfg.terrain) world.cityMask = { W, D, data: plan.mask };
@@ -942,6 +947,36 @@ export function generateCity(cfgIn, onProgress) {
       }
     }
   }
+  // ---- the Mega Arena and the University: likewise beside the city, the arena east and the
+  // university west where they can be (then any side the others leave, the sides with this
+  // city's own bridges last, never the side a bridge comes in by) ---------------------------------
+  const OFFSITE = ['airport', 'themepark', 'arena', 'university'];
+  const offsiteFor = (pref) => {
+    const allowed = offsiteSides(), own = cfg.joinSides || [];
+    const used = new Set(landmarks.filter((q) => OFFSITE.includes(q.kind)).map((q) => q.side));
+    const order = pref.filter((q) => allowed.includes(q));
+    const rank = (q) => (used.has(q) ? 2 : 0) + (own.includes(q) ? 1 : 0);
+    return order.map((q, i) => [q, rank(q) * 10 + i]).sort((a, b) => a[1] - b[1]).map((q) => q[0]);
+  };
+  const offsiteAvoid = () => landmarks.filter((q) => OFFSITE.includes(q.kind)).flatMap((q) => [q.lot, q.roadRect].filter(Boolean));
+  const noRoomWhy = (what) => cfg.terrain ? `a city fitted to your world has no room of its own beside it for the ${what}`
+    : cfg.dome ? 'not with the dome' : cfg.underwater ? 'not under the sea' : cfg.stilts ? 'not on stilts' : floating ? 'not with floating islands' : hills.cliff ? 'not on a cliff' : null;
+  let arenaMissing = null, universityMissing = null;
+  for (const [key, what, pref, build] of [['arena', 'arena', ['east', 'west', 'south', 'north'], buildArena], ['university', 'university', ['west', 'east', 'north', 'south'], buildUniversity]]) {
+    if (!cfg[key]) continue;
+    const why = noRoomWhy(what);
+    let miss = why;
+    if (!why) {
+      const R = build(world, plan, cfg, { GROUND, elevAt, signTags, avoid: offsiteAvoid(), sides: offsiteFor(pref) });
+      if (R.missing) miss = R.missing;
+      else {
+        landmarks.push(R);
+        world.extraInside = [...(world.extraInside || []), R.lot, R.roadRect];
+        world.planSize = { W: plan.W, D: plan.D };
+      }
+    }
+    if (key === 'arena') arenaMissing = miss; else universityMissing = miss;
+  }
   // ---- cities joined by bridges (joins.js): the road in from another city's bridge, then
   // this city's own bridges out (not on the side the road in takes) ----------------------------
   const joins = [], joinMissing = [];
@@ -951,7 +986,7 @@ export function generateCity(cfgIn, onProgress) {
     // (a city with no centre mark is still built round the middle of its square: the export's
     // own fallback, the middle of all its blocks, would move with the bridges)
     if (!world.centre) world.centre = [Math.floor(plan.W / 2), Math.floor(plan.D / 2)];
-    const avoid = landmarks.filter((q) => q.kind === 'airport' || q.kind === 'themepark').flatMap((q) => [q.lot, q.roadRect].filter(Boolean));
+    const avoid = landmarks.filter((q) => OFFSITE.includes(q.kind)).flatMap((q) => [q.lot, q.roadRect].filter(Boolean));
     const jctx = { GROUND, elevAt, signTags, avoid };
     const rectOf = (cells) => ({ x0: Math.min(...cells.map((p) => p[0])), x1: Math.max(...cells.map((p) => p[0])), z0: Math.min(...cells.map((p) => p[2])), z1: Math.max(...cells.map((p) => p[2])) });
     if (cfg.joinTo && cfg.joinTo.end) {
@@ -1035,7 +1070,11 @@ export function generateCity(cfgIn, onProgress) {
     // they were graded to be: the wild land round them is the hillside's own)
     const graded = world.cutFaces || null;
     const inCity = (x, z) => inPlan(x, z) && !(graded && graded.has(x + ',' + z));
-    const inside = dome ? (x, z) => (x - dome.cx) ** 2 + (z - dome.cz) ** 2 < dome.R * dome.R : sea ? sea.inFoot : inCity;
+    // (and the arena's and the university's grounds beside the city: they light themselves, this
+    // makes sure of every spot)
+    const offLots = landmarks.filter((L) => L.kind === 'arena' || L.kind === 'university').map((L) => L.lot);
+    const inOff = (x, z) => offLots.some((l) => x >= l.x0 && x <= l.x1 && z >= l.z0 && z <= l.z1);
+    const inside = dome ? (x, z) => (x - dome.cx) ** 2 + (z - dome.cz) ** 2 < dome.R * dome.R : sea ? sea.inFoot : offLots.length ? (x, z) => inCity(x, z) || inOff(x, z) : inCity;
     const keepDome = dome ? (x, y, z) => ((x - dome.cx) ** 2 + (z - dome.cz) ** 2) / dome.R ** 2 + ((y - GROUND) / dome.c) ** 2 < 1 : sea ? sea.interior : () => true;
     // (and never in a landmark that lights itself: the botanical garden, where a
     // light set in a bed would take a plant's place, or a cactus's air)
@@ -1147,6 +1186,12 @@ export function generateCity(cfgIn, onProgress) {
   { const T = landmarks.find((q) => q.kind === 'themepark');
     if (T) stats.themepark = `beside the city to the ${T.side}: a roller coaster of ${T.coaster.length} rails with a lift hill ${T.coaster.lift} high, two corkscrews and a dark tunnel, a big wheel of ${T.wheel.cabins.length} cabins that turns, a drop tower ${T.tower.height} high, a carousel, ${T.stalls.length} stalls; at the back bumper boats, a hedge maze, trampolines, an archery range`;
     else if (cfg.themepark) stats.themeparkMissing = themeparkMissing || 'no room for the theme park'; }
+  { const M = landmarks.find((q) => q.kind === 'arena');
+    if (M) stats.arena = `beside the city to the ${M.side}: a covered arena ${2 * M.frame.R + 1} across, ${M.stairs.length + M.corners.length} seats in 25 rows round a glass cage 41 across, in it ${M.cageFighters.length} fighters (${M.cageFighters.filter((f) => f.type === 'golem').length} iron golems and two of each of ${ARENA_KINDS.length} hostile mobs) who fight forever and never die`;
+    else if (cfg.arena) stats.arenaMissing = arenaMissing || 'no room for the arena'; }
+  { const U = landmarks.find((q) => q.kind === 'university');
+    if (U) stats.university = `beside the city to the ${U.side}: schools of ${SCHOOLS.join(', ')} round a quad, the Great Library, the Great Hall, a clock tower ${U.tower.top - U.ground} high, a sports field`;
+    else if (cfg.university) stats.universityMissing = universityMissing || 'no room for the university'; }
   { const A = landmarks.find((q) => q.kind === 'airport');
     if (A) stats.airport = `beside the city to the ${A.side}: a runway ${A.runway.length} long, a terminal, a control tower ${A.tower.top - A.ground} high, ${A.pads.length} elytra launch pads, ${A.planes.length} aircraft`;
     else if (cfg.airport) stats.airportMissing = airportMissing || 'no room for the airport'; }
@@ -1160,6 +1205,9 @@ export function generateCity(cfgIn, onProgress) {
   // a half of the game running), saved on the mob; a silent command block under the
   // pitch gives it again (landmarks-extra.js), should the game not keep a saved effect
   for (const L of landmarks) for (const f of L.fighters || []) spawns.push({ ...f, group: 'stadium', tags: [FIGHTER_TAG],
+    effects: [{ id: 11, amp: 4, ticks: 1000000000 }] });
+  // the arena's cage: the same, a group of its own
+  for (const L of landmarks) for (const f of L.cageFighters || []) spawns.push({ ...f, group: 'arena', tags: [FIGHTER_TAG],
     effects: [{ id: 11, amp: 4, ticks: 1000000000 }] });
   // the mall's shopkeepers: villagers of their trades, in the structures with the rest
   for (const L of landmarks) for (const k of L.keepers || []) spawns.push({ type: 'villager', x: k.x, y: k.y, z: k.z, profession: k.profession, tier: k.tier, group: 'mall' });
