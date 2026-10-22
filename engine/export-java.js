@@ -129,7 +129,8 @@ function javaBlockEntity(name, data) {
     const t = data.tags || {}, cmd = t.Command ? t.Command.v : '';
     const m = cmd.match(/^effect (@[pa])\[r=(\d+)\] ([a-z_]+) (\d+) (\d+) true$/);
     // (the theme park's wheel turns only in Bedrock: its clock left blank in Java)
-    const jcmd = m ? `effect give ${m[1]}[distance=..${m[2]}] minecraft:${m[3]} ${m[4]} ${m[5]} true` : /structure load|polis_fun/.test(cmd) ? '' : cmd;
+    // (and the fireworks' clock, whose chain block waits a moment in Bedrock and cannot in Java: blank)
+    const jcmd = m ? `effect give ${m[1]}[distance=..${m[2]}] minecraft:${m[3]} ${m[4]} ${m[5]} true` : /structure load|polis_fun|lever \["open_bit"|^setblock .* air$|function \{ns\}\//.test(cmd) ? '' : cmd;
     return J.comp({ id: J.str(name.includes('chain') ? 'minecraft:chain_command_block' : 'minecraft:command_block'), Command: J.str(jcmd),
       auto: J.byte(t.auto ? t.auto.v : 0), powered: J.byte(0), conditionMet: J.byte(0), TrackOutput: J.byte(1), UpdateLastExecution: J.byte(1) });
   }
@@ -144,6 +145,19 @@ function javaBlockEntity(name, data) {
       SpawnCount: J.short(v('SpawnCount', 4)), MaxNearbyEntities: J.short(v('MaxNearbyEntities', 6)),
       RequiredPlayerRange: J.short(v('RequiredPlayerRange', 16)), SpawnRange: J.short(v('SpawnRange', 4)),
     });
+  }
+  // the fireworks' dispensers: their rockets, each stack's burst in Java's own words (0.80.0)
+  if (data.id === 'Dispenser') {
+    const SHAPE = ['small_ball', 'large_ball', 'star', 'creeper', 'burst'];
+    const DYE = [0x1D1D21, 0xB02E26, 0x5E7C16, 0x835432, 0x3C44AA, 0x8932B8, 0x169C9C, 0x9D9D97, 0x474F52, 0xF38BAA, 0x80C71F, 0xFED83D, 0x3AB3DA, 0xC74EBD, 0xF9801D, 0xF9FFFE];
+    const items = (data.tags && data.tags.Items ? data.tags.Items.v : []).map((it) => {
+      const f = it.v, fw = f.tag && f.tag.v.Fireworks ? f.tag.v.Fireworks.v : null;
+      const comps = fw ? { components: J.comp({ 'minecraft:fireworks': J.comp({ flight_duration: J.byte(fw.Flight ? fw.Flight.v : 1), explosions: J.list(T.COMPOUND, fw.Explosions.v.map((x) => J.comp({
+        shape: J.str(SHAPE[x.v.FireworkType.v] || 'small_ball'), colors: J.list(T.INT, x.v.FireworkColor.v.map((c) => J.int(DYE[c]))), fade_colors: J.list(T.INT, x.v.FireworkFade.v.map((c) => J.int(DYE[c]))),
+        has_twinkle: J.byte(x.v.FireworkFlicker.v), has_trail: J.byte(x.v.FireworkTrail.v) }))) }) }) } : {};
+      return J.comp({ Slot: J.byte(f.Slot.v), id: J.str(f.Name.v), count: J.int(f.Count.v), ...comps });
+    });
+    return J.comp({ id: J.str('minecraft:dispenser'), Items: J.list(T.COMPOUND, items) });
   }
   if (data.id === 'Bed') return null;                    // Java carries the colour in the block name
   // a chest, a barrel, a hopper: what is in it, in Java 1.21's own words (a count, an

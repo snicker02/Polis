@@ -9,6 +9,7 @@
 //
 // Both put the city's ground layer where the block under your feet is.
 
+import { traderDef, tradeFiles } from './market.js';
 import { splitWorld, writeMcStructure, buildMcPack, makeZip, crc32, VoxelWorld, N } from './blockcore.js';
 import { MATERIALS, MAT } from './materials.js';
 import { makeEntity, STRUCTURE_MOBS, makeRiderPair, makeCart, makeBoat } from './entities.js';
@@ -17,7 +18,7 @@ import { makeRng } from './rng.js';
 // Must match main.js VERSION, package.json and index.html data-version;
 // tools/validate.js fails if they drift. The app refuses to export when the
 // browser has mixed cached copies of old and new files.
-export const POLIS_VERSION = '0.79.0';
+export const POLIS_VERSION = '0.81.0';
 
 export const CHUNK = 64;          // Bedrock structure limit per horizontal axis
 export const GROUND_DROP = 2;     // base layer y=0 sits 2 below feet; surface y=1 replaces the block you stand on
@@ -310,7 +311,8 @@ export function cityAir(world) {
 // stood empty.)
 export function mobEntityFiles() {
   return Object.entries(VANILLA_MOBS).map(([kind, def]) => {
-    const d = JSON.parse(JSON.stringify(def));
+    // (the wandering trader as the farmers' market keeps it: market.js)
+    const d = kind === 'wandering_trader' ? traderDef(def) : JSON.parse(JSON.stringify(def));
     const e = d['minecraft:entity'];
     const has = (name) => JSON.stringify(e).includes('"' + name + '"');
     const kept = { 'minecraft:persistent': {} };
@@ -981,7 +983,7 @@ export function functionFiles(tiles, world, opts = {}) {
   // the jail and the zoo on their own, to fill them again (after the areas below)
   // each landmark's mobs again on their own: its own structure tiles loaded (a
   // structure waits for its chunks, as a summon does not)
-  for (const [group, noun] of [['jail', 'inmates for the jail'], ['zoo', 'animals and fish for the zoo and aquarium'], ['museum', 'suits of armour for the museum'], ['mall', 'shopkeepers for the mall'], ['stadium', 'fighters for the stadium\'s bouts'], ['arena', 'fighters for the Mega Arena\'s cage']]) {
+  for (const [group, noun] of [['jail', 'inmates for the jail'], ['zoo', 'animals and fish for the zoo and aquarium'], ['museum', 'suits of armour for the museum'], ['mall', 'shopkeepers for the mall'], ['stadium', 'fighters for the stadium\'s bouts'], ['arena', 'fighters for the Mega Arena\'s cage'], ['market', 'traders for the farmers\' market']]) {
     const tiles = mobs.filter((t) => t.group === group);
     if (!tiles.length) continue;
     const only = (dx, dz, title) => [
@@ -1242,6 +1244,33 @@ export function placementGuide(tiles, opts = {}) {
     L.push('  pandas (only a hurt one fights, and only players), and the ones that need water.');
     L.push('');
   }
+  if ((opts.spawns || []).some((p) => p.group === 'market')) {
+    const names = [...new Set(opts.spawns.filter((p) => p.group === 'market').map((p) => p.name))];
+    L.push('THE FARMERS\' MARKET: a wandering trader in each stall of the market, each stall its own trades (they come back');
+    L.push('  after a while, as a villager\'s do): ' + names.join(', ') + '.');
+    L.push('  Trade over the counter at the front of a stall. The traders come with populate, or /function ' + ns + '/market_centered');
+    L.push('  (each run brings another set). They never leave or despawn; a wandering trader the game sends is as it always was.');
+    L.push('');
+  }
+  if ((opts.world && opts.world.data ? [...opts.world.data.values()] : []).some((d) => d && d.id === 'CommandBlock' && /lever \["open_bit"/.test(d.tags.Command.v))) {
+    L.push('FIREWORKS: a lever on the town hall\'s front wall, beside its doors, a sign by it. Flip it on and the fireworks');
+    L.push('  go up over the town square every second and a half, five at a time, from the column in the fountain; off,');
+    L.push('  they stop. Each dispenser holds nine stacks of rockets (about twenty minutes of show); refill them with any');
+    L.push('  rockets. Command blocks must be on (/gamerule commandblocksenabled true), and you must be near enough for the');
+    L.push('  square and the town hall to be loaded.');
+    L.push('');
+  }
+  if ((opts.places || []).some((P) => P.kind === 'maproom')) {
+    L.push('THE MAP ROOM: the whole city laid out in blocks on its floor, north to the north. Up the four steps beside');
+    L.push('  the doors to the gallery round it, and look down: the key is on the signs along the gallery\'s back wall');
+    L.push('  (red: you are here; gold: the town hall; yellow: the landmarks; white: towers; grey: streets; blue: water).');
+    L.push('');
+  }
+  if ((opts.world && opts.world.data ? [...opts.world.data.values()] : []).some((d) => d && d.id === 'CommandBlock' && /function \{ns\}\/goto_/.test(d.tags.Command.v))) {
+    L.push('FIND A LANDMARK IN THE GAME: the board by the centre monument has a sign for every landmark; press the button');
+    L.push('  under one and it takes you there (it runs /function ' + ns + '/goto_<name> for you). Command blocks must be on.');
+    L.push('');
+  }
   if ((opts.places || []).some((P) => P.kind === 'university')) {
     L.push('THE UNIVERSITY: a campus beside the city through its gate: the avenue across the quad to the clock tower, eight');
     L.push('  schools round the quad (Science, Medicine, Engineering, Agriculture, Law, Arts, Music, Astronomy), each with');
@@ -1455,10 +1484,12 @@ export async function exportPack(world, optsIn = {}) {
   // aquarium's (its fish are summoned with keep events these define); the mobs'
   // where there is a jail or a zoo to keep
   const hasFish = (opts.spawns || []).some((p) => FISH.has(p.type)) || (opts.zoo || []).some((p) => FISH.has(p.type) || p.type === 'tropicalfish');
-  const hasKept = (opts.inmates || []).length > 0 || (opts.zoo || []).length > 0;
+  // (and any other mob saved kept: the arena's cage, the market's traders)
+  const hasKept = (opts.inmates || []).length > 0 || (opts.zoo || []).length > 0 || (opts.spawns || []).some((p) => p.type === 'mob');
+  const hasMarket = (opts.spawns || []).some((p) => p.kind === 'wandering_trader');
   const data = await buildMcPack(structures.concat(mobStructs), {
     ...opts, guide,
-    files: fns.map((f) => ({ name: f.name, data: f.text })).concat(hasFish ? fishEntityFiles() : [], hasKept ? mobEntityFiles() : []),
+    files: fns.map((f) => ({ name: f.name, data: f.text })).concat(hasFish ? fishEntityFiles() : [], hasKept ? mobEntityFiles() : [], hasMarket ? tradeFiles() : []),
   });
   return { data, structures, mobStructures: mobStructs, guide, functions: fns };
 }

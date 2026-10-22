@@ -16,12 +16,15 @@
 // the ornament is new, and none of it sits on a floor a player walks.
 
 import { makeBuilding, OUTWARD } from './building.js';
-import { MAT, WOOLS, pumpkinId, smokerId, stairId, WEIRDO, STAINED, gateId, signId, SIGN_FACING } from './materials.js';
+import { MAT, WOOLS, pumpkinId, smokerId, stairId, WEIRDO, STAINED, gateId, signId, SIGN_FACING, chestId } from './materials.js';
 import { N } from './blockcore.js';
 import { USE, frontage } from './plan.js';
 import { townSquare, stadium, cemetery, allotments, bandstand } from './landmarks-extra.js';
 import { FLOWERS as FLOWERS_M } from './materials.js';
 import { styleOf } from './styles.js';
+import { STALLS, stallGroup } from './market.js';
+import { mapRoom } from './maproom.js';
+import { MATERIALS } from './materials.js';
 
 // The style a landmark is built in: its own district's, when the city mixes
 // styles (cfg.styleAt, set by generateCity), otherwise the city's.
@@ -50,7 +53,7 @@ const NEED = {                       // [shorter side, longer side] of the lot
   townhall: [13, 15], clocktower: [9, 9], library: [11, 12], market: [12, 12],
   church: [13, 15], mansion: [15, 20], school: [17, 25], lighthouse: [9, 9], castle: [13, 13],
   townsquare: [13, 13], stadium: [17, 21], cemetery: [12, 14], allotments: [13, 13], bandstand: [9, 9],
-  jail: [15, 23], zoo: [15, 24], aquarium: [11, 20], museum: [15, 24], hospital: [15, 23], firestation: [12, 20], police: [13, 15], theatre: [17, 20], hotel: [13, 19], factory: [13, 18], workshop: [13, 15], mill: [13, 15], park: [15, 19], waterpark: [15, 19], lazyriver: [14, 15], garden: [15, 19], station: [11, 11], mall: [17, 20], sports: [17, 23], bank: [17, 21], watertower: [9, 9], petrol: [15, 17], skatepark: [15, 19], wizard: [15, 15], nightclub: [17, 24],
+  jail: [15, 23], zoo: [15, 24], aquarium: [11, 20], museum: [15, 24], hospital: [15, 23], firestation: [12, 20], police: [13, 15], theatre: [17, 20], hotel: [13, 19], factory: [13, 18], workshop: [13, 15], mill: [13, 15], park: [15, 19], waterpark: [15, 19], lazyriver: [14, 15], garden: [15, 19], station: [11, 11], mall: [17, 20], sports: [17, 23], bank: [17, 21], watertower: [9, 9], petrol: [15, 17], skatepark: [15, 19], wizard: [15, 15], nightclub: [17, 24], maproom: [17, 17],
 };
 
 // Mark the lots, each kind at most once:
@@ -144,6 +147,18 @@ export function chooseLandmarks(plan, cfg, hills = null, canal = null, transit =
   // fit far smaller ones. Toward the edge of town where it can be.
   // (and the zoo and aquarium, when asked for, next: the zoo as big as the jail,
   // the aquarium smaller)
+  // (0.81.0) the map room, when asked for, before the other big landmarks: the roomiest lot in
+  // the city (the bigger the lot, the bigger the map on its floor), the nearer the middle the
+  // better between two of a size
+  if (cfg.mapRoom) {
+    const area = (c) => c.a * c.b;
+    // (a park's lot too: the parks are the biggest lots a town has)
+    const parks = plan.lots.filter((l) => l.kind === USE.PARK && !l.landmark && !l.island).map((l) => ({ l, cx: (l.x0 + l.x1) / 2, cz: (l.z0 + l.z1) / 2,
+      a: Math.min(l.x1 - l.x0 + 1, l.z1 - l.z0 + 1), b: Math.max(l.x1 - l.x0 + 1, l.z1 - l.z0 + 1) })).map((c) => ({ ...c, d: Math.hypot(c.cx - fx, c.cz - fz) }));
+    const square = (c) => Math.min(c.a, c.b * 1);                      // (the map is square: the shorter side is what counts)
+    const lots = [...all, ...parks].filter((c) => fits(c, 'maproom')).sort((p, q) => square(q) - square(p) || area(q) - area(p) || p.d - q.d);
+    if (lots.length) { lots[0].l.landmark = 'maproom'; out.push(lots[0].l); }
+  }
   for (const kind of ['jail', 'zoo', 'aquarium', 'museum', 'hospital', 'firestation', 'police', 'theatre', 'hotel', 'factory', 'workshop', 'mill', 'park', 'waterpark', 'lazyriver', 'garden', 'mall', 'sports', 'bank', 'petrol', 'skatepark', 'wizard', 'nightclub', 'watertower']) {
     // (the aquarium comes with the zoo, the workshop and the mill with the factory)
     if (!cfg[kind === 'aquarium' ? 'zoo' : kind === 'workshop' || kind === 'mill' ? 'factory' : kind === 'lazyriver' ? 'waterpark' : kind]) continue;
@@ -188,6 +203,12 @@ export function chooseLandmarks(plan, cfg, hills = null, canal = null, transit =
   const fortress = styleOf(cfg.cityStyle).keepAtCentre;
   if (fortress) { take('castle', all.slice().sort((p, q) => p.d - q.d)); take('market', all.slice().sort((p, q) => p.d - q.d)); }
   for (const kind of ['townhall', 'clocktower', 'library', 'market', 'church']) if (!(fortress && kind === 'market')) take(kind, downtown);
+  // (0.80.0) fireworks asked for: the town square they go over, next, near the middle (out of
+  // downtown if downtown has no lot left for it)
+  if (cfg.fireworks) {
+    take('townsquare', downtown.slice().sort((p, q) => p.d - q.d));
+    if (!out.some((l) => l.landmark === 'townsquare')) take('townsquare', all.slice().sort((p, q) => p.d - q.d));
+  }
   const maxD = Math.max(1, ...all.map((c) => c.d));
   // the school wants a big lot (building, porch, yard and a sports field);
   // if the city has none, it makes do with a smaller one
@@ -241,7 +262,7 @@ export function chooseLandmarks(plan, cfg, hills = null, canal = null, transit =
   if (!fortress) take('castle', all.slice().sort((p, q) => elev(q) - elev(p) || q.a - p.a));
 
   // the town square belongs among the shops and offices, near the middle
-  take('townsquare', downtown.slice().sort((p, q) => p.d - q.d));
+  if (!out.some((l) => l.landmark === 'townsquare')) take('townsquare', downtown.slice().sort((p, q) => p.d - q.d));
   // the bandstand likes a small open lot, a little way out from the square
   take('bandstand', all.slice().sort((p, q) => Math.abs(p.d - maxD * 0.35) - Math.abs(q.d - maxD * 0.35)));
   // the stadium needs room, so it takes the biggest lot left, out of the centre
@@ -493,7 +514,15 @@ function market(world, lot, face, cfg, rng, G) {
   };
   const GOODS = [() => MAT.MELON, () => pumpkinId(rng.pick(['north', 'south', 'east', 'west'])), () => MAT.HAY,
     () => MAT.BARREL, () => MAT.COMPOSTER, () => MAT.CAULDRON_FULL, () => MAT.CRAFTING, () => smokerId('south')];
-  const stalls = [];
+  const stalls = [], traders = [];
+  // (0.80.0) a working farmers' market: a wandering trader in each stall (market.js), its
+  // counter on the side toward the street, its goods a block high on the other three; under
+  // the cloth roof it cannot climb out, and is traded with over the counter
+  const working = !!cfg.farmersMarket;
+  const [Fx, Fz] = OUTWARD[face], Rx = Fz, Rz = -Fx;
+  const goodsOf = (g, facing) => g === 'melon' ? MAT.MELON : g === 'pumpkin' ? pumpkinId(facing) : g === 'hay' ? MAT.HAY : g === 'ice' ? MAT.PACKED_ICE
+    : g === 'honey' ? MATERIALS.add(null, 'minecraft:honey_block', '#e8a033', {}) : g === 'moss' ? MAT.MOSS_BLOCK : g === 'flowers' ? MAT.MOSS_BLOCK : chestId(facing);
+  const faceName = (x, z) => (x > 0 ? 'east' : x < 0 ? 'west' : z > 0 ? 'south' : 'north');
   let k = 0;
   for (const sz of grid(I.z0, Lz))
     for (const sx of grid(I.x0, Lx)) {
@@ -501,11 +530,40 @@ function market(world, lot, face, cfg, rng, G) {
       for (const [x, z] of [[sx, sz], [sx + 2, sz], [sx, sz + 2], [sx + 2, sz + 2]]) {
         world.set(x, G + 1, z, MAT.FENCE); world.set(x, G + 2, z, MAT.FENCE);
       }
-      const wool = WOOLS[k++ % WOOLS.length];
+      const wool = WOOLS[k % WOOLS.length];
       for (let z = sz; z <= sz + 2; z++) for (let x = sx; x <= sx + 2; x++) world.set(x, G + 3, z, wool);
-      world.set(sx + 1, G + 1, sz + 1, rng.pick(GOODS)());
+      const cx = sx + 1, cz = sz + 1;
+      if (!working) world.set(cx, G + 1, cz, rng.pick(GOODS)());
+      else {
+        const st = STALLS[k % STALLS.length];
+        world.set(cx + Fx, G + 1, cz + Fz, MAT.OAK);                                   // the counter
+        const sides = [[Rx, Rz], [-Fx, -Fz], [-Rx, -Rz]];
+        sides.forEach(([ax, az], i) => {
+          const x = cx + ax, z = cz + az;
+          world.set(x, G + 1, z, goodsOf(st.goods[i], faceName(ax, az)));
+          if (st.goods[i] === 'flowers') world.set(x, G + 2, z, FLOWERS_M[(k + i) % FLOWERS_M.length]);
+        });
+        for (let y = G + 1; y <= G + 2; y++) world.clear(cx, y, cz);
+        const yRot = Math.atan2(-Fx, Fz) * 180 / Math.PI;
+        traders.push({ type: 'mob', kind: 'wandering_trader', x: cx, y: G + 1, z: cz, yRot, name: st.name, stall: st.id,
+          groups: [stallGroup(st.id)], group: 'market', counter: [cx + Fx, G + 1, cz + Fz], stand: [cx + 2 * Fx, G + 1, cz + 2 * Fz], sign: null });
+      }
+      k++;
       stalls.push({ x0: sx, z0: sz, x1: sx + 2, z1: sz + 2 });
     }
+  // each stall's name on a sign before it, beside where its customer stands (never on another's
+  // customer's place)
+  const standing = new Set(traders.map((t) => t.stand[0] + ',' + t.stand[2]));
+  for (const t of traders) {
+    for (const r of [1, -1]) {
+      const nx = t.stand[0] + Rx * r, nz = t.stand[2] + Rz * r;
+      if (!inLot(lot, nx, nz) || world.has(nx, G + 1, nz) || standing.has(nx + ',' + nz)) continue;
+      world.set(nx, G + 1, nz, signId(SIGN_FACING[faceName(Fx, Fz)]));
+      world.setData(nx, G + 1, nz, { id: 'Sign', tags: signTags(t.name + '\nfarmers\' market') });
+      t.sign = [nx, G + 1, nz];
+      break;
+    }
+  }
   if (!bigSquare) {
     // lantern post where the aisles cross, if that spot is clear
     const px = mx, pz = mz;
@@ -513,7 +571,7 @@ function market(world, lot, face, cfg, rng, G) {
       world.set(px, G + 1, pz, MAT.FENCE); world.set(px, G + 2, pz, MAT.FENCE); world.set(px, G + 3, pz, MAT.LAMP);
     }
   }
-  return { kind: 'market', rec: null, stalls, well, lot };
+  return { kind: 'market', rec: null, stalls, traders, well, lot };
 }
 
 // ---- church ------------------------------------------------------------------
@@ -917,7 +975,7 @@ function mansion(world, lot, face, cfg, rng, G) {
   return { kind: 'mansion', rec, wings, lot, portico, garden, gate: at(0, doorA) };
 }
 
-const BUILDERS = { townhall: townHall, clocktower: clockTower, library, market, church, mansion, school, lighthouse, castle,
+const BUILDERS = { maproom: (w, l, f, c, r, G) => mapRoom(w, l, f, c, r, G, signTags), townhall: townHall, clocktower: clockTower, library, market, church, mansion, school, lighthouse, castle,
   townsquare: townSquare, allotments, bandstand,
   stadium: (w, l, f, c, r, G) => stadium(w, l, f, c, r, G, signTags),   // (its bouts have signs)
   // (the cemetery puts the names typed in for it on signs)
@@ -950,7 +1008,7 @@ const BUILDERS = { townhall: townHall, clocktower: clockTower, library, market, 
   nightclub: (w, l, f, c, r, G) => nightclub(w, l, f, c, r, G, signTags) };
 export const LANDMARK_NAMES = { townhall: 'Town Hall', clocktower: 'Clock Tower', library: 'Library', market: 'Market',
   church: 'Church', school: 'School', lighthouse: 'Lighthouse', castle: 'Castle', mansion: 'Mansion',
-  townsquare: 'Town Square', stadium: 'Stadium', cemetery: 'Cemetery', allotments: 'Allotments', bandstand: 'Bandstand', jail: 'Jail', zoo: 'Zoo', aquarium: 'Aquarium', museum: 'Museum', hospital: 'Hospital', firestation: 'Fire Station', police: 'Police Station', theatre: 'Theatre', hotel: 'Hotel', factory: 'Factory', workshop: 'Workshop', mill: 'Mill', park: 'Amusement Park', waterpark: 'Water Park', lazyriver: 'Lazy River', garden: 'Botanical Garden', station: 'Station', mall: 'Shopping Mall', sports: 'Sports Centre', bank: 'Bank', watertower: 'Water Tower', petrol: 'Petrol Station', skatepark: 'Skate Park', wizard: "Wizard's Tower", nightclub: 'Nightclub', airport: 'Airport', themepark: 'Theme Park', arena: 'Mega Arena', university: 'University' };
+  townsquare: 'Town Square', stadium: 'Stadium', cemetery: 'Cemetery', allotments: 'Allotments', bandstand: 'Bandstand', jail: 'Jail', zoo: 'Zoo', aquarium: 'Aquarium', museum: 'Museum', hospital: 'Hospital', firestation: 'Fire Station', police: 'Police Station', theatre: 'Theatre', hotel: 'Hotel', factory: 'Factory', workshop: 'Workshop', mill: 'Mill', park: 'Amusement Park', waterpark: 'Water Park', lazyriver: 'Lazy River', garden: 'Botanical Garden', station: 'Station', mall: 'Shopping Mall', sports: 'Sports Centre', bank: 'Bank', watertower: 'Water Tower', petrol: 'Petrol Station', skatepark: 'Skate Park', wizard: "Wizard's Tower", nightclub: 'Nightclub', airport: 'Airport', themepark: 'Theme Park', arena: 'Mega Arena', university: 'University', maproom: 'Map Room' };
 
 export function buildLandmark(world, lot, face, cfg, rng, G) {
   const L = BUILDERS[lot.landmark](world, lot, face, cfg, rng, G);

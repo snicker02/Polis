@@ -14,6 +14,8 @@
 // already puts in its buildings — the game then gives them proper trades and
 // they level up by being traded with.
 
+import { STALLS } from './market.js';
+
 const PAINTING_VARIANT = {
   SkullAndRoses: 'skull_and_roses', BurningSkull: 'burning_skull', Kebab: 'kebab', Aztec: 'aztec',
   Pointer: 'pointer', Match: 'match', Graham: 'graham', Wasteland: 'wasteland',
@@ -47,6 +49,14 @@ export function javaEntity(spawn, J) {
         PersistenceRequired: J.byte(1),
       },
     };
+  }
+  // the farmers' market's traders: wandering traders with their stall's offers, never leaving (0.80.0)
+  if (t === 'mob' && spawn.kind === 'wandering_trader' && spawn.stall) {
+    const st = STALLS.find((q) => q.id === spawn.stall);
+    const item = (id, n) => J.comp({ id: J.str('minecraft:' + id), count: J.int(n) });
+    const offers = st ? [...st.sells.map(([it, n, price]) => [item('emerald', price || 1), item(it, n)]), ...st.buys.map(([it, n]) => [item(it, n), item('emerald', 1)])] : [];
+    return { id: 'minecraft:wandering_trader', nbt: { DespawnDelay: J.int(0), PersistenceRequired: J.byte(1), CustomName: J.str(JSON.stringify(spawn.name || 'Trader')),
+      Offers: J.comp({ Recipes: J.list(10, offers.map(([buy, sell]) => J.comp({ buy, sell, maxUses: J.int(16), uses: J.int(0), rewardExp: J.byte(1), xp: J.int(1) }))) }) } };
   }
   if (t === 'golem') return { id: 'minecraft:iron_golem', nbt: { PlayerCreated: J.byte(1), PersistenceRequired: J.byte(1) } };
   if (t === 'cat') {

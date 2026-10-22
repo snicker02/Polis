@@ -41,6 +41,9 @@ import { chooseLandmarks, buildLandmark, LANDMARK_NAMES } from './landmarks.js';
 import { namesOf, FIGHTER_TAG, BOUTS } from './landmarks-extra.js';
 import { buildAirport } from './airport.js';
 import { buildThemePark } from './themepark.js';
+import { buildFireworks, FIREWORKS as FW } from './fireworks.js';
+import { paintMap } from './maproom.js';
+import { buildFindBoard } from './findboard.js';
 import { buildArena, ARENA_KINDS, ARENA_HUNTERS, ARENA_PREY } from './arena.js';
 import { buildUniversity, SCHOOLS } from './university.js';
 import { planHills, liftBlocks, cutStairs, shiftBuilding, walkCity } from './terrain.js';
@@ -131,6 +134,10 @@ export const DEFAULTS = {
   graveNames: '',            // names for the cemetery's other gravestones (one a line)
   bouts: false,              // exhibition bouts in the stadium: mobs that fight and never die (landmarks-extra.js)
   themepark: false,          // a theme park beside the city: a giant coaster, a big wheel, a drop tower, a carousel (themepark.js)
+  mapRoom: false,            // a map room: the whole city laid out in blocks on its floor, a gallery to see it from (maproom.js)
+  findBoard: false,          // Find a landmark in the game: a board by the centre monument, a sign and a button for every landmark (findboard.js)
+  farmersMarket: false,      // the market at work: a wandering trader in each stall, each stall with its own set trades (market.js)
+  fireworks: false,          // fireworks over the town square, on a clock, switched on and off by a lever at the town hall (fireworks.js)
   arena: false,              // the Mega Arena beside the city (east first): a covered arena, a giant cage of every mob that fights forever (arena.js)
   university: false,         // the University beside the city (west first): eight schools round a quad, a library, a great hall, a clock tower (university.js)
   airport: false,            // an airport beside the city: runway, terminal, control tower, elytra launch pads (airport.js)
@@ -665,6 +672,7 @@ export function generateCity(cfgIn, onProgress) {
       if (L.bell) L.bell[1] += elevAt(L.bell[0], L.bell[2]);
       for (const m of L.inmates || []) m.y += elevAt(Math.floor(m.x), Math.floor(m.z));   // the jail's inmates ride up with it
       for (const m of L.keepers || []) m.y += elevAt(m.x, m.z);                           // the mall's shopkeepers
+      for (const m of L.traders || []) { const e = elevAt(m.x, m.z); m.y += e; for (const p of [m.counter, m.stand, m.sign]) if (p) p[1] += e; }   // the market's traders
       for (const m of L.fighters || []) m.y += elevAt(m.x, m.z);                          // the stadium's fighters
       if (L.bouts) { for (const p of [L.bouts.announcer, L.bouts.command, ...L.bouts.stair]) if (p) p[1] += elevAt(p[0], p[2]); }
       for (const m of [...(L.animals || []), ...(L.fish || [])]) m.y += elevAt(Math.floor(m.x), Math.floor(m.z));   // the zoo's too
@@ -748,6 +756,18 @@ export function generateCity(cfgIn, onProgress) {
   for (const rec of buildings) for (const p of (rec.furniture && rec.furniture.paintings) || []) spawns.push(p);
   for (const L of landmarks) for (const p of L.paintings || []) spawns.push(p);   // (the museum's gallery)
 
+  // ---- fireworks over the town square, the lever at the town hall (fireworks.js): once the
+  // ground is where it stays, so the clock's offsets to the lever and the battery are the real ones
+  let fireworks = null, fireworksMissing = null;
+  if (cfg.fireworks) {
+    const sq = landmarks.find((q) => q.kind === 'townsquare'), th = landmarks.find((q) => q.kind === 'townhall');
+    if (!cfg.landmarks) fireworksMissing = 'the fireworks go over the town square, a landmark: tick Landmarks';
+    else if (!sq || !th) fireworksMissing = `no ${!sq ? 'town square' : 'town hall'} in this city for the fireworks`;
+    else {
+      const F = buildFireworks(world, sq, th, { GROUND, elevAt, signTags });
+      if (F.missing) fireworksMissing = F.missing; else { fireworks = F; sq.fireworks = F; }
+    }
+  }
   // ---- city style: restyle the role materials, then snow -----------------------
   // ---- on stilts: open water under the streets and buildings ----------------
   const stilts = cfg.stilts && !cfg.terrain ? stiltCity(world, plan, buildings, GROUND) : null;
@@ -1069,6 +1089,9 @@ export function generateCity(cfgIn, onProgress) {
     });
     for (const [x, y, z] of opened) world.set(x, y, z, MAT.SHROOMLIGHT);
   }
+  // ---- the map room's map, now the whole city stands (maproom.js) ---------------------------
+  let cityMap = null;
+  { const MR = landmarks.find((q) => q.kind === 'maproom'); if (MR) { cityMap = paintMap(world, MR, plan, buildings, landmarks, GROUND, elevAt); MR.painted = cityMap; } }
   // ---- no dark corners: light every spot a hostile mob could spawn -----------
   // (last of all, over everything, dome included: see lighting.js)
   let lighting = null;
@@ -1195,6 +1218,11 @@ export function generateCity(cfgIn, onProgress) {
   { const T = landmarks.find((q) => q.kind === 'themepark');
     if (T) stats.themepark = `beside the city to the ${T.side}: a roller coaster of ${T.coaster.length} rails with a lift hill ${T.coaster.lift} high, two corkscrews and a dark tunnel, a big wheel of ${T.wheel.cabins.length} cabins that turns, a drop tower ${T.tower.height} high, a carousel, ${T.stalls.length} stalls; at the back bumper boats, a hedge maze, trampolines, an archery range`;
     else if (cfg.themepark) stats.themeparkMissing = themeparkMissing || 'no room for the theme park'; }
+  if (fireworks) stats.fireworks = `over the town square: ${fireworks.dispensers.length} dispensers of rockets on a clock, every ${FW.EVERY / 20} seconds while the lever by the town hall's doors is on`;
+  else if (cfg.fireworks) stats.fireworksMissing = fireworksMissing;
+  { const MK = landmarks.find((q) => q.kind === 'market');
+    if (cfg.farmersMarket) { if (MK && MK.traders && MK.traders.length) stats.farmersMarket = `${MK.traders.length} stalls, each a wandering trader with its own trades: ${MK.traders.map((t) => t.name).join(', ')}`;
+      else stats.farmersMarketMissing = !cfg.landmarks ? 'the farmers\' market is the market, a landmark: tick Landmarks' : MK ? 'the market has no stalls' : 'no market in this city'; } }
   { const M = landmarks.find((q) => q.kind === 'arena');
     if (M) stats.arena = `beside the city to the ${M.side}: a covered arena ${2 * M.frame.R + 1} across, ${M.stairs.length + M.corners.length} seats in 25 rows round a glass cage 41 across, in it ${M.cageFighters.length} fighters (${M.cageFighters.filter((f) => f.type === 'golem').length} iron golems, two of each of ${ARENA_KINDS.length} hostile mobs, and two each of the hunters ${ARENA_HUNTERS.join(', ').replace(/_/g, ' ')} with their prey ${ARENA_PREY.join(', ')}) who fight forever and never die`;
     else if (cfg.arena) stats.arenaMissing = arenaMissing || 'no room for the arena'; }
@@ -1215,6 +1243,8 @@ export function generateCity(cfgIn, onProgress) {
   // pitch gives it again (landmarks-extra.js), should the game not keep a saved effect
   for (const L of landmarks) for (const f of L.fighters || []) spawns.push({ ...f, group: 'stadium', tags: [FIGHTER_TAG],
     effects: [{ id: 11, amp: 4, ticks: 1000000000 }] });
+  // the farmers' market's traders: each kept, in its stall, with its stall's trades
+  for (const L of landmarks) for (const t of L.traders || []) spawns.push({ ...t });
   // the arena's cage: the same, a group of its own
   for (const L of landmarks) for (const f of L.cageFighters || []) spawns.push({ ...f, group: 'arena', tags: [FIGHTER_TAG],
     effects: [{ id: 11, amp: 4, ticks: 1000000000 }] });
@@ -1243,8 +1273,20 @@ export function generateCity(cfgIn, onProgress) {
   // where each landmark is, to find it in the game (export.js: the guide's list and
   // a goto_<kind> function for each): a spot to stand on the street before its front
   const places = landmarkPlaces(world, landmarks, (x, z) => GROUND + elevAt(x, z));
+  // ---- Find a landmark in the game: the board by the centre monument (findboard.js) ----------
+  let findBoard = null;
+  if (cfg.findBoard) {
+    const B = buildFindBoard(world, plan, centre, places, { GROUND, elevAt, signTags });
+    if (B.missing) stats.findBoardMissing = !centre ? 'the board stands by the centre monument: tick its option (on by default)' : B.missing;
+    else { findBoard = B; stats.findBoard = `by the centre monument: ${B.entries.length} landmarks, a sign and a button each (the button takes you there)`; }
+  }
+  if (cfg.mapRoom) {
+    const MR = landmarks.find((q) => q.kind === 'maproom');
+    if (MR && cityMap) stats.mapRoom = `the city on its floor, ${cityMap.size[0]} by ${cityMap.size[1]}, ${cityMap.scale} blocks to the cell, a gallery round it`;
+    else stats.mapRoomMissing = !cfg.landmarks ? 'the map room is a landmark: tick Landmarks' : 'no lot big enough for the map room (it needs 17 by 17)';
+  }
   world.lifts = buildings.filter((b) => b.lift).length;     // (for the guide)
-  return { joins, joinFrom, joinMissing, longships, aqueducts, world, plan, buildings, cfg, stats, shell, bridges, farms, ranches, spawns, bell, transit, wall, landmarks, places, canal, centre, streets, harbour, harbourPlan, megaliths, ponds, courtyards, hostiles, inmates, zoo, stands, dome, sea, flood, canals, lighting, styleDistricts: SD, spawners, stilts, islands, cliffWays, rooms, metro, hills, stepRails,
+  return { fireworks, findBoard, cityMap, joins, joinFrom, joinMissing, longships, aqueducts, world, plan, buildings, cfg, stats, shell, bridges, farms, ranches, spawns, bell, transit, wall, landmarks, places, canal, centre, streets, harbour, harbourPlan, megaliths, ponds, courtyards, hostiles, inmates, zoo, stands, dome, sea, flood, canals, lighting, styleDistricts: SD, spawners, stilts, islands, cliffWays, rooms, metro, hills, stepRails,
     hills, stairRuns, reach, groundAt: (x, z) => GROUND + elevAt(x, z) };
 }
 

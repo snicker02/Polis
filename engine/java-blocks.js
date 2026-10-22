@@ -124,6 +124,7 @@ function translateState(block, key, value) {
     case 'height': return ['layers', String(Math.min(8, value + 1))];      // snow layers count from one
     case 'covered_bit': return null;
     case 'conditional_bit': return ['conditional', value ? 'true' : 'false'];       // a command block's (0.78.0)
+    case 'triggered_bit': return ['triggered', value ? 'true' : 'false'];            // a dispenser's (0.80.0)
     case 'toggle_bit': return null;
     case 'age_bit': return ['age', value ? '1' : '0'];
     case 'bamboo_leaf_size': return ['leaves', value === 'large_leaves' ? 'large' : value === 'small_leaves' ? 'small' : 'none'];

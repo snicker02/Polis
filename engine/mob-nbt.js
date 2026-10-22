@@ -68,6 +68,7 @@ export function mobNbt(kind, x, y, z, rng, opts = {}) {
   const m = hydrate(COW);
   const v = m.v;
   let groups = startingGroups(kind);
+  if (opts.groups) groups = new Set(opts.groups);                 // (groups of its own: a market trader's stall)
   if (opts.variety) {
     // a named variety's pattern and colours its own: the spawn event's random ones left out
     const looks = (g) => { const c = ((e && e.component_groups) || {})[g] || {}; return ['minecraft:variant', 'minecraft:mark_variant', 'minecraft:color', 'minecraft:color2'].some((k) => k in c); };

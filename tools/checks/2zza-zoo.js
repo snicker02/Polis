@@ -215,6 +215,7 @@ export default async function run(ctx) {
         const k = f.name.replace('entities/', '').replace('.json', ''), d = JSON.parse(f.data), e = d['minecraft:entity'];
         const kept = e.component_groups['polis:kept'], ev = e.events['polis:keep'];
         if (!kept || !kept['minecraft:persistent'] || !ev) { exact = false; continue; }
+        if (k === 'wandering_trader') continue;     // (the market's trader: its own changes besides, checked in 2zzzi)
         const game = VANILLA_MOBS[k]['minecraft:entity'];
         const gs = (game.events || {})['minecraft:entity_spawned'];
         if (gs && !(ev.sequence && JSON.stringify(ev.sequence[0]) === JSON.stringify(gs))) exact = false;

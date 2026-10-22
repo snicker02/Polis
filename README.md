@@ -1,4 +1,4 @@
-# Polis v0.79.0
+# Polis v0.81.0
 
 *Created with help from Claude AI.*
 
@@ -771,6 +771,43 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.81.0** — Two more options:
+- **A map room.** A hall with the whole city laid out in blocks on its floor,
+  north to the north, at as many blocks to the cell as it takes to fit: streets
+  grey, towers white, buildings light grey, houses terracotta, parks lime,
+  squares andesite, water blue (a canal shows even where it is narrow), the
+  landmarks yellow, the town hall gold, and the map room itself red: you are
+  here. Up four steps beside the doors to a gallery round it, to look down on it;
+  the key on signs along the gallery's back wall. It takes the roomiest lot in
+  town, a park's if a park's is roomiest, for the biggest map. (A filled map item
+  hung on a wall is not possible: a map's picture lives in the world's own save,
+  and one brought in by a structure is blank.)
+- **Find a landmark in the game.** A board by the centre monument with a sign for
+  every landmark (and the memorial), naming its goto_ function; press the button
+  under a sign and it takes you there (it runs /function <city>/goto_<name> for
+  you). Command blocks must be on.
+New check 2zzzj.
+
+**0.80.0** — Two new options:
+- **A working farmers' market.** The market's stalls each get a wandering trader
+  with set trades: Greengrocer, Baker, Butcher & Dairy, Fishmonger, Florist,
+  Seeds & Saplings, Honey & Candles, Mushrooms & Moss (round again on a big
+  market). Each sells its goods for emeralds, and most buy produce back; the
+  trades come back after a while, as a villager's do. The trader stands in its
+  stall, closed round a block high under the cloth roof, so it cannot climb out:
+  trade over the counter at the front, the stall's name on a sign beside you.
+  They never leave or despawn (the pack's wandering trader keeps a wild one's
+  llamas and despawn timer for the ones the game sends). In Java, each trader
+  carries its offers. /function <city>/market_centered brings them again.
+- **Fireworks over the town square.** The fountain's spout becomes a column with
+  five dispensers of rockets on top (nine stacks each, every stack a different
+  burst and colour). A lever on the town hall's front wall, beside its doors,
+  switches them on and off: while it is on, a silent command-block clock under
+  the fountain fires all five every second and a half. The town square is
+  always laid out when fireworks are asked for. (In Java the dispensers and their
+  rockets come, but the clock is left blank.)
+New check 2zzzi.
 
 **0.79.0** — Fixes from the first 1024 city:
 - **Metro stairs.** Since 0.76.0 the metro keeps near the middle, and in a big
