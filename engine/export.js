@@ -17,7 +17,7 @@ import { makeRng } from './rng.js';
 // Must match main.js VERSION, package.json and index.html data-version;
 // tools/validate.js fails if they drift. The app refuses to export when the
 // browser has mixed cached copies of old and new files.
-export const POLIS_VERSION = '0.78.0';
+export const POLIS_VERSION = '0.79.0';
 
 export const CHUNK = 64;          // Bedrock structure limit per horizontal axis
 export const GROUND_DROP = 2;     // base layer y=0 sits 2 below feet; surface y=1 replaces the block you stand on
@@ -1222,18 +1222,24 @@ export function placementGuide(tiles, opts = {}) {
     L.push('');
   }
   if ((opts.spawns || []).some((p) => p.group === 'arena')) {
-    const kinds = [...new Set(opts.spawns.filter((p) => p.group === 'arena' && p.type === 'mob').map((p) => p.kind.replace(/_/g, ' ')))];
+    const HUNT = ['wolf', 'fox', 'ocelot', 'cat', 'polar_bear', 'goat', 'llama'], PREY = ['sheep', 'rabbit', 'chicken'];
+    const kinds = [...new Set(opts.spawns.filter((p) => p.group === 'arena' && p.type === 'mob' && !HUNT.includes(p.kind) && !PREY.includes(p.kind)).map((p) => p.kind.replace(/_/g, ' ')))];
     L.push('THE MEGA ARENA: a covered arena beside the city, its doors at the end of its own road. A tunnel under the stands');
     L.push('  leads in to the walkway round the cage; climb the rows of seats (a staircase all round) to the concourse at the top.');
     L.push('  In the glass cage, roofed in glass fourteen blocks up, every mob a cage can hold, two of each, and a dozen');
     L.push('  iron golems to take them on: ' + kinds.join(', ') + '.');
+    L.push('  And the hunters with their prey: wolves (after sheep, rabbits, foxes and the skeletons), foxes (chickens, rabbits),');
+    L.push('  ocelots (chickens), cats (rabbits), polar bears (foxes), goats (they ram anything near), llamas (they spit at');
+    L.push('  wolves); sheep, rabbits and chickens to be chased. Two of each, kept from harm like the rest.');
     L.push('  Every fighter is saved with Resistance V (no damage at all) and named (a named mob never despawns), and a');
     L.push('  silent command block under the sand gives the Resistance again every two seconds: the fights go on and');
     L.push('  nobody dies. The roof keeps the sun off. They come with populate, or /function ' + ns + '/arena_centered');
     L.push('  (each run brings another set). Command blocks must be on (/gamerule commandblocksenabled true).');
     L.push('  Not in the cage: creeper (would blow it open), ghast, guardian and elder guardian (fly or need water),');
     L.push('  enderman and shulker (teleport out), evoker and vex (pass through walls), Wither, Warden, Ender Dragon (no cage');
-    L.push('  holds them), phantom (fights only players), piglins and hoglins (turn into other mobs in the Overworld), creaking.');
+    L.push('  holds them), phantom (fights only players), piglins and hoglins (turn into other mobs in the Overworld), creaking;');
+    L.push('  and of the animals: frogs (they swallow small slimes whole, past any Resistance), bees (die when they sting),');
+    L.push('  pandas (only a hurt one fights, and only players), and the ones that need water.');
     L.push('');
   }
   if ((opts.places || []).some((P) => P.kind === 'university')) {

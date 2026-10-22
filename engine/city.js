@@ -41,7 +41,7 @@ import { chooseLandmarks, buildLandmark, LANDMARK_NAMES } from './landmarks.js';
 import { namesOf, FIGHTER_TAG, BOUTS } from './landmarks-extra.js';
 import { buildAirport } from './airport.js';
 import { buildThemePark } from './themepark.js';
-import { buildArena, ARENA_KINDS } from './arena.js';
+import { buildArena, ARENA_KINDS, ARENA_HUNTERS, ARENA_PREY } from './arena.js';
 import { buildUniversity, SCHOOLS } from './university.js';
 import { planHills, liftBlocks, cutStairs, shiftBuilding, walkCity } from './terrain.js';
 import { styleOf, remapTable, STYLES } from './styles.js';
@@ -153,7 +153,7 @@ export const DEFAULTS = {
   villagers: 60,
   professionals: 0.7,        // share of villagers that start with a trade (at mixed levels)
   golemsPer10: 3,            // iron golems per 10 villagers
-  golemMax: 60,
+  golemMax: 1000,          // (0.79.0: up from 60, for the biggest cities)
   lights: true,
   lamps: true,
   trees: true,
@@ -910,6 +910,24 @@ export function generateCity(cfgIn, onProgress) {
     const own = cfg.joinSides || [];
     return [...all.filter((q) => !own.includes(q)), ...all.filter((q) => own.includes(q))];
   };
+  // ---- which side each ground beside the city takes (0.79.0) ---------------------------------------
+  // Each has a home: the airport north, the theme park south, the arena east, the university west.
+  // A home side it may not take (the side a bridge comes in by: the other city stands there) sends
+  // it to the side with the fewest grounds on it or kept for one, sharing it (a long side holds two,
+  // side by side), rather than pushing another ground off its own; this city's own bridges' sides last.
+  const OFFSITE = ['airport', 'themepark', 'arena', 'university'];
+  const HOME = { airport: 'north', themepark: 'south', arena: 'east', university: 'west' };
+  const groundSides = (kind) => {
+    const allowed = offsiteSides(), own = cfg.joinSides || [];
+    const load = {};
+    for (const q of landmarks) if (OFFSITE.includes(q.kind)) load[q.side] = (load[q.side] || 0) + 1;
+    for (const k of OFFSITE) if (k !== kind && cfg[k] && !landmarks.some((q) => q.kind === k) && allowed.includes(HOME[k])) load[HOME[k]] = (load[HOME[k]] || 0) + 1;
+    // (a home side this city's own bridge goes out by is no home: the next city stands there)
+    const home = allowed.includes(HOME[kind]) && !own.includes(HOME[kind]) ? [HOME[kind]] : [];
+    const rest = allowed.filter((q) => !home.includes(q)).map((q, i) => [q, (load[q] || 0) * 10 + (own.includes(q) ? 5 : 0) + i * 0.1]).sort((a, b) => a[1] - b[1]).map((q) => q[0]);
+    return [...home, ...rest];
+  };
+  const offsiteAvoid = () => landmarks.filter((q) => OFFSITE.includes(q.kind)).flatMap((q) => [q.lot, q.roadRect].filter(Boolean));
   // ---- the airport: an airfield of its own beside the city, a road out to it ----
   // (not on a city fitted to your world, whose land round it is the world's own; not
   // with a dome, on stilts, floating or on a cliff, which have no ground beside them)
@@ -921,7 +939,7 @@ export function generateCity(cfgIn, onProgress) {
     else {
       // (never on the side facing a bridge this city comes in by: it would stand on the bridge;
       // the sides of this city's own bridges last)
-      const A = buildAirport(world, plan, cfg, { GROUND, elevAt, signTags, route: { sides: offsiteSides() } });
+      const A = buildAirport(world, plan, cfg, { GROUND, elevAt, signTags, route: { sides: groundSides('airport') } });
       if (A.missing) airportMissing = A.missing;
       else {
         landmarks.push(A);
@@ -938,7 +956,7 @@ export function generateCity(cfgIn, onProgress) {
     if (why) themeparkMissing = why;
     else {
       const air = landmarks.find((q) => q.kind === 'airport');
-      const T = buildThemePark(world, plan, cfg, { GROUND, elevAt, signTags, awayFrom: air ? air.side : null, avoid: air ? [air.lot, air.roadRect] : [], sides: offsiteSides(air ? air.side : null) });
+      const T = buildThemePark(world, plan, cfg, { GROUND, elevAt, signTags, awayFrom: air ? air.side : null, avoid: offsiteAvoid(), sides: groundSides('themepark') });
       if (T.missing) themeparkMissing = T.missing;
       else {
         landmarks.push(T);
@@ -950,24 +968,15 @@ export function generateCity(cfgIn, onProgress) {
   // ---- the Mega Arena and the University: likewise beside the city, the arena east and the
   // university west where they can be (then any side the others leave, the sides with this
   // city's own bridges last, never the side a bridge comes in by) ---------------------------------
-  const OFFSITE = ['airport', 'themepark', 'arena', 'university'];
-  const offsiteFor = (pref) => {
-    const allowed = offsiteSides(), own = cfg.joinSides || [];
-    const used = new Set(landmarks.filter((q) => OFFSITE.includes(q.kind)).map((q) => q.side));
-    const order = pref.filter((q) => allowed.includes(q));
-    const rank = (q) => (used.has(q) ? 2 : 0) + (own.includes(q) ? 1 : 0);
-    return order.map((q, i) => [q, rank(q) * 10 + i]).sort((a, b) => a[1] - b[1]).map((q) => q[0]);
-  };
-  const offsiteAvoid = () => landmarks.filter((q) => OFFSITE.includes(q.kind)).flatMap((q) => [q.lot, q.roadRect].filter(Boolean));
   const noRoomWhy = (what) => cfg.terrain ? `a city fitted to your world has no room of its own beside it for the ${what}`
     : cfg.dome ? 'not with the dome' : cfg.underwater ? 'not under the sea' : cfg.stilts ? 'not on stilts' : floating ? 'not with floating islands' : hills.cliff ? 'not on a cliff' : null;
   let arenaMissing = null, universityMissing = null;
-  for (const [key, what, pref, build] of [['arena', 'arena', ['east', 'west', 'south', 'north'], buildArena], ['university', 'university', ['west', 'east', 'north', 'south'], buildUniversity]]) {
+  for (const [key, what, build] of [['arena', 'arena', buildArena], ['university', 'university', buildUniversity]]) {
     if (!cfg[key]) continue;
     const why = noRoomWhy(what);
     let miss = why;
     if (!why) {
-      const R = build(world, plan, cfg, { GROUND, elevAt, signTags, avoid: offsiteAvoid(), sides: offsiteFor(pref) });
+      const R = build(world, plan, cfg, { GROUND, elevAt, signTags, avoid: offsiteAvoid(), sides: groundSides(key) });
       if (R.missing) miss = R.missing;
       else {
         landmarks.push(R);
@@ -1187,7 +1196,7 @@ export function generateCity(cfgIn, onProgress) {
     if (T) stats.themepark = `beside the city to the ${T.side}: a roller coaster of ${T.coaster.length} rails with a lift hill ${T.coaster.lift} high, two corkscrews and a dark tunnel, a big wheel of ${T.wheel.cabins.length} cabins that turns, a drop tower ${T.tower.height} high, a carousel, ${T.stalls.length} stalls; at the back bumper boats, a hedge maze, trampolines, an archery range`;
     else if (cfg.themepark) stats.themeparkMissing = themeparkMissing || 'no room for the theme park'; }
   { const M = landmarks.find((q) => q.kind === 'arena');
-    if (M) stats.arena = `beside the city to the ${M.side}: a covered arena ${2 * M.frame.R + 1} across, ${M.stairs.length + M.corners.length} seats in 25 rows round a glass cage 41 across, in it ${M.cageFighters.length} fighters (${M.cageFighters.filter((f) => f.type === 'golem').length} iron golems and two of each of ${ARENA_KINDS.length} hostile mobs) who fight forever and never die`;
+    if (M) stats.arena = `beside the city to the ${M.side}: a covered arena ${2 * M.frame.R + 1} across, ${M.stairs.length + M.corners.length} seats in 25 rows round a glass cage 41 across, in it ${M.cageFighters.length} fighters (${M.cageFighters.filter((f) => f.type === 'golem').length} iron golems, two of each of ${ARENA_KINDS.length} hostile mobs, and two each of the hunters ${ARENA_HUNTERS.join(', ').replace(/_/g, ' ')} with their prey ${ARENA_PREY.join(', ')}) who fight forever and never die`;
     else if (cfg.arena) stats.arenaMissing = arenaMissing || 'no room for the arena'; }
   { const U = landmarks.find((q) => q.kind === 'university');
     if (U) stats.university = `beside the city to the ${U.side}: schools of ${SCHOOLS.join(', ')} round a quad, the Great Library, the Great Hall, a clock tower ${U.tower.top - U.ground} high, a sports field`;

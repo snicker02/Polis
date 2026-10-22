@@ -1,4 +1,4 @@
-# Polis v0.78.0
+# Polis v0.79.0
 
 *Created with help from Claude AI.*
 
@@ -771,6 +771,30 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.79.0** — Fixes from the first 1024 city:
+- **Metro stairs.** Since 0.76.0 the metro keeps near the middle, and in a big
+  city that is often the loop alone (no avenue near the middle runs clear for a
+  cross line). The loop's stations had no way up: their flights only ran along
+  the line, which under the middle of town comes up under buildings, so every
+  one was dropped. Stations now also climb along the street that crosses over
+  them, straight out or out and back, in that street's own width: the
+  reporter's city has 17 stations, every one with stairs.
+- **Which side the grounds take.** Each ground beside the city has a home side:
+  the airport north, the theme park south, the arena east, the university west.
+  A city joined by a bridge coming in from the south has another city standing
+  there, so nothing can go south; the ground whose home that is now shares a side
+  with another (a long side holds two side by side) instead of taking another
+  ground's home and pushing it round.
+- **Villagers up to 1000** (the slider stopped at 200), and the iron golems no
+  longer capped at 60: Golems per 10 villagers now gives what it says. A thousand
+  of each is a lot for the game to run.
+- **Hunters and prey in the Mega Arena's cage**: two each of wolves, foxes,
+  ocelots, cats, polar bears, goats and llamas, and the sheep, rabbits and
+  chickens they go after, kept from harm like the rest (wolves also take on the
+  skeletons). Left out, and why, in the guide: frogs swallow small slimes whole,
+  past any Resistance; bees die when they sting; pandas fight only players.
+New check 2zzzh (the reporter's 1024 city).
 
 **0.78.0** — Two new grounds beside the city, like the airport and the theme park,
 each at the end of its own road (two new checkboxes, beside the theme park):

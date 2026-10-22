@@ -145,14 +145,36 @@ export function buildMetro(world, plan, cfg, G, opts = {}) {
       for (let j = 1; j <= h2; j++) steps.push({ u: uL - ud * j, a: bs, y: F + h1 + j, dir: -ud });
       plans.push({ steps, landing: [{ u: uL, a: as, y: F + h1 }, { u: uL, a: bs, y: F + h1 }], exit: { u: uL - ud * (h2 + 1), a: bs }, foot: { u: start - ud, a: as } });
     }
+    // (0.79.0) Flights out of the hall's side, along the street that crosses over the line: where
+    // the line runs under no street of its own (a loop under the middle of a big city, crossed by
+    // streets three wide), a flight along the line comes up under a building. These climb along
+    // the crossing street, in its own width: straight out, or out and back (a switchback).
+    for (const side of [1, -1]) for (const du of [0, 1, -1]) {
+      const steps = [];
+      for (let i = 1; i <= rise; i++) steps.push({ u: st.u + du, a: a + side * (3 + i), y: F + i, dirA: side });
+      plans.push({ perp: true, steps, landing: [], exit: { u: st.u + du, a: a + side * (4 + rise) }, foot: { u: st.u + du, a: a + side * 3 } });
+      for (const e of [1, -1]) {
+        const h1 = Math.floor(rise / 2), h2 = rise - h1, aL = a + side * (3 + h1 + 1), steps2 = [];
+        for (let i = 1; i <= h1; i++) steps2.push({ u: st.u + du, a: a + side * (3 + i), y: F + i, dirA: side });
+        for (let j = 1; j <= h2; j++) steps2.push({ u: st.u + du + e, a: aL - side * j, y: F + h1 + j, dirA: -side });
+        plans.push({ perp: true, steps: steps2, landing: [{ u: st.u + du, a: aL, y: F + h1 }, { u: st.u + du + e, a: aL, y: F + h1 }],
+          exit: { u: st.u + du + e, a: aL - side * (h2 + 1) }, foot: { u: st.u + du, a: a + side * 3 } });
+      }
+    }
+    const climbA = { 1: axis === 'x' ? WEIRDO.south : WEIRDO.east, [-1]: axis === 'x' ? WEIRDO.north : WEIRDO.west };
     const hallHas = (u, aa) => Math.abs(u - st.u) <= 5 && Math.abs(aa - a) <= 5;
+    // (no flight further from the middle than the metro's reach and its halls: all of it under
+    // the areas held loaded round the middle, export.js)
+    const REACH = (opts.reach || METRO_REACH) + 8, CX = Math.floor(W / 2), CZ = Math.floor(D / 2);
+    const within = (q) => { const [x, z] = cell(q.u, q.a); return Math.abs(x - CX) <= REACH && Math.abs(z - CZ) <= REACH; };
     for (const pl of plans) {
+      if (![...pl.steps, ...pl.landing, pl.exit].every(within)) continue;
       const [ex, ez] = cell(pl.exit.u, pl.exit.a);
       if (!isStreet(ex, ez) || !clearAbove(ex, ez) || byDoor(ex, ez)) continue;
       if (surf(ex, ez) !== G) continue;                       // the way out at this street height
       // (and the opening on level street at it: no step in the pavement round it)
       if ([...pl.steps, ...pl.landing].some((q) => q.y + 3 >= G && surf(...cell(q.u, q.a)) !== G)) continue;
-      if (pl.steps.some((q) => Math.abs(q.a - a) >= 5 && hallHas(q.u, q.a))) continue;      // not through the hall's side walls
+      if (!pl.perp && pl.steps.some((q) => Math.abs(q.a - a) >= 5 && hallHas(q.u, q.a))) continue;      // not through the hall's side walls
       let ok = true;
       for (const q of [...pl.steps, ...pl.landing]) {
         const [x, z] = cell(q.u, q.a);
@@ -175,7 +197,7 @@ export function buildMetro(world, plan, cfg, G, opts = {}) {
       for (const q of all) {
         const [x, z] = cell(q.u, q.a);
         for (let yy = F + 1; yy < q.y; yy++) world.set(x, yy, z, MAT.STONEBRICK);
-        world.set(x, q.y, z, q.dir ? stairId('stonebrick', climbUp[q.dir]) : MAT.STONEBRICK);
+        world.set(x, q.y, z, q.dirA ? stairId('stonebrick', climbA[q.dirA]) : q.dir ? stairId('stonebrick', climbUp[q.dir]) : MAT.STONEBRICK);
         const top = Math.min(G + 3, q.y + 3);
         for (let yy = q.y + 1; yy <= top; yy++) world.clear(x, yy, z);
         if (q.y + 1 <= G && G <= top) opening.push([x, z]);

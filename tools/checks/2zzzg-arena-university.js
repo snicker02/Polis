@@ -32,7 +32,7 @@ export default async function run(ctx) {
   const { check, note, ROOT } = ctx;
   const { generateCity, DEFAULTS } = await import('../../engine/city.js');
   const { MATERIALS } = await import('../../engine/materials.js');
-  const { ARENA, ARENA_KINDS } = await import('../../engine/arena.js');
+  const { ARENA, ARENA_KINDS, ARENA_HUNTERS, ARENA_PREY, ARENA_ANIMALS } = await import('../../engine/arena.js');
   const { SCHOOLS } = await import('../../engine/university.js');
   const { FIGHTER_TAG } = await import('../../engine/landmarks-extra.js');
   const { lightMap, spawnSpots } = await import('../../engine/lighting.js');
@@ -108,7 +108,7 @@ export default async function run(ctx) {
       const room = (p) => [0, 1, 2].every((d) => blk(p.x, p.y + d, p.z) === 'air') && floor(blk(p.x, p.y - 1, p.z));
       const golems = fs.filter((p) => p.type === 'golem').length;
       const kinds = new Map(); for (const p of fs.filter((p) => p.type === 'mob')) kinds.set(p.kind, (kinds.get(p.kind) || 0) + 1);
-      out.fighters = { n: fs.length, golems, everyKind: ARENA_KINDS.every((k) => kinds.get(k) === 2), inCage: fs.every(inCage), room: fs.every(room), named: fs.every((p) => p.name),
+      out.fighters = { n: fs.length, golems, everyKind: ARENA_KINDS.every((k) => kinds.get(k) === 2), animals: ARENA_ANIMALS.every((k) => kinds.get(k) === 2), inCage: fs.every(inCage), room: fs.every(room), named: fs.every((p) => p.name),
         kept: fs.every((p) => p.tags && p.tags.includes(FIGHTER_TAG) && p.effects && p.effects.some((e) => e.id === 11 && e.amp === 4 && e.ticks >= 1e9)) };
       const cb = w.getData(...A.command);
       out.command = blk(...A.command) === 'repeating_command_block' && !!cb && /effect @e\[tag=polis_fighter\] resistance/.test(cb.tags.Command.v) && cb.tags.LPCommandMode.v === 1 && cb.tags.auto.v === 1;
@@ -160,7 +160,7 @@ export default async function run(ctx) {
   check('both built beside the city, outside its square, at the end of their own roads; no two grounds overlapping', all((t) => t.place), say((t) => [t.A, t.U, t.place]));
   check('the arena east and the university west (those sides free)', all((t) => t.sides === 'east/west'), say((t) => t.sides));
   check('the arena\'s cage: glass all round from the sand to fourteen up, a glass roof over it, its floor whole', all((t) => t.cage.glass === 0 && t.cage.roof === 0 && t.cage.floorBad === 0), say((t) => t.cage));
-  check(`in the cage: ${ARENA.GOLEMS} iron golems and two of each of ${ARENA_KINDS.length} hostile mobs, each on the sand with room over it`, all((t) => t.fighters.golems === ARENA.GOLEMS && t.fighters.everyKind && t.fighters.inCage && t.fighters.room && t.fighters.n === ARENA.GOLEMS + 2 * ARENA_KINDS.length), say((t) => t.fighters));
+  check(`in the cage: ${ARENA.GOLEMS} iron golems, two of each of ${ARENA_KINDS.length} hostile mobs, and two of each hunter (${ARENA_HUNTERS.join(', ')}) and of their prey (${ARENA_PREY.join(', ')}), each on the sand with room over it`, all((t) => t.fighters.golems === ARENA.GOLEMS && t.fighters.everyKind && t.fighters.animals && t.fighters.inCage && t.fighters.room && t.fighters.n === ARENA.GOLEMS + 2 * (ARENA_KINDS.length + ARENA_ANIMALS.length)), say((t) => t.fighters));
   check('every fighter tagged, named (never despawns), with Resistance V saved on it; the repeating command block under the sand giving it again', all((t) => t.fighters.kept && t.fighters.named && t.command), say((t) => [t.fighters.kept, t.command]));
   check('the whole hall roofed: nothing in it sees the sky', all((t) => t.roofed === 0), say((t) => t.roofed));
   check('the arena walked from the city\'s street through the doors and the tunnel to the walkway round the cage (all round it), up the seats to the top row and the concourse; the announcer reached; the cage never walked into', all((t) => Object.values(t.walk).every(Boolean) && t.sealed), say((t) => [t.walk, t.sealed]));
@@ -180,7 +180,7 @@ export default async function run(ctx) {
     const arenaMobs = mobs.filter((t) => t.group === 'arena');
     const ents = arenaMobs.flatMap((t) => decodeNbt(t.data).root.structure.entities);
     const resist = ents.filter((e) => JSON.stringify(e, (k, v) => (typeof v === 'bigint' ? String(v) : v)).includes(FIGHTER_TAG)).length;
-    check('in the pack: the arena\'s fighters in structures of their own (tagged), an arena_centered function; a goto to each ground; the guide tells of both', arenaMobs.length > 0 && resist === ARENA.GOLEMS + 2 * ARENA_KINDS.length
+    check('in the pack: the arena\'s fighters in structures of their own (tagged), an arena_centered function; a goto to each ground; the guide tells of both', arenaMobs.length > 0 && resist === ARENA.GOLEMS + 2 * (ARENA_KINDS.length + ARENA_ANIMALS.length)
       && fns.some((f) => f.fn === 'chk/arena_centered') && fns.some((f) => f.fn === 'chk/goto_arena') && fns.some((f) => f.fn === 'chk/goto_university')
       && /THE MEGA ARENA/.test(guide) && /THE UNIVERSITY/.test(guide), `${arenaMobs.length} structures, ${ents.length} entities, ${resist} tagged`);
   }

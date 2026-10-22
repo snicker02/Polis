@@ -38,10 +38,18 @@ export const ARENA = { L: 120, D: 126, VC: 68, HALF: 55, CAGE: 21, CAGE_H: 14, W
 // the cage's fighters: two of each (and the golems)
 export const ARENA_KINDS = ['zombie', 'husk', 'drowned', 'zombie_villager', 'skeleton', 'stray', 'bogged', 'wither_skeleton', 'spider', 'cave_spider',
   'silverfish', 'endermite', 'witch', 'slime', 'magma_cube', 'blaze', 'breeze', 'pillager', 'vindicator', 'ravager', 'zoglin'];
+// (0.79.0) and the animals that hunt, with what they hunt: wolves go for sheep, rabbits, foxes and
+// skeletons; foxes for chickens and rabbits; ocelots for chickens; cats for rabbits; polar bears
+// for foxes; goats ram whatever stands near; llamas spit at wolves. Two of each, kept like the rest.
+export const ARENA_HUNTERS = ['wolf', 'fox', 'ocelot', 'cat', 'polar_bear', 'goat', 'llama'];
+export const ARENA_PREY = ['sheep', 'rabbit', 'chicken'];
+export const ARENA_ANIMALS = [...ARENA_HUNTERS, ...ARENA_PREY];
 export const ARENA_LEFT_OUT = { creeper: 'it would blow the cage open', ghast: 'it flies, too big for any cage', guardian: 'it needs water', elder_guardian: 'it needs water, and its curse reaches the crowd',
   enderman: 'it teleports out', shulker: 'it teleports out', evoker: 'its vexes pass through walls', vex: 'it passes through walls', wither: 'no cage holds it', warden: 'its sonic boom passes through walls',
   ender_dragon: 'no cage holds it', phantom: 'it fights nobody but players', piglin: 'it turns into a zombified piglin in the Overworld', piglin_brute: 'it turns into a zombified piglin in the Overworld',
-  hoglin: 'it turns into a zoglin in the Overworld (a zoglin is in)', creaking: 'it only moves when no one is looking' };
+  hoglin: 'it turns into a zoglin in the Overworld (a zoglin is in)', creaking: 'it only moves when no one is looking',
+  frog: 'it eats small slimes and magma cubes whole, which no Resistance survives', bee: 'it dies when it stings', panda: 'only a hurt one fights, and only players',
+  axolotl: 'it needs water', dolphin: 'it needs water' };
 const cap = (s) => s.split('_').map((w) => w[0].toUpperCase() + w.slice(1)).join(' ');
 
 export function buildArena(world, plan, cfg, ctx) {
@@ -160,14 +168,14 @@ export function buildArena(world, plan, cfg, ctx) {
   let s = 0;
   const free = (k) => { const [du, dv] = spots[k % spots.length]; return [du + (k >= spots.length ? 2 : 0), dv]; };
   for (let g = 0; g < A.GOLEMS; g++) { const [du, dv] = free(s++); const [x, y, z] = pos(du, VC + dv, YA + 1); fighters.push({ type: 'golem', x, y, z, name: 'Champion' }); }
-  for (const kind of ARENA_KINDS) for (let n = 0; n < 2; n++) { const [du, dv] = free(s++); const [x, y, z] = pos(du, VC + dv, YA + 1); fighters.push({ type: 'mob', kind, x, y, z, name: cap(kind) }); }
+  for (const kind of [...ARENA_KINDS, ...ARENA_ANIMALS]) for (let n = 0; n < 2; n++) { const [du, dv] = free(s++); const [x, y, z] = pos(du, VC + dv, YA + 1); fighters.push({ type: 'mob', kind, x, y, z, name: cap(kind) }); }
   // the backstop: a repeating command block under the middle of the sand, silent
   const REPEAT = MATERIALS.add(null, 'minecraft:repeating_command_block', '#6b4fa0', { conditional_bit: BYTE(0), facing_direction: INT(1) });
   const command = pos(0, VC, YA);
   world.set(...command, REPEAT);
   world.setData(...command, commandBlock(`effect @e[tag=${FIGHTER_TAG}] resistance 6 4 true`, { mode: 'repeat', delay: 40 }));
   // the announcer, on the walkway where the tunnel comes out
-  const announcer = sign(4, vIn + 1, YA + 1, dirOf(0, -1), 'Tonight: every mob\nv twelve golems\nNo one gets hurt');
+  const announcer = sign(4, vIn + 1, YA + 1, dirOf(0, -1), 'Tonight: every mob,\nhunters and prey,\nv twelve golems\nNo one gets hurt');
 
   // ---- outside: a fence round the ground, its grass and forecourt lit ------------------------------
   const fence = [];
