@@ -23,6 +23,47 @@ const impulse = () => MATERIALS.add(null, 'minecraft:command_block', '#b07a4e', 
 const nm = (v) => (v[0] > 0 ? 'east' : v[0] < 0 ? 'west' : v[1] > 0 ? 'south' : 'north');
 const clean = (t) => String(t).replace(/[^A-Za-z0-9 &'.-]/g, '');
 
+// A layout's cell a along it, t across it (t = 0 the wall's first row; a second face's row t = 1)
+export const layoutCell = (L) => (a, t) => (L.along[0] ? [L.a0 + L.sgn * a, L.p + t] : [L.p + t, L.a0 + L.sgn * a]);
+// (0.82.1) Where a board of so many slots fits joined to a monument (its rect, the cell before its
+// entrance): running on from one of its sides, in line with it. Two faces where there is room
+// before both, else one. checks.board(x, z), checks.stand(x, z): the ground's own tests.
+export function boardFit(mono, entrance, slots, G, checks) {
+  const inMono = (x, z) => x >= mono.x0 && x <= mono.x1 && z >= mono.z0 && z <= mono.z1;
+  const kept = (x, z) => !inMono(x, z) && !(x === entrance[0] && z === entrance[1]);
+  for (const two of [true, false]) {
+    const K = Math.ceil(slots / ((two ? 2 : 1) * BOARD.ROWS));
+    for (const along of [[1, 0], [0, 1]]) for (const sgn of [1, -1]) {
+      const thick = [along[1], along[0]];
+      const a0 = along[0] ? (sgn > 0 ? mono.x1 + 1 : mono.x0 - 1) : (sgn > 0 ? mono.z1 + 1 : mono.z0 - 1);
+      const pLo = along[0] ? mono.z0 : mono.x0, pHi = along[0] ? mono.z1 : mono.x1;
+      for (let p = (two ? pLo - 1 : pLo); p <= pHi; p++) {
+        const L0 = { along, sgn, a0, p, K };
+        const cell = layoutCell(L0);
+        const layouts = two ? [[{ t: 0, out: [-thick[0], -thick[1]] }, { t: 1, out: thick }]] : [[{ t: 0, out: thick }], [{ t: 0, out: [-thick[0], -thick[1]] }]];
+        for (const faces of layouts) {
+          let ok = true;
+          for (let a = 0; a < K && ok; a++) for (const f of faces) {
+            const [x, z] = cell(a, f.t), sx = x + f.out[0], sz = z + f.out[1];
+            if (!kept(x, z) || !kept(sx, sz) || !checks.board(x, z) || !checks.stand(sx, sz)) { ok = false; break; }
+          }
+          if (ok) return { ...L0, faces, joined: true };
+        }
+      }
+    }
+  }
+  return null;
+}
+// its wall: quartz where the signs hang, stone where the buttons go, lanterns on top
+export function boardShell(world, L) {
+  const cell = layoutCell(L), g0 = L.ground;
+  for (let a = 0; a < L.K; a++) for (const f of L.faces) {
+    const [x, z] = cell(a, f.t);
+    for (let row = 0; row < BOARD.ROWS; row++) { world.set(x, g0 + 1 + 2 * row, z, MAT.STONEBRICK); world.set(x, g0 + 2 + 2 * row, z, MAT.SMOOTH_QUARTZ); }
+    world.set(x, g0 + 1 + 2 * BOARD.ROWS, z, MAT.SEA_LANTERN);
+  }
+}
+
 export function buildFindBoard(world, plan, centre, places, ctx) {
   const { GROUND, elevAt, signTags } = ctx;
   const list = places.filter((P) => P && P.id);
@@ -51,7 +92,7 @@ export function buildFindBoard(world, plan, centre, places, ctx) {
   const kept = (x, z) => !inMono(x, z) && !(x === entrance[0] && z === entrance[1]) && !(x === cx && z === cz);
   const boardOk = (x, z) => kept(x, z) && cellOk(x, z, OK_BOARD) && ![[1, 0], [-1, 0], [0, 1], [0, -1]].some(([a, b]) => [1, 2].some((dy) => { const i = world.get(x + a, g0 + dy, z + b); return i >= 0 && /door/.test(MATERIALS.def(i).block); }));
   const standOk = (x, z) => kept(x, z) && inPlan(x, z) && OK_STAND.has(use[z * W + x]) && ground(x, z) && !world.has(x, g0 + 1, z) && !world.has(x, g0 + 2, z);
-  let best = null;
+  let best = ctx.layout ? { cell: layoutCell(ctx.layout), faces: ctx.layout.faces, K: ctx.layout.K, joined: true } : null;
   const tryLayout = (cell, faces, K) => {
     for (let a = 0; a < K; a++) {
       for (const f of faces) { const [x, z] = cell(a, f.t); if (!boardOk(x, z)) return false; const [sx, sz] = [x + f.out[0], z + f.out[1]]; if (!standOk(sx, sz)) return false; }
@@ -59,6 +100,7 @@ export function buildFindBoard(world, plan, centre, places, ctx) {
     return true;
   };
   for (const two of [true, false]) {
+    if (best) break;
     const K = Math.ceil(N / ((two ? 2 : 1) * BOARD.ROWS));
     for (const along of [[1, 0], [0, 1]]) for (const sgn of [1, -1]) {
       if (best) break;

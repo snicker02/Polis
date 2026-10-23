@@ -156,6 +156,16 @@ export default async function run(ctx) {
     check('every block one of Bedrock\'s own states', bad.size === 0, [...bad].slice(0, 4).join(', '));
     check('in Java, every block a block Java has, with its own states', jbad.size === 0, [...jbad].slice(0, 6).join(', '));
   }
-  check('the board joined to the monument in most cities', res.filter((t) => cities.find(([n]) => n === t.n)[1].findBoard && cities.find(([n]) => n === t.n)[1].findBoard.joined).length >= 2, res.map((t) => `${t.n}: ${(cities.find(([n]) => n === t.n)[1].findBoard || {}).joined}`).join(', '));
+  check('the board joined to the monument in every city: the two one thing (0.82.1)', res.filter((t) => cities.find(([n]) => n === t.n)[1].findBoard && cities.find(([n]) => n === t.n)[1].findBoard.joined).length === cities.length, res.map((t) => `${t.n}: ${(cities.find(([n]) => n === t.n)[1].findBoard || {}).joined}`).join(', '));
+  // (0.82.1) the monument and the board one thing: in a run of cities of every size, every board joined
+  {
+    const runs = [[96, 1], [128, 2], [160, 3], [224, 5], [256, 6], [320, 7], [448, 9], [192, 12]].map(([size, seed]) => {
+      const r = generateCity({ ...DEFAULTS, size, seed, findBoard: true, furnish: false, villagers: 0, mixStyles: seed % 2 === 0 });
+      const B = r.findBoard, blk = blkOf(r.world);
+      const touch = B && [[B.rect.x0, B.rect.z0], [B.rect.x1, B.rect.z1], [B.rect.x0, B.rect.z1], [B.rect.x1, B.rect.z0]].some(([x, z]) => [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([a, b]) => [1, 2, 3].some((dy) => blk(x + a, B.ground + dy, z + b) === 'diamond_block')));
+      return [`${size}/${seed}`, !!B && B.joined && touch && B.entries.length === r.places.filter((p) => p.kind !== 'findboard').length];
+    });
+    check('in eight cities of every size, the board joined to the monument\'s diamond, every place on it', runs.every(([, ok]) => ok), runs.filter(([, ok]) => !ok).map(([n]) => n).join(', '));
+  }
   note(res.map((t) => `${t.n}: map ${t.built ? cities.find(([n]) => n === t.n)[1].cityMap.size.join('x') : '-'}, board ${t.board}`).join('; '));
 }

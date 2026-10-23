@@ -1,4 +1,4 @@
-# Polis v0.82.0
+# Polis v0.82.1
 
 *Created with help from Claude AI.*
 
@@ -771,6 +771,16 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.82.1** — The monument and the find-a-landmark board one thing (a report: in ten
+random cities, no board was joined to the monument). 0.82.0 placed the monument
+first and then looked for room for the board beside it; in most towns there was
+none, and the board went off on its own. Now, with the board asked for, the
+monument's own search looks for a spot where both fit together: the board's wall
+goes up with the monument, joined to its diamond (never across the row its alcove
+opens from), and its signs and buttons go on at the end. In twelve random cities
+from 96 to 512 across, every board joined. Only where no spot in town takes both
+does the board stand apart, as before.
 
 **0.82.0** — The find-a-landmark board joined to the centre monument (a request,
 with a screenshot of the strip of pavement beside it). The board now runs on

@@ -43,7 +43,7 @@ import { buildAirport } from './airport.js';
 import { buildThemePark } from './themepark.js';
 import { buildFireworks, FIREWORKS as FW } from './fireworks.js';
 import { paintMap } from './maproom.js';
-import { buildFindBoard } from './findboard.js';
+import { buildFindBoard, boardFit, boardShell } from './findboard.js';
 import { buildArena, ARENA_KINDS, ARENA_HUNTERS, ARENA_PREY } from './arena.js';
 import { buildUniversity, SCHOOLS } from './university.js';
 import { planHills, liftBlocks, cutStairs, shiftBuilding, walkCity } from './terrain.js';
@@ -836,8 +836,15 @@ export function generateCity(cfgIn, onProgress) {
   if (transit && cfg.transit !== 'roads') for (const line of transit.lines) shapeLine(world, line, { relay: !!line.loop });
 
   // ---- the centre marker -----------------------------------------------------
-  const centre = cfg.centreMark ? markCentre(world, plan, buildings, GROUND, elevAt, spawns, stairRuns) : null;
+  // (0.82.1) with the find-a-landmark board asked for, the monument and the board are one thing:
+  // the monument goes where the board fits joined to one of its sides (findboard.js), its wall
+  // put up now so nothing later takes its ground; its signs and buttons go on at the end, once
+  // every place is known. Its slots: every landmark so far, the memorial, the grounds beside the
+  // city asked for, and the title.
+  const boardSlots = cfg.findBoard ? landmarks.length + landmarks.filter((L) => L.memorial).length + ['airport', 'themepark', 'arena', 'university'].filter((k) => cfg[k]).length + 1 : 0;
+  const centre = cfg.centreMark ? markCentre(world, plan, buildings, GROUND, elevAt, spawns, stairRuns, boardSlots) : null;
   if (centre) world.centre = [centre.block[0], centre.block[2]];   // the export centres on it
+  if (centre && centre.board) boardShell(world, centre.board);
 
   // A doorway opens onto the cell in front of it, and that cell's surface has
   // to be at the door's own level. Settling the ground can leave the pavement
@@ -1276,7 +1283,7 @@ export function generateCity(cfgIn, onProgress) {
   // ---- Find a landmark in the game: the board by the centre monument (findboard.js) ----------
   let findBoard = null;
   if (cfg.findBoard) {
-    const B = buildFindBoard(world, plan, centre, places, { GROUND, elevAt, signTags });
+    const B = buildFindBoard(world, plan, centre, places, { GROUND, elevAt, signTags, layout: centre && centre.board });
     if (B.missing) stats.findBoardMissing = !centre ? 'the board stands by the centre monument: tick its option (on by default)' : B.missing;
     else {
       findBoard = B;
@@ -1824,7 +1831,7 @@ function streetNameSigns(world, plan, cfg, G, elevAt, rng) {
 // beams reach the sky (from a structure saved in game). It goes as near the
 // middle of the city as it can while staying outdoors, on level ground, clear
 // of buildings, off the railway and under open sky, entrance to the street.
-function markCentre(world, plan, buildings, G, elevAt, spawns = [], stairRuns = []) {
+function markCentre(world, plan, buildings, G, elevAt, spawns = [], stairRuns = [], boardSlots = 0) {
   const { W, D, use, mask } = plan;
   const wb = world.box;
   const cx0 = Math.floor((wb.x0 + wb.x1 + 1) / 2), cz0 = Math.floor((wb.z0 + wb.z1 + 1) / 2);
@@ -1862,6 +1869,18 @@ function markCentre(world, plan, buildings, G, elevAt, spawns = [], stairRuns = 
     for (let y = G + 1; y <= G + height + 12; y++) if (world.has(x, y, z)) return false;   // room, and open sky for the beams
     return true;
   };
+  // a cell for the board's wall (open ground, not the roadway, room up to its top, no door onto
+  // it) or for standing before it (the roadway will do): beside a building is fine
+  const boardCellOk = (x, z, standing) => {
+    if (x < 1 || z < 1 || x >= W - 1 || z >= D - 1 || (mask && !mask[z * W + x])) return false;
+    const u = use[z * W + x];
+    if (!OUTDOOR.has(u) || (!standing && u === USE.ROAD) || elevAt(x, z) !== 0 || near[1][z * W + x] || taken.has(x + ',' + z)) return false;
+    if (!world.has(x, G, z) || world.get(x, G, z) === MAT.WATER) return false;
+    for (let y = G + 1; y <= G + (standing ? 2 : 8); y++) if (world.has(x, y, z)) return false;
+    if (!standing) for (const [a, b] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) for (const dy of [1, 2]) { const i = world.get(x + a, G + dy, z + b); if (i >= 0 && /door/.test(MATERIALS.def(i).block)) return false; }
+    return true;
+  };
+  const inFoot = (f, x, z) => x >= f.x0 && x <= f.x1 && z >= f.z0 && z <= f.z1;
   const { height } = centreCells(0);
   // the cell just outside the entrance, for a corner and a rotation
   const probeOf = (r, ox, oz, fw, fd) => (r === 0 ? [ox + 1, oz - 1] : r === 1 ? [ox + fw, oz + 1]
@@ -1872,9 +1891,12 @@ function markCentre(world, plan, buildings, G, elevAt, spawns = [], stairRuns = 
   // a cell clear all round, the mark may stand beside a building.
   let best = search();
   if (!best) { nearGrid = near[1]; best = search(); }
+  // (no site where the board fits joined to it: the monument where it would go alone, the board
+  // apart from it, as before; only in the smallest or most crowded towns)
+  if (!best && boardSlots) { boardSlots = 0; nearGrid = near[0]; best = search(); if (!best) { nearGrid = near[1]; best = search(); } }
   if (!best) return null;
   const out = buildCentre(world, best.ox, best.oz, G + 1, best.r);
-  return { block: [out.stand[0], G, out.stand[2]], stand: out.stand, sign: out.sign, beacons: out.beacons,
+  return { board: best.board ? { ...best.board, ground: G } : null, block: [out.stand[0], G, out.stand[2]], stand: out.stand, sign: out.sign, beacons: out.beacons,
     facing: out.facing, rotation: out.rotation, drift: Math.abs(out.stand[0] - cx0) + Math.abs(out.stand[2] - cz0) };
 
   function search() {
@@ -1893,8 +1915,18 @@ function markCentre(world, plan, buildings, G, elevAt, spawns = [], stairRuns = 
           if (!ok) continue;
           const [px, pz] = probeOf(r, ox, oz, fw, fd);           // the entrance must open onto the street
           if (!clearCell(px, pz, 2)) continue;
+          // (and the find-a-landmark board joined to it, where one is asked for: 0.82.1)
+          let board = null;
+          if (boardSlots) {
+            // (joined to its diamond: the footprint less the row the alcove opens from, which stays clear)
+            const foot = { x0: ox, z0: oz, x1: ox + fw - 1, z1: oz + fd - 1 };
+            const solid = { x0: foot.x0 + (px < foot.x0 ? 1 : 0), x1: foot.x1 - (px > foot.x1 ? 1 : 0), z0: foot.z0 + (pz < foot.z0 ? 1 : 0), z1: foot.z1 - (pz > foot.z1 ? 1 : 0) };
+            board = boardFit(solid, [px, pz], boardSlots, G, {
+              board: (x, z) => boardCellOk(x, z, false) && !inFoot(foot, x, z), stand: (x, z) => boardCellOk(x, z, true) && !inFoot(foot, x, z) });
+            if (!board) continue;
+          }
           const score = rad + (PENALTY[use[oz * W + ox]] || 11);
-          if (score < bestScore) { bestScore = score; best = { r, ox, oz }; }
+          if (score < bestScore) { bestScore = score; best = { r, ox, oz, board }; }
           break;
         }
       }
