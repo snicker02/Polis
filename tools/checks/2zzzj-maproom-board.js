@@ -157,6 +157,30 @@ export default async function run(ctx) {
     check('in Java, every block a block Java has, with its own states', jbad.size === 0, [...jbad].slice(0, 6).join(', '));
   }
   check('the board joined to the monument in every city: the two one thing (0.82.1)', res.filter((t) => cities.find(([n]) => n === t.n)[1].findBoard && cities.find(([n]) => n === t.n)[1].findBoard.joined).length === cities.length, res.map((t) => `${t.n}: ${(cities.find(([n]) => n === t.n)[1].findBoard || {}).joined}`).join(', '));
+  // (0.83.0) the way back: at every place on the board a post, its button's command block taking the
+  // one who pressed it to the board (by the post's own offset), facing it; no arrival on the monument
+  {
+    const bad = [];
+    for (const [n, r] of cities) {
+      const B = r.findBoard, w = r.world, blk = blkOf(w);
+      if (!B) { bad.push(n + ': no board'); continue; }
+      const listed = r.places.filter((p) => p.kind !== 'findboard');
+      for (const P of listed) {
+        const post = (B.posts || []).find((q) => q.id === P.id);
+        if (!post) { bad.push(`${n}: no post at ${P.id}`); continue; }
+        const cmd = (w.getData(...post.command) || { tags: { Command: { v: '' } } }).tags.Command.v;
+        const m = cmd.match(/^tp @p\[r=4\] (\S+) (\S+) (\S+) facing (\S+) (\S+) (\S+)$/);
+        const v = (t) => (t === '~' ? 0 : Number(t.slice(1)));
+        const to = m && [post.command[0] + v(m[1]), post.command[1] + v(m[2]), post.command[2] + v(m[3])];
+        if (blk(...post.command) !== 'command_block' || !to || to.join() !== B.visit.join()) bad.push(`${n}: ${P.id} command`);
+        if (blk(...post.button) !== 'stone_button' || !/wall_sign/.test(blk(...post.sign)) || Math.abs(post.button[0] - post.command[0]) + Math.abs(post.button[2] - post.command[2]) !== 1) bad.push(`${n}: ${P.id} button`);
+        if (blk(post.button[0], post.button[1] - 1, post.button[2]) === 'air') bad.push(`${n}: ${P.id} nothing to stand on`);
+        if (Math.abs(post.command[0] - P.at[0]) + Math.abs(post.command[2] - P.at[2]) > 4) bad.push(`${n}: ${P.id} far`);
+        if (/beacon|diamond/.test(blk(P.at[0], P.at[1] - 1, P.at[2]))) bad.push(`${n}: ${P.id} arrives on the monument`);
+      }
+    }
+    check('at every place on the board a post beside where its goto puts you: a button whose command block takes the one who pressed it to the board, facing it; a sign over it; no place arriving on the monument', bad.length === 0, bad.slice(0, 6).join('; '));
+  }
   // (0.82.1) the monument and the board one thing: in a run of cities of every size, every board joined
   {
     const runs = [[96, 1], [128, 2], [160, 3], [224, 5], [256, 6], [320, 7], [448, 9], [192, 12]].map(([size, seed]) => {

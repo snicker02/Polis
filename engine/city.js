@@ -43,7 +43,7 @@ import { buildAirport } from './airport.js';
 import { buildThemePark } from './themepark.js';
 import { buildFireworks, FIREWORKS as FW } from './fireworks.js';
 import { paintMap } from './maproom.js';
-import { buildFindBoard, boardFit, boardShell } from './findboard.js';
+import { buildFindBoard, boardFit, boardShell, buildReturnPosts } from './findboard.js';
 import { buildArena, ARENA_KINDS, ARENA_HUNTERS, ARENA_PREY } from './arena.js';
 import { buildUniversity, SCHOOLS } from './university.js';
 import { planHills, liftBlocks, cutStairs, shiftBuilding, walkCity } from './terrain.js';
@@ -1290,6 +1290,9 @@ export function generateCity(cfgIn, onProgress) {
       stats.findBoard = `${B.words ? B.words + ' of' : 'by'} the centre monument: ${B.entries.length} landmarks, a sign and a button each (the button takes you there); in the game, /function <city>/goto_findboard`;
       // (a place of its own: Find a landmark lists it, and the pack has goto_findboard)
       places.push({ kind: 'findboard', id: 'findboard', name: 'Find-a-landmark board', at: B.visit.slice(), look: B.look.slice(), side: 'south', lot: { ...B.rect } });
+      // (0.83.0) and at every place on it, a post with a button back to the board
+      B.posts = buildReturnPosts(world, places, B, { signTags });
+      stats.findBoard += `; at ${B.posts.length} of the ${B.entries.length} places a button back to it`;
     }
   }
   if (cfg.mapRoom) {
@@ -3114,7 +3117,8 @@ export function landmarkPlaces(world, landmarks, groundAt) {
   const OUT = { north: [0, -1], south: [0, 1], west: [-1, 0], east: [1, 0] };
   const nameOf = (i) => i < 0 ? 'minecraft:air' : MATERIALS.def(i).block;
   const free = (x, y, z) => { const b = nameOf(world.get(x, y, z)); return b === 'minecraft:air' || /sign|lantern|torch|carpet|button|pressure_plate|flower|grass$|fern/.test(b) && !/grass_block/.test(b); };
-  const floor = (x, y, z) => { const i = world.get(x, y, z); if (i < 0) return false; const b = nameOf(i); return !/water|lava|rail|air|sign|lantern|torch|leaves|fence|wall|magma|campfire|cactus/.test(b); };
+  // (never on top of the centre monument, or of the find-a-landmark board: 0.83.0)
+  const floor = (x, y, z) => { const i = world.get(x, y, z); if (i < 0) return false; const b = nameOf(i); return !/water|lava|rail|air|sign|lantern|torch|leaves|fence|wall|magma|campfire|cactus|beacon|diamond_block|command_block|quartz/.test(b); };
   const seen = new Map(), out = [];
   for (const L of landmarks) {
     const lot = L.lot; if (!lot || !L.kind) continue;

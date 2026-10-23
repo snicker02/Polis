@@ -1,4 +1,4 @@
-# Polis v0.82.1
+# Polis v0.83.0
 
 *Created with help from Claude AI.*
 
@@ -771,6 +771,14 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.83.0** — The way back to the find-a-landmark board. At every place on the board,
+beside where its goto puts you, a post: a button with a sign over it ("Back to the
+Find-a-landmark board"), a lantern on top. Press it and you are back in front of
+the board, facing it (the button's command block teleports you by its own offset
+from the board, so no marker is needed). Also, no goto now lands you on top of the
+centre monument (a town hall just behind it had its arrival spot on the beacons).
+In Java the post's teleport is written in Java's words.
 
 **0.82.1** — The monument and the find-a-landmark board one thing (a report: in ten
 random cities, no board was joined to the monument). 0.82.0 placed the monument

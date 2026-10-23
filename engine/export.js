@@ -18,7 +18,7 @@ import { makeRng } from './rng.js';
 // Must match main.js VERSION, package.json and index.html data-version;
 // tools/validate.js fails if they drift. The app refuses to export when the
 // browser has mixed cached copies of old and new files.
-export const POLIS_VERSION = '0.82.1';
+export const POLIS_VERSION = '0.83.0';
 
 export const CHUNK = 64;          // Bedrock structure limit per horizontal axis
 export const GROUND_DROP = 2;     // base layer y=0 sits 2 below feet; surface y=1 replaces the block you stand on
@@ -1268,7 +1268,8 @@ export function placementGuide(tiles, opts = {}) {
   }
   if ((opts.world && opts.world.data ? [...opts.world.data.values()] : []).some((d) => d && d.id === 'CommandBlock' && /function \{ns\}\/goto_/.test(d.tags.Command.v))) {
     L.push('FIND A LANDMARK IN THE GAME: the board by the centre monument has a sign for every landmark; press the button');
-    L.push('  under one and it takes you there (it runs /function ' + ns + '/goto_<name> for you). Command blocks must be on.');
+    L.push('  under one and it takes you there (it runs /function ' + ns + '/goto_<name> for you). At each place, a post beside');
+    L.push('  you with a button: "Back to the Find-a-landmark board". Command blocks must be on.');
     L.push('');
   }
   if ((opts.places || []).some((P) => P.kind === 'university')) {

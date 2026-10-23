@@ -18,7 +18,7 @@ import { buildPregenPack, pregenFileName, siteRegion, viewRegion, pregenCommand,
 import { decodeNbt } from './tools/nbt-read.js';
 import { THEMES, MAT } from './engine/materials.js';
 
-const VERSION = '0.82.1';
+const VERSION = '0.83.0';
 const $ = (id) => document.getElementById(id);
 const numVal = (id) => Number($(id).value);      // readCfg has its own local num()
 

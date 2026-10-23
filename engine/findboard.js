@@ -185,3 +185,57 @@ export function buildFindBoard(world, plan, centre, places, ctx) {
   }
   return { entries, title: titleSign, rect, ground: g0, K, faces: faces.length, joined: best.joined, visit, look, words, pointer };
 }
+
+// ---- (0.83.0) the way back: at every place on the board, beside where its goto puts you, a post
+// with a button and a sign, "back to the board". The button's command block takes the player who
+// pressed it straight to the board, facing it: a teleport by its own offset from the post (no
+// marker needed, so it works wherever the board's part of the world is loaded or not).
+const POST_SIGN = 'Back to the\nFind-a-landmark\nboard:\npress below';
+export function buildReturnPosts(world, places, board, ctx) {
+  const { signTags } = ctx;
+  if (!board || !board.visit) return [];
+  const posts = [];
+  const solid = (x, y, z) => { const i = world.get(x, y, z); return i >= 0 && !MATERIALS.isPassable(i) && !/water|lava|leaves|fence|wall|door|sign|button|lantern/.test(MATERIALS.def(i).block); };
+  const doorNear = (x, y, z) => [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([a, b]) => [0, 1].some((dy) => { const i = world.get(x + a, y + dy, z + b); return i >= 0 && /door|gate/.test(MATERIALS.def(i).block); }));
+  for (const P of places) {
+    if (!P || !P.id || P.kind === 'findboard' || !P.at) continue;
+    const [ax, ay, az] = P.at;
+    const look = P.look || [ax, ay, az + 1];
+    const fwd = [Math.sign(look[0] - ax), Math.sign(look[2] - az)];
+    // the post near the arrival spot: beside it first (to one side of the way it faces), else a
+    // step further; the button on whichever face of the post can be stood before, nearest the spot
+    const side = [fwd[1], -fwd[0]];
+    const cands = [];
+    for (let dx = -2; dx <= 2; dx++) for (let dz = -2; dz <= 2; dz++) {
+      if (!dx && !dz) continue;
+      const ahead = dx * fwd[0] + dz * fwd[1];
+      cands.push([dx, dz, Math.abs(dx) + Math.abs(dz) + (ahead > 0 ? 2 : 0) + (dx * side[0] + dz * side[1] ? 0 : 0.5)]);
+    }
+    cands.sort((p, q) => p[2] - q[2]);
+    const standable = (x, y, z) => !world.has(x, y, z) && !world.has(x, y + 1, z) && solid(x, y - 1, z);
+    let made = null;
+    for (const [dx, dz] of cands) {
+      const qx = ax + dx, qz = az + dz;
+      if (world.has(qx, ay, qz) || world.has(qx, ay + 1, qz) || !solid(qx, ay - 1, qz) || doorNear(qx, ay, qz)) continue;
+      const fronts = [[1, 0], [-1, 0], [0, 1], [0, -1]].map(([a, b]) => [a, b, qx + a, qz + b])
+        .filter(([, , x, z]) => !(x === qx && z === qz) && standable(x, ay, z))
+        .sort((p, q) => (Math.abs(p[2] - ax) + Math.abs(p[3] - az)) - (Math.abs(q[2] - ax) + Math.abs(q[3] - az)));
+      if (!fronts.length) continue;
+      const [fx, fz, bx, bz] = fronts[0];
+      const C = [qx, ay, qz], face = nm([fx, fz]);
+      const v = board.visit, l = board.look;
+      const off = (p) => `~${p[0] - C[0]} ~${p[1] - C[1]} ~${p[2] - C[2]}`.replace(/~0(?= |$)/g, '~');
+      world.set(...C, impulse());
+      world.setData(...C, commandBlock(`tp @p[r=4] ${off(v)} facing ${off(l)}`));
+      world.set(qx, ay + 1, qz, MAT.SMOOTH_QUARTZ);
+      if (!world.has(qx, ay + 2, qz)) world.set(qx, ay + 2, qz, MAT.SEA_LANTERN);
+      const btn = [bx, ay, bz];
+      world.set(...btn, button(face));
+      world.set(bx, ay + 1, bz, wallSignId(face)); world.setData(bx, ay + 1, bz, { id: 'Sign', tags: signTags(POST_SIGN) });
+      made = { id: P.id, command: C, button: btn, sign: [bx, ay + 1, bz], at: P.at.slice() };
+      break;
+    }
+    if (made) posts.push(made);
+  }
+  return posts;
+}

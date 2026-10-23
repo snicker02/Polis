@@ -131,7 +131,9 @@ function javaBlockEntity(name, data) {
     // (the theme park's wheel turns only in Bedrock: its clock left blank in Java)
     // (and the fireworks' clock, whose chain block waits a moment in Bedrock and cannot in Java: blank)
     const jcmd = m ? `effect give ${m[1]}[distance=..${m[2]}] minecraft:${m[3]} ${m[4]} ${m[5]} true` : /structure load|polis_fun|lever \["open_bit"|^setblock .* air$|function \{ns\}\//.test(cmd) ? '' : cmd;
-    return J.comp({ id: J.str(name.includes('chain') ? 'minecraft:chain_command_block' : 'minecraft:command_block'), Command: J.str(jcmd),
+    // (the way back to the find-a-landmark board: the same teleport in Java's words)
+    const jcmd2 = /^tp @p\[r=\d+\] /.test(jcmd) ? jcmd.replace(/^tp @p\[r=(\d+)\]/, 'tp @p[distance=..$1]') : jcmd;
+    return J.comp({ id: J.str(name.includes('chain') ? 'minecraft:chain_command_block' : 'minecraft:command_block'), Command: J.str(jcmd2),
       auto: J.byte(t.auto ? t.auto.v : 0), powered: J.byte(0), conditionMet: J.byte(0), TrackOutput: J.byte(1), UpdateLastExecution: J.byte(1) });
   }
   if (data.id === 'MobSpawner') {
