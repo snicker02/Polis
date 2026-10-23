@@ -97,7 +97,16 @@ export default async function run(ctx) {
     out.board = !!B;
     if (B) {
       const why = [];
-      if (B.entries.length !== r.places.length) why.push(`${B.entries.length} of ${r.places.length}`);
+      const listed = r.places.filter((p) => p.kind !== 'findboard');
+      if (B.entries.length !== listed.length) why.push(`${B.entries.length} of ${listed.length}`);
+      // (0.81.1) the board a place of its own (goto_findboard), its visit before it; a sign by the
+      // monument saying which way it is, where it stands further off
+      const me = r.places.find((p) => p.kind === 'findboard');
+      if (!me || Math.abs(me.at[0] - B.rect.x0) + Math.abs(me.at[2] - B.rect.z0) > 12) why.push('its place');
+      if (Math.abs(B.rect.x0 - r.centre.stand[0]) + Math.abs(B.rect.z0 - r.centre.stand[2]) > 10 && !(B.pointer && /standing_sign/.test(blk(...B.pointer)))) why.push('pointer');
+      // (0.82.0) joined to the monument where it can be: its first column beside a diamond block
+      if (B.joined) { const d = (x, z) => [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([a, b]) => [1, 2, 3].some((dy) => blk(x + a, B.ground + dy, z + b) === 'diamond_block'));
+        if (![[B.rect.x0, B.rect.z0], [B.rect.x1, B.rect.z1], [B.rect.x0, B.rect.z1], [B.rect.x1, B.rect.z0]].some(([x, z]) => d(x, z))) why.push('not joined'); }
       for (const e of B.entries) {
         const sd = JSON.stringify(w.getData(...e.sign) || {}, (k, v) => (typeof v === 'bigint' ? String(v) : v));
         if (!/wall_sign/.test(blk(...e.sign)) || !sd.includes('goto_' + e.id)) why.push('sign ' + e.id);
@@ -120,13 +129,13 @@ export default async function run(ctx) {
   check('the map room\'s own cell red (you are here), the town hall\'s gold; water drawn where the city has a canal; the key on signs', all((t) => t.here && t.water && t.key), say((t) => [t.here, t.water, t.key]));
   check('walked from the street through the doors, up the steps to the gallery, round it to the key, and onto the map', all((t) => Object.values(t.walk).every(Boolean)), say((t) => t.walk));
   check('every spot a mob could spawn on, in the map room and round it, lit', all((t) => t.dark === 0), say((t) => t.dark));
-  check('the board by the centre monument: a sign for every place (naming its goto_), a button under each on a command block running that goto_ for the one who pressed it, ground before it', all((t) => t.board && t.boardBad.length === 0), say((t) => t.boardBad));
+  check('the board by the centre monument (joined to it where a side has room): a sign for every place (naming its goto_), a button under each on a command block running that goto_ for the one who pressed it, ground before it', all((t) => t.board && t.boardBad.length === 0), say((t) => t.boardBad));
   // ---- the pack
   {
     const r = cities[0][1];
     const opts = { namespace: 'chk', prefix: 'c', spawns: r.spawns, places: r.places, centre: r.world.centre, world: r.world };
     const fns = ex.functionFiles(ex.tileList(r.world, opts), r.world, opts);
-    const gotos = r.findBoard.entries.every((e) => fns.some((f) => f.fn === `chk/goto_${e.id}`));
+    const gotos = r.findBoard.entries.every((e) => fns.some((f) => f.fn === `chk/goto_${e.id}`)) && fns.some((f) => f.fn === 'chk/goto_findboard');
     const named = ex.buildStructures(r.world, { namespace: 'chk' }).some((s) => JSON.stringify(decodeNbt(s.data).root, (k, v) => (typeof v === 'bigint' ? String(v) : v)).includes('function chk/goto_'));
     const guide = ex.placementGuide(ex.tileList(r.world, opts), opts);
     check('in the pack: every button\'s goto_ a function the pack has, its command naming the pack; the guide telling of the map room and the board', gotos && named && /THE MAP ROOM/.test(guide) && /FIND A LANDMARK IN THE GAME/.test(guide), `${gotos} ${named}`);
@@ -147,5 +156,6 @@ export default async function run(ctx) {
     check('every block one of Bedrock\'s own states', bad.size === 0, [...bad].slice(0, 4).join(', '));
     check('in Java, every block a block Java has, with its own states', jbad.size === 0, [...jbad].slice(0, 6).join(', '));
   }
+  check('the board joined to the monument in most cities', res.filter((t) => cities.find(([n]) => n === t.n)[1].findBoard && cities.find(([n]) => n === t.n)[1].findBoard.joined).length >= 2, res.map((t) => `${t.n}: ${(cities.find(([n]) => n === t.n)[1].findBoard || {}).joined}`).join(', '));
   note(res.map((t) => `${t.n}: map ${t.built ? cities.find(([n]) => n === t.n)[1].cityMap.size.join('x') : '-'}, board ${t.board}`).join('; '));
 }

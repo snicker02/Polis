@@ -18,7 +18,7 @@ import { buildPregenPack, pregenFileName, siteRegion, viewRegion, pregenCommand,
 import { decodeNbt } from './tools/nbt-read.js';
 import { THEMES, MAT } from './engine/materials.js';
 
-const VERSION = '0.81.0';
+const VERSION = '0.82.0';
 const $ = (id) => document.getElementById(id);
 const numVal = (id) => Number($(id).value);      // readCfg has its own local num()
 
@@ -842,7 +842,7 @@ function showStats(mesh, times) {
     // where the asked-for landmarks are, from the build_centered spot (in the pack:
     // /function <city>/goto_<name>, and the guide lists every one)
     if (result.places && result.places.length) {
-      const asked = new Set(['jail', 'zoo', 'aquarium', 'museum', 'hospital', 'firestation', 'police', 'theatre', 'hotel', 'factory', 'workshop', 'mill', 'park', 'waterpark', 'lazyriver', 'garden', 'station', 'mall', 'sports', 'bank', 'watertower', 'petrol', 'skatepark', 'wizard', 'nightclub', 'airport', 'themepark', 'arena', 'university', 'maproom', 'memorial']);
+      const asked = new Set(['jail', 'zoo', 'aquarium', 'museum', 'hospital', 'firestation', 'police', 'theatre', 'hotel', 'factory', 'workshop', 'mill', 'park', 'waterpark', 'lazyriver', 'garden', 'station', 'mall', 'sports', 'bank', 'watertower', 'petrol', 'skatepark', 'wizard', 'nightclub', 'airport', 'themepark', 'arena', 'university', 'maproom', 'findboard', 'memorial']);
       const ps = placeOffsets(result.world, { places: result.places.filter((P) => asked.has(P.kind)) });
       if (ps.length) line('where (from the centre)', ps.map((P) => `${P.name}: ${P.words}`).join(' · ') + ' — in the game, /function <city>/goto_<name>');
     }

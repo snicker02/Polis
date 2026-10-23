@@ -1278,7 +1278,12 @@ export function generateCity(cfgIn, onProgress) {
   if (cfg.findBoard) {
     const B = buildFindBoard(world, plan, centre, places, { GROUND, elevAt, signTags });
     if (B.missing) stats.findBoardMissing = !centre ? 'the board stands by the centre monument: tick its option (on by default)' : B.missing;
-    else { findBoard = B; stats.findBoard = `by the centre monument: ${B.entries.length} landmarks, a sign and a button each (the button takes you there)`; }
+    else {
+      findBoard = B;
+      stats.findBoard = `${B.words ? B.words + ' of' : 'by'} the centre monument: ${B.entries.length} landmarks, a sign and a button each (the button takes you there); in the game, /function <city>/goto_findboard`;
+      // (a place of its own: Find a landmark lists it, and the pack has goto_findboard)
+      places.push({ kind: 'findboard', id: 'findboard', name: 'Find-a-landmark board', at: B.visit.slice(), look: B.look.slice(), side: 'south', lot: { ...B.rect } });
+    }
   }
   if (cfg.mapRoom) {
     const MR = landmarks.find((q) => q.kind === 'maproom');

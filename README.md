@@ -1,4 +1,4 @@
-# Polis v0.81.0
+# Polis v0.82.0
 
 *Created with help from Claude AI.*
 
@@ -771,6 +771,22 @@ single shared `Uint16` index buffer serves them all, which is what keeps it
 inside WebGL1's limits.
 
 ## Changelog
+
+**0.82.0** — The find-a-landmark board joined to the centre monument (a request,
+with a screenshot of the strip of pavement beside it). The board now runs on
+from one of the monument's own sides, in line with it, where the ground allows:
+two faces of signs where there is room to stand before both, one face where its
+back is against a building (it never covers a door, and the monument's alcove is
+kept clear). The reporter's city: a board sixteen long on the pavement west of
+the monument, facing the tram line. Only where no side of the monument has room
+does it stand apart, as before (with goto_findboard and the sign pointing to it).
+
+**0.81.1** — The find-a-landmark board easier to find (a report: "I can not find the
+board"). It stands as near the centre monument as there is open ground for it,
+and in a built-up middle that can be fifty blocks off. Now it is a place of its
+own: /function <city>/goto_findboard takes you to it, it is in Find a landmark,
+and the summary says where it is from the monument; where it stands further off,
+a sign by the monument says which way to go.
 
 **0.81.0** — Two more options:
 - **A map room.** A hall with the whole city laid out in blocks on its floor,
