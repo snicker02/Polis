@@ -4874,3 +4874,6 @@ of both functions against the source world, cell for cell.
 
 **0.1.0** — First release.
 
+## License
+
+MIT — see [LICENSE](LICENSE).
